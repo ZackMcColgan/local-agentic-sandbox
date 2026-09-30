@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerBrowserTools, htmlToMarkdown } from "../src/tools/browser.js";
+import { registerBrowserTools, htmlToMarkdown, evaluateContentQuality } from "../src/tools/browser.js";
 
 describe("Browser MCP Toolchain Suite", () => {
   let mcp: McpServer;
@@ -69,6 +69,19 @@ describe("Browser MCP Toolchain Suite", () => {
       assert.ok(markdown.includes("This is a paragraph explaining the API."));
       assert.ok(markdown.includes("* Item 1"));
       assert.ok(markdown.includes("* Item 2"));
+    });
+  });
+
+  describe("Content Quality Evaluator", () => {
+    it("distinguishes substantive informative text from empty SPA navigation shells", () => {
+      const spaShell = "Home About Contact Settings Login Sign In Menu Search Copyright 2026";
+      const richArticle = "The current weather condition is partly sunny with a high of 85°F and a low of 68°F. Winds are calm at 5 mph from the south. Tomorrow will feature scattered rain showers with a 40% precipitation probability. The barometer stands at 30.12 in.";
+
+      const spaScore = evaluateContentQuality(spaShell);
+      const articleScore = evaluateContentQuality(richArticle);
+
+      assert.strictEqual(spaScore, 0, "Short boilerplate text should yield 0 score");
+      assert.ok(articleScore >= 100, `Informative text with sentences and numbers should score high (got ${articleScore})`);
     });
   });
 });

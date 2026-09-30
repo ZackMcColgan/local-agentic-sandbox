@@ -68,11 +68,19 @@ export function htmlToMarkdown(html: string): string {
     .trim();
 }
 
+export function evaluateContentQuality(text: string): number {
+  if (!text || text.length < 100) return 0;
+  const sentences = (text.match(/[.!?](\s+|$)/g) || []).length;
+  const numbers = (text.match(/\b\d+(\.\d+)?%?°?\b/g) || []).length;
+  const words = text.split(/\s+/).filter((w) => w.length > 0).length;
+  return sentences * 10 + numbers * 5 + Math.min(words, 1000);
+}
+
 export function registerBrowserTools(mcp: McpServer) {
   // Tool 1: Search the web
   mcp.tool(
     "search_web",
-    "Search the public internet using DuckDuckGo for live facts, current events, technical documentation, library APIs, or web information.",
+    "Search the public internet using DuckDuckGo for live facts, current events, technical documentation, library APIs, or web information. Automatically fetches and attaches clean markdown for the most informative top result.",
     {
       query: z.string().describe("Search keywords or technical question (e.g. 'latest PyTorch release notes', 'pydantic v2 field validator syntax')"),
       limit: z.number().min(1).max(10).optional().default(5).describe("Maximum number of search results to return")
@@ -128,6 +136,54 @@ export function registerBrowserTools(mcp: McpServer) {
           }
         }
 
+        // Auto-fetch best substantive candidate from top links
+        let topResultContent: { title: string; url: string; markdown: string } | null = null;
+        const candidates = results.slice(0, 4);
+
+        if (candidates.length > 0) {
+          const fetchPromises = candidates.map(async (c) => {
+            if (isPrivateIpOrLocalhost(c.url)) return null;
+            try {
+              const pageRes = await fetch(c.url, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                },
+                signal: AbortSignal.timeout(3500)
+              });
+              if (!pageRes.ok) return null;
+              const pageHtml = await pageRes.text();
+              const markdown = htmlToMarkdown(pageHtml);
+              const score = evaluateContentQuality(markdown);
+              return { title: c.title, url: c.url, markdown, score };
+            } catch {
+              return null;
+            }
+          });
+
+          const settled = await Promise.allSettled(fetchPromises);
+          let bestCandidate: { title: string; url: string; markdown: string; score: number } | null = null;
+          for (const item of settled) {
+            if (item.status === "fulfilled" && item.value && item.value.score >= 500) {
+              if (!bestCandidate || item.value.score > bestCandidate.score) {
+                bestCandidate = item.value;
+              }
+            }
+          }
+
+          if (bestCandidate) {
+            const truncated = bestCandidate.markdown.length > 15000
+              ? bestCandidate.markdown.substring(0, 15000) + "\n\n...[Content truncated for context window]"
+              : bestCandidate.markdown;
+
+            topResultContent = {
+              title: bestCandidate.title,
+              url: bestCandidate.url,
+              markdown: truncated
+            };
+          }
+        }
+
         return {
           content: [{
             type: "text" as const,
@@ -135,6 +191,7 @@ export function registerBrowserTools(mcp: McpServer) {
               status: "SUCCESS",
               query,
               count: results.length,
+              top_result_content: topResultContent,
               results: results.length > 0 ? results : [{
                 title: "Fallback Notice",
                 snippet: `Query submitted for '${query}'. Use fetch_webpage_markdown to inspect direct URLs.`,

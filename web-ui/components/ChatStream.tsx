@@ -18,11 +18,25 @@ import {
   Globe,
   Cpu,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Paperclip,
+  FileText,
+  X,
+  Image as ImageIcon
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+
+export interface AttachedFileItem {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  previewUrl?: string;
+  base64: string;
+  isImage: boolean;
+}
 
 export interface ChatMessage {
   id: string;
@@ -30,6 +44,13 @@ export interface ChatMessage {
   content: string;
   thought?: string;
   traces?: ExecutionTraceItem[];
+  attachments?: Array<{
+    name: string;
+    type: string;
+    size: number;
+    previewUrl?: string;
+    isImage: boolean;
+  }>;
   modelUsed?: string;
   durationMs?: number;
 }
@@ -63,6 +84,21 @@ const PRESET_PROMPTS = [
     prompt: "Verify the container provenance for image 'local-agentic-sandbox/mcp-server:latest' targeting the 'staging' environment."
   }
 ];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+}
 
 function CodeBlock({ language, code }: { language?: string; code: string }) {
   const [copied, setCopied] = useState(false);
@@ -137,7 +173,7 @@ export function ChatStream({
       id: "initial-welcome",
       role: "assistant",
       content:
-        "Welcome to **local-agentic-sandbox**! I'm your local AI agent combining hardware-accelerated local LLMs, zero-trust container execution, and live web research.\n\n- 🔒 **Air-Gapped Python Sandbox**: `cap_drop: ALL`, read-only rootfs, zero egress.\n- 🌐 **Isolated Web Scraper**: Live DuckDuckGo search & documentation fetch via isolated proxy.\n- 🛡️ **Container Provenance**: Docker Scout CVE gating & SLSA verification.",
+        "Welcome to **local-agentic-sandbox**! I'm your local AI agent combining hardware-accelerated local models (`gemma4:e4b` Flash & `qwen3.8:27b` Pro), zero-trust container execution, live web research, and multimodal image & document support.\n\n- 🔒 **Air-Gapped Python Sandbox**: `cap_drop: ALL`, read-only rootfs, zero egress.\n- 🌐 **Isolated Web Scraper**: Live DuckDuckGo search & documentation fetch via isolated proxy.\n- 📎 **Multimodal Inputs**: Upload images (`.png`, `.jpg`), PDFs (`.pdf`), Word docs (`.docx`), and code for instant analysis.\n- 🛡️ **Container Provenance**: Docker Scout CVE gating & SLSA verification.",
       modelUsed: activeModel
     }
   ]);
@@ -146,9 +182,15 @@ export function ChatStream({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
+  
+  // Attached files state (Images, PDFs, Word docs)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -180,18 +222,87 @@ export function ChatStream({
     ]);
   };
 
+  // Handle file selection from input or drag-and-drop
+  const processFiles = async (files: FileList | File[]) => {
+    const newItems: AttachedFileItem[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+      
+      try {
+        const base64 = await fileToBase64(file);
+        newItems.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          previewUrl: isImage ? base64 : undefined,
+          base64,
+          isImage
+        });
+      } catch (err) {
+        console.error("Failed to read file", file.name, err);
+      }
+    }
+
+    setAttachedFiles((prev) => [...prev, ...newItems]);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachedFiles((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const prompt = (textToSend || input).trim();
-    if (!prompt || isLoading) return;
+    if ((!prompt && attachedFiles.length === 0) || isLoading) return;
 
     setErrorMsg(null);
     setInput("");
+
+    const currentAttachments = [...attachedFiles];
+    setAttachedFiles([]);
 
     const userMsgId = `user-${Date.now()}`;
     const userMessage: ChatMessage = {
       id: userMsgId,
       role: "user",
-      content: prompt
+      content: prompt || (currentAttachments.length > 0 ? `Analyzed attached files: ${currentAttachments.map(a => a.name).join(", ")}` : ""),
+      attachments: currentAttachments.map(a => ({
+        name: a.name,
+        type: a.type,
+        size: a.size,
+        previewUrl: a.previewUrl,
+        isImage: a.isImage
+      }))
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -207,7 +318,13 @@ export function ChatStream({
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           model: activeModel,
-          reasoning_effort: reasoningEffort
+          reasoning_effort: reasoningEffort,
+          attachments: currentAttachments.map(a => ({
+            name: a.name,
+            type: a.type,
+            size: a.size,
+            base64: a.base64
+          }))
         })
       });
 
@@ -246,7 +363,6 @@ export function ChatStream({
   };
 
   const handleRegenerate = () => {
-    // Find the last user message
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "user") {
         handleSend(messages[i].content);
@@ -263,8 +379,46 @@ export function ChatStream({
   };
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-white/10 bg-slate-900/50 backdrop-blur-sm overflow-hidden shadow-2xl">
-      
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`relative flex flex-col h-full rounded-2xl border transition-colors bg-slate-900/50 backdrop-blur-sm overflow-hidden shadow-2xl ${
+        isDraggingOver ? "border-emerald-500/80 bg-emerald-950/20" : "border-white/10"
+      }`}
+    >
+      {/* Hidden File Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,.pdf,.doc,.docx,.txt,.md,.json,.csv,.py"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
+      {/* Image Lightbox Modal */}
+      {previewModalImage && (
+        <div
+          onClick={() => setPreviewModalImage(null)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img
+              src={previewModalImage}
+              alt="Fullscreen preview"
+              className="rounded-xl shadow-2xl max-w-full max-h-[85vh] object-contain border border-white/10"
+            />
+            <button
+              onClick={() => setPreviewModalImage(null)}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/90 text-white hover:bg-slate-850 border border-white/20"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="px-4 py-3 border-b border-white/10 bg-slate-950/60 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -295,7 +449,7 @@ export function ChatStream({
         </div>
       </div>
 
-      {/* Preset Suggestions Carousel (Clean, modern pills) */}
+      {/* Preset Suggestions Carousel */}
       <div className="px-3 py-2 bg-slate-950/30 border-b border-white/5 flex gap-2 overflow-x-auto scrollbar-none">
         {PRESET_PROMPTS.map((p, idx) => (
           <button
@@ -364,6 +518,37 @@ export function ChatStream({
                         {m.thought}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Render Attached Files for User Message */}
+                {isUser && m.attachments && m.attachments.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2 justify-end">
+                    {m.attachments.map((att, aIdx) => (
+                      <div key={aIdx}>
+                        {att.isImage && att.previewUrl ? (
+                          <div
+                            onClick={() => setPreviewModalImage(att.previewUrl || null)}
+                            className="cursor-pointer group/img relative rounded-lg border border-white/20 overflow-hidden shadow-md max-w-[120px]"
+                          >
+                            <img
+                              src={att.previewUrl}
+                              alt={att.name}
+                              className="h-20 w-28 object-cover group-hover/img:scale-105 transition-transform"
+                            />
+                            <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[9px] text-white px-1 py-0.5 truncate font-mono">
+                              {att.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-950/80 border border-indigo-400/30 text-indigo-200 text-[11px] font-mono shadow-sm">
+                            <FileText className="h-3.5 w-3.5 text-cyan-400" />
+                            <span className="max-w-[140px] truncate">{att.name}</span>
+                            <span className="text-[10px] text-indigo-400/80">({formatFileSize(att.size)})</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -467,7 +652,7 @@ export function ChatStream({
                   )}
                 </div>
 
-                {/* Inline Tool Execution Summary Badges (If tools were invoked) */}
+                {/* Inline Tool Execution Summary Badges */}
                 {!isUser && m.traces && m.traces.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {m.traces.map((trace, tIdx) => (
@@ -593,7 +778,7 @@ export function ChatStream({
             <div className="rounded-2xl rounded-tl-sm p-4 bg-slate-950/80 border border-white/10 text-xs text-slate-400 flex items-center gap-2.5">
               <Terminal className="h-4 w-4 text-cyan-400 animate-pulse" />
               <span>
-                Orchestrating <span className="text-slate-200 font-mono">{activeModel}</span> & dispatching MCP tools...
+                Orchestrating <span className="text-slate-200 font-mono">{activeModel}</span> & analyzing input...
               </span>
             </div>
           </div>
@@ -610,8 +795,48 @@ export function ChatStream({
         <div ref={scrollRef} />
       </div>
 
-      {/* Floating Modern Prompt Bar */}
+      {/* Modern Floating Prompt Bar with Attachment Staging Area */}
       <div className="p-3 sm:p-4 bg-slate-950/80 border-t border-white/10">
+        
+        {/* Attachment Chips Preview Bar (when files are attached) */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-2.5 flex flex-wrap items-center gap-2 p-2 rounded-xl bg-slate-900/90 border border-white/10">
+            {attachedFiles.map((att) => (
+              <div
+                key={att.id}
+                className="group relative flex items-center gap-2 p-1.5 pr-2 rounded-lg bg-slate-800 border border-white/10 text-xs text-slate-200"
+              >
+                {att.isImage && att.previewUrl ? (
+                  <img
+                    src={att.previewUrl}
+                    alt={att.name}
+                    className="h-7 w-7 rounded object-cover border border-white/10"
+                  />
+                ) : (
+                  <FileText className="h-4 w-4 text-cyan-400 shrink-0" />
+                )}
+                <div className="flex flex-col">
+                  <span className="max-w-[120px] sm:max-w-[160px] truncate font-medium text-[11px]">
+                    {att.name}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    {formatFileSize(att.size)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(att.id)}
+                  className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-rose-400 transition-colors ml-1"
+                  title="Remove file"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input Form */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -619,6 +844,18 @@ export function ChatStream({
           }}
           className="relative flex items-center gap-2"
         >
+          {/* File Attach Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="p-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-white/10 text-slate-400 hover:text-cyan-400 transition-colors shadow-inner"
+            title="Attach images (PNG, JPG) or documents (PDF, DOCX, Code)"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+
+          {/* Prompt Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -626,20 +863,27 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             disabled={isLoading}
-            placeholder="Ask agent to write & test Python, search the web, or inspect security boundaries..."
+            placeholder={
+              attachedFiles.length > 0
+                ? "Ask questions about the attached files (or press Enter)..."
+                : "Ask agent to write code, search the web, analyze documents or images (drop files here)..."
+            }
             className="flex-1 bg-slate-900/90 border border-white/10 focus:border-emerald-500/60 rounded-xl px-4 py-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none resize-none transition-all shadow-inner"
           />
+
+          {/* Send Button */}
           <button
             type="submit"
-            disabled={!input.trim() || isLoading}
+            disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
             className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white transition-all shrink-0 shadow-md shadow-emerald-500/20 active:scale-95"
             title="Send prompt"
           >
             <Send className="h-4 w-4" />
           </button>
         </form>
+
         <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
-          <span className="hidden sm:inline">Zero-Trust Linux Container Sandbox • cap_drop ALL</span>
+          <span className="hidden sm:inline">Supports PNG, JPG, PDF, DOCX, TXT, CSV, Code • Drag & Drop enabled</span>
           <span>Shift+Enter for new line • Enter ↵ to send</span>
         </div>
       </div>

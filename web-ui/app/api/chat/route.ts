@@ -3,6 +3,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 
+import { parseAttachment } from "@/lib/fileParser";
+
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
   const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" }>();
 
   try {
-    const { messages, model: requestedModel, reasoning_effort: requestedReasoning } = await req.json();
+    const { messages, model: requestedModel, reasoning_effort: requestedReasoning, attachments } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 });
@@ -81,23 +83,27 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-const SYSTEM_PROMPT = `You are an intelligent agentic AI platform running on local hardware with Model Context Protocol (MCP) tool integration.
+const SYSTEM_PROMPT = `You are an intelligent agentic AI platform running on local hardware with Model Context Protocol (MCP) tool integration and native multimodal support.
 
 You have access to two distinct tool tiers:
 1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
-   - 'search_web': Search the internet using DuckDuckGo. Use this whenever the user asks about real-time information, latest documentation, external packages, or general web lookups.
-   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation or inspect web pages.
+   - 'search_web': Search the internet using DuckDuckGo. Automatically fetches and attaches clean markdown for the most informative top result in 'top_result_content'. Use this whenever the user asks about real-time information, latest documentation, weather forecasts, external packages, or general web lookups.
+   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation, inspect web pages, or scrape articles.
 
 2. Air-Gapped Code Sandbox & Provenance (Tier: Sandbox / AI Mesh):
    - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs). Use this whenever asked to write, run, or verify code.
    - 'verify_container_provenance': Inspect runtime container security boundaries and SLSA attestations.
    - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
 
-IMPORTANT INSTRUCTIONS:
-- When a user query requires real-time facts or external web data, invoke 'search_web' or 'fetch_webpage_markdown'.
+CRITICAL INSTRUCTIONS:
+- When a user query requires real-time facts, current weather, news, external documentation, or data:
+  1. Invoke 'search_web' to locate relevant URLs and inspect the 'top_result_content' markdown.
+  2. If 'top_result_content' already contains the required information, synthesize and answer immediately.
+  3. If 'top_result_content' is missing or lacks the specific details requested, invoke 'fetch_webpage_markdown' on another relevant link from the search results (preferring content-rich sources like government, official documentation, or news over ad/paywall SPAs).
+  4. NEVER tell the user "I cannot display this here, visit these links". You have web scraping tools: extract the content and present the actual answer, numbers, temperatures, conditions, and facts directly to the user in formatted Markdown tables or text.
 - When asked to execute or test code, invoke 'execute_sandboxed_python'.
 - When invoking tools, do not output conversational preamble or filler beforehand. Trigger the tool call directly.
-- Synthesize responses clearly using clean Markdown formatting.`;
+- Synthesize all tool results into a thorough, clear answer for the user.`;
 
     let effortDirective = "";
     if (reasoningEffort === "low") {
@@ -106,7 +112,37 @@ IMPORTANT INSTRUCTIONS:
       effortDirective = "\n\nREASONING EFFORT: DEEP. Think deeply step-by-step before answering.";
     }
 
+    // Process attachments (Images -> base64 vision, Documents -> extracted text context)
+    const imagePayloads: string[] = [];
+    const docContexts: string[] = [];
+
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      for (const att of attachments) {
+        const parsed = await parseAttachment(att.name, att.type, att.size, att.base64);
+        if (parsed.isImage && parsed.rawBase64) {
+          imagePayloads.push(parsed.rawBase64);
+        } else if (parsed.textContent) {
+          docContexts.push(
+            `\n\n--- ATTACHED DOCUMENT: ${parsed.name} (${parsed.type}) ---\n${parsed.textContent}\n--- END OF ATTACHED DOCUMENT ---`
+          );
+        }
+      }
+    }
+
     const conversationMessages = [...messages];
+    if (conversationMessages.length > 0) {
+      const lastIdx = conversationMessages.length - 1;
+      const lastMsg = { ...conversationMessages[lastIdx] };
+
+      if (docContexts.length > 0) {
+        lastMsg.content = `${lastMsg.content || ""}${docContexts.join("\n")}`;
+      }
+      if (imagePayloads.length > 0) {
+        lastMsg.images = imagePayloads;
+      }
+      conversationMessages[lastIdx] = lastMsg;
+    }
+
     if (!conversationMessages.some((m: any) => m.role === "system")) {
       conversationMessages.unshift({
         role: "system",
@@ -116,15 +152,16 @@ IMPORTANT INSTRUCTIONS:
 
     const computeOptions = () => {
       const opts: any = {};
+      opts.num_ctx = activeModel.includes("gemma4") ? 16384 : 8192;
       if (reasoningEffort === "low") {
         opts.temperature = 0.2;
-        opts.num_predict = 1536;
+        opts.num_predict = 4096;
       } else if (reasoningEffort === "xhigh") {
         opts.temperature = 0.7;
-        opts.num_predict = 4096;
+        opts.num_predict = 8192;
       } else {
         opts.temperature = 0.5;
-        opts.num_predict = 2048;
+        opts.num_predict = 4096;
       }
       if (activeModel.includes("qwen3.8")) {
         opts.reasoning_effort = reasoningEffort;
@@ -216,7 +253,7 @@ IMPORTANT INSTRUCTIONS:
     // Step 2: Handle Autonomous Multi-Round MCP Tool Execution Loop
     let currentAssistantMessage = assistantMessage;
     let round = 0;
-    const MAX_TOOL_ROUNDS = 3;
+    const MAX_TOOL_ROUNDS = 5;
 
     while (round < MAX_TOOL_ROUNDS) {
       const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
@@ -287,6 +324,36 @@ IMPORTANT INSTRUCTIONS:
 
       const nextData = await nextRes.json();
       currentAssistantMessage = nextData.message;
+    }
+
+    // Post-tool synthesis safety pass:
+    // If tools were invoked and the final assistant message still contains a lingering tool call,
+    // or if the assistant content is empty, perform one final prompt to force human-readable markdown synthesis!
+    const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
+    if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+      conversationMessages.push(currentAssistantMessage);
+      conversationMessages.push({
+        role: "user",
+        content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
+      });
+
+      const finalRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: activeModel,
+          messages: conversationMessages,
+          stream: false,
+          options: computeOptions()
+        })
+      });
+
+      if (finalRes.ok) {
+        const finalData = await finalRes.json();
+        if (finalData.message?.content?.trim()) {
+          currentAssistantMessage = finalData.message;
+        }
+      }
     }
 
     return NextResponse.json({
