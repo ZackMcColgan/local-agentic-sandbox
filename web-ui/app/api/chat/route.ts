@@ -96,6 +96,7 @@ You have access to two distinct tool tiers:
 IMPORTANT INSTRUCTIONS:
 - When a user query requires real-time facts or external web data, invoke 'search_web' or 'fetch_webpage_markdown'.
 - When asked to execute or test code, invoke 'execute_sandboxed_python'.
+- When invoking tools, do not output conversational preamble or filler beforehand. Trigger the tool call directly.
 - Synthesize responses clearly using clean Markdown formatting.`;
 
     let effortDirective = "";
@@ -158,20 +159,47 @@ IMPORTANT INSTRUCTIONS:
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
-    // Normalizing helper to detect tool calls either from message.tool_calls OR from content JSON
+    // Normalizing helper to detect tool calls either from message.tool_calls OR from content JSON (even with preamble text)
     const getEffectiveToolCalls = (msg: any) => {
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         return msg.tool_calls;
       }
       if (msg.content && typeof msg.content === "string") {
+        // 1. Look for ```json ... ``` or ``` ... ``` blocks anywhere in the text
+        const codeBlockMatches = Array.from(msg.content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
+        for (const match of codeBlockMatches) {
+          try {
+            const parsed = JSON.parse((match as RegExpMatchArray)[1].trim());
+            if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+              return [{
+                function: {
+                  name: parsed.name,
+                  arguments: parsed.arguments || {}
+                }
+              }];
+            }
+          } catch {}
+        }
+
+        // 2. Look for raw JSON object {"name": "...", "arguments": {...}} anywhere in text
+        const jsonMatch = msg.content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0].trim());
+            if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+              return [{
+                function: {
+                  name: parsed.name,
+                  arguments: parsed.arguments || {}
+                }
+              }];
+            }
+          } catch {}
+        }
+
+        // 3. Simple JSON object fallback
         try {
-          const trimmed = msg.content.trim();
-          const clean = trimmed.startsWith("```json")
-            ? trimmed.replace(/^```json/, "").replace(/```$/, "").trim()
-            : trimmed.startsWith("```")
-            ? trimmed.replace(/^```/, "").replace(/```$/, "").trim()
-            : trimmed;
-          const parsed = JSON.parse(clean);
+          const parsed = JSON.parse(msg.content.trim());
           if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
             return [{
               function: {

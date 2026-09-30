@@ -7,8 +7,8 @@ describe("Web UI Model Configuration Suite", () => {
     assert.equal(DEFAULT_PRIMARY_MODEL, "qwen3.8:27b-q3_k_m");
   });
 
-  it("defaults to qwen2.5-coder:7b for fast sub-agent execution", () => {
-    assert.equal(DEFAULT_SUBAGENT_MODEL, "qwen2.5-coder:7b");
+  it("defaults to gemma4:e4b for fast multimodal sub-agent execution", () => {
+    assert.equal(DEFAULT_SUBAGENT_MODEL, "gemma4:e4b");
   });
 
   it("contains complete profiles for orchestrator and sub-agents", () => {
@@ -21,9 +21,9 @@ describe("Web UI Model Configuration Suite", () => {
     assert.equal(orchestrator?.defaultReasoningEffort, "medium");
     assert.ok(orchestrator?.recommendedVRAM.includes("13.8 GB"));
 
-    const subagent = PRESET_MODEL_PROFILES.find((p) => p.id === "qwen2.5-coder:7b");
-    assert.ok(subagent, "qwen2.5-coder:7b profile must exist");
+    const subagent = PRESET_MODEL_PROFILES.find((p) => p.id === "gemma4:e4b");
+    assert.ok(subagent, "gemma4:e4b profile must exist");
     assert.equal(subagent?.role, "sub-agent");
-    assert.equal(subagent?.supportsReasoningEffort, false);
+    assert.equal(subagent?.supportsReasoningEffort, true);
   });
 });

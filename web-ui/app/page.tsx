@@ -15,7 +15,7 @@ export default function Home() {
     mcp: "INITIALIZING",
     airGapped: true
   });
-  const [selectedModel, setSelectedModel] = useState<string>("qwen2.5-coder:7b");
+  const [selectedModel, setSelectedModel] = useState<string>("gemma4:e4b");
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("low");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);

@@ -53,9 +53,8 @@ export function Navbar({
   );
 
   const getModelShortLabel = (id: string) => {
-    if (id.includes("qwen2.5-coder:7b")) return "Qwen 2.5 Coder (7B)";
-    if (id.includes("qwen2.5-coder:1.5b")) return "Qwen 2.5 Coder (1.5B)";
-    if (id.includes("qwen3.8")) return "Qwen 3.8 (27B)";
+    if (id.includes("gemma4")) return "Gemma 4 E4B (Flash)";
+    if (id.includes("qwen3.8")) return "Qwen 3.8 (27B Pro)";
     return id.split(":")[0];
   };
 
@@ -181,7 +180,7 @@ export function Navbar({
                   {getModelShortLabel(selectedModel)}
                 </span>
                 <span className="font-medium text-slate-100 sm:hidden">
-                  {selectedModel.includes("coder:7b") ? "7B" : selectedModel.includes("3.8") ? "27B" : "1.5B"}
+                  {selectedModel.includes("gemma4") ? "Gemma 4" : "Qwen 27B"}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
               </button>
