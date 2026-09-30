@@ -17,6 +17,10 @@ interface ChatStreamProps {
 
 const PRESET_PROMPTS = [
   {
+    title: "Live Web & Weather",
+    prompt: "Search the web for today's weather forecast and summarize the conditions."
+  },
+  {
     title: "Fibonacci & Test Suite",
     prompt: "Write a python script to calculate fibonacci up to 10 and run it with unit tests."
   },
@@ -38,7 +42,7 @@ export function ChatStream({ onTracesUpdate, activeModel, reasoningEffort }: Cha
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Welcome to **local-agentic-sandbox**. I am your local AI coding agent running on an air-gapped `ai-mesh` network. You can ask me to generate, test, and execute Python code, verify container provenance, and inspect our zero-trust boundaries."
+      content: "Welcome to **local-agentic-sandbox**. I am your local AI agent combining air-gapped zero-trust Python execution with live web research. You can ask me to search the web, fetch documentation, generate & execute sandboxed Python scripts, and inspect container security boundaries."
     }
   ]);
   const [input, setInput] = useState("");

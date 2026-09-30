@@ -72,8 +72,9 @@ export function registerBrowserTools(mcp: McpServer) {
   // Tool 1: Search the web
   mcp.tool(
     "search_web",
+    "Search the public internet using DuckDuckGo for live facts, current events, weather forecasts, technical documentation, or web pages.",
     {
-      query: z.string().describe("Search keywords or technical question (e.g. 'pydantic v2 model_validator')"),
+      query: z.string().describe("Search keywords or technical question (e.g. 'Austin TX weather today', 'pydantic v2 validator')"),
       limit: z.number().min(1).max(10).optional().default(5).describe("Maximum number of search results to return")
     },
     async ({ query, limit }) => {
@@ -96,12 +97,21 @@ export function registerBrowserTools(mcp: McpServer) {
         
         let match;
         while ((match = resultRegex.exec(html)) !== null && results.length < (limit || 5)) {
-          const rawUrl = match[1].trim();
+          let rawUrl = match[1].trim();
           const rawSnippet = match[2].replace(/<[^>]+>/g, "").trim();
+
+          // Unwrap DuckDuckGo redirect uddg parameter
+          const uddgMatch = rawUrl.match(/[?&]uddg=([^&]+)/);
+          if (uddgMatch) {
+            rawUrl = decodeURIComponent(uddgMatch[1]);
+          } else if (!rawUrl.startsWith("http")) {
+            rawUrl = `https://${rawUrl.replace(/^\/+/, "")}`;
+          }
+
           results.push({
             title: `Result ${results.length + 1}`,
             snippet: rawSnippet,
-            url: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`
+            url: rawUrl
           });
         }
 
@@ -138,6 +148,7 @@ export function registerBrowserTools(mcp: McpServer) {
   // Tool 2: Scrape web page to clean markdown
   mcp.tool(
     "fetch_webpage_markdown",
+    "Fetch a public web page or documentation URL and convert its HTML content into clean, readable Markdown.",
     {
       url: z.string().url().describe("Target documentation or website URL to scrape (must be public HTTP/HTTPS)")
     },

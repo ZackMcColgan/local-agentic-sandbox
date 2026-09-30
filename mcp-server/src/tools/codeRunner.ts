@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 export function registerCodeRunner(mcp: McpServer) {
   mcp.tool(
     "execute_sandboxed_python",
+    "Execute Python code and assertions inside an isolated, unprivileged Linux container sandbox with zero network egress (cap_drop: ALL, read-only rootfs, tmpfs buffer).",
     {
       code: z.string().describe("The Python script to execute"),
       test_code: z.string().optional().describe("Optional pytest or unit test assertions to run alongside the code")

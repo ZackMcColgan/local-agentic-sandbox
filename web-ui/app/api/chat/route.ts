@@ -81,10 +81,35 @@ export async function POST(req: NextRequest) {
       }
     }));
 
+const SYSTEM_PROMPT = `You are an intelligent agentic AI platform running on local hardware with Model Context Protocol (MCP) tool integration.
+
+You have access to two distinct tool tiers:
+1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
+   - 'search_web': Search the internet using DuckDuckGo. Use this whenever the user asks about real-time events, current weather, latest documentation, or questions requiring live web lookups.
+   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation or scrape specific websites.
+
+2. Air-Gapped Code Sandbox & Provenance (Tier: Sandbox / AI Mesh):
+   - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs). Use this whenever asked to write, run, or verify code.
+   - 'verify_container_provenance': Inspect runtime container security boundaries and SLSA attestations.
+   - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
+
+IMPORTANT INSTRUCTIONS:
+- Whenever the user asks about current facts, weather, external libraries, or web lookups, ALWAYS proactively invoke the 'search_web' tool. Do NOT claim you cannot access the internet; your browser toolchain handles web access safely through an isolated egress proxy.
+- Whenever asked to run or test Python code, ALWAYS invoke 'execute_sandboxed_python'.
+- Synthesize tool execution results cleanly for the user.`;
+
+    const conversationMessages = [...messages];
+    if (!conversationMessages.some((m: any) => m.role === "system")) {
+      conversationMessages.unshift({
+        role: "system",
+        content: SYSTEM_PROMPT
+      });
+    }
+
     // Step 1: Query Ollama with dynamic model and reasoning effort
     const ollamaPayload: any = {
       model: activeModel,
-      messages,
+      messages: conversationMessages,
       stream: false
     };
 
@@ -113,9 +138,20 @@ export async function POST(req: NextRequest) {
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
-    // Step 2: Handle Autonomous MCP Tool Execution Loop
-    if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      for (const toolCall of assistantMessage.tool_calls) {
+    // Step 2: Handle Autonomous Multi-Round MCP Tool Execution Loop
+    let currentAssistantMessage = assistantMessage;
+    let round = 0;
+    const MAX_TOOL_ROUNDS = 3;
+
+    while (
+      currentAssistantMessage.tool_calls &&
+      currentAssistantMessage.tool_calls.length > 0 &&
+      round < MAX_TOOL_ROUNDS
+    ) {
+      round++;
+      conversationMessages.push(currentAssistantMessage);
+
+      for (const toolCall of currentAssistantMessage.tool_calls) {
         const toolName = toolCall.function.name;
         const toolArgs = typeof toolCall.function.arguments === "string"
           ? JSON.parse(toolCall.function.arguments)
@@ -143,50 +179,45 @@ export async function POST(req: NextRequest) {
           tier: target.tier
         });
 
-        // Append assistant tool request and tool outcome to conversation history
-        messages.push(assistantMessage);
-        messages.push({
+        conversationMessages.push({
           role: "tool",
           name: toolName,
           content: JSON.stringify(result)
         });
       }
 
-      // Step 3: Synthesis call with execution output
-      const synthesisPayload: any = {
+      // Next step: query model with updated context (and tools if not at max rounds)
+      const nextPayload: any = {
         model: activeModel,
-        messages,
+        messages: conversationMessages,
         stream: false
       };
 
-      if (reasoningEffort) {
-        synthesisPayload.options = { reasoning_effort: reasoningEffort };
+      if (round < MAX_TOOL_ROUNDS && ollamaTools.length > 0) {
+        nextPayload.tools = ollamaTools;
       }
 
-      const synthesisRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+      if (reasoningEffort) {
+        nextPayload.options = { reasoning_effort: reasoningEffort };
+      }
+
+      const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(synthesisPayload)
+        body: JSON.stringify(nextPayload)
       });
 
-      if (!synthesisRes.ok) {
-        throw new Error(`Ollama synthesis failed: ${await synthesisRes.text()}`);
+      if (!nextRes.ok) {
+        throw new Error(`Ollama synthesis failed: ${await nextRes.text()}`);
       }
 
-      const synthesisData = await synthesisRes.json();
-
-      return NextResponse.json({
-        content: synthesisData.message.content,
-        traces,
-        model: activeModel,
-        reasoning_effort: reasoningEffort
-      });
+      const nextData = await nextRes.json();
+      currentAssistantMessage = nextData.message;
     }
 
-    // Direct text response without tool invocation
     return NextResponse.json({
-      content: assistantMessage.content,
-      traces: [],
+      content: currentAssistantMessage.content,
+      traces,
       model: activeModel,
       reasoning_effort: reasoningEffort
     });

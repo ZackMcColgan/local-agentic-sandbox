@@ -48,6 +48,7 @@ export function registerAttestation(mcp: McpServer) {
   // Tool 1: Live Container Security & Runtime Provenance Probe
   mcp.tool(
     "verify_container_provenance",
+    "Inspect and attest live container runtime security posture (UID, Linux capabilities, rootfs immutability) and supply-chain trust levels.",
     {
       image_uri: z.string().describe("Container image URI or digest (e.g. local-agentic-sandbox/mcp-server:latest)"),
       environment: z.enum(["dev", "staging", "prod"]).describe("Target deployment environment")
@@ -102,6 +103,7 @@ export function registerAttestation(mcp: McpServer) {
   // Tool 2: Docker Scout Vulnerability & Policy Gate Tool (invoked when scout is present)
   mcp.tool(
     "docker_scout_policy_gate",
+    "Evaluate container images against Docker Scout CVE vulnerability thresholds and security policy baselines.",
     {
       image_uri: z.string().describe("Target image to scan with Docker Scout (e.g. local-agentic-sandbox/mcp-server:latest)"),
       max_critical: z.number().default(0).describe("Maximum allowed critical CVEs (policy threshold)"),
