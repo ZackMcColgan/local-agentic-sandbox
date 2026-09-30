@@ -10,6 +10,7 @@ export interface ExecutionTraceItem {
   durationMs: number;
   timestamp: string;
   model?: string;
+  tier?: "sandbox" | "browser";
 }
 
 interface ExecutionTraceProps {
@@ -157,21 +158,41 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                     </pre>
                   </div>
 
-                  {/* Security Boundary Badges */}
+                  {/* Dynamic Security Boundary Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-500/20">
-                      <ShieldCheck className="h-3 w-3" />
-                      Egress: BLOCKED
-                    </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
-                      UID: 10001
-                    </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
-                      RootFS: READ_ONLY
-                    </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
-                      cap_drop: ALL
-                    </span>
+                    {trace.tier === "browser" ? (
+                      <>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-400 border border-cyan-500/30">
+                          <ShieldCheck className="h-3 w-3" />
+                          Egress: PERMITTED (Isolated Scraper)
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          UID: 10002
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          SSRF Guard: ACTIVE
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          Network: egress-mesh
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
+                          <ShieldCheck className="h-3 w-3" />
+                          Egress: BLOCKED (Air-Gapped)
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          UID: 10001
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          RootFS: READ_ONLY
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">
+                          cap_drop: ALL
+                        </span>
+                      </>
+                    )}
                   </div>
 
                 </div>

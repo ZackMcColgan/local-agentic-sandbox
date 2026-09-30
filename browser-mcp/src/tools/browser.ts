@@ -72,47 +72,60 @@ export function registerBrowserTools(mcp: McpServer) {
   // Tool 1: Search the web
   mcp.tool(
     "search_web",
-    "Search the public internet using DuckDuckGo for live facts, current events, weather forecasts, technical documentation, or web pages.",
+    "Search the public internet using DuckDuckGo for live facts, current events, technical documentation, library APIs, or web information.",
     {
-      query: z.string().describe("Search keywords or technical question (e.g. 'Austin TX weather today', 'pydantic v2 validator')"),
+      query: z.string().describe("Search keywords or technical question (e.g. 'latest PyTorch release notes', 'pydantic v2 field validator syntax')"),
       limit: z.number().min(1).max(10).optional().default(5).describe("Maximum number of search results to return")
     },
     async ({ query, limit }) => {
       try {
-        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const results: Array<{ title: string; snippet: string; url: string }> = [];
+
+        // DuckDuckGo Lite Search (POST method, scriptless, zero CAPTCHAs)
+        const searchUrl = "https://lite.duckduckgo.com/lite/";
         const res = await fetch(searchUrl, {
+          method: "POST",
+          body: new URLSearchParams({ q: query }),
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-          }
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+          },
+          signal: AbortSignal.timeout(5000)
         });
 
-        if (!res.ok) {
-          throw new Error(`Search provider returned HTTP ${res.status}`);
-        }
+        if (res.ok) {
+          const html = await res.text();
+          const linkRegex = /<a\s+[^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi;
+          const snippetRegex = /<td\s+[^>]*class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/gi;
 
-        const html = await res.text();
-        // Extract basic search snippets from HTML response
-        const results: Array<{ title: string; snippet: string; url: string }> = [];
-        const resultRegex = /<a class="result__url"[^>]*href="([^"]+)"[^>]*>[\s\S]*?<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-        
-        let match;
-        while ((match = resultRegex.exec(html)) !== null && results.length < (limit || 5)) {
-          let rawUrl = match[1].trim();
-          const rawSnippet = match[2].replace(/<[^>]+>/g, "").trim();
-
-          // Unwrap DuckDuckGo redirect uddg parameter
-          const uddgMatch = rawUrl.match(/[?&]uddg=([^&]+)/);
-          if (uddgMatch) {
-            rawUrl = decodeURIComponent(uddgMatch[1]);
-          } else if (!rawUrl.startsWith("http")) {
-            rawUrl = `https://${rawUrl.replace(/^\/+/, "")}`;
+          const links: Array<{ title: string; url: string }> = [];
+          let m;
+          while ((m = linkRegex.exec(html)) !== null) {
+            const fullTag = m[0];
+            const title = m[1].replace(/<[^>]+>/g, "").trim();
+            const hrefMatch = fullTag.match(/href=['"]([^'"]+)['"]/i);
+            if (hrefMatch) {
+              let targetUrl = hrefMatch[1];
+              const uddg = targetUrl.match(/[?&]uddg=([^&]+)/);
+              if (uddg) targetUrl = decodeURIComponent(uddg[1]);
+              links.push({ title, url: targetUrl });
+            }
           }
 
-          results.push({
-            title: `Result ${results.length + 1}`,
-            snippet: rawSnippet,
-            url: rawUrl
-          });
+          const snippets: string[] = [];
+          while ((m = snippetRegex.exec(html)) !== null) {
+            snippets.push(m[1].replace(/<[^>]+>/g, "").trim());
+          }
+
+          const targetLimit = limit || 5;
+          for (let i = 0; i < links.length && results.length < targetLimit; i++) {
+            results.push({
+              title: links[i].title,
+              snippet: snippets[i] || "Click to fetch full page content.",
+              url: links[i].url
+            });
+          }
         }
 
         return {
@@ -125,7 +138,7 @@ export function registerBrowserTools(mcp: McpServer) {
               results: results.length > 0 ? results : [{
                 title: "Fallback Notice",
                 snippet: `Query submitted for '${query}'. Use fetch_webpage_markdown to inspect direct URLs.`,
-                url: searchUrl
+                url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`
               }]
             }, null, 2)
           }]

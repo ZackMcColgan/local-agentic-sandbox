@@ -85,8 +85,8 @@ const SYSTEM_PROMPT = `You are an intelligent agentic AI platform running on loc
 
 You have access to two distinct tool tiers:
 1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
-   - 'search_web': Search the internet using DuckDuckGo. Use this whenever the user asks about real-time events, current weather, latest documentation, or questions requiring live web lookups.
-   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation or scrape specific websites.
+   - 'search_web': Search the internet using DuckDuckGo. Use this whenever the user asks about real-time information, latest documentation, external packages, or general web lookups.
+   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation or inspect web pages.
 
 2. Air-Gapped Code Sandbox & Provenance (Tier: Sandbox / AI Mesh):
    - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs). Use this whenever asked to write, run, or verify code.
@@ -94,30 +94,50 @@ You have access to two distinct tool tiers:
    - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
 
 IMPORTANT INSTRUCTIONS:
-- Whenever the user asks about current facts, weather, external libraries, or web lookups, ALWAYS proactively invoke the 'search_web' tool. Do NOT claim you cannot access the internet; your browser toolchain handles web access safely through an isolated egress proxy.
-- Whenever asked to run or test Python code, ALWAYS invoke 'execute_sandboxed_python'.
-- Synthesize tool execution results cleanly for the user.`;
+- When a user query requires real-time facts or external web data, invoke 'search_web' or 'fetch_webpage_markdown'.
+- When asked to execute or test code, invoke 'execute_sandboxed_python'.
+- Synthesize responses clearly using clean Markdown formatting.`;
+
+    let effortDirective = "";
+    if (reasoningEffort === "low") {
+      effortDirective = "\n\nREASONING EFFORT: FAST / DIRECT. Provide direct, concise answers without <think> tags or verbose preamble.";
+    } else if (reasoningEffort === "xhigh") {
+      effortDirective = "\n\nREASONING EFFORT: DEEP. Think deeply step-by-step before answering.";
+    }
 
     const conversationMessages = [...messages];
     if (!conversationMessages.some((m: any) => m.role === "system")) {
       conversationMessages.unshift({
         role: "system",
-        content: SYSTEM_PROMPT
+        content: SYSTEM_PROMPT + effortDirective
       });
     }
+
+    const computeOptions = () => {
+      const opts: any = {};
+      if (reasoningEffort === "low") {
+        opts.temperature = 0.2;
+        opts.num_predict = 1536;
+      } else if (reasoningEffort === "xhigh") {
+        opts.temperature = 0.7;
+        opts.num_predict = 4096;
+      } else {
+        opts.temperature = 0.5;
+        opts.num_predict = 2048;
+      }
+      if (activeModel.includes("qwen3.8")) {
+        opts.reasoning_effort = reasoningEffort;
+      }
+      return opts;
+    };
 
     // Step 1: Query Ollama with dynamic model and reasoning effort
     const ollamaPayload: any = {
       model: activeModel,
       messages: conversationMessages,
-      stream: false
+      stream: false,
+      options: computeOptions()
     };
-
-    if (reasoningEffort) {
-      ollamaPayload.options = {
-        reasoning_effort: reasoningEffort
-      };
-    }
 
     if (ollamaTools.length > 0) {
       ollamaPayload.tools = ollamaTools;
@@ -138,20 +158,48 @@ IMPORTANT INSTRUCTIONS:
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
+    // Normalizing helper to detect tool calls either from message.tool_calls OR from content JSON
+    const getEffectiveToolCalls = (msg: any) => {
+      if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+        return msg.tool_calls;
+      }
+      if (msg.content && typeof msg.content === "string") {
+        try {
+          const trimmed = msg.content.trim();
+          const clean = trimmed.startsWith("```json")
+            ? trimmed.replace(/^```json/, "").replace(/```$/, "").trim()
+            : trimmed.startsWith("```")
+            ? trimmed.replace(/^```/, "").replace(/```$/, "").trim()
+            : trimmed;
+          const parsed = JSON.parse(clean);
+          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+            return [{
+              function: {
+                name: parsed.name,
+                arguments: parsed.arguments || {}
+              }
+            }];
+          }
+        } catch {}
+      }
+      return [];
+    };
+
     // Step 2: Handle Autonomous Multi-Round MCP Tool Execution Loop
     let currentAssistantMessage = assistantMessage;
     let round = 0;
     const MAX_TOOL_ROUNDS = 3;
 
-    while (
-      currentAssistantMessage.tool_calls &&
-      currentAssistantMessage.tool_calls.length > 0 &&
-      round < MAX_TOOL_ROUNDS
-    ) {
+    while (round < MAX_TOOL_ROUNDS) {
+      const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
+      if (!toolCalls || toolCalls.length === 0) {
+        break;
+      }
+
       round++;
       conversationMessages.push(currentAssistantMessage);
 
-      for (const toolCall of currentAssistantMessage.tool_calls) {
+      for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
         const toolArgs = typeof toolCall.function.arguments === "string"
           ? JSON.parse(toolCall.function.arguments)
@@ -197,9 +245,7 @@ IMPORTANT INSTRUCTIONS:
         nextPayload.tools = ollamaTools;
       }
 
-      if (reasoningEffort) {
-        nextPayload.options = { reasoning_effort: reasoningEffort };
-      }
+      nextPayload.options = computeOptions();
 
       const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: "POST",

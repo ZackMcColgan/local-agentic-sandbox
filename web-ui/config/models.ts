@@ -44,6 +44,14 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "sub-agent",
     recommendedVRAM: "~4.7 GB",
     supportsReasoningEffort: false,
-    description: "Ultra-fast execution sub-agent for unit testing and quick fixes."
+    description: "Ultra-fast execution and coding (~45 tok/s). Recommended for fast chat."
+  },
+  {
+    id: "qwen2.5-coder:1.5b",
+    name: "Qwen 2.5 Coder (1.5B)",
+    role: "sub-agent",
+    recommendedVRAM: "~1.0 GB",
+    supportsReasoningEffort: false,
+    description: "Instant sub-second response (~185 tok/s). Ultra-lightweight."
   }
 ];
