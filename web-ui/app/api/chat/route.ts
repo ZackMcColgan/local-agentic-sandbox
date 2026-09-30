@@ -4,7 +4,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
-const MODEL_NAME = process.env.MODEL_NAME || "qwen2.5-coder:7b";
+const MODEL_NAME = process.env.MODEL_NAME || "qwen3.8";
 
 interface TraceItem {
   tool: string;

@@ -5,7 +5,7 @@ all: help
 help:
 	@echo "local-agentic-sandbox - Management Commands"
 	@echo "============================================"
-	@echo "make pull-model    Start Ollama and pull qwen2.5-coder:7b model"
+	@echo "make pull-model    Start Ollama and pull qwen3.8 model"
 	@echo "make up            Build and launch all services in detached mode"
 	@echo "make down          Stop and remove all containers"
 	@echo "make restart       Restart all services"
@@ -15,7 +15,7 @@ help:
 
 pull-model:
 	docker compose up -d ollama
-	docker compose exec ollama ollama run qwen2.5-coder:7b
+	docker compose exec ollama ollama run qwen3.8
 
 up:
 	docker compose up --build -d

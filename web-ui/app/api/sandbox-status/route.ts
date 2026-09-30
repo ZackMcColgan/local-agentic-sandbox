@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
-const MODEL_NAME = process.env.MODEL_NAME || "qwen2.5-coder:7b";
+const MODEL_NAME = process.env.MODEL_NAME || "qwen3.8";
 
 export async function GET() {
   const timestamp = new Date().toISOString();

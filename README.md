@@ -1,4 +1,4 @@
-﻿# local-agentic-sandbox
+# local-agentic-sandbox
 
 A full-stack, air-gapped agentic AI platform orchestrating local LLMs via Ollama, Model Context Protocol (MCP), and hardened container sandboxes for safe autonomous code execution.
 
@@ -6,7 +6,7 @@ A full-stack, air-gapped agentic AI platform orchestrating local LLMs via Ollama
 
 ## Architecture Overview
 
-- **Local Inference**: Ollama (`qwen2.5-coder:7b`) on an isolated internal network (`ai-mesh`).
+- **Local Inference**: Ollama (`qwen3.8`) on an isolated internal network (`ai-mesh`).
 - **Sandboxed MCP Server**: Unprivileged container (`uid: 10001`), read-only root filesystem, dropped Linux capabilities (`cap_drop: ALL`), ephemeral `tmpfs` execution buffer.
 - **Web UI & Orchestrator**: Next.js 15 streaming interface with agent execution trace and sandbox governance monitoring.
 
@@ -28,7 +28,7 @@ sbx run --kit git+https://github.com/shelajev/agy-sbx-kit.git agy .
 ```bash
 # 1. Pull the model into Ollama
 docker compose up -d ollama
-docker compose exec ollama ollama run qwen2.5-coder:7b
+docker compose exec ollama ollama run qwen3.8
 
 # 2. Build and launch all services
 docker compose up --build -d

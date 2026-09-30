@@ -1,4 +1,4 @@
-﻿services:
+services:
   # 1. Local AI Engine (Air-Gapped)
   ollama:
     image: ollama/ollama:latest
@@ -8,6 +8,7 @@
       - ollama_data:/root/.ollama
     networks:
       - ai-mesh
+      - egress-mesh
     environment:
       - OLLAMA_KEEP_ALIVE=24h
 
@@ -46,7 +47,7 @@
       - NODE_ENV=production
       - OLLAMA_BASE_URL=http://ollama:11434
       - MCP_SERVER_URL=http://mcp-server:8080/sse
-      - MODEL_NAME=qwen2.5-coder:7b
+      - MODEL_NAME=qwen3.8
     networks:
       - ai-mesh
       - egress-mesh

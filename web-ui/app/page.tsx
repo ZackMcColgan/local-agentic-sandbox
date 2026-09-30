@@ -81,7 +81,7 @@ export default function Home() {
                 <span>Zero-Trust 3-Tier Topology</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-normal">
-                Autonomous code generation runs on <span className="text-slate-200">Ollama (Qwen 2.5 Coder)</span>, dispatches tools over <span className="text-slate-200">Model Context Protocol SSE</span>, and executes in a sandboxed container with <span className="text-slate-200 font-mono">cap_drop: ALL</span> and <span className="text-slate-200 font-mono">read_only rootfs</span>.
+                Autonomous code generation runs on <span className="text-slate-200">Ollama (Qwen 3.8)</span>, dispatches tools over <span className="text-slate-200">Model Context Protocol SSE</span>, and executes in a sandboxed container with <span className="text-slate-200 font-mono">cap_drop: ALL</span> and <span className="text-slate-200 font-mono">read_only rootfs</span>.
               </p>
               <div className="pt-1 flex items-center justify-between text-[10px] font-mono text-slate-500">
                 <span>Network: ai-mesh (internal)</span>

@@ -1,4 +1,4 @@
-﻿# Architecture Specification: local-agentic-sandbox
+# Architecture Specification: local-agentic-sandbox
 
 **Repository**: `local-agentic-sandbox`  
 **Description**: Full-stack, air-gapped agentic AI platform. Orchestrates local LLMs via Ollama, Model Context Protocol (MCP), and hardened container sandboxes for autonomous code generation, execution, and verification.
@@ -120,7 +120,7 @@ sbx run --kit git+https://github.com/shelajev/agy-sbx-kit.git agy .
 ```bash
 # 1. Pull the model into Ollama
 docker compose up -d ollama
-docker compose exec ollama ollama run qwen2.5-coder:7b
+docker compose exec ollama ollama run qwen3.8
 
 # 2. Build and launch all services
 docker compose up --build -d
