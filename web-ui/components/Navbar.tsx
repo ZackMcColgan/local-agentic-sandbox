@@ -42,20 +42,21 @@ export function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         
         {/* Brand & Identity */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm shadow-emerald-500/20">
-            <Shield className="h-5 w-5" />
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm shadow-emerald-500/20">
+            <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-100 tracking-tight text-base">
-                local-agentic-sandbox
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-semibold text-slate-100 tracking-tight text-sm sm:text-base">
+                <span className="sm:hidden">agentic-sandbox</span>
+                <span className="hidden sm:inline">local-agentic-sandbox</span>
               </span>
-              <span className="text-[10px] font-mono uppercase bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 tracking-wider">
-                v1.1 Multi-Agent
+              <span className="text-[9px] sm:text-[10px] font-mono uppercase bg-emerald-950/80 text-emerald-400 px-1.5 sm:px-2 py-0.5 rounded border border-emerald-500/20 tracking-wider">
+                v1.1
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
+            <p className="text-xs text-slate-400 hidden md:block">
               Zero-Trust Autonomous Execution & Dynamic Model Router
             </p>
           </div>

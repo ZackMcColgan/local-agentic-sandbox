@@ -57,18 +57,19 @@ services:
       dockerfile: Dockerfile
     container_name: enterprise-ai-portal
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - NODE_ENV=production
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
       - MODEL_NAME=qwen3.8:27b-q3_k_m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - ai-mesh
       - egress-mesh
     depends_on:
-      - ollama
       - mcp-server
       - browser-mcp
 
