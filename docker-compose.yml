@@ -8,7 +8,6 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - ai-mesh
-      - egress-mesh
     environment:
       - OLLAMA_KEEP_ALIVE=24h
 
@@ -35,7 +34,23 @@ services:
           cpus: "2.0"
           memory: 1024M
 
-  # 3. Next.js Web UI & Orchestrator
+  # 3. Dedicated Browser MCP Server (Egress & Scraping Boundary)
+  browser-mcp:
+    build:
+      context: ./browser-mcp
+      dockerfile: Dockerfile
+    container_name: browser-mcp-toolchain
+    restart: unless-stopped
+    user: "10002:10002"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ai-mesh
+      - egress-mesh
+    environment:
+      - PORT=8081
+
+  # 4. Next.js Web UI & Orchestrator
   web-ui:
     build:
       context: ./web-ui
@@ -47,13 +62,15 @@ services:
       - NODE_ENV=production
       - OLLAMA_BASE_URL=http://ollama:11434
       - MCP_SERVER_URL=http://mcp-server:8080/sse
-      - MODEL_NAME=qwen3.8
+      - BROWSER_MCP_URL=http://browser-mcp:8081/sse
+      - MODEL_NAME=qwen3.8:27b-q3_k_m
     networks:
       - ai-mesh
       - egress-mesh
     depends_on:
       - ollama
       - mcp-server
+      - browser-mcp
 
 networks:
   ai-mesh:

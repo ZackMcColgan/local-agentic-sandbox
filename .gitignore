@@ -8,6 +8,8 @@ dist/
 .next/
 out/
 build/
+coverage/
+.nyc_output/
 
 # Next.js telemetry & cache
 .next/cache/
@@ -31,6 +33,7 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+*.code-workspace
 *.swp
 *.swo
 

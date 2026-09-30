@@ -21,45 +21,56 @@ Enterprises and developers want autonomous coding agents that can generate, test
 ## 2. System Architecture & Topology
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        HOST MACHINE (DOCKER ENGINE)                    │
-│                                                                        │
-│   ┌──────────────────────┐      ┌──────────────────────────────────┐   │
-│   │   Browser Client     │ ───► │   Web UI & Agent Orchestrator    │   │
-│   │   (Port 3000)        │      │   - Next.js 15 / TypeScript      │   │
-│   │                      │      │   - Streaming Chat Interface     │   │
-│   │                      │      │   - Visual Agent Execution Trace │   │
-│   │                      │      │   - Live Sandbox Security Gauge  │   │
-│   └──────────────────────┘      └─────────────────┬────────────────┘   │
-│                                                   │                    │
-│                        egress-mesh (External)     │                    │
-│           ════════════════════════════════════════╪════════════════    │
-│                        ai-mesh (internal: true, zero internet egress)  │
-│                                                   │                    │
-│                     ┌─────────────────────────────┴─────────────────┐  │
-│                     ▼                                               ▼  │
-│      ┌─────────────────────────────┐                 ┌───────────────┐ │
-│      │   Sandboxed MCP Server      │                 │ Ollama Engine │ │
-│      │   - Official @modelcontext  │                 │ (Local LLM)   │ │
-│      │   - read_only rootfs        │                 │ - Qwen /      │ │
-│      │   - cap_drop: ALL           │                 │   Gemma       │ │
-│      │   - user: 10001:10001       │                 │ - Air-Gapped  │ │
-│      │   - tmpfs: /tmp (noexec)    │                 └───────────────┘ │
-│      │   - Safe Python Execution   │                                   │
-│      │   - Attestation Verifier    │                                   │
-│      └─────────────────────────────┘                                   │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              HOST MACHINE (DOCKER ENGINE)                              │
+│                                                                                        │
+│   ┌──────────────────────┐      ┌──────────────────────────────────┐                   │
+│   │   Browser Client     │ ───► │   Web UI & Agent Orchestrator    │                   │
+│   │   (Port 3000)        │      │   - Next.js 15 / TypeScript      │                   │
+│   │                      │      │   - Dual-MCP Tool Multiplexer    │                   │
+│   │                      │      │   - Visual Agent Execution Trace │                   │
+│   │                      │      │   - Live Sandbox Security Gauge  │                   │
+│   └──────────────────────┘      └─────────┬────────────────────────┘                   │
+│                                           │                                            │
+│                        egress-mesh        │                                            │
+│           ════════════════════════════════╪════════════════════════════════════        │
+│                                           │                      │                     │
+│                                           │                      ▼                     │
+│                                           │       ┌─────────────────────────────┐      │
+│                                           │       │   Browser MCP (Port 8081)   │      │
+│                                           │       │   - Isolated Web Scraper    │      │
+│                                           │       │   - SSRF Protection Guard   │      │
+│                                           │       │   - HTML-to-Markdown Clean  │      │
+│                                           │       │   - user: 10002:10002       │      │
+│                                           │       └─────────────────────────────┘      │
+│                                           │                                            │
+│                        ai-mesh (internal: true, zero internet egress)                  │
+│                                           │                                            │
+│                     ┌─────────────────────┴─────────────────────────┐                  │
+│                     ▼                                               ▼                  │
+│      ┌─────────────────────────────┐                 ┌───────────────┐                 │
+│      │   Sandboxed MCP Server      │                 │ Ollama Engine │                 │
+│      │   - Air-Gapped Code Runner  │                 │ (Local LLM)   │                 │
+│      │   - read_only rootfs        │                 │ - Qwen 3.8 /  │                 │
+│      │   - cap_drop: ALL           │                 │   Gemma       │                 │
+│      │   - user: 10001:10001       │                 │ - Air-Gapped  │                 │
+│      │   - tmpfs: /tmp (noexec)    │                 └───────────────┘                 │
+│      │   - Safe Python Execution   │                                                   │
+│      │   - Attestation Verifier    │                                                   │
+│      └─────────────────────────────┘                                                   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 3. Network & Security Isolation Matrix
 
-| Container | Network Placement | Filesystem Mode | Linux Capabilities | User ID | Resource Limits |
+| Container | Network Placement | Filesystem Mode | Linux Capabilities | User ID | Role & Capabilities |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`web-ui`** | `ai-mesh`, `egress-mesh` | Read-Write | Default | Non-Root | 1.0 CPU, 512MB RAM |
-| **`mcp-server`** | `ai-mesh` (`internal: true`) | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | 2.0 CPU, 1024MB RAM |
-| **`ollama`** | `ai-mesh` (`internal: true`) | Volume Mounted | Default | Root (in-container) | GPU / 4.0 CPU, 8GB RAM |
+| **`web-ui`** | `ai-mesh`, `egress-mesh` | Read-Write | Default | Non-Root | Web Client & Multi-MCP Orchestrator |
+| **`mcp-server`** | `ai-mesh` (`internal: true`) | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Python Code Runner |
+| **`browser-mcp`** | `ai-mesh`, `egress-mesh` | Read-Only App | Default (No Privs) | **`10002:10002`** | Isolated Web Scraper & Search |
+| **`ollama`** | `ai-mesh` (`internal: true`) | Volume Mounted | Default | Root (in-container) | Air-Gapped GPU Inference Engine |
 
 * **Zero Egress Enforcement**: The `ai-mesh` network is configured with `internal: true`. Neither the LLM engine nor the code execution container can initiate or receive internet traffic.
 * **Ephemeral Memory Buffer**: The MCP container mounts `/tmp` as a `tmpfs` (64MB) with `noexec,nosuid` to prevent malicious binary execution.

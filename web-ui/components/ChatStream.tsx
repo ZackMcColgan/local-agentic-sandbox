@@ -11,6 +11,8 @@ interface Message {
 
 interface ChatStreamProps {
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
+  activeModel: string;
+  reasoningEffort: "low" | "medium" | "xhigh";
 }
 
 const PRESET_PROMPTS = [
@@ -32,7 +34,7 @@ const PRESET_PROMPTS = [
   }
 ];
 
-export function ChatStream({ onTracesUpdate }: ChatStreamProps) {
+export function ChatStream({ onTracesUpdate, activeModel, reasoningEffort }: ChatStreamProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -63,7 +65,11 @@ export function ChatStream({ onTracesUpdate }: ChatStreamProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages })
+        body: JSON.stringify({
+          messages: newMessages,
+          model: activeModel,
+          reasoning_effort: reasoningEffort
+        })
       });
 
       const data = await res.json();

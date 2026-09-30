@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
+import { PRESET_MODEL_PROFILES, DEFAULT_PRIMARY_MODEL } from "@/config/models";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
-const MODEL_NAME = process.env.MODEL_NAME || "qwen3.8";
+const ACTIVE_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
 export async function GET() {
   const timestamp = new Date().toISOString();
 
-  // 1. Check Ollama Engine Health
+  // 1. Discover Ollama Engine Health and Installed Models
   let ollamaStatus = "OFFLINE";
   let availableModels: string[] = [];
   try {
     const res = await fetch(`${OLLAMA_URL}/api/tags`, {
       method: "GET",
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(2500)
     });
     if (res.ok) {
       ollamaStatus = "HEALTHY";
@@ -26,7 +27,7 @@ export async function GET() {
 
   // 2. Check MCP Server Health
   let mcpStatus = "OFFLINE";
-  let mcpTools = ["execute_sandboxed_python", "verify_container_provenance"];
+  const mcpTools = ["execute_sandboxed_python", "verify_container_provenance"];
   try {
     const res = await fetch(`${MCP_BASE}/health`, {
       method: "GET",
@@ -50,8 +51,9 @@ export async function GET() {
       ollama: {
         status: ollamaStatus,
         url: OLLAMA_URL,
-        target_model: MODEL_NAME,
-        model_loaded: availableModels.some((m) => m.includes("qwen") || m.includes("coder"))
+        target_model: ACTIVE_MODEL,
+        installed_models: availableModels,
+        profiles: PRESET_MODEL_PROFILES
       },
       mcp_server: {
         status: mcpStatus,

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import { z } from "zod";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export function registerCodeRunner(mcp: McpServer) {
   mcp.tool(
@@ -22,7 +22,7 @@ export function registerCodeRunner(mcp: McpServer) {
         const fullScript = test_code ? `${code}\n\n# --- Test Execution ---\n${test_code}` : code;
         await fs.writeFile(scriptPath, fullScript, "utf8");
 
-        const { stdout, stderr } = await execAsync(`python3 ${scriptPath}`, {
+        const { stdout, stderr } = await execFileAsync("python3", [scriptPath], {
           timeout: 5000,
           maxBuffer: 1024 * 1024
         });

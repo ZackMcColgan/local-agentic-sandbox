@@ -9,6 +9,7 @@ export interface ExecutionTraceItem {
   result: any;
   durationMs: number;
   timestamp: string;
+  model?: string;
 }
 
 interface ExecutionTraceProps {
@@ -97,7 +98,12 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
+                <div className="flex items-center gap-2.5 text-[11px] font-mono text-slate-400">
+                  {trace.model && (
+                    <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-500/20 text-[10px]">
+                      {trace.model}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {trace.durationMs}ms
