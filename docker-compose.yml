@@ -1,0 +1,65 @@
+﻿services:
+  # 1. Local AI Engine (Air-Gapped)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: local-ai-engine
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ai-mesh
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+
+  # 2. Sandboxed MCP Server (Execution Boundary)
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: sandboxed-mcp-toolchain
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks:
+      - ai-mesh
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+
+  # 3. Next.js Web UI & Orchestrator
+  web-ui:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    container_name: enterprise-ai-portal
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - MCP_SERVER_URL=http://mcp-server:8080/sse
+      - MODEL_NAME=qwen2.5-coder:7b
+    networks:
+      - ai-mesh
+      - egress-mesh
+    depends_on:
+      - ollama
+      - mcp-server
+
+networks:
+  ai-mesh:
+    internal: true # Zero internet access
+    driver: bridge
+  egress-mesh:
+    driver: bridge
+
+volumes:
+  ollama_data:
