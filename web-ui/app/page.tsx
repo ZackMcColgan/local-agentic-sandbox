@@ -90,7 +90,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors">
       <Navbar
         status={status}
         selectedModel={selectedModel}
@@ -106,11 +106,11 @@ export default function Home() {
         onThemeChange={handleThemeChange}
       />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto p-2 sm:p-4 lg:p-6 flex flex-col">
+      <main className="flex-1 min-h-0 flex flex-col max-w-5xl w-full mx-auto p-0 sm:p-4 lg:p-6 overflow-hidden">
         {activeTab === "chat" ? (
-          <div className="flex-1 flex flex-col h-[calc(100dvh-4.2rem)] sm:h-[calc(100dvh-5.5rem)]">
-            {/* Direct Full-Screen Chat View (No Cluttering Strips) */}
-            <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col">
+            {/* Direct Full-Screen Chat View */}
+            <div className="flex-1 min-h-0 overflow-hidden">
               <ChatStream
                 onTracesUpdate={handleTracesUpdate}
                 activeModel={selectedModel}
@@ -120,7 +120,7 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-6 p-3 sm:p-0 pb-12 animate-in fade-in duration-200">
             
             {/* Top Bar for Security Tab */}
             <div className="flex items-center justify-between">
@@ -187,13 +187,23 @@ export default function Home() {
                 <Layers className="h-4 w-4 text-cyan-500 dark:text-cyan-400" />
                 <span>Zero-Trust 3-Tier Multi-Agent Topology</span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
                 Autonomous orchestrator running on{" "}
-                <span className="text-emerald-600 dark:text-emerald-400 font-mono font-medium">{selectedModel}</span> (
-                <span className="text-amber-600 dark:text-amber-400 font-mono capitalize">{reasoningEffort}</span> effort),
-                dispatches tools over <span className="text-slate-800 dark:text-zinc-200 font-medium">Model Context Protocol SSE</span>. Air-gapped code executes inside a Linux container sandbox with{" "}
-                <span className="text-cyan-600 dark:text-cyan-400 font-mono">cap_drop: ALL</span> and a{" "}
-                <span className="text-cyan-600 dark:text-cyan-400 font-mono">read_only rootfs</span>. Web search and documentation scraping run isolated in an egress-only container with strict SSRF filtering.
+                <code className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-medium border border-emerald-500/20">
+                  {selectedModel}
+                </code>{" "}
+                (<span className="text-amber-600 dark:text-amber-400 font-mono capitalize">{reasoningEffort}</span> effort),
+                dispatches tools over{" "}
+                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
+                  Model Context Protocol SSE
+                </code>. Air-gapped code executes inside a zero-trust Linux container sandbox with{" "}
+                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
+                  cap_drop: ALL
+                </code>{" "}
+                and a{" "}
+                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
+                  read_only rootfs
+                </code>. Web search and documentation scraping run isolated in an egress-only container with strict SSRF filtering.
               </p>
               <div className="pt-2 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800">
                 <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Network: ai-mesh (air-gapped)</span>

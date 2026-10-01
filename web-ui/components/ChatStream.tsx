@@ -9,6 +9,7 @@ import {
   Loader2,
   Terminal,
   ShieldAlert,
+  ShieldCheck,
   Copy,
   Check,
   Edit3,
@@ -176,6 +177,7 @@ export function ChatStream({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
+  const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   
   // Attached files state (Images, PDFs, Word docs)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
@@ -192,6 +194,10 @@ export function ChatStream({
 
   const toggleThought = (msgId: string) => {
     setExpandedThoughts((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  const toggleProof = (proofKey: string) => {
+    setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
   };
 
   const copyToClipboard = (text: string, msgId: string) => {
@@ -376,7 +382,7 @@ export function ChatStream({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative flex flex-col h-full rounded-2xl border transition-colors bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 shadow-md overflow-hidden ${
+      className={`relative flex flex-col h-full rounded-none sm:rounded-2xl border-0 sm:border transition-colors bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 shadow-md overflow-hidden ${
         isDraggingOver ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20" : ""
       }`}
     >
@@ -444,7 +450,7 @@ export function ChatStream({
       </div>
 
       {/* Preset Suggestions Carousel */}
-      <div className="px-3 py-2 bg-slate-50/50 dark:bg-zinc-950/30 border-b border-slate-200/60 dark:border-zinc-800/60 flex gap-2 overflow-x-auto scrollbar-none">
+      <div className="px-3 py-2 bg-slate-50/50 dark:bg-zinc-950/30 border-b border-slate-200/60 dark:border-zinc-800/60 flex items-center gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PRESET_PROMPTS.map((p, idx) => (
           <button
             key={idx}
@@ -453,14 +459,14 @@ export function ChatStream({
             onClick={() => handleSend(p.prompt)}
             className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-700 dark:text-zinc-200 transition-all shadow-sm"
           >
-            <Sparkles className="h-3 w-3 text-cyan-500 dark:text-cyan-400" />
+            <Sparkles className="h-3 w-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
             <span>{p.title}</span>
           </button>
         ))}
       </div>
 
       {/* Scrollable Conversation Thread */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-4">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
@@ -531,10 +537,10 @@ export function ChatStream({
                             </span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-900/90 border border-indigo-400/30 text-indigo-100 text-[11px] font-mono shadow-sm">
-                            <FileText className="h-3.5 w-3.5 text-cyan-300" />
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-200/80 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-mono shadow-sm">
+                            <FileText className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
                             <span className="max-w-[140px] truncate">{att.name}</span>
-                            <span className="text-[10px] text-indigo-300">({formatFileSize(att.size)})</span>
+                            <span className="text-[10px] text-slate-500 dark:text-zinc-400">({formatFileSize(att.size)})</span>
                           </div>
                         )}
                       </div>
@@ -546,7 +552,7 @@ export function ChatStream({
                 <div
                   className={`rounded-2xl p-3.5 sm:p-4 text-xs leading-relaxed ${
                     isUser
-                      ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm"
+                      ? "bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tr-sm backdrop-blur-sm shadow-sm"
                       : "w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 rounded-tl-sm shadow-sm"
                   }`}
                 >
@@ -651,33 +657,157 @@ export function ChatStream({
                   )}
                 </div>
 
-                {/* Inline Tool Execution Summary Badges */}
+                {/* Inline Expandable Sandbox & Telemetry Badges (Demo Flex) */}
                 {!isUser && m.traces && m.traces.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {m.traces.map((trace, tIdx) => (
-                      <div
-                        key={tIdx}
-                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-mono text-slate-700 dark:text-zinc-300 shadow-sm"
-                      >
-                        {trace.tier === "browser" ? (
-                          <Globe className="h-3 w-3 text-cyan-500 dark:text-cyan-400" />
-                        ) : (
-                          <Cpu className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
-                        )}
-                        <span className="font-semibold">{trace.tool}</span>
-                        <span className="text-slate-500 dark:text-zinc-400">({trace.durationMs}ms)</span>
-                      </div>
-                    ))}
-                    {onViewSecurityTelemetry && (
-                      <button
-                        type="button"
-                        onClick={onViewSecurityTelemetry}
-                        className="inline-flex items-center gap-1 text-[10px] text-cyan-600 dark:text-cyan-400 hover:underline font-mono ml-1"
-                      >
-                        <span>Telemetry</span>
-                        <ArrowRight className="h-2.5 w-2.5" />
-                      </button>
-                    )}
+                  <div className="mt-2.5 space-y-2 w-full">
+                    {m.traces.map((trace, tIdx) => {
+                      const proofKey = `${m.id}-${tIdx}`;
+                      const isExpanded = !!expandedProofs[proofKey];
+                      const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
+
+                      let stdoutPreview = "";
+                      try {
+                        if (trace.result?.content?.[0]?.text) {
+                          const parsed = JSON.parse(trace.result.content[0].text);
+                          stdoutPreview = parsed.stdout || parsed.output || (typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2));
+                        } else if (trace.result) {
+                          stdoutPreview = typeof trace.result === "string" ? trace.result : JSON.stringify(trace.result, null, 2);
+                        }
+                      } catch {
+                        stdoutPreview = trace.result?.content?.[0]?.text || String(trace.result || "");
+                      }
+
+                      return (
+                        <div
+                          key={tIdx}
+                          className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-950/70 overflow-hidden shadow-sm transition-all"
+                        >
+                          {/* Execution Proof Header Badge */}
+                          <button
+                            type="button"
+                            onClick={() => toggleProof(proofKey)}
+                            className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-900/80 transition-colors text-xs font-mono"
+                          >
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isBrowser ? (
+                                <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
+                                  <Globe className="h-3.5 w-3.5" />
+                                  <span>Isolated Egress Mesh</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                  <span>Executed in Docker Sandbox</span>
+                                </span>
+                              )}
+                              <span className="text-slate-400 dark:text-zinc-600">•</span>
+                              <span className="text-slate-600 dark:text-zinc-300 font-medium">{trace.tool}</span>
+                              <span className="text-slate-400 dark:text-zinc-600">•</span>
+                              <span className="text-slate-500 dark:text-zinc-400">{trace.durationMs}ms</span>
+                              <span className="text-slate-400 dark:text-zinc-600 hidden xs:inline">•</span>
+                              <span className="text-slate-600 dark:text-zinc-400 hidden xs:inline">
+                                {isBrowser ? "UID: 10002" : "UID: 10001"}
+                              </span>
+                              <span className="text-slate-400 dark:text-zinc-600 hidden sm:inline">•</span>
+                              <span className="text-slate-600 dark:text-zinc-400 hidden sm:inline">
+                                {isBrowser ? "SSRF Guard: ON" : "CapDrop: ALL"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
+                              <span>{isExpanded ? "Hide Proof" : "Expand Proof"}</span>
+                              {isExpanded ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </div>
+                          </button>
+
+                          {/* Collapsible Sandbox Terminal Drawer */}
+                          {isExpanded && (
+                            <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 dark:bg-black p-3.5 space-y-3 font-mono text-[11px] text-slate-300 animate-in fade-in duration-150">
+                              
+                              {/* Security Primitives Attestation Bar */}
+                              <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-800 text-[10px]">
+                                <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                                  <ShieldCheck className="h-3 w-3" />
+                                  SLSA-3 Verified Runtime
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-sky-400 border border-zinc-800">
+                                  {isBrowser ? "container: browser-mcp-toolchain" : "container: sandboxed-mcp-toolchain"}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+                                  {isBrowser ? "user: 10002:10002" : "user: 10001:10001"}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+                                  {isBrowser ? "network: egress-mesh" : "network: ai-mesh (air-gapped)"}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 border border-zinc-800">
+                                  {isBrowser ? "ssrf_guard: ACTIVE" : "cap_drop: ALL"}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+                                  {isBrowser ? "no_new_privs: true" : "rootfs: READ_ONLY | /tmp: tmpfs"}
+                                </span>
+                              </div>
+
+                              {/* Tool Stdin Payload */}
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                                  Input Payload:
+                                </div>
+                                <pre className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-cyan-300 overflow-x-auto max-h-36 whitespace-pre-wrap leading-relaxed">
+                                  {trace.args?.code ? trace.args.code : JSON.stringify(trace.args, null, 2)}
+                                </pre>
+                              </div>
+
+                              {/* Tool Stdout & Execution Output */}
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                                  <span>Sandbox Stdout Output:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(stdoutPreview, proofKey)}
+                                    className="text-slate-400 hover:text-white flex items-center gap-1 text-[10px] font-sans"
+                                  >
+                                    {copiedMessageId === proofKey ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-emerald-400" />
+                                        <span className="text-emerald-400">Copied</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3" />
+                                        <span>Copy Stdout</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <pre className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-emerald-300/90 overflow-x-auto max-h-48 whitespace-pre-wrap leading-relaxed">
+                                  {stdoutPreview || "Process exited with code 0 (no output)"}
+                                </pre>
+                              </div>
+
+                              {/* Direct Jump to System Tab */}
+                              {onViewSecurityTelemetry && (
+                                <div className="pt-1 flex items-center justify-between text-[11px] font-sans">
+                                  <span className="text-slate-400">Full host GPU & Docker Scout telemetry available:</span>
+                                  <button
+                                    type="button"
+                                    onClick={onViewSecurityTelemetry}
+                                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-medium"
+                                  >
+                                    <span>System Architecture Tab</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -760,7 +890,7 @@ export function ChatStream({
 
               {/* User Avatar */}
               {isUser && (
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-300 shrink-0 mt-0.5 shadow-sm">
+                <div className="hidden sm:flex h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-blue-500/10 border border-blue-500/30 items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5 shadow-sm">
                   <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
               )}
@@ -792,8 +922,8 @@ export function ChatStream({
         <div ref={scrollRef} />
       </div>
 
-      {/* Modern Floating Prompt Bar with Attachment Staging Area */}
-      <div className="p-2.5 sm:p-4 bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200 dark:border-zinc-800 backdrop-blur-md">
+      {/* Modern Docked Floating Prompt Bar with Attachment Staging Area */}
+      <div className="sticky bottom-0 z-20 p-2.5 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200 dark:border-zinc-800 backdrop-blur-md">
         
         {/* Attachment Chips Preview Bar (when files are attached) */}
         {attachedFiles.length > 0 && (

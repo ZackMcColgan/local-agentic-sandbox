@@ -68,19 +68,19 @@ export function Navbar({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         
         {/* Main Header Bar */}
-        <div className="h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="h-14 flex items-center justify-between gap-1 sm:gap-4">
           
           {/* Brand Logo & Title */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/10">
-              <Shield className="h-4 w-4" />
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0">
+              <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <span className="font-bold text-slate-900 dark:text-zinc-100 tracking-tight text-xs sm:text-sm">
-                  agentic-sandbox
+                  <span className="hidden xs:inline sm:inline">agentic-</span>sandbox
                 </span>
-                <span className="text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
+                <span className="hidden sm:inline-block text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
                   v1.2
                 </span>
               </div>
@@ -92,11 +92,11 @@ export function Navbar({
           </div>
 
           {/* Center Tabs: Chat vs System & Security */}
-          <div className="flex items-center bg-slate-100 dark:bg-zinc-900 p-1 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-inner">
+          <div className="flex items-center bg-slate-100 dark:bg-zinc-900 p-0.5 sm:p-1 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-inner shrink-0">
             <button
               type="button"
               onClick={() => onTabChange("chat")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === "chat"
                   ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-300 border border-slate-200 dark:border-zinc-700 shadow-sm"
                   : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
@@ -109,17 +109,17 @@ export function Navbar({
             <button
               type="button"
               onClick={() => onTabChange("security")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === "security"
                   ? "bg-white dark:bg-zinc-800 text-cyan-600 dark:text-cyan-300 border border-slate-200 dark:border-zinc-700 shadow-sm"
                   : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
               }`}
             >
               <Activity className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">System & Architecture</span>
-              <span className="sm:hidden">System</span>
+              <span className="hidden sm:inline">System</span>
+              <span className="sm:hidden">Sys</span>
               {traceCount > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-500/30">
+                <span className="px-1 py-0.2 rounded-full text-[9px] font-mono bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-500/30">
                   {traceCount}
                 </span>
               )}
@@ -127,7 +127,7 @@ export function Navbar({
           </div>
 
           {/* Right Controls: Model Selector, Thinking Effort, Theme Toggle */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
             {/* Thinking / Reasoning Effort Selector */}
             <div className="hidden sm:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
