@@ -28,6 +28,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+import { AgentMode } from "@/config/models";
 
 export interface AttachedFileItem {
   id: string;
@@ -59,28 +60,11 @@ export interface ChatMessage {
 interface ChatStreamProps {
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
   activeModel: string;
+  agentMode?: AgentMode;
   reasoningEffort: "low" | "medium" | "xhigh";
   onViewSecurityTelemetry?: () => void;
+  activeBranch?: string;
 }
-
-const PRESET_PROMPTS = [
-  {
-    title: "Web Research & Facts",
-    prompt: "Search the web for the latest Python 3.13 release highlights and summarize the key security features."
-  },
-  {
-    title: "Python Sandbox Test",
-    prompt: "Write a python script to calculate fibonacci up to 10 and run it with unit tests in the sandbox."
-  },
-  {
-    title: "Verify Zero Egress",
-    prompt: "Write a Python script that attempts to open a socket connection to 8.8.8.8 on port 53 and run it to verify zero network egress."
-  },
-  {
-    title: "Filesystem Immutability",
-    prompt: "Write a Python script that tries to write a file to /etc/test.txt to confirm the root filesystem is read-only."
-  }
-];
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -161,8 +145,10 @@ function parseThinkingAndContent(raw: string): { thought?: string; content: stri
 export function ChatStream({
   onTracesUpdate,
   activeModel,
+  agentMode = "auto",
   reasoningEffort,
-  onViewSecurityTelemetry
+  onViewSecurityTelemetry,
+  activeBranch
 }: ChatStreamProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -325,6 +311,7 @@ export function ChatStream({
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           model: activeModel,
+          mode: agentMode,
           reasoning_effort: reasoningEffort,
           attachments: currentAttachments.map(a => ({
             name: a.name,
@@ -357,7 +344,7 @@ export function ChatStream({
           content: parsed.content,
           thought: parsed.thought,
           traces: data.traces,
-          modelUsed: activeModel,
+          modelUsed: data.model || activeModel,
           durationMs
         }
       ]);
@@ -435,6 +422,12 @@ export function ChatStream({
           <div>
             <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 block">Workspace</span>
           </div>
+          {activeBranch && (
+            <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 shadow-xs">
+              <span className="text-[10px]">🌿</span>
+              <span>{activeBranch}</span>
+            </span>
+          )}
           <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">{activeModel}</span>
             {" • "}
@@ -455,22 +448,6 @@ export function ChatStream({
             </button>
           )}
         </div>
-      </div>
-
-      {/* Preset Suggestions Carousel */}
-      <div className="px-3 py-2 bg-white dark:bg-zinc-950/30 border-b border-slate-100 dark:border-zinc-800/60 flex items-center gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PRESET_PROMPTS.map((p, idx) => (
-          <button
-            key={idx}
-            type="button"
-            disabled={isLoading}
-            onClick={() => handleSend(p.prompt)}
-            className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-700 dark:text-zinc-200 transition-all shadow-sm"
-          >
-            <Sparkles className="h-3 w-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
-            <span>{p.title}</span>
-          </button>
-        ))}
       </div>
 
       {/* Scrollable Conversation Thread */}

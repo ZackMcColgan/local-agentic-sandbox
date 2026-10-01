@@ -6,7 +6,7 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { ChatStream } from "@/components/ChatStream";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { Layers, ShieldCheck, Globe, Cpu, ArrowLeft, RefreshCw } from "lucide-react";
-import { PRESET_MODEL_PROFILES, ModelProfile } from "@/config/models";
+import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 
 export default function Home() {
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
@@ -15,6 +15,8 @@ export default function Home() {
     mcp: "INITIALIZING",
     airGapped: true
   });
+  const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
+  const [activeBranch, setActiveBranch] = useState<string>("agent/v2-autonomous-platform");
   const [selectedModel, setSelectedModel] = useState<string>("gemma4:e4b");
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("low");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
@@ -47,18 +49,40 @@ export default function Home() {
     } catch {}
   };
 
-  // Load theme preference on mount (supports ?theme=light / ?theme=dark in URL for testing/preview)
+  // Load theme & agent mode preferences on mount
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme") as "dark" | "light" | null;
-      const saved = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null) || "dark";
-      setTheme(saved);
-      applyTheme(saved);
+      const savedTheme = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null) || "dark";
+      setTheme(savedTheme);
+      applyTheme(savedTheme);
+
+      const savedMode = (localStorage.getItem("local_agent_mode") as AgentMode) || DEFAULT_AGENT_MODE;
+      setAgentMode(savedMode);
+      if (savedMode === "flash") {
+        setSelectedModel("gemma4:e4b");
+      } else if (savedMode === "pro") {
+        setSelectedModel("qwen3.8:27b-q3_k_m");
+      }
     } catch {
       applyTheme("dark");
     }
   }, []);
+
+  const handleAgentModeChange = (newMode: AgentMode) => {
+    setAgentMode(newMode);
+    try {
+      localStorage.setItem("local_agent_mode", newMode);
+    } catch {}
+    if (newMode === "flash") {
+      setSelectedModel("gemma4:e4b");
+    } else if (newMode === "pro") {
+      setSelectedModel("qwen3.8:27b-q3_k_m");
+    } else {
+      setSelectedModel("gemma4:e4b");
+    }
+  };
 
   const handleThemeChange = (newTheme: "dark" | "light") => {
     setTheme(newTheme);
@@ -111,6 +135,8 @@ export default function Home() {
     >
       <Navbar
         status={status}
+        agentMode={agentMode}
+        onAgentModeChange={handleAgentModeChange}
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
         reasoningEffort={reasoningEffort}
@@ -122,6 +148,7 @@ export default function Home() {
         traceCount={traces.length}
         theme={theme}
         onThemeChange={handleThemeChange}
+        activeBranch={activeBranch}
       />
 
       <main className="flex-1 min-h-0 flex flex-col max-w-5xl w-full mx-auto p-0 sm:p-4 lg:p-6 overflow-hidden">
@@ -132,8 +159,10 @@ export default function Home() {
               <ChatStream
                 onTracesUpdate={handleTracesUpdate}
                 activeModel={selectedModel}
+                agentMode={agentMode}
                 reasoningEffort={reasoningEffort}
                 onViewSecurityTelemetry={() => setActiveTab("security")}
+                activeBranch={activeBranch}
               />
             </div>
           </div>

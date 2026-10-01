@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
-
+import {
+  DEFAULT_PRIMARY_MODEL,
+  DEFAULT_SUBAGENT_MODEL,
+  AgentMode,
+  AGENT_MODES
+} from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
+import { extractArchitectureSpec } from "@/lib/visionProcessor";
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
+const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
@@ -17,7 +22,7 @@ interface TraceItem {
   durationMs: number;
   timestamp: string;
   model: string;
-  tier?: "sandbox" | "browser";
+  tier?: "sandbox" | "browser" | "workspace";
 }
 
 async function connectMcpClient(url: string, name: string) {
@@ -36,21 +41,105 @@ async function connectMcpClient(url: string, name: string) {
   }
 }
 
+/**
+ * Lean hierarchical triage classifier using Gemma 4 E4B (~80 tok/s).
+ * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
+ */
+async function triageComplexity(
+  userQuery: string,
+  ollamaBaseUrl: string,
+  triageModel: string = DEFAULT_SUBAGENT_MODEL
+): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
+  try {
+    const res = await fetch(`${ollamaBaseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: triageModel,
+        messages: [
+          {
+            role: "system",
+            content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
+SIMPLE_EXECUTION: file navigation, git branch operations, running tests/commands, inspecting logs, small bug fixes, direct tool calls.
+DEEP_SYNTHESIS: novel system architecture, complex algorithm design, full module refactoring, difficult multi-step planning.
+Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "reasoning": "brief explanation"}`
+          },
+          {
+            role: "user",
+            content: userQuery
+          }
+        ],
+        format: "json",
+        stream: false,
+        options: {
+          temperature: 0.1,
+          num_ctx: 2048,
+          num_predict: 128
+        }
+      })
+    });
+
+    if (!res.ok) {
+      return "SIMPLE_EXECUTION";
+    }
+
+    const data = await res.json();
+    const parsed = JSON.parse(data.message?.content || "{}");
+    if (parsed.complexity === "DEEP_SYNTHESIS") {
+      return "DEEP_SYNTHESIS";
+    }
+    return "SIMPLE_EXECUTION";
+  } catch (err) {
+    console.warn("[Triage] Error classifying complexity, defaulting to SIMPLE_EXECUTION:", err);
+    return "SIMPLE_EXECUTION";
+  }
+}
+
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
-  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" }>();
+  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" }>();
 
   try {
-    const { messages, model: requestedModel, reasoning_effort: requestedReasoning, attachments } = await req.json();
+    const {
+      messages,
+      model: requestedModel,
+      mode: requestedMode,
+      reasoning_effort: requestedReasoning,
+      attachments
+    } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 });
     }
 
-    const activeModel = requestedModel || DEFAULT_MODEL;
-    const reasoningEffort = requestedReasoning || (activeModel.includes("qwen3.8") ? "medium" : undefined);
+    const mode: AgentMode = requestedMode || "auto";
 
-    // 1. Connect to Sandboxed Code-Runner MCP
+    // 1. Resolve Active Model via Tri-Mode Dispatcher
+    let activeModel = requestedModel;
+    let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
+
+    if (!activeModel || activeModel === "auto") {
+      if (mode === "flash") {
+        activeModel = "gemma4:e4b";
+      } else if (mode === "pro") {
+        activeModel = DEFAULT_PRIMARY_MODEL;
+      } else {
+        // mode === "auto": Execute fast triage step
+        const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+        const userPrompt = lastUserMsg?.content || "";
+        triageComplexityResult = await triageComplexity(userPrompt, OLLAMA_URL, "gemma4:e4b");
+
+        if (triageComplexityResult === "DEEP_SYNTHESIS") {
+          activeModel = DEFAULT_PRIMARY_MODEL;
+        } else {
+          activeModel = "gemma4:e4b";
+        }
+      }
+    }
+
+    const reasoningEffort = requestedReasoning || (activeModel.includes("qwen3.8") ? "medium" : "low");
+
+    // 2. Connect to Sandboxed Code-Runner / Workspace MCP
     const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
     if (sandboxSession) {
       activeSessions.push(sandboxSession);
@@ -59,7 +148,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Connect to Isolated Browser/Scraper MCP
+    // 3. Connect to Isolated Browser/Scraper MCP
     const browserSession = await connectMcpClient(BROWSER_MCP_URL, "orchestrator-browser-client");
     if (browserSession) {
       activeSessions.push(browserSession);
@@ -83,31 +172,34 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-const SYSTEM_PROMPT = `You are an intelligent agentic AI platform running on local hardware with Model Context Protocol (MCP) tool integration and native multimodal support.
+    const SYSTEM_PROMPT = `You are an intelligent autonomous AI engineering platform running on local hardware with Model Context Protocol (MCP) tool integration, workspace automation, and native multimodal support.
 
 You have access to two distinct tool tiers:
 1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
    - 'search_web': Search the internet using DuckDuckGo. Automatically fetches and attaches clean markdown for the most informative top result in 'top_result_content'. Use this whenever the user asks about real-time information, latest documentation, weather forecasts, external packages, or general web lookups.
    - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation, inspect web pages, or scrape articles.
 
-2. Air-Gapped Code Sandbox & Provenance (Tier: Sandbox / AI Mesh):
-   - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs). Use this whenever asked to write, run, or verify code.
+2. Air-Gapped Code Sandbox, Workspace & Git Operations (Tier: Sandbox / AI Mesh):
+   - 'workspace_get_tree': Retrieve repository directory tree skipping node_modules and .git.
+   - 'workspace_grep': Fast regex/substring search across codebase.
+   - 'workspace_read_file': Read files with line numbers.
+   - 'workspace_write_file': Atomically write code, Markdown documentation, and .drawio.svg diagrams.
+   - 'workspace_run_command': Execute commands (pytest, npm test, cargo, bash) and inspect exit codes & stderr.
+   - 'git_status' & 'git_diff': Inspect branch status, unstaged changes, and unified diffs.
+   - 'git_checkout_branch': Create or switch to an autonomous branch (e.g. agent/feat-xyz).
+   - 'git_commit': Commit staged modifications with semantic messages.
+   - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs).
    - 'verify_container_provenance': Inspect runtime container security boundaries and SLSA attestations.
    - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
 
 CRITICAL INSTRUCTIONS:
 - TOOL INVOCATION LATENCY & EFFICIENCY:
-  - When a user query requires tools (like 'search_web' or 'execute_sandboxed_python'), invoke the tool call IMMEDIATELY as your first action.
-  - DO NOT output extensive internal reasoning, deliberation, or conversational filler before calling a tool.
+  - When a query requires tools, invoke the tool call IMMEDIATELY as your first action.
+  - DO NOT output extensive conversational filler before calling a tool.
   - Trigger the tool directly so execution starts in the sandbox without delay.
   - Synthesize and reason over the facts AFTER tool results are returned.
-- When a user query requires real-time facts, current weather, news, external documentation, or data:
-  1. Invoke 'search_web' to locate relevant URLs and inspect the 'top_result_content' markdown.
-  2. If 'top_result_content' already contains the required information, synthesize and answer immediately.
-  3. If 'top_result_content' is missing or lacks specific details, invoke 'fetch_webpage_markdown' on another relevant link.
-  4. NEVER tell the user "I cannot display this here, visit these links". Present the actual numbers, facts, and release notes directly.
-- When asked to execute or test code, invoke 'execute_sandboxed_python'.
-- Synthesize all tool results into a thorough, clear answer for the user.`;
+- When asked to execute or test code, run the appropriate test command or sandbox runner.
+- Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 
     let effortDirective = "";
     if (reasoningEffort === "low") {
@@ -118,7 +210,7 @@ CRITICAL INSTRUCTIONS:
       effortDirective = "\n\nREASONING EFFORT: BALANCED. Keep reasoning concise before executing tools.";
     }
 
-    // Process attachments (Images -> base64 vision, Documents -> extracted text context)
+    // Process attachments (Images -> multimodal diagram ingestion + rawBase64, Documents -> text)
     const imagePayloads: string[] = [];
     const docContexts: string[] = [];
 
@@ -127,6 +219,19 @@ CRITICAL INSTRUCTIONS:
         const parsed = await parseAttachment(att.name, att.type, att.size, att.base64);
         if (parsed.isImage && parsed.rawBase64) {
           imagePayloads.push(parsed.rawBase64);
+          // Run multimodal architecture diagram ingestion via Gemma 4 E4B
+          try {
+            const archSpec = await extractArchitectureSpec(
+              { name: parsed.name, base64: parsed.rawBase64, type: parsed.type },
+              OLLAMA_URL,
+              "gemma4:e4b"
+            );
+            docContexts.push(
+              `\n\n--- EXTRACTED ARCHITECTURE SPECIFICATION (${parsed.name}) ---\n${archSpec.markdownSpec}\n--- END OF ARCHITECTURE SPECIFICATION ---`
+            );
+          } catch (err: any) {
+            console.warn(`[ChatRoute] Failed to extract architecture spec for ${parsed.name}:`, err.message);
+          }
         } else if (parsed.textContent) {
           docContexts.push(
             `\n\n--- ATTACHED DOCUMENT: ${parsed.name} (${parsed.type}) ---\n${parsed.textContent}\n--- END OF ATTACHED DOCUMENT ---`
@@ -156,9 +261,9 @@ CRITICAL INSTRUCTIONS:
       });
     }
 
-    const computeOptions = () => {
+    const computeOptions = (modelToUse: string) => {
       const opts: any = {};
-      opts.num_ctx = activeModel.includes("gemma4") ? 16384 : 8192;
+      opts.num_ctx = modelToUse.includes("gemma4") ? 16384 : 8192;
       if (reasoningEffort === "low") {
         opts.temperature = 0.2;
         opts.num_predict = 4096;
@@ -169,18 +274,18 @@ CRITICAL INSTRUCTIONS:
         opts.temperature = 0.5;
         opts.num_predict = 4096;
       }
-      if (activeModel.includes("qwen3.8")) {
+      if (modelToUse.includes("qwen3.8")) {
         opts.reasoning_effort = reasoningEffort;
       }
       return opts;
     };
 
-    // Step 1: Query Ollama with dynamic model and reasoning effort
+    // Step 1: Initial query to Ollama
     const ollamaPayload: any = {
       model: activeModel,
       messages: conversationMessages,
       stream: false,
-      options: computeOptions()
+      options: computeOptions(activeModel)
     };
 
     if (ollamaTools.length > 0) {
@@ -202,7 +307,7 @@ CRITICAL INSTRUCTIONS:
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
-    // Normalizing helper to detect tool calls either from message.tool_calls OR from content XML / JSON
+    // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
     const getEffectiveToolCalls = (msg: any) => {
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         return msg.tool_calls;
@@ -214,8 +319,7 @@ CRITICAL INSTRUCTIONS:
       const content = msg.content;
       const extractedCalls: any[] = [];
 
-      // 1. Qwen XML syntax: <function=NAME>...</function> or <function name="NAME">...</function>
-      // e.g. <tool_call> <function=search_web> <parameter=query> Python 3.13 </parameter> </function> </tool_call>
+      // 1. Qwen XML syntax: <function=NAME>...</function>
       const funcRegex = /<function(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/function>/gi;
       let match;
       while ((match = funcRegex.exec(content)) !== null) {
@@ -286,7 +390,7 @@ CRITICAL INSTRUCTIONS:
         } catch {}
       }
 
-      // 4. Raw JSON object {"name": "...", "arguments": {...}} anywhere in text
+      // 4. Raw JSON object fallback
       const jsonMatch = content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
       if (jsonMatch) {
         try {
@@ -304,28 +408,14 @@ CRITICAL INSTRUCTIONS:
         } catch {}
       }
 
-      // 5. Simple JSON object fallback
-      try {
-        const parsed = JSON.parse(content.trim());
-        if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-          return [{
-            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            type: "function",
-            function: {
-              name: parsed.name,
-              arguments: parsed.arguments || {}
-            }
-          }];
-        }
-      } catch {}
-
       return [];
     };
 
-    // Step 2: Handle Autonomous Multi-Round MCP Tool Execution Loop
+    // Step 2: Handle Autonomous Multi-Round Tool Execution Loop
     let currentAssistantMessage = assistantMessage;
     let round = 0;
-    const MAX_TOOL_ROUNDS = 5;
+    const MAX_TOOL_ROUNDS = 8;
+    let consecutiveFailures = 0;
 
     while (round < MAX_TOOL_ROUNDS) {
       const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
@@ -334,7 +424,6 @@ CRITICAL INSTRUCTIONS:
       }
 
       round++;
-      // Attach tool_calls to assistant message object so conversation history conforms to tool specification
       const assistantMsgToPush = {
         ...currentAssistantMessage,
         tool_calls: toolCalls
@@ -343,9 +432,10 @@ CRITICAL INSTRUCTIONS:
 
       for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
-        const toolArgs = typeof toolCall.function.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function.arguments;
+        const toolArgs =
+          typeof toolCall.function.arguments === "string"
+            ? JSON.parse(toolCall.function.arguments)
+            : toolCall.function.arguments;
 
         const target = toolClientMap.get(toolName);
         if (!target) {
@@ -358,6 +448,25 @@ CRITICAL INSTRUCTIONS:
           arguments: toolArgs
         });
         const durationMs = Math.round(performance.now() - startTime);
+
+        // Track test / command failure for auto-escalation
+        let isExecutionError = false;
+        try {
+          const resultStr = JSON.stringify(result);
+          if (
+            resultStr.includes('"status":"EXECUTION_ERROR"') ||
+            resultStr.includes('"exit_code":1') ||
+            (result as any).isError
+          ) {
+            isExecutionError = true;
+          }
+        } catch {}
+
+        if (isExecutionError) {
+          consecutiveFailures++;
+        } else {
+          consecutiveFailures = 0;
+        }
 
         traces.push({
           tool: toolName,
@@ -374,9 +483,23 @@ CRITICAL INSTRUCTIONS:
           name: toolName,
           content: JSON.stringify(result)
         });
+
+        // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
+        if (
+          mode === "auto" &&
+          activeModel.includes("gemma4") &&
+          consecutiveFailures >= 2
+        ) {
+          console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
+          activeModel = DEFAULT_PRIMARY_MODEL;
+          conversationMessages.push({
+            role: "system",
+            content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+          });
+        }
       }
 
-      // Next step: query model with updated context (and tools if not at max rounds)
+      // Query model with updated tool results
       const nextPayload: any = {
         model: activeModel,
         messages: conversationMessages,
@@ -387,7 +510,7 @@ CRITICAL INSTRUCTIONS:
         nextPayload.tools = ollamaTools;
       }
 
-      nextPayload.options = computeOptions();
+      nextPayload.options = computeOptions(activeModel);
 
       const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: "POST",
@@ -404,8 +527,6 @@ CRITICAL INSTRUCTIONS:
     }
 
     // Post-tool synthesis safety pass:
-    // If tools were invoked and the final assistant message still contains a lingering tool call,
-    // or if the assistant content is empty, perform one final prompt to force human-readable markdown synthesis!
     const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
     if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
       conversationMessages.push(currentAssistantMessage);
@@ -421,7 +542,7 @@ CRITICAL INSTRUCTIONS:
           model: activeModel,
           messages: conversationMessages,
           stream: false,
-          options: computeOptions()
+          options: computeOptions(activeModel)
         })
       });
 
@@ -433,7 +554,7 @@ CRITICAL INSTRUCTIONS:
       }
     }
 
-    // Clean residual tool tags from the final assistant message so raw pseudo-XML never leaks to the user
+    // Clean residual tool tags
     let cleanedContent = (currentAssistantMessage.content || "")
       .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
       .replace(/<function(?:=|\s+name=)[\"']?[a-zA-Z0-9_\-]+[\"']?>[\s\S]*?<\/function>/gi, "")
@@ -447,7 +568,9 @@ CRITICAL INSTRUCTIONS:
       content: cleanedContent,
       traces,
       model: activeModel,
-      reasoning_effort: reasoningEffort
+      mode,
+      reasoning_effort: reasoningEffort,
+      triage: triageComplexityResult
     });
 
   } catch (err: any) {
