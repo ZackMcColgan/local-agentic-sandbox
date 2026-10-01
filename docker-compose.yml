@@ -19,6 +19,9 @@ services:
     container_name: sandboxed-mcp-toolchain
     restart: unless-stopped
     read_only: true
+    environment:
+      - PORT=8080
+      - GIT_CONFIG_GLOBAL=/tmp/.gitconfig
     user: "10001:10001"
     cap_drop:
       - ALL
@@ -26,6 +29,8 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
+    volumes:
+      - ./workspace:/workspace:rw
     networks:
       - ai-mesh
     deploy:

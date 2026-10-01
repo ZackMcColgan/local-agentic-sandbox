@@ -28,6 +28,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+import { DiffViewer } from "./DiffViewer";
 import { AgentMode } from "@/config/models";
 
 export interface AttachedFileItem {
@@ -651,10 +652,11 @@ export function ChatStream({
                       const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
 
                       let stdoutPreview = "";
+                      let parsedJson: any = null;
                       try {
                         if (trace.result?.content?.[0]?.text) {
-                          const parsed = JSON.parse(trace.result.content[0].text);
-                          stdoutPreview = parsed.stdout || parsed.output || (typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2));
+                          parsedJson = JSON.parse(trace.result.content[0].text);
+                          stdoutPreview = parsedJson.stdout || parsedJson.output || (typeof parsedJson === "string" ? parsedJson : JSON.stringify(parsedJson, null, 2));
                         } else if (trace.result) {
                           stdoutPreview = typeof trace.result === "string" ? trace.result : JSON.stringify(trace.result, null, 2);
                         }
@@ -772,6 +774,17 @@ export function ChatStream({
                                   {stdoutPreview || "Process exited with code 0 (no output)"}
                                 </pre>
                               </div>
+
+                              {/* Visual Unified Diff Inspector */}
+                              {parsedJson?.diff && (
+                                <div className="pt-1">
+                                  <DiffViewer
+                                    branch={parsedJson.branch || activeBranch || "main"}
+                                    diff={parsedJson.diff}
+                                    modifiedFiles={parsedJson.modified_files}
+                                  />
+                                </div>
+                              )}
 
                               {/* Direct Jump to System Tab */}
                               {onViewSecurityTelemetry && (

@@ -43,3 +43,6 @@ scratch/
 extracted_readme.txt
 test_*.png
 
+# Dynamic Agent Workspace
+workspace/
+

@@ -4,18 +4,20 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { registerCodeRunner } from "./tools/codeRunner.js";
 import { registerAttestation } from "./tools/attestation.js";
+import { registerWorkspaceTools } from "./tools/workspaceTools.js";
 
 const app = express();
 app.use(cors());
 
 const mcp = new McpServer({
   name: "local-agentic-sandbox-tools",
-  version: "1.0.0"
+  version: "2.0.0"
 });
 
 // Register MCP tools
 registerCodeRunner(mcp);
 registerAttestation(mcp);
+registerWorkspaceTools(mcp);
 
 // Active SSE transports keyed by sessionId
 const transports = new Map<string, SSEServerTransport>();
