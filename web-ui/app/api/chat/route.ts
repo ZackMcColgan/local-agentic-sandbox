@@ -10,6 +10,7 @@ import {
 import { parseAttachment } from "@/lib/fileParser";
 import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
+import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -26,18 +27,21 @@ interface TraceItem {
   tier?: "sandbox" | "browser" | "workspace";
 }
 
+
 async function connectMcpClient(url: string, name: string) {
+  const sseUrl = normalizeMcpUrl(url);
   try {
-    const transport = new SSEClientTransport(new URL(url));
+    const transport = new SSEClientTransport(new URL(sseUrl));
     const client = new Client(
       { name, version: "1.0.0" },
       { capabilities: {} }
     );
     await client.connect(transport);
     const toolsResult = await client.listTools();
+    console.log(`[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`);
     return { client, transport, tools: toolsResult.tools };
   } catch (err: any) {
-    console.warn(`[Orchestrator] Could not connect to MCP at ${url}:`, err.message);
+    console.warn(`[Orchestrator] Could not connect to MCP at ${sseUrl}:`, err.message);
     return null;
   }
 }
@@ -332,103 +336,7 @@ CRITICAL INSTRUCTIONS:
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         return msg.tool_calls;
       }
-      if (!msg.content || typeof msg.content !== "string") {
-        return [];
-      }
-
-      const content = msg.content;
-      const extractedCalls: any[] = [];
-
-      // 1. Qwen XML syntax: <function=NAME>...</function>
-      const funcRegex = /<function(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/function>/gi;
-      let match;
-      while ((match = funcRegex.exec(content)) !== null) {
-        const name = match[1].trim();
-        const paramsBlock = match[2];
-        const args: Record<string, any> = {};
-        const paramRegex = /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
-        let pMatch;
-        while ((pMatch = paramRegex.exec(paramsBlock)) !== null) {
-          const key = pMatch[1].trim();
-          const rawVal = pMatch[2].trim();
-          try {
-            args[key] = JSON.parse(rawVal);
-          } catch {
-            args[key] = rawVal;
-          }
-        }
-        if (toolClientMap.has(name)) {
-          extractedCalls.push({
-            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            type: "function",
-            function: { name, arguments: args }
-          });
-        }
-      }
-      if (extractedCalls.length > 0) {
-        return extractedCalls;
-      }
-
-      // 2. Qwen JSON inside <tool_call>...</tool_call>
-      const toolCallBlockRegex = /<tool_call>([\s\S]*?)<\/tool_call>/gi;
-      let blockMatch;
-      while ((blockMatch = toolCallBlockRegex.exec(content)) !== null) {
-        const inner = blockMatch[1].trim();
-        try {
-          const parsed = JSON.parse(inner);
-          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-            extractedCalls.push({
-              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-              type: "function",
-              function: {
-                name: parsed.name,
-                arguments: parsed.arguments || {}
-              }
-            });
-          }
-        } catch {}
-      }
-      if (extractedCalls.length > 0) {
-        return extractedCalls;
-      }
-
-      // 3. Code block ```json ... ```
-      const codeBlockMatches = Array.from(content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
-      for (const match of codeBlockMatches) {
-        try {
-          const parsed = JSON.parse((match as RegExpMatchArray)[1].trim());
-          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-            return [{
-              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-              type: "function",
-              function: {
-                name: parsed.name,
-                arguments: parsed.arguments || {}
-              }
-            }];
-          }
-        } catch {}
-      }
-
-      // 4. Raw JSON object fallback
-      const jsonMatch = content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0].trim());
-          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-            return [{
-              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-              type: "function",
-              function: {
-                name: parsed.name,
-                arguments: parsed.arguments || {}
-              }
-            }];
-          }
-        } catch {}
-      }
-
-      return [];
+      return parseToolCallsFromText(msg.content, toolClientMap);
     };
 
     // Step 2: Handle Autonomous Multi-Round Tool Execution Loop
@@ -601,13 +509,16 @@ CRITICAL INSTRUCTIONS:
     }
 
     // Clean residual tool tags
-    let cleanedContent = (currentAssistantMessage.content || "")
-      .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
-      .replace(/<function(?:=|\s+name=)[\"']?[a-zA-Z0-9_\-]+[\"']?>[\s\S]*?<\/function>/gi, "")
-      .trim();
+    let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
 
-    if (!cleanedContent && traces.length > 0) {
-      cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+    if (!cleanedContent) {
+      if (traces.length > 0) {
+        cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+      } else if (currentAssistantMessage.content?.trim()) {
+        cleanedContent = currentAssistantMessage.content.trim();
+      } else {
+        cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+      }
     }
 
     rootSpan.end("ok", {

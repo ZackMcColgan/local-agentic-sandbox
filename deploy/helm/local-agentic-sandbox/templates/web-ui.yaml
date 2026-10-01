@@ -38,9 +38,9 @@ spec:
             - name: OLLAMA_HOST
               value: "http://{{ include "local-agentic-sandbox.fullname" . }}-ollama:{{ .Values.ollama.port }}"
             - name: MCP_SERVER_URL
-              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-mcp-runner:{{ .Values.mcpRunner.service.port }}"
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-mcp-runner:{{ .Values.mcpRunner.service.port }}/sse"
             - name: BROWSER_MCP_URL
-              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-browser-mcp:{{ .Values.browserMCP.service.port }}"
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-browser-mcp:{{ .Values.browserMCP.service.port }}/sse"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://{{ include "local-agentic-sandbox.fullname" . }}-otel-collector:{{ .Values.observability.ports.otlpHttp }}"
             - name: OTEL_SERVICE_NAME

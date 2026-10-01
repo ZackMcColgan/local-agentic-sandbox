@@ -1,9 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, AgentMode } from "@/config/models";
+import { normalizeMcpUrl } from "./toolParser";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const MCP_URL = process.env.MCP_SERVER_URL || "http://127.0.0.1:8080/sse";
+const MCP_URL = normalizeMcpUrl(process.env.MCP_SERVER_URL || "http://127.0.0.1:8080/sse");
 
 export interface AutonomousStep {
   iteration: number;
@@ -38,7 +39,7 @@ export class AutonomousEngine {
     maxIterations: number = 8
   ) {
     this.ollamaUrl = ollamaUrl;
-    this.mcpUrl = mcpUrl;
+    this.mcpUrl = normalizeMcpUrl(mcpUrl);
     this.maxIterations = maxIterations;
   }
 

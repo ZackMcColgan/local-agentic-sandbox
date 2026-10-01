@@ -12,10 +12,14 @@ spec:
   selector:
     matchLabels:
       app: web-ui
+      app.kubernetes.io/part-of: local-agentic-sandbox
+      app.kubernetes.io/version: "2.0.0"
   template:
     metadata:
       labels:
         app: web-ui
+        app.kubernetes.io/part-of: local-agentic-sandbox
+        app.kubernetes.io/version: "2.0.0"
         tier: frontend
     spec:
       securityContext:
@@ -41,9 +45,9 @@ spec:
             - name: OLLAMA_HOST
               value: "http://ollama-service:11434"
             - name: MCP_SERVER_URL
-              value: "http://mcp-runner:8080"
+              value: "http://mcp-runner:8080/sse"
             - name: BROWSER_MCP_URL
-              value: "http://browser-mcp:8081"
+              value: "http://browser-mcp:8081/sse"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME

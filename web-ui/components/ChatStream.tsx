@@ -334,7 +334,7 @@ export function ChatStream({
       }
 
       const durationMs = Math.round(performance.now() - startTime);
-      const parsed = parseThinkingAndContent(data.content || "Code executed inside sandbox successfully.");
+      const parsed = parseThinkingAndContent(data.content || "I didn't receive a response. Please try again.");
 
       const assistantMsgId = `assistant-${Date.now()}`;
       setMessages((prev) => [
