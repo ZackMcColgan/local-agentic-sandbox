@@ -3,17 +3,31 @@
 @tailwind utilities;
 
 :root {
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
-  --card: 222 47% 7%;
-  --card-foreground: 213 31% 91%;
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 99%;
+  --card-foreground: 222 47% 11%;
   --primary: 160 84% 39%;
-  --primary-foreground: 222 47% 5%;
+  --primary-foreground: 0 0% 100%;
   --accent: 250 89% 65%;
-  --accent-foreground: 210 40% 98%;
-  --muted: 217 33% 14%;
-  --muted-foreground: 215 20% 65%;
-  --border: 217 33% 17%;
+  --accent-foreground: 0 0% 100%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 215 16% 47%;
+  --border: 220 13% 91%;
+}
+
+.dark {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 6% 10%;
+  --card-foreground: 0 0% 98%;
+  --primary: 160 84% 39%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 250 89% 65%;
+  --accent-foreground: 0 0% 100%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+  --border: 240 4% 18%;
 }
 
 * {
@@ -33,30 +47,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
+  background: rgba(150, 150, 150, 0.25);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--border));
-}
-
-/* Glassmorphism utility */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.glass-glow-emerald {
-  box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.15);
-}
-
-.glass-glow-indigo {
-  box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.15);
+  background: rgba(150, 150, 150, 0.4);
 }
