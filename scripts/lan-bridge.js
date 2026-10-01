@@ -24,13 +24,20 @@ function createProxyServer(listenPort) {
   const server = http.createServer((req, res) => {
     const clientIp = req.socket.remoteAddress || "unknown";
 
+    const headers = { ...req.headers };
+    const isDocRequest = req.url === "/" || req.url.startsWith("/?");
+    if (isDocRequest) {
+      delete headers["if-none-match"];
+      delete headers["if-modified-since"];
+    }
+
     const options = {
       hostname: TARGET_HOST,
       port: TARGET_PORT,
       path: req.url,
       method: req.method,
       headers: {
-        ...req.headers,
+        ...headers,
         host: `${TARGET_HOST}:${TARGET_PORT}`,
         "x-forwarded-for": clientIp,
         "x-forwarded-proto": "http",
@@ -39,10 +46,13 @@ function createProxyServer(listenPort) {
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
-      // Preserve response headers and status
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-
-      // Stream response chunks directly with backpressure
+      const resHeaders = { ...proxyRes.headers };
+      if (isDocRequest) {
+        resHeaders["cache-control"] = "no-cache, no-store, must-revalidate";
+        resHeaders["pragma"] = "no-cache";
+        resHeaders["expires"] = "0";
+      }
+      res.writeHead(proxyRes.statusCode, resHeaders);
       proxyRes.pipe(res, { end: true });
 
       proxyRes.on("end", () => {
