@@ -75,16 +75,16 @@ export function Navbar({
             <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0">
               <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
-            <div>
+            <div className="hidden sm:block">
               <div className="flex items-center gap-1">
                 <span className="font-bold text-slate-900 dark:text-zinc-100 tracking-tight text-xs sm:text-sm">
-                  <span className="hidden xs:inline sm:inline">agentic-</span>sandbox
+                  agentic-sandbox
                 </span>
-                <span className="hidden sm:inline-block text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
+                <span className="text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
                   v1.2
                 </span>
               </div>
-              <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400 font-mono">
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400 font-mono">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>ROCm GPU Active</span>
               </div>
@@ -179,7 +179,7 @@ export function Navbar({
               <button
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-800 dark:text-zinc-200 transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-800 dark:text-zinc-200 transition-colors shadow-sm"
               >
                 <Cpu className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                 <span className="font-medium hidden sm:inline">
@@ -239,7 +239,7 @@ export function Navbar({
             <button
               type="button"
               onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
-              className="p-1.5 sm:p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors shadow-sm"
+              className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors shadow-sm"
               title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
               {theme === "dark" ? (

@@ -419,7 +419,7 @@ export function ChatStream({
       )}
 
       {/* Header Bar */}
-      <div className="px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-950/60 flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <Bot className="h-3.5 w-3.5" />
@@ -439,7 +439,7 @@ export function ChatStream({
             <button
               onClick={handleClearHistory}
               type="button"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-slate-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-slate-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
               title="Clear chat history"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -450,14 +450,14 @@ export function ChatStream({
       </div>
 
       {/* Preset Suggestions Carousel */}
-      <div className="px-3 py-2 bg-slate-50/50 dark:bg-zinc-950/30 border-b border-slate-200/60 dark:border-zinc-800/60 flex items-center gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="px-3 py-2 bg-white dark:bg-zinc-950/30 border-b border-slate-100 dark:border-zinc-800/60 flex items-center gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PRESET_PROMPTS.map((p, idx) => (
           <button
             key={idx}
             type="button"
             disabled={isLoading}
             onClick={() => handleSend(p.prompt)}
-            className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-700 dark:text-zinc-200 transition-all shadow-sm"
+            className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-700 dark:text-zinc-200 transition-all shadow-sm"
           >
             <Sparkles className="h-3 w-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
             <span>{p.title}</span>
@@ -466,7 +466,7 @@ export function ChatStream({
       </div>
 
       {/* Scrollable Conversation Thread */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-4 bg-white dark:bg-zinc-900">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
@@ -552,7 +552,7 @@ export function ChatStream({
                 <div
                   className={`rounded-2xl p-3.5 sm:p-4 text-xs leading-relaxed ${
                     isUser
-                      ? "bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tr-sm backdrop-blur-sm shadow-sm"
+                      ? "bg-blue-50/90 dark:bg-blue-500/15 border border-blue-200/80 dark:border-blue-500/30 text-blue-950 dark:text-slate-100 rounded-2xl rounded-tr-sm shadow-sm"
                       : "w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 rounded-tl-sm shadow-sm"
                   }`}
                 >
@@ -927,11 +927,11 @@ export function ChatStream({
         
         {/* Attachment Chips Preview Bar (when files are attached) */}
         {attachedFiles.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+          <div className="mb-2 flex flex-wrap items-center gap-2 p-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
             {attachedFiles.map((att) => (
               <div
                 key={att.id}
-                className="group relative flex items-center gap-2 p-1.5 pr-2 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-800 dark:text-zinc-200 shadow-sm"
+                className="group relative flex items-center gap-2 p-1.5 pr-2 rounded-lg bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-800 dark:text-zinc-200 shadow-sm"
               >
                 {att.isImage && att.previewUrl ? (
                   <img
@@ -953,7 +953,7 @@ export function ChatStream({
                 <button
                   type="button"
                   onClick={() => handleRemoveAttachment(att.id)}
-                  className="p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
                   title="Remove file"
                 >
                   <X className="h-3 w-3" />
@@ -976,7 +976,7 @@ export function ChatStream({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="p-2.5 sm:p-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm"
+            className="p-2.5 sm:p-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm"
             title="Attach images (PNG, JPG) or documents (PDF, DOCX, Code)"
           >
             <Paperclip className="h-4 w-4" />
@@ -995,7 +995,7 @@ export function ChatStream({
                 ? "Ask about the attached files..."
                 : "Ask agent to write code, search the web, analyze documents..."
             }
-            className="flex-1 bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none resize-none transition-all shadow-inner"
+            className="flex-1 bg-white dark:bg-zinc-900/90 border border-slate-300 dark:border-zinc-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none resize-none transition-all shadow-sm"
           />
 
           {/* Send Button */}

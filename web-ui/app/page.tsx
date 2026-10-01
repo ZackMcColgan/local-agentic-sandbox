@@ -23,10 +23,12 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"chat" | "security">("chat");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  // Load theme preference on mount
+  // Load theme preference on mount (supports ?theme=light / ?theme=dark in URL for testing/preview)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("app-theme") as "dark" | "light" | null;
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryTheme = urlParams.get("theme") as "dark" | "light" | null;
+      const saved = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null);
       if (saved) {
         setTheme(saved);
         if (saved === "dark") {
@@ -90,7 +92,7 @@ export default function Home() {
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors">
       <Navbar
         status={status}
         selectedModel={selectedModel}
