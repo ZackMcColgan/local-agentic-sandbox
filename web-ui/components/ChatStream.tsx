@@ -211,6 +211,14 @@ export function ChatStream({
     textareaRef.current?.focus();
   };
 
+  // Dynamically adjust textarea height to prevent clipping and support multi-line prompts
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(Math.max(textareaRef.current.scrollHeight, 40), 144)}px`;
+    }
+  }, [input]);
+
   const handleClearHistory = () => {
     setMessages([
       {
@@ -922,96 +930,116 @@ export function ChatStream({
         <div ref={scrollRef} />
       </div>
 
-      {/* Modern Docked Floating Prompt Bar with Attachment Staging Area */}
+      {/* Modern Docked Floating Prompt Bar with Unified Card Architecture */}
       <div className="sticky bottom-0 z-20 p-2.5 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200 dark:border-zinc-800 backdrop-blur-md">
         
-        {/* Attachment Chips Preview Bar (when files are attached) */}
-        {attachedFiles.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 p-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
-            {attachedFiles.map((att) => (
-              <div
-                key={att.id}
-                className="group relative flex items-center gap-2 p-1.5 pr-2 rounded-lg bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-800 dark:text-zinc-200 shadow-sm"
-              >
-                {att.isImage && att.previewUrl ? (
-                  <img
-                    src={att.previewUrl}
-                    alt={att.name}
-                    className="h-7 w-7 rounded object-cover border border-slate-200 dark:border-zinc-700"
-                  />
-                ) : (
-                  <FileText className="h-4 w-4 text-cyan-500 dark:text-cyan-400 shrink-0" />
-                )}
-                <div className="flex flex-col">
-                  <span className="max-w-[120px] sm:max-w-[160px] truncate font-medium text-[11px]">
-                    {att.name}
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-zinc-400 font-mono">
-                    {formatFileSize(att.size)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(att.id)}
-                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
-                  title="Remove file"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Input Form */}
+        {/* Unified Input Form Card */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="relative flex items-center gap-2"
+          className="relative rounded-2xl sm:rounded-3xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 shadow-md shadow-slate-900/5 dark:shadow-black/40 focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all p-2 sm:p-2.5 flex flex-col gap-1.5"
         >
-          {/* File Attach Button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="p-2.5 sm:p-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-sm"
-            title="Attach images (PNG, JPG) or documents (PDF, DOCX, Code)"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
+          {/* Attachment Chips inside card if files exist */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pb-2 mb-1 border-b border-slate-100 dark:border-zinc-800/80">
+              {attachedFiles.map((att) => (
+                <div
+                  key={att.id}
+                  className="group relative flex items-center gap-1.5 p-1 pr-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
+                >
+                  {att.isImage && att.previewUrl ? (
+                    <img
+                      src={att.previewUrl}
+                      alt={att.name}
+                      className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
+                    />
+                  ) : (
+                    <FileText className="h-4 w-4 text-cyan-500 dark:text-cyan-400 shrink-0" />
+                  )}
+                  <div className="flex flex-col">
+                    <span className="max-w-[120px] sm:max-w-[160px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
+                      {att.name}
+                    </span>
+                    <span className="text-[9px] text-slate-400 dark:text-zinc-400 font-mono">
+                      {formatFileSize(att.size)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(att.id)}
+                    className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-0.5"
+                    title="Remove file"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* Prompt Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            disabled={isLoading}
-            placeholder={
-              attachedFiles.length > 0
-                ? "Ask about the attached files..."
-                : "Ask agent to write code, search the web, analyze documents..."
-            }
-            className="flex-1 bg-white dark:bg-zinc-900/90 border border-slate-300 dark:border-zinc-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none resize-none transition-all shadow-sm"
-          />
+          {/* Text Area */}
+          <div className="flex items-start">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              disabled={isLoading}
+              placeholder={
+                attachedFiles.length > 0
+                  ? "Ask about the attached files..."
+                  : "Ask agent anything, run code, search web..."
+              }
+              className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-2 py-1 leading-relaxed max-h-36 min-h-[40px]"
+            />
+          </div>
 
-          {/* Send Button */}
-          <button
-            type="submit"
-            disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
-            className="p-2.5 sm:p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white transition-all shrink-0 shadow-md shadow-emerald-600/20 active:scale-95"
-            title="Send prompt"
-          >
-            <Send className="h-4 w-4" />
-          </button>
+          {/* Bottom Actions Row: Paperclip on Left, Helper/Send on Right */}
+          <div className="flex items-center justify-between pt-0.5 px-0.5">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                title="Attach images (PNG, JPG) or documents (PDF, DOCX, Code)"
+              >
+                <Paperclip className="h-4 w-4" />
+                <span className="text-[11px] hidden sm:inline">Attach</span>
+              </button>
+
+              <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono hidden sm:inline">
+                • Zero-Trust UID 10001
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
+                className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all ${
+                  (!input.trim() && attachedFiles.length === 0) || isLoading
+                    ? "bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-600 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 active:scale-95"
+                }`}
+                title="Send prompt"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                ) : (
+                  <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                )}
+              </button>
+            </div>
+          </div>
         </form>
 
-        <div className="mt-1.5 hidden sm:flex items-center justify-between text-[10px] text-slate-400 dark:text-zinc-500 px-1 font-mono">
+        <div className="mt-1 hidden sm:flex items-center justify-between text-[10px] text-slate-400 dark:text-zinc-500 px-2 font-mono">
           <span>Supports PNG, JPG, PDF, DOCX, TXT, CSV, Code • Drag & Drop enabled</span>
-          <span>Shift+Enter for new line • Enter ↵ to send</span>
+          <span>Shift+Enter for newline • Enter ↵ to send</span>
         </div>
       </div>
 

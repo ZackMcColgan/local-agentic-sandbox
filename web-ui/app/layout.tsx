@@ -4,7 +4,11 @@ import "./globals.css";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#020617",
+  colorScheme: "dark light",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export const metadata: Metadata = {
@@ -30,10 +34,17 @@ export default function RootLayout({
                   var urlParams = new URLSearchParams(window.location.search);
                   var queryTheme = urlParams.get('theme');
                   var saved = queryTheme || localStorage.getItem('app-theme');
-                  if (saved === 'light') {
+                  var isLight = saved === 'light';
+                  if (isLight) {
                     document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.style.colorScheme = 'light';
                   } else {
                     document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('light');
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    document.documentElement.style.colorScheme = 'dark';
                   }
                 } catch(e) {}
               })();

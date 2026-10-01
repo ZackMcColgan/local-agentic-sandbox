@@ -3,9 +3,10 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
   --background: 0 0% 100%;
   --foreground: 222 47% 11%;
-  --card: 0 0% 99%;
+  --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
   --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
@@ -16,7 +17,8 @@
   --border: 220 13% 91%;
 }
 
-.dark {
+.dark, [data-theme="dark"] {
+  color-scheme: dark;
   --background: 240 10% 4%;
   --foreground: 0 0% 98%;
   --card: 240 6% 10%;
@@ -28,6 +30,24 @@
   --muted: 240 4% 16%;
   --muted-foreground: 240 5% 65%;
   --border: 240 4% 18%;
+}
+
+html:not(.dark),
+html[data-theme="light"],
+html:not(.dark) body,
+html[data-theme="light"] body {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.dark,
+html[data-theme="dark"],
+html.dark body,
+html[data-theme="dark"] body {
+  color-scheme: dark !important;
+  background-color: #09090b !important;
+  color: #f4f4f5 !important;
 }
 
 * {
@@ -58,3 +78,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.4);
 }
+
+/* Touch-friendly horizontal scroller hiding ugly scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+

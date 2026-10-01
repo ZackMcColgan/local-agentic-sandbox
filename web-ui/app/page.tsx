@@ -23,35 +23,46 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"chat" | "security">("chat");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
+  const applyTheme = (newTheme: "dark" | "light") => {
+    try {
+      localStorage.setItem("app-theme", newTheme);
+      const isDark = newTheme === "dark";
+      if (isDark) {
+        document.documentElement.classList.add("dark");
+        document.documentElement.classList.remove("light");
+        document.documentElement.setAttribute("data-theme", "dark");
+        document.documentElement.style.colorScheme = "dark";
+        document.body.classList.add("dark");
+        document.body.classList.remove("light");
+        document.body.setAttribute("data-theme", "dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.classList.add("light");
+        document.documentElement.setAttribute("data-theme", "light");
+        document.documentElement.style.colorScheme = "light";
+        document.body.classList.remove("dark");
+        document.body.classList.add("light");
+        document.body.setAttribute("data-theme", "light");
+      }
+    } catch {}
+  };
+
   // Load theme preference on mount (supports ?theme=light / ?theme=dark in URL for testing/preview)
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme") as "dark" | "light" | null;
-      const saved = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null);
-      if (saved) {
-        setTheme(saved);
-        if (saved === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      } else {
-        document.documentElement.classList.add("dark");
-      }
-    } catch {}
+      const saved = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null) || "dark";
+      setTheme(saved);
+      applyTheme(saved);
+    } catch {
+      applyTheme("dark");
+    }
   }, []);
 
   const handleThemeChange = (newTheme: "dark" | "light") => {
     setTheme(newTheme);
-    try {
-      localStorage.setItem("app-theme", newTheme);
-      if (newTheme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    } catch {}
+    applyTheme(newTheme);
   };
 
   const fetchStatus = async () => {
@@ -92,7 +103,12 @@ export default function Home() {
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors">
+    <div
+      data-theme={theme}
+      className={`h-[100dvh] flex flex-col overflow-hidden ${
+        theme === "dark" ? "dark bg-zinc-950 text-zinc-100" : "bg-white text-slate-900"
+      } antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors`}
+    >
       <Navbar
         status={status}
         selectedModel={selectedModel}

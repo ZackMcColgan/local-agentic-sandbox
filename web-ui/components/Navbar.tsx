@@ -238,9 +238,11 @@ export function Navbar({
             {/* Light / Dark Mode Toggle Button */}
             <button
               type="button"
+              id="theme-toggle-btn"
               onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
-              className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors shadow-sm"
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-zinc-100 transition-all shadow-sm active:scale-95"
+              title={theme === "dark" ? "Switch to Daytime / Light Mode" : "Switch to Dark Mode"}
+              aria-label={theme === "dark" ? "Switch to Daytime / Light Mode" : "Switch to Dark Mode"}
             >
               {theme === "dark" ? (
                 <Sun className="h-4 w-4 text-amber-400" />

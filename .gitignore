@@ -41,3 +41,5 @@ Thumbs.db
 *.docx
 scratch/
 extracted_readme.txt
+test_*.png
+
