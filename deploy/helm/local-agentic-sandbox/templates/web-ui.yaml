@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-web-ui
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: web-ui
+spec:
+  replicas: {{ .Values.webUI.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "local-agentic-sandbox.selectorLabels" . | nindent 6 }}
+      app: web-ui
+  template:
+    metadata:
+      labels:
+        {{- include "local-agentic-sandbox.selectorLabels" . | nindent 8 }}
+        app: web-ui
+    spec:
+      securityContext:
+        runAsUser: {{ .Values.webUI.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.webUI.securityContext.runAsGroup }}
+        runAsNonRoot: {{ .Values.webUI.securityContext.runAsNonRoot }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web-ui
+          image: "{{ .Values.webUI.image.repository }}:{{ .Values.webUI.image.tag }}"
+          imagePullPolicy: {{ .Values.webUI.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.webUI.service.port }}
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "{{ .Values.webUI.service.port }}"
+            - name: OLLAMA_HOST
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-ollama:{{ .Values.ollama.port }}"
+            - name: MCP_SERVER_URL
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-mcp-runner:{{ .Values.mcpRunner.service.port }}"
+            - name: BROWSER_MCP_URL
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-browser-mcp:{{ .Values.browserMCP.service.port }}"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-otel-collector:{{ .Values.observability.ports.otlpHttp }}"
+            - name: OTEL_SERVICE_NAME
+              value: "enterprise-ai-portal"
+          resources:
+            {{- toYaml .Values.webUI.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.webUI.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.webUI.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-web-ui
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: web-ui
+spec:
+  type: {{ .Values.webUI.service.type }}
+  ports:
+    - port: {{ .Values.webUI.service.port }}
+      targetPort: {{ .Values.webUI.service.port }}
+      {{- if eq .Values.webUI.service.type "NodePort" }}
+      nodePort: {{ .Values.webUI.service.nodePort }}
+      {{- end }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "local-agentic-sandbox.selectorLabels" . | nindent 4 }}
+    app: web-ui

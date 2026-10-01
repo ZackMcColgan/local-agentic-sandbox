@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-ui
+  namespace: local-agentic-sandbox
+  labels:
+    app: web-ui
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: portal-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-ui
+  template:
+    metadata:
+      labels:
+        app: web-ui
+        tier: frontend
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web-ui
+          image: local-agentic-sandbox-web-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: OLLAMA_HOST
+              value: "http://ollama-service:11434"
+            - name: MCP_SERVER_URL
+              value: "http://mcp-runner:8080"
+            - name: BROWSER_MCP_URL
+              value: "http://browser-mcp:8081"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4318"
+            - name: OTEL_SERVICE_NAME
+              value: "enterprise-ai-portal"
+          resources:
+            limits:
+              cpu: "2000m"
+              memory: "1024Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-ui
+  namespace: local-agentic-sandbox
+  labels:
+    app: web-ui
+    app.kubernetes.io/name: local-agentic-sandbox
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300
+      protocol: TCP
+      name: http
+  selector:
+    app: web-ui

@@ -1,0 +1,107 @@
+# Default values for local-agentic-sandbox.
+# This is a YAML-formatted file.
+
+global:
+  namespace: local-agentic-sandbox
+
+workspace:
+  storageSize: 10Gi
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+
+webUI:
+  replicaCount: 1
+  image:
+    repository: local-agentic-sandbox-web-ui
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 3000
+    nodePort: 30300
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1024Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+
+mcpRunner:
+  replicaCount: 1
+  image:
+    repository: local-agentic-sandbox-mcp-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1024Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+browserMCP:
+  replicaCount: 1
+  image:
+    repository: local-agentic-sandbox-browser-mcp
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8081
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  securityContext:
+    runAsUser: 10002
+    runAsGroup: 10002
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+ollama:
+  mode: hostPassthrough # 'hostPassthrough' or 'inClusterROCm'
+  hostExternalName: host.docker.internal
+  port: 11434
+  rocm:
+    replicas: 0
+    gpuLimit: "1"
+    memoryLimit: 16Gi
+
+networkPolicies:
+  enabled: true
+  gitHubEgressAllowed: true
+
+observability:
+  enabled: true
+  image:
+    repository: jaegertracing/all-in-one
+    tag: "1.53"
+  ports:
+    otlpHttp: 4318
+    otlpGrpc: 4317
+    ui: 16686

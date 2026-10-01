@@ -5,6 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { ChatStream } from "@/components/ChatStream";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
+import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { Layers, ShieldCheck, Globe, Cpu, ArrowLeft, RefreshCw } from "lucide-react";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 
@@ -57,6 +58,11 @@ export default function Home() {
       const savedTheme = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null) || "dark";
       setTheme(savedTheme);
       applyTheme(savedTheme);
+
+      const queryTab = urlParams.get("tab") as "chat" | "security" | null;
+      if (queryTab) {
+        setActiveTab(queryTab);
+      }
 
       const savedMode = (localStorage.getItem("local_agent_mode") as AgentMode) || DEFAULT_AGENT_MODE;
       setAgentMode(savedMode);
@@ -258,6 +264,11 @@ export default function Home() {
                 <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Browser UID: 10002</span>
                 <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Attestation: SLSA Level 3</span>
               </div>
+            </section>
+
+            {/* OpenTelemetry Distributed Tracing Waterfall */}
+            <section>
+              <TraceWaterfall />
             </section>
 
             {/* Execution Trace Viewer */}

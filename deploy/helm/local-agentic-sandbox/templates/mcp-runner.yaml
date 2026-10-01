@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-mcp-runner
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: mcp-runner
+spec:
+  replicas: {{ .Values.mcpRunner.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "local-agentic-sandbox.selectorLabels" . | nindent 6 }}
+      app: mcp-runner
+  template:
+    metadata:
+      labels:
+        {{- include "local-agentic-sandbox.selectorLabels" . | nindent 8 }}
+        app: mcp-runner
+    spec:
+      securityContext:
+        runAsUser: {{ .Values.mcpRunner.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.mcpRunner.securityContext.runAsGroup }}
+        runAsNonRoot: {{ .Values.mcpRunner.securityContext.runAsNonRoot }}
+        fsGroup: {{ .Values.mcpRunner.securityContext.runAsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-runner
+          image: "{{ .Values.mcpRunner.image.repository }}:{{ .Values.mcpRunner.image.tag }}"
+          imagePullPolicy: {{ .Values.mcpRunner.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mcpRunner.service.port }}
+              name: http
+          env:
+            - name: PORT
+              value: "{{ .Values.mcpRunner.service.port }}"
+            - name: NODE_ENV
+              value: "production"
+            - name: WORKSPACE_DIR
+              value: "/workspace"
+            - name: GIT_CONFIG_GLOBAL
+              value: "/tmp/.gitconfig"
+          securityContext:
+            readOnlyRootFilesystem: {{ .Values.mcpRunner.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: {{ .Values.mcpRunner.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              drop:
+                {{- toYaml .Values.mcpRunner.securityContext.capabilities.drop | nindent 16 }}
+          resources:
+            {{- toYaml .Values.mcpRunner.resources | nindent 12 }}
+          volumeMounts:
+            - name: workspace-volume
+              mountPath: /workspace
+            - name: tmpfs-volume
+              mountPath: /tmp
+      volumes:
+        - name: workspace-volume
+          persistentVolumeClaim:
+            claimName: {{ include "local-agentic-sandbox.fullname" . }}-workspace
+        - name: tmpfs-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-mcp-runner
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: mcp-runner
+spec:
+  type: {{ .Values.mcpRunner.service.type }}
+  ports:
+    - port: {{ .Values.mcpRunner.service.port }}
+      targetPort: {{ .Values.mcpRunner.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "local-agentic-sandbox.selectorLabels" . | nindent 4 }}
+    app: mcp-runner

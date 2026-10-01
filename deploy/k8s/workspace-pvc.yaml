@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-workspace
+  namespace: local-agentic-sandbox
+  labels:
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: persistent-storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

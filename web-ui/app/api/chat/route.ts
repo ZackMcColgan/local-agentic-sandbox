@@ -9,6 +9,7 @@ import {
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { extractArchitectureSpec } from "@/lib/visionProcessor";
+import { TelemetryTracer } from "@/lib/telemetry";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -98,6 +99,7 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
   const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" }>();
+  let rootSpan: any = null;
 
   try {
     const {
@@ -114,6 +116,15 @@ export async function POST(req: NextRequest) {
 
     const mode: AgentMode = requestedMode || "auto";
 
+    // Initialize OpenTelemetry Distributed Tracer
+    const clientSessionId = req.headers.get("x-session-id") || `turn_${Date.now()}`;
+    const tracer = new TelemetryTracer(clientSessionId);
+    rootSpan = tracer.startSpan("agent.turn", undefined, {
+      mode,
+      requestedModel: requestedModel || "auto",
+      messagesCount: messages.length
+    });
+
     // 1. Resolve Active Model via Tri-Mode Dispatcher
     let activeModel = requestedModel;
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
@@ -124,10 +135,12 @@ export async function POST(req: NextRequest) {
       } else if (mode === "pro") {
         activeModel = DEFAULT_PRIMARY_MODEL;
       } else {
-        // mode === "auto": Execute fast triage step
+        // mode === "auto": Execute fast triage step with OpenTelemetry span
+        const triageSpan = tracer.startSpan("router.triage", rootSpan.spanId, { model: "gemma4:e4b" });
         const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
         const userPrompt = lastUserMsg?.content || "";
         triageComplexityResult = await triageComplexity(userPrompt, OLLAMA_URL, "gemma4:e4b");
+        triageSpan.end("ok", { result: triageComplexityResult });
 
         if (triageComplexityResult === "DEEP_SYNTHESIS") {
           activeModel = DEFAULT_PRIMARY_MODEL;
@@ -280,7 +293,12 @@ CRITICAL INSTRUCTIONS:
       return opts;
     };
 
-    // Step 1: Initial query to Ollama
+    // Step 1: Initial query to Ollama with OpenTelemetry reasoning span
+    const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
+      model: activeModel,
+      round: 0
+    });
+
     const ollamaPayload: any = {
       model: activeModel,
       messages: conversationMessages,
@@ -300,10 +318,12 @@ CRITICAL INSTRUCTIONS:
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
+      reasoningSpan.end("error", { error: errText });
       throw new Error(`Ollama engine returned ${aiRes.status}: ${errText}`);
     }
 
     const aiData = await aiRes.json();
+    reasoningSpan.end("ok");
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
@@ -442,6 +462,18 @@ CRITICAL INSTRUCTIONS:
           throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
         }
 
+        const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
+          tool: toolName,
+          tier: target.tier
+        });
+
+        let bashSpan: any = null;
+        if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
+          bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
+            command: toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python")
+          });
+        }
+
         const startTime = performance.now();
         const result = await target.client.callTool({
           name: toolName,
@@ -461,6 +493,11 @@ CRITICAL INSTRUCTIONS:
             isExecutionError = true;
           }
         } catch {}
+
+        if (bashSpan) {
+          bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
+        }
+        toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
 
         if (isExecutionError) {
           consecutiveFailures++;
@@ -512,6 +549,11 @@ CRITICAL INSTRUCTIONS:
 
       nextPayload.options = computeOptions(activeModel);
 
+      const nextReasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
+        model: activeModel,
+        round
+      });
+
       const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -519,16 +561,19 @@ CRITICAL INSTRUCTIONS:
       });
 
       if (!nextRes.ok) {
+        nextReasoningSpan.end("error");
         throw new Error(`Ollama synthesis failed: ${await nextRes.text()}`);
       }
 
       const nextData = await nextRes.json();
+      nextReasoningSpan.end("ok");
       currentAssistantMessage = nextData.message;
     }
 
     // Post-tool synthesis safety pass:
     const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
     if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+      const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
       conversationMessages.push(currentAssistantMessage);
       conversationMessages.push({
         role: "user",
@@ -552,6 +597,7 @@ CRITICAL INSTRUCTIONS:
           currentAssistantMessage = finalData.message;
         }
       }
+      synthSpan.end("ok");
     }
 
     // Clean residual tool tags
@@ -564,16 +610,30 @@ CRITICAL INSTRUCTIONS:
       cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
     }
 
+    rootSpan.end("ok", {
+      tracesCount: traces.length,
+      modelUsed: activeModel
+    });
+
     return NextResponse.json({
       content: cleanedContent,
       traces,
       model: activeModel,
       mode,
       reasoning_effort: reasoningEffort,
-      triage: triageComplexityResult
+      triage: triageComplexityResult,
+      trace_session: {
+        sessionId: tracer.getSessionId(),
+        traceId: tracer.getTraceId()
+      }
     });
 
   } catch (err: any) {
+    if (rootSpan) {
+      try {
+        rootSpan.end("error", { error: err.message });
+      } catch {}
+    }
     console.error("[Agent Orchestrator Error]:", err);
     return NextResponse.json(
       {

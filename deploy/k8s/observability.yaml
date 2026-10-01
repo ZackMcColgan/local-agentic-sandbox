@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: local-agentic-sandbox
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: tracing-telemetry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+        tier: observability
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.53
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 16686
+              name: jaeger-ui
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: local-agentic-sandbox
+  labels:
+    app: otel-collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4318
+      targetPort: 4318
+      name: otlp-http
+      protocol: TCP
+    - port: 4317
+      targetPort: 4317
+      name: otlp-grpc
+      protocol: TCP
+    - port: 16686
+      targetPort: 16686
+      name: jaeger-ui
+      protocol: TCP
+  selector:
+    app: otel-collector

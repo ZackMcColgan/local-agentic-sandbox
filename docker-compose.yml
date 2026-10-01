@@ -69,6 +69,8 @@ services:
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
       - MODEL_NAME=qwen3.8:27b-q3_k_m
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=enterprise-ai-portal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -77,6 +79,19 @@ services:
     depends_on:
       - mcp-server
       - browser-mcp
+
+  # 5. OpenTelemetry & Jaeger Distributed Tracing Collector
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: local-agentic-jaeger
+    restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - ai-mesh
 
 networks:
   ai-mesh:
