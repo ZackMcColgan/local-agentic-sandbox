@@ -129,7 +129,32 @@ export function Navbar({
           {/* Right Controls: Model Selector, Thinking Effort, Theme Toggle */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Thinking / Reasoning Effort Selector */}
+            {/* Mobile Compact Thinking Mode Toggle Chip */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = reasoningEffort === "low" ? "medium" : reasoningEffort === "medium" ? "xhigh" : "low";
+                onReasoningChange(next);
+              }}
+              className={`sm:hidden flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-mono transition-all shadow-sm active:scale-95 ${
+                reasoningEffort === "low"
+                  ? "bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300"
+                  : reasoningEffort === "medium"
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
+                  : "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+              }`}
+              title={`Mode: ${reasoningEffort}. Tap to toggle Fast / Balanced / Deep.`}
+              aria-label={`Mode: ${reasoningEffort}. Tap to toggle Fast / Balanced / Deep.`}
+            >
+              {reasoningEffort === "low" && <Zap className="h-3 w-3 text-amber-500" />}
+              {reasoningEffort === "medium" && <Scale className="h-3 w-3 text-indigo-500" />}
+              {reasoningEffort === "xhigh" && <Brain className="h-3 w-3 text-emerald-500" />}
+              <span className="text-[11px] font-medium capitalize">
+                {reasoningEffort === "low" ? "Fast" : reasoningEffort === "medium" ? "Bal" : "Deep"}
+              </span>
+            </button>
+
+            {/* Desktop Thinking / Reasoning Effort Selector */}
             <div className="hidden sm:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
               <button
                 type="button"

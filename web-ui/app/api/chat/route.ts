@@ -96,20 +96,26 @@ You have access to two distinct tool tiers:
    - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
 
 CRITICAL INSTRUCTIONS:
+- TOOL INVOCATION LATENCY & EFFICIENCY:
+  - When a user query requires tools (like 'search_web' or 'execute_sandboxed_python'), invoke the tool call IMMEDIATELY as your first action.
+  - DO NOT output extensive internal reasoning, deliberation, or conversational filler before calling a tool.
+  - Trigger the tool directly so execution starts in the sandbox without delay.
+  - Synthesize and reason over the facts AFTER tool results are returned.
 - When a user query requires real-time facts, current weather, news, external documentation, or data:
   1. Invoke 'search_web' to locate relevant URLs and inspect the 'top_result_content' markdown.
   2. If 'top_result_content' already contains the required information, synthesize and answer immediately.
-  3. If 'top_result_content' is missing or lacks the specific details requested, invoke 'fetch_webpage_markdown' on another relevant link from the search results (preferring content-rich sources like government, official documentation, or news over ad/paywall SPAs).
-  4. NEVER tell the user "I cannot display this here, visit these links". You have web scraping tools: extract the content and present the actual answer, numbers, temperatures, conditions, and facts directly to the user in formatted Markdown tables or text.
+  3. If 'top_result_content' is missing or lacks specific details, invoke 'fetch_webpage_markdown' on another relevant link.
+  4. NEVER tell the user "I cannot display this here, visit these links". Present the actual numbers, facts, and release notes directly.
 - When asked to execute or test code, invoke 'execute_sandboxed_python'.
-- When invoking tools, do not output conversational preamble or filler beforehand. Trigger the tool call directly.
 - Synthesize all tool results into a thorough, clear answer for the user.`;
 
     let effortDirective = "";
     if (reasoningEffort === "low") {
-      effortDirective = "\n\nREASONING EFFORT: FAST / DIRECT. Provide direct, concise answers without <think> tags or verbose preamble.";
+      effortDirective = "\n\nREASONING EFFORT: FAST / DIRECT. Provide direct, concise answers without <think> tags or verbose preamble. Call tools immediately.";
     } else if (reasoningEffort === "xhigh") {
       effortDirective = "\n\nREASONING EFFORT: DEEP. Think deeply step-by-step before answering.";
+    } else {
+      effortDirective = "\n\nREASONING EFFORT: BALANCED. Keep reasoning concise before executing tools.";
     }
 
     // Process attachments (Images -> base64 vision, Documents -> extracted text context)
@@ -196,49 +202,81 @@ CRITICAL INSTRUCTIONS:
     const assistantMessage = aiData.message;
     const traces: TraceItem[] = [];
 
-    // Normalizing helper to detect tool calls either from message.tool_calls OR from content JSON (even with preamble text)
+    // Normalizing helper to detect tool calls either from message.tool_calls OR from content XML / JSON
     const getEffectiveToolCalls = (msg: any) => {
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         return msg.tool_calls;
       }
-      if (msg.content && typeof msg.content === "string") {
-        // 1. Look for ```json ... ``` or ``` ... ``` blocks anywhere in the text
-        const codeBlockMatches = Array.from(msg.content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
-        for (const match of codeBlockMatches) {
-          try {
-            const parsed = JSON.parse((match as RegExpMatchArray)[1].trim());
-            if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-              return [{
-                function: {
-                  name: parsed.name,
-                  arguments: parsed.arguments || {}
-                }
-              }];
-            }
-          } catch {}
-        }
+      if (!msg.content || typeof msg.content !== "string") {
+        return [];
+      }
 
-        // 2. Look for raw JSON object {"name": "...", "arguments": {...}} anywhere in text
-        const jsonMatch = msg.content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0].trim());
-            if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
-              return [{
-                function: {
-                  name: parsed.name,
-                  arguments: parsed.arguments || {}
-                }
-              }];
-            }
-          } catch {}
-        }
+      const content = msg.content;
+      const extractedCalls: any[] = [];
 
-        // 3. Simple JSON object fallback
+      // 1. Qwen XML syntax: <function=NAME>...</function> or <function name="NAME">...</function>
+      // e.g. <tool_call> <function=search_web> <parameter=query> Python 3.13 </parameter> </function> </tool_call>
+      const funcRegex = /<function(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/function>/gi;
+      let match;
+      while ((match = funcRegex.exec(content)) !== null) {
+        const name = match[1].trim();
+        const paramsBlock = match[2];
+        const args: Record<string, any> = {};
+        const paramRegex = /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
+        let pMatch;
+        while ((pMatch = paramRegex.exec(paramsBlock)) !== null) {
+          const key = pMatch[1].trim();
+          const rawVal = pMatch[2].trim();
+          try {
+            args[key] = JSON.parse(rawVal);
+          } catch {
+            args[key] = rawVal;
+          }
+        }
+        if (toolClientMap.has(name)) {
+          extractedCalls.push({
+            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            type: "function",
+            function: { name, arguments: args }
+          });
+        }
+      }
+      if (extractedCalls.length > 0) {
+        return extractedCalls;
+      }
+
+      // 2. Qwen JSON inside <tool_call>...</tool_call>
+      const toolCallBlockRegex = /<tool_call>([\s\S]*?)<\/tool_call>/gi;
+      let blockMatch;
+      while ((blockMatch = toolCallBlockRegex.exec(content)) !== null) {
+        const inner = blockMatch[1].trim();
         try {
-          const parsed = JSON.parse(msg.content.trim());
+          const parsed = JSON.parse(inner);
+          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+            extractedCalls.push({
+              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              type: "function",
+              function: {
+                name: parsed.name,
+                arguments: parsed.arguments || {}
+              }
+            });
+          }
+        } catch {}
+      }
+      if (extractedCalls.length > 0) {
+        return extractedCalls;
+      }
+
+      // 3. Code block ```json ... ```
+      const codeBlockMatches = Array.from(content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
+      for (const match of codeBlockMatches) {
+        try {
+          const parsed = JSON.parse((match as RegExpMatchArray)[1].trim());
           if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
             return [{
+              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              type: "function",
               function: {
                 name: parsed.name,
                 arguments: parsed.arguments || {}
@@ -247,6 +285,40 @@ CRITICAL INSTRUCTIONS:
           }
         } catch {}
       }
+
+      // 4. Raw JSON object {"name": "...", "arguments": {...}} anywhere in text
+      const jsonMatch = content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0].trim());
+          if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+            return [{
+              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              type: "function",
+              function: {
+                name: parsed.name,
+                arguments: parsed.arguments || {}
+              }
+            }];
+          }
+        } catch {}
+      }
+
+      // 5. Simple JSON object fallback
+      try {
+        const parsed = JSON.parse(content.trim());
+        if (parsed && typeof parsed === "object" && parsed.name && toolClientMap.has(parsed.name)) {
+          return [{
+            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            type: "function",
+            function: {
+              name: parsed.name,
+              arguments: parsed.arguments || {}
+            }
+          }];
+        }
+      } catch {}
+
       return [];
     };
 
@@ -262,7 +334,12 @@ CRITICAL INSTRUCTIONS:
       }
 
       round++;
-      conversationMessages.push(currentAssistantMessage);
+      // Attach tool_calls to assistant message object so conversation history conforms to tool specification
+      const assistantMsgToPush = {
+        ...currentAssistantMessage,
+        tool_calls: toolCalls
+      };
+      conversationMessages.push(assistantMsgToPush);
 
       for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
@@ -356,8 +433,18 @@ CRITICAL INSTRUCTIONS:
       }
     }
 
+    // Clean residual tool tags from the final assistant message so raw pseudo-XML never leaks to the user
+    let cleanedContent = (currentAssistantMessage.content || "")
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+      .replace(/<function(?:=|\s+name=)[\"']?[a-zA-Z0-9_\-]+[\"']?>[\s\S]*?<\/function>/gi, "")
+      .trim();
+
+    if (!cleanedContent && traces.length > 0) {
+      cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+    }
+
     return NextResponse.json({
-      content: currentAssistantMessage.content,
+      content: cleanedContent,
       traces,
       model: activeModel,
       reasoning_effort: reasoningEffort
