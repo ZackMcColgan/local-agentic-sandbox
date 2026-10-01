@@ -25,6 +25,11 @@ spec:
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 16686
               name: jaeger-ui

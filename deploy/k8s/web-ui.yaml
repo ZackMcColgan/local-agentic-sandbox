@@ -36,6 +36,8 @@ spec:
               value: "production"
             - name: PORT
               value: "3000"
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama-service:11434"
             - name: OLLAMA_HOST
               value: "http://ollama-service:11434"
             - name: MCP_SERVER_URL
@@ -46,6 +48,11 @@ spec:
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             limits:
               cpu: "2000m"
