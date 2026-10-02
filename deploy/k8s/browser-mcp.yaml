@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browser-mcp
+  namespace: local-agentic-sandbox
+  labels:
+    app: browser-mcp
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: egress-toolchain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: browser-mcp
+  template:
+    metadata:
+      labels:
+        app: browser-mcp
+        tier: egress-gateway
+    spec:
+      securityContext:
+        runAsUser: 10002
+        runAsGroup: 10002
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: browser-mcp
+          image: local-agentic-sandbox-browser-mcp:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: browser-http
+          env:
+            - name: PORT
+              value: "8081"
+            - name: NODE_ENV
+              value: "production"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: tmpfs-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmpfs-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: browser-mcp
+  namespace: local-agentic-sandbox
+  labels:
+    app: browser-mcp
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+      name: http
+  selector:
+    app: browser-mcp

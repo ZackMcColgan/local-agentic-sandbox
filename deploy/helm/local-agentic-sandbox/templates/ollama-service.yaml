@@ -1,0 +1,70 @@
+{{- if eq .Values.ollama.mode "hostPassthrough" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-ollama
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+spec:
+  type: ExternalName
+  externalName: {{ .Values.ollama.hostExternalName }}
+  ports:
+    - port: {{ .Values.ollama.port }}
+      targetPort: {{ .Values.ollama.port }}
+      protocol: TCP
+      name: ollama-api
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-ollama-rocm
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ollama.rocm.replicas }}
+  selector:
+    matchLabels:
+      {{- include "local-agentic-sandbox.selectorLabels" . | nindent 6 }}
+      app: ollama-rocm
+  template:
+    metadata:
+      labels:
+        {{- include "local-agentic-sandbox.selectorLabels" . | nindent 8 }}
+        app: ollama-rocm
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:rocm
+          ports:
+            - containerPort: {{ .Values.ollama.port }}
+              name: api
+          resources:
+            limits:
+              k8s.amd.com/gpu: {{ .Values.ollama.rocm.gpuLimit | quote }}
+              memory: {{ .Values.ollama.rocm.memoryLimit }}
+            requests:
+              memory: 8Gi
+          volumeMounts:
+            - name: ollama-models
+              mountPath: /root/.ollama
+      volumes:
+        - name: ollama-models
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-ollama
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.ollama.port }}
+      targetPort: {{ .Values.ollama.port }}
+      protocol: TCP
+      name: api
+  selector:
+    {{- include "local-agentic-sandbox.selectorLabels" . | nindent 4 }}
+    app: ollama-rocm
+{{- end }}

@@ -88,3 +88,33 @@ Once running, access the web interface at **`http://localhost:3000`**.
 * [ARCHITECTURE.md](./ARCHITECTURE.md) - In-depth zero-trust topology and threat modeling.
 * [DEVELOPMENT_SANDBOX.md](./docs/DEVELOPMENT_SANDBOX.md) - Guide for running inside isolated microVMs and development sandboxes.
 * [ADR-001: Sandboxed MCP Architecture](./docs/ADR-001-sandboxed-mcp.md) - Architectural Decision Record for containerized MCP.
+
+---
+
+## LAN Bridge Security
+
+The LAN reverse proxy bridge (`scripts/lan-bridge.js`) binds to `0.0.0.0` on ports `80` and `3000` without authentication. This is an **intentional design decision** by the system owner to allow seamless, frictionless access from mobile devices, tablets, and laptops across the private home local area network (e.g. `http://192.168.50.254/`) via simple browser bookmarks without token prompts.
+
+### Blast Radius & Threat Model
+* **Scope**: The bridge is not exposed to the public internet; exposure is strictly bounded to the local home network (e.g., family devices, guest Wi-Fi devices, or compromised IoT hardware on the same subnet).
+* **Execution Capabilities**: Any unauthenticated client on the home LAN that connects to the Web UI can prompt the autonomous agent to invoke `workspace_run_command`, which executes arbitrary shell commands inside the sandboxed container workspace (`/workspace`).
+* **Container Defenses**: Even with unauthenticated LAN access, execution is contained within an unprivileged UID (`10001`), root filesystem is mounted `read_only`, Linux capabilities are dropped (`cap_drop: ALL`), and egress network access from the code runner is blocked via network policies.
+
+### Optional Hardening Path (Opt-In)
+If authenticated access is ever desired in the future, the bridge can be hardened without breaking mobile usability:
+1. **Environment-Driven Bearer Token**: Introduce an optional `BRIDGE_AUTH_TOKEN` environment variable.
+2. **Bookmark Query Token**: Allow mobile bookmarks to authenticate seamlessly via URL query parameter (`http://192.168.50.254/?token=<SECRET_TOKEN>`), which the bridge extracts and converts into an HTTP-only session cookie.
+3. **LAN Header Validation**: Reject any inbound LAN requests lacking the valid bearer token or session cookie with HTTP `401 Unauthorized`.
+
+---
+
+## Host-Filesystem Write Trust Boundary (`./workspace:rw`)
+
+The `mcp-server` execution boundary mounts `./workspace` from the host directly into `/workspace:rw`:
+* **Intentional Pair Programming Design**: Code written by the autonomous agent, git branches, test suites, diagrams, and learned skills are saved directly to `./workspace` on the host machine.
+* **Blast Radius**: While the container root filesystem is `read_only` and path traversal outside `/workspace` is strictly rejected, any file placed inside `./workspace` can be read, written, or modified by the agent via `workspace_write_file` and `workspace_run_command`.
+* **Security Guidance**:
+  * Never create symlinks inside `./workspace` that point to sensitive host directories (such as `~/.ssh`, cloud credentials, or parent repositories).
+  * Treat `./workspace` as an untrusted code sandbox that is monitored via version control. Git initializes an automatic repository with commit history inside `/workspace` to allow tracking and reverting agent-generated changes.
+
+

@@ -15,7 +15,8 @@ import {
   Sun,
   Moon
 } from "lucide-react";
-import { ModelProfile } from "@/config/models";
+import { ModelProfile, AgentMode } from "@/config/models";
+import { ModelSelector } from "@/components/ModelSelector";
 
 interface NavbarProps {
   status: {
@@ -23,6 +24,8 @@ interface NavbarProps {
     mcp: string;
     airGapped: boolean;
   };
+  agentMode: AgentMode;
+  onAgentModeChange: (mode: AgentMode) => void;
   selectedModel: string;
   onModelChange: (model: string) => void;
   reasoningEffort: "low" | "medium" | "xhigh";
@@ -34,10 +37,13 @@ interface NavbarProps {
   traceCount: number;
   theme: "dark" | "light";
   onThemeChange: (theme: "dark" | "light") => void;
+  activeBranch?: string;
 }
 
 export function Navbar({
   status,
+  agentMode,
+  onAgentModeChange,
   selectedModel,
   onModelChange,
   reasoningEffort,
@@ -48,7 +54,8 @@ export function Navbar({
   onTabChange,
   traceCount,
   theme,
-  onThemeChange
+  onThemeChange,
+  activeBranch
 }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const isOllamaUp = status.ollama === "HEALTHY";
@@ -81,7 +88,7 @@ export function Navbar({
                   agentic-sandbox
                 </span>
                 <span className="text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
-                  v1.2
+                  v2.0
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400 font-mono">
@@ -89,6 +96,11 @@ export function Navbar({
                 <span>ROCm GPU Active</span>
               </div>
             </div>
+          </div>
+
+          {/* Tri-Mode Model Dispatcher [ Auto | Flash | Pro ] */}
+          <div className="flex items-center shrink-0">
+            <ModelSelector mode={agentMode} onModeChange={onAgentModeChange} />
           </div>
 
           {/* Center Tabs: Chat vs System & Security */}
@@ -126,36 +138,11 @@ export function Navbar({
             </button>
           </div>
 
-          {/* Right Controls: Model Selector, Thinking Effort, Theme Toggle */}
+          {/* Right Controls: Thinking Effort (Desktop), Model Selector (Desktop), Theme Toggle */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Mobile Compact Thinking Mode Toggle Chip */}
-            <button
-              type="button"
-              onClick={() => {
-                const next = reasoningEffort === "low" ? "medium" : reasoningEffort === "medium" ? "xhigh" : "low";
-                onReasoningChange(next);
-              }}
-              className={`sm:hidden flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-mono transition-all shadow-sm active:scale-95 ${
-                reasoningEffort === "low"
-                  ? "bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300"
-                  : reasoningEffort === "medium"
-                  ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
-                  : "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-              }`}
-              title={`Mode: ${reasoningEffort}. Tap to toggle Fast / Balanced / Deep.`}
-              aria-label={`Mode: ${reasoningEffort}. Tap to toggle Fast / Balanced / Deep.`}
-            >
-              {reasoningEffort === "low" && <Zap className="h-3 w-3 text-amber-500" />}
-              {reasoningEffort === "medium" && <Scale className="h-3 w-3 text-indigo-500" />}
-              {reasoningEffort === "xhigh" && <Brain className="h-3 w-3 text-emerald-500" />}
-              <span className="text-[11px] font-medium capitalize">
-                {reasoningEffort === "low" ? "Fast" : reasoningEffort === "medium" ? "Bal" : "Deep"}
-              </span>
-            </button>
-
             {/* Desktop Thinking / Reasoning Effort Selector */}
-            <div className="hidden sm:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
+            <div className="hidden md:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
               <button
                 type="button"
                 onClick={() => onReasoningChange("low")}
@@ -199,8 +186,8 @@ export function Navbar({
               </button>
             </div>
 
-            {/* Model Switcher Dropdown */}
-            <div className="relative">
+            {/* Model Switcher Dropdown (Desktop) */}
+            <div className="relative hidden lg:block">
               <button
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -209,9 +196,6 @@ export function Navbar({
                 <Cpu className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                 <span className="font-medium hidden sm:inline">
                   {getModelShortLabel(selectedModel)}
-                </span>
-                <span className="font-medium sm:hidden">
-                  {selectedModel.includes("gemma4") ? "Gemma" : "Qwen"}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-400" />
               </button>

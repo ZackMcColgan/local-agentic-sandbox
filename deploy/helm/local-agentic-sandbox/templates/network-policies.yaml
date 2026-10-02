@@ -1,0 +1,91 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-mcp-isolation
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-runner
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: web-ui
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcpRunner.service.port }}
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if .Values.networkPolicies.gitHubEgressAllowed }}
+    - to:
+        {{- range .Values.networkPolicies.githubCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-web-ui-policy
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: web-ui
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.webUI.service.port }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mcp-runner
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcpRunner.service.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: browser-mcp
+      ports:
+        - protocol: TCP
+          port: {{ .Values.browserMCP.service.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.ports.otlpHttp }}
+        - protocol: TCP
+          port: {{ .Values.observability.ports.otlpGrpc }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.ollama.port }}
+{{- end }}

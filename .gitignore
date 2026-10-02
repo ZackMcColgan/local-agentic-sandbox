@@ -10,6 +10,7 @@ out/
 build/
 coverage/
 .nyc_output/
+*.tsbuildinfo
 
 # Next.js telemetry & cache
 .next/cache/
@@ -42,4 +43,7 @@ Thumbs.db
 scratch/
 extracted_readme.txt
 test_*.png
+
+# Dynamic Agent Workspace
+workspace/
 

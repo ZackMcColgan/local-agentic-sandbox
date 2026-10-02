@@ -1,0 +1,17 @@
+apiVersion: v2
+name: local-agentic-sandbox
+description: Enterprise Private Autonomous Multi-Agent Platform on Local Workstation Hardware
+type: application
+version: 2.0.0
+appVersion: "2.0.0"
+keywords:
+  - ai-agent
+  - mcp
+  - ollama
+  - rocm
+  - kubernetes
+  - zero-trust
+home: https://github.com/ZackMcColgan/local-agentic-sandbox
+maintainers:
+  - name: Autonomous Agent Team
+    email: agent@local-sandbox.internal

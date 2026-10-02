@@ -1,0 +1,67 @@
+{{- if .Values.observability.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-otel-collector
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "local-agentic-sandbox.selectorLabels" . | nindent 6 }}
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        {{- include "local-agentic-sandbox.selectorLabels" . | nindent 8 }}
+        app: otel-collector
+    spec:
+      containers:
+        - name: jaeger
+          image: "{{ .Values.observability.image.repository }}:{{ .Values.observability.image.tag }}"
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            - containerPort: {{ .Values.observability.ports.ui }}
+              name: jaeger-ui
+            - containerPort: {{ .Values.observability.ports.otlpGrpc }}
+              name: otlp-grpc
+            - containerPort: {{ .Values.observability.ports.otlpHttp }}
+              name: otlp-http
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-otel-collector
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: otel-collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.observability.ports.otlpHttp }}
+      targetPort: {{ .Values.observability.ports.otlpHttp }}
+      name: otlp-http
+      protocol: TCP
+    - port: {{ .Values.observability.ports.otlpGrpc }}
+      targetPort: {{ .Values.observability.ports.otlpGrpc }}
+      name: otlp-grpc
+      protocol: TCP
+    - port: {{ .Values.observability.ports.ui }}
+      targetPort: {{ .Values.observability.ports.ui }}
+      name: jaeger-ui
+      protocol: TCP
+  selector:
+    {{- include "local-agentic-sandbox.selectorLabels" . | nindent 4 }}
+    app: otel-collector
+{{- end }}

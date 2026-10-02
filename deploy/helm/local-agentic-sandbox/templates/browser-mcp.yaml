@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-browser-mcp
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: browser-mcp
+spec:
+  replicas: {{ .Values.browserMCP.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "local-agentic-sandbox.selectorLabels" . | nindent 6 }}
+      app: browser-mcp
+  template:
+    metadata:
+      labels:
+        {{- include "local-agentic-sandbox.selectorLabels" . | nindent 8 }}
+        app: browser-mcp
+    spec:
+      securityContext:
+        runAsUser: {{ .Values.browserMCP.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.browserMCP.securityContext.runAsGroup }}
+        runAsNonRoot: {{ .Values.browserMCP.securityContext.runAsNonRoot }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: browser-mcp
+          image: "{{ .Values.browserMCP.image.repository }}:{{ .Values.browserMCP.image.tag }}"
+          imagePullPolicy: {{ .Values.browserMCP.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.browserMCP.service.port }}
+              name: http
+          env:
+            - name: PORT
+              value: "{{ .Values.browserMCP.service.port }}"
+            - name: NODE_ENV
+              value: "production"
+          securityContext:
+            readOnlyRootFilesystem: {{ .Values.browserMCP.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: {{ .Values.browserMCP.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              drop:
+                {{- toYaml .Values.browserMCP.securityContext.capabilities.drop | nindent 16 }}
+          resources:
+            {{- toYaml .Values.browserMCP.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmpfs-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmpfs-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "local-agentic-sandbox.fullname" . }}-browser-mcp
+  labels:
+    {{- include "local-agentic-sandbox.labels" . | nindent 4 }}
+    app: browser-mcp
+spec:
+  type: {{ .Values.browserMCP.service.type }}
+  ports:
+    - port: {{ .Values.browserMCP.service.port }}
+      targetPort: {{ .Values.browserMCP.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "local-agentic-sandbox.selectorLabels" . | nindent 4 }}
+    app: browser-mcp

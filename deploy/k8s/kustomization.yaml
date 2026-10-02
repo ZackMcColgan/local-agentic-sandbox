@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: local-agentic-sandbox
+
+resources:
+  - namespace.yaml
+  - workspace-pvc.yaml
+  - mcp-runner.yaml
+  - browser-mcp.yaml
+  - web-ui.yaml
+  - ollama-service.yaml
+  - network-policies.yaml
+  - observability.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: local-agentic-sandbox
+  app.kubernetes.io/version: "2.0.0"

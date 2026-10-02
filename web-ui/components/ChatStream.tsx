@@ -28,6 +28,9 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+import { DiffViewer } from "./DiffViewer";
+import { AgentMode } from "@/config/models";
+import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
 
 export interface AttachedFileItem {
   id: string;
@@ -59,28 +62,13 @@ export interface ChatMessage {
 interface ChatStreamProps {
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
   activeModel: string;
+  agentMode?: AgentMode;
   reasoningEffort: "low" | "medium" | "xhigh";
   onViewSecurityTelemetry?: () => void;
+  activeBranch?: string;
+  messages?: ChatMessage[];
+  setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
-
-const PRESET_PROMPTS = [
-  {
-    title: "Web Research & Facts",
-    prompt: "Search the web for the latest Python 3.13 release highlights and summarize the key security features."
-  },
-  {
-    title: "Python Sandbox Test",
-    prompt: "Write a python script to calculate fibonacci up to 10 and run it with unit tests in the sandbox."
-  },
-  {
-    title: "Verify Zero Egress",
-    prompt: "Write a Python script that attempts to open a socket connection to 8.8.8.8 on port 53 and run it to verify zero network egress."
-  },
-  {
-    title: "Filesystem Immutability",
-    prompt: "Write a Python script that tries to write a file to /etc/test.txt to confirm the root filesystem is read-only."
-  }
-];
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -161,17 +149,18 @@ function parseThinkingAndContent(raw: string): { thought?: string; content: stri
 export function ChatStream({
   onTracesUpdate,
   activeModel,
+  agentMode = "auto",
   reasoningEffort,
-  onViewSecurityTelemetry
+  onViewSecurityTelemetry,
+  activeBranch,
+  messages: propsMessages,
+  setMessages: propsSetMessages
 }: ChatStreamProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "initial-welcome",
-      role: "assistant",
-      content: "Welcome! I'm your local AI agent. How can I help you today?",
-      modelUsed: activeModel
-    }
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
+    getInitialWelcomeMessage(activeModel)
   ]);
+  const messages = propsMessages ?? localMessages;
+  const setMessages = propsSetMessages ?? setLocalMessages;
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -220,14 +209,8 @@ export function ChatStream({
   }, [input]);
 
   const handleClearHistory = () => {
-    setMessages([
-      {
-        id: `welcome-${Date.now()}`,
-        role: "assistant",
-        content: "Chat cleared. How can I help you today?",
-        modelUsed: activeModel
-      }
-    ]);
+    const cleared = clearChatHistory(activeModel);
+    setMessages(cleared);
   };
 
   const processFiles = async (files: FileList | File[]) => {
@@ -325,6 +308,7 @@ export function ChatStream({
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           model: activeModel,
+          mode: agentMode,
           reasoning_effort: reasoningEffort,
           attachments: currentAttachments.map(a => ({
             name: a.name,
@@ -346,7 +330,7 @@ export function ChatStream({
       }
 
       const durationMs = Math.round(performance.now() - startTime);
-      const parsed = parseThinkingAndContent(data.content || "Code executed inside sandbox successfully.");
+      const parsed = parseThinkingAndContent(data.content || "I didn't receive a response. Please try again.");
 
       const assistantMsgId = `assistant-${Date.now()}`;
       setMessages((prev) => [
@@ -357,7 +341,7 @@ export function ChatStream({
           content: parsed.content,
           thought: parsed.thought,
           traces: data.traces,
-          modelUsed: activeModel,
+          modelUsed: data.model || activeModel,
           durationMs
         }
       ]);
@@ -435,6 +419,12 @@ export function ChatStream({
           <div>
             <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 block">Workspace</span>
           </div>
+          {activeBranch && (
+            <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 shadow-xs">
+              <span className="text-[10px]">🌿</span>
+              <span>{activeBranch}</span>
+            </span>
+          )}
           <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">{activeModel}</span>
             {" • "}
@@ -455,22 +445,6 @@ export function ChatStream({
             </button>
           )}
         </div>
-      </div>
-
-      {/* Preset Suggestions Carousel */}
-      <div className="px-3 py-2 bg-white dark:bg-zinc-950/30 border-b border-slate-100 dark:border-zinc-800/60 flex items-center gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PRESET_PROMPTS.map((p, idx) => (
-          <button
-            key={idx}
-            type="button"
-            disabled={isLoading}
-            onClick={() => handleSend(p.prompt)}
-            className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-700 dark:text-zinc-200 transition-all shadow-sm"
-          >
-            <Sparkles className="h-3 w-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
-            <span>{p.title}</span>
-          </button>
-        ))}
       </div>
 
       {/* Scrollable Conversation Thread */}
@@ -674,10 +648,11 @@ export function ChatStream({
                       const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
 
                       let stdoutPreview = "";
+                      let parsedJson: any = null;
                       try {
                         if (trace.result?.content?.[0]?.text) {
-                          const parsed = JSON.parse(trace.result.content[0].text);
-                          stdoutPreview = parsed.stdout || parsed.output || (typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2));
+                          parsedJson = JSON.parse(trace.result.content[0].text);
+                          stdoutPreview = parsedJson.stdout || parsedJson.output || (typeof parsedJson === "string" ? parsedJson : JSON.stringify(parsedJson, null, 2));
                         } else if (trace.result) {
                           stdoutPreview = typeof trace.result === "string" ? trace.result : JSON.stringify(trace.result, null, 2);
                         }
@@ -795,6 +770,17 @@ export function ChatStream({
                                   {stdoutPreview || "Process exited with code 0 (no output)"}
                                 </pre>
                               </div>
+
+                              {/* Visual Unified Diff Inspector */}
+                              {parsedJson?.diff && (
+                                <div className="pt-1">
+                                  <DiffViewer
+                                    branch={parsedJson.branch || activeBranch || "main"}
+                                    diff={parsedJson.diff}
+                                    modifiedFiles={parsedJson.modified_files}
+                                  />
+                                </div>
+                              )}
 
                               {/* Direct Jump to System Tab */}
                               {onViewSecurityTelemetry && (
