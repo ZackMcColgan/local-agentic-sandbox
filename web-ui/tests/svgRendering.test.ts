@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import {
   isSvgCode,
+  isDrawioXml,
+  convertDrawioToSvg,
   sanitizeSvg,
   wrapRawSvgInMarkdown,
   isSvgFilePath,
@@ -11,13 +13,74 @@ import {
 } from "../lib/svgUtils.js";
 
 describe("SVG Rendering & Sanitization Suite", () => {
-  it("detects SVG code by language flag or SVG XML structure", () => {
+  it("detects SVG code and Draw.io XML by language flag or structure", () => {
     assert.equal(isSvgCode("<svg></svg>", "svg"), true);
     assert.equal(isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>", "xml"), true);
     assert.equal(isSvgCode("<?xml version='1.0'?><svg viewBox='0 0 100 100'></svg>", "bash"), true);
+    assert.equal(isSvgCode("<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>", "xml"), true);
+    assert.equal(isSvgCode("<mxGraphModel><root><mxCell id='0'/></root></mxGraphModel>", ""), true);
     assert.equal(isSvgCode("function test() { return 42; }", "javascript"), false);
     assert.equal(isSvgCode("echo 'hello'", "bash"), false);
   });
+
+  it("detects Draw.io XML diagrams with isDrawioXml", () => {
+    assert.equal(isDrawioXml("<mxfile host='app.diagrams.net'><diagram></diagram></mxfile>"), true);
+    assert.equal(isDrawioXml("<mxGraphModel><root></root></mxGraphModel>"), true);
+    assert.equal(isDrawioXml("<svg><rect/></svg>"), false);
+    assert.equal(isDrawioXml("const x = 10;"), false);
+  });
+
+  it("converts Draw.io XML into standalone SVG with vertices, shapes, and edges", () => {
+    const drawioXml = `<mxfile host="app.diagrams.net">
+      <diagram id="d1" name="Two Tier">
+        <mxGraphModel>
+          <root>
+            <mxCell id="0"/>
+            <mxCell id="1" parent="0"/>
+            <mxCell id="box1" value="Web Tier" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+              <mxGeometry x="50" y="50" width="120" height="60" as="geometry"/>
+            </mxCell>
+            <mxCell id="box2" value="Database Tier" style="shape=cylinder;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+              <mxGeometry x="250" y="50" width="120" height="60" as="geometry"/>
+            </mxCell>
+            <mxCell id="edge1" value="SQL Query" style="endArrow=classic;strokeColor=#2563eb;" edge="1" parent="1" source="box1" target="box2">
+              <mxGeometry relative="1" as="geometry"/>
+            </mxCell>
+          </root>
+        </mxGraphModel>
+      </diagram>
+    </mxfile>`;
+
+    const convertedSvg = convertDrawioToSvg(drawioXml);
+    assert.ok(convertedSvg.includes("<svg"), "Must return root <svg> element");
+    assert.ok(convertedSvg.includes("viewBox="), "Must compute viewBox");
+    assert.ok(convertedSvg.includes("Web Tier"), "Must render Web Tier label");
+    assert.ok(convertedSvg.includes("Database Tier"), "Must render Database Tier label");
+    assert.ok(convertedSvg.includes("SQL Query"), "Must render edge label");
+    assert.ok(convertedSvg.includes("rect") || convertedSvg.includes("path"), "Must render shape elements");
+  });
+
+  it("sanitizeSvg converts Draw.io XML to clean SVG and strips malicious attributes", () => {
+    const drawioWithXss = `<mxfile host="app.diagrams.net">
+      <diagram id="d2">
+        <mxGraphModel>
+          <root>
+            <mxCell id="0"/>
+            <mxCell id="1" parent="0"/>
+            <mxCell id="xss1" value="Safe Node" style="rounded=1;" vertex="1" parent="1">
+              <mxGeometry x="10" y="10" width="100" height="50" as="geometry"/>
+            </mxCell>
+          </root>
+        </mxGraphModel>
+      </diagram>
+    </mxfile>`;
+
+    const sanitized = sanitizeSvg(drawioWithXss);
+    assert.ok(sanitized.includes("<svg"), "Must produce SVG markup");
+    assert.ok(sanitized.includes("Safe Node"), "Preserves diagram node text");
+    assert.equal(sanitized.includes("<mxfile"), false, "Must replace mxfile with svg");
+  });
+
 
   it("sanitizes potentially malicious scripts and event handlers from SVG while preserving vector elements", () => {
     const maliciousSvg = `

@@ -80,6 +80,73 @@ const mockMessages = JSON.stringify([
         }
       }
     ]
+  },
+  {
+    id: "user-2",
+    role: "user",
+    content: "Render two_tier_aws_architecture.drawio.svg as well"
+  },
+  {
+    id: "assistant-2",
+    role: "assistant",
+    content: "I have updated the diagram for AWS cloud environment with ALB, Web Servers, ElastiCache Redis, and RDS database layers.",
+    traces: [
+      {
+        tool: "workspace_write_file",
+        durationMs: 8,
+        timestamp: "2026-10-02T17:33:00.000Z",
+        args: {
+          path: "two_tier_aws_architecture.drawio.svg",
+          content: `<mxfile host="app.diagrams.net" modified="2024-07-25T12:00:00.000Z" agent="AI Agent" version="24.4.13" type="device">
+  <diagram id="two_tier_aws" name="Two Tier AWS Architecture">
+    <mxGraphModel dx="1434" dy="846" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="vpc" value="VPC Network" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="850" height="900" as="geometry"/>
+        </mxCell>
+        <mxCell id="aws_boundary" value="AWS Cloud Environment" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="750" height="800" as="geometry"/>
+        </mxCell>
+        <mxCell id="elb" value="Application Load Balancer (ALB)" style="shape=cylinder;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="aws_boundary">
+          <mxGeometry x="100" y="150" width="150" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="web_tier" value="Web/Presentation Tier (EC2/ECS/Lambda)" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="aws_boundary">
+          <mxGeometry x="300" y="130" width="300" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="rds" value="RDS Database (PostgreSQL/MySQL)" style="shape=cylinder;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="aws_boundary">
+          <mxGeometry x="550" y="400" width="150" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="cache" value="ElastiCache (Redis)" style="shape=cylinder;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="aws_boundary">
+          <mxGeometry x="350" y="400" width="150" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="conn_elb_to_web" value="HTTP/S Traffic" style="endArrow=classic;strokeColor=#2563eb;" edge="1" parent="vpc" source="elb" target="web_tier">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="conn_web_to_cache" value="Cache Read/Write" style="endArrow=classic;strokeColor=#2563eb;" edge="1" parent="vpc" source="web_tier" target="cache">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>`
+        },
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                status: "SUCCESS",
+                path: "two_tier_aws_architecture.drawio.svg",
+                bytes_written: 5566,
+                is_diagram: true
+              })
+            }
+          ]
+        }
+      }
+    ]
   }
 ]);
 

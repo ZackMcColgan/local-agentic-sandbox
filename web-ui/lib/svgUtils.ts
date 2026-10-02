@@ -1,13 +1,350 @@
 /**
  * SVG Utility and Sanitization Library for local-agentic-sandbox UI
+ * Supports standard SVG vector graphics and Draw.io XML (<mxfile>, <mxGraphModel>) diagrams.
  */
+
+export function isDrawioXml(code: string): boolean {
+  if (!code || typeof code !== "string") return false;
+  const trimmed = code.trim();
+  return (
+    /<mxfile\b/i.test(trimmed) ||
+    /<mxGraphModel\b/i.test(trimmed) ||
+    /<diagram\b/i.test(trimmed)
+  );
+}
+
+function parseStyle(styleStr?: string): Record<string, string | boolean> {
+  const style: Record<string, string | boolean> = {};
+  if (!styleStr) return style;
+  const parts = styleStr.split(";");
+  for (const part of parts) {
+    const idx = part.indexOf("=");
+    if (idx !== -1) {
+      const k = part.substring(0, idx).trim();
+      const v = part.substring(idx + 1).trim();
+      if (k) style[k] = v;
+    } else {
+      const k = part.trim();
+      if (k) style[k] = true;
+    }
+  }
+  return style;
+}
+
+function escapeXml(unsafe?: string): string {
+  if (!unsafe) return "";
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function unescapeEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&#xa;/gi, "\n")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Converts Draw.io XML (<mxfile>, <mxGraphModel>) into a valid, standalone SVG graphic.
+ */
+export function convertDrawioToSvg(xml: string): string {
+  if (!xml || typeof xml !== "string") return "";
+
+  let cleanXml = xml;
+  // If the XML is encoded inside an HTML block
+  if (cleanXml.includes("&lt;mxfile") || cleanXml.includes("&lt;mxGraphModel")) {
+    cleanXml = unescapeEntities(cleanXml);
+  }
+
+  // Parse mxCell elements
+  const cells: Array<{
+    id: string;
+    parent?: string;
+    value?: string;
+    style?: string;
+    vertex?: string;
+    edge?: string;
+    source?: string;
+    target?: string;
+    geometry?: Record<string, string>;
+    points?: Array<{ x: number; y: number }>;
+  }> = [];
+
+  const cellRegex = /<mxCell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/mxCell>)/gi;
+  const attrRegex = /([a-zA-Z0-9_:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = cellRegex.exec(cleanXml)) !== null) {
+    const attrsStr = match[1];
+    const inner = match[2] || "";
+
+    const attrs: any = {};
+    let attrMatch: RegExpExecArray | null;
+    while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
+      attrs[attrMatch[1]] = attrMatch[2] !== undefined ? attrMatch[2] : attrMatch[3];
+    }
+
+    // Geometry
+    const geoMatch = /<mxGeometry\b([^>]*?)(?:\/>|>([\s\S]*?)<\/mxGeometry>)/i.exec(inner);
+    if (geoMatch) {
+      const geoAttrs: Record<string, string> = {};
+      let gMatch: RegExpExecArray | null;
+      while ((gMatch = attrRegex.exec(geoMatch[1])) !== null) {
+        geoAttrs[gMatch[1]] = gMatch[2] !== undefined ? gMatch[2] : gMatch[3];
+      }
+      attrs.geometry = geoAttrs;
+
+      // Waypoints inside mxGeometry
+      if (geoMatch[2]) {
+        const points: Array<{ x: number; y: number }> = [];
+        const ptRegex = /<mxPoint\b([^>]*?)\/?>/gi;
+        let ptMatch: RegExpExecArray | null;
+        while ((ptMatch = ptRegex.exec(geoMatch[2])) !== null) {
+          const ptAttrs: Record<string, string> = {};
+          let pAttr: RegExpExecArray | null;
+          while ((pAttr = attrRegex.exec(ptMatch[1])) !== null) {
+            ptAttrs[pAttr[1]] = pAttr[2] !== undefined ? pAttr[2] : pAttr[3];
+          }
+          if (ptAttrs.x !== undefined && ptAttrs.y !== undefined) {
+            points.push({ x: parseFloat(ptAttrs.x), y: parseFloat(ptAttrs.y) });
+          }
+        }
+        if (points.length > 0) attrs.points = points;
+      }
+    }
+
+    if (attrs.id && attrs.id !== "0" && attrs.id !== "1") {
+      cells.push(attrs);
+    }
+  }
+
+  const vertices = cells.filter((c) => c.vertex === "1" && c.geometry);
+  const edges = cells.filter((c) => c.edge === "1");
+
+  if (vertices.length === 0 && edges.length === 0) {
+    return "";
+  }
+
+  // Build vertex map
+  const vertexMap = new Map<string, any>();
+  for (const v of vertices) {
+    const g = v.geometry || {};
+    const x = parseFloat(g.x || "0");
+    const y = parseFloat(g.y || "0");
+    const width = parseFloat(g.width || "120");
+    const height = parseFloat(g.height || "60");
+    vertexMap.set(v.id, {
+      ...v,
+      parsedStyle: parseStyle(v.style),
+      x,
+      y,
+      width,
+      height,
+      absX: x,
+      absY: y
+    });
+  }
+
+  // Calculate absolute positions taking parent hierarchy into account
+  for (const v of vertexMap.values()) {
+    let parentId = v.parent;
+    let depth = 0;
+    while (parentId && vertexMap.has(parentId) && depth < 10) {
+      const parent = vertexMap.get(parentId);
+      v.absX += parent.x;
+      v.absY += parent.y;
+      parentId = parent.parent;
+      depth++;
+    }
+  }
+
+  // Compute overall bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const v of vertexMap.values()) {
+    minX = Math.min(minX, v.absX);
+    minY = Math.min(minY, v.absY);
+    maxX = Math.max(maxX, v.absX + v.width);
+    maxY = Math.max(maxY, v.absY + v.height);
+  }
+
+  if (!isFinite(minX)) minX = 0;
+  if (!isFinite(minY)) minY = 0;
+  if (!isFinite(maxX) || maxX <= minX) maxX = minX + 800;
+  if (!isFinite(maxY) || maxY <= minY) maxY = minY + 600;
+
+  const padding = 40;
+  const viewBoxX = minX - padding;
+  const viewBoxY = minY - padding;
+  const viewBoxW = (maxX - minX) + padding * 2;
+  const viewBoxH = (maxY - minY) + padding * 2;
+
+  // Sort vertices: containers (larger area) drawn in background first, smaller nodes on top
+  const sortedVertices = Array.from(vertexMap.values()).sort((a, b) => {
+    const areaA = a.width * a.height;
+    const areaB = b.width * b.height;
+    return areaB - areaA;
+  });
+
+  const svgParts: string[] = [];
+  svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" class="drawio-svg" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}" width="100%" height="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: transparent;">`);
+
+  // Definitions
+  svgParts.push(`  <defs>`);
+  svgParts.push(`    <filter id="drawio-shadow" x="-10%" y="-10%" width="125%" height="125%">`);
+  svgParts.push(`      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>`);
+  svgParts.push(`    </filter>`);
+  svgParts.push(`    <marker id="drawio-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">`);
+  svgParts.push(`      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#3b82f6" />`);
+  svgParts.push(`    </marker>`);
+  svgParts.push(`    <marker id="drawio-arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">`);
+  svgParts.push(`      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#10b981" />`);
+  svgParts.push(`    </marker>`);
+  svgParts.push(`    <marker id="drawio-arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">`);
+  svgParts.push(`      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#64748b" />`);
+  svgParts.push(`    </marker>`);
+  svgParts.push(`  </defs>`);
+
+  // Render Vertices
+  for (const v of sortedVertices) {
+    const s = v.parsedStyle || {};
+    const isContainer = (v.width * v.height > 80000) || (s.rounded === "1" && v.width > 300);
+    const stroke = (s.strokeColor as string) || (isContainer ? "#cbd5e1" : "#64748b");
+    const strokeWidth = s.strokeWidth ? parseFloat(s.strokeWidth as string) : (isContainer ? 2 : 1.5);
+    const fill = (s.fillColor as string) || (isContainer ? "rgba(248, 250, 252, 0.4)" : "#ffffff");
+    const fillOpacity = isContainer ? "0.35" : ((s["fill-opacity"] as string) || "1");
+    const isDashed = s.dashed === "1";
+    const rx = s.rounded === "1" ? 8 : (s.rounded ? 12 : 4);
+    const dashAttr = isDashed ? 'stroke-dasharray="6 3"' : "";
+
+    svgParts.push(`  <!-- Node: ${escapeXml(v.id)} -->`);
+    svgParts.push(`  <g id="node-${escapeXml(v.id)}" class="drawio-node">`);
+
+    if (s.shape === "cylinder") {
+      const topH = Math.min(18, v.height * 0.25);
+      svgParts.push(`    <path d="M ${v.absX} ${v.absY + topH} L ${v.absX} ${v.absY + v.height - topH} A ${v.width / 2} ${topH} 0 0 0 ${v.absX + v.width} ${v.absY + v.height - topH} L ${v.absX + v.width} ${v.absY + topH} Z" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dashAttr} filter="url(#drawio-shadow)"/>`);
+      svgParts.push(`    <ellipse cx="${v.absX + v.width / 2}" cy="${v.absY + topH}" rx="${v.width / 2}" ry="${topH}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />`);
+    } else if (s.shape === "ellipse") {
+      svgParts.push(`    <ellipse cx="${v.absX + v.width / 2}" cy="${v.absY + v.height / 2}" rx="${v.width / 2}" ry="${v.height / 2}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dashAttr} filter="url(#drawio-shadow)"/>`);
+    } else {
+      svgParts.push(`    <rect x="${v.absX}" y="${v.absY}" width="${v.width}" height="${v.height}" rx="${rx}" ry="${rx}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dashAttr} ${isContainer ? "" : 'filter="url(#drawio-shadow)"'}/>`);
+    }
+
+    // Text Label
+    if (v.value) {
+      const rawVal = unescapeEntities(v.value);
+      const cleanVal = rawVal.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").trim();
+      const lines = cleanVal.split(/\\n|\n|\s{3,}/).filter(Boolean);
+
+      const labelY = isContainer
+        ? v.absY + 22
+        : (v.absY + v.height / 2 - (lines.length - 1) * 7);
+
+      const textColor = (s.fontColor as string) || "#0f172a";
+      const fontWeight = isContainer ? "700" : "600";
+      const fontSize = isContainer ? "13" : "11.5";
+
+      svgParts.push(`    <text x="${v.absX + v.width / 2}" y="${labelY}" text-anchor="middle" dominant-baseline="central" fill="${textColor}" font-size="${fontSize}" font-weight="${fontWeight}" letter-spacing="-0.01em">`);
+
+      lines.forEach((line: string, idx: number) => {
+        const dy = idx === 0 ? "0" : "15";
+        svgParts.push(`      <tspan x="${v.absX + v.width / 2}" dy="${dy}">${escapeXml(line.trim())}</tspan>`);
+      });
+      svgParts.push(`    </text>`);
+    }
+
+    svgParts.push(`  </g>`);
+  }
+
+  // Render Edges
+  for (const edge of edges) {
+    const s = parseStyle(edge.style);
+    const source = edge.source ? vertexMap.get(edge.source) : undefined;
+    const target = edge.target ? vertexMap.get(edge.target) : undefined;
+
+    let startX = 0, startY = 0, endX = 0, endY = 0;
+
+    if (source && target) {
+      const exitX = s.exitX !== undefined ? parseFloat(s.exitX as string) : 0.5;
+      const exitY = s.exitY !== undefined ? parseFloat(s.exitY as string) : 0.5;
+      const entryX = s.entryX !== undefined ? parseFloat(s.entryX as string) : 0.5;
+      const entryY = s.entryY !== undefined ? parseFloat(s.entryY as string) : 0.5;
+
+      startX = source.absX + source.width * exitX;
+      startY = source.absY + source.height * exitY;
+      endX = target.absX + target.width * entryX;
+      endY = target.absY + target.height * entryY;
+    } else if (edge.points && edge.points.length >= 2) {
+      startX = edge.points[0].x;
+      startY = edge.points[0].y;
+      endX = edge.points[edge.points.length - 1].x;
+      endY = edge.points[edge.points.length - 1].y;
+    }
+
+    if (startX === 0 && startY === 0 && endX === 0 && endY === 0) continue;
+
+    const stroke = (s.strokeColor as string) || "#2563eb";
+    const strokeWidth = s.strokeWidth ? parseFloat(s.strokeWidth as string) : 2;
+    const isDashed = s.dashed === "1";
+    const dashAttr = isDashed ? 'stroke-dasharray="5 3"' : "";
+
+    const pathSegments = [`M ${startX} ${startY}`];
+    let midX = (startX + endX) / 2;
+    let midY = (startY + endY) / 2;
+
+    if (edge.points && edge.points.length > 0) {
+      for (const pt of edge.points) {
+        pathSegments.push(`L ${pt.x} ${pt.y}`);
+      }
+      const midPt = edge.points[Math.floor(edge.points.length / 2)];
+      midX = midPt.x;
+      midY = midPt.y;
+    }
+    pathSegments.push(`L ${endX} ${endY}`);
+
+    const markerId = stroke.includes("10b981") || stroke.includes("82b366")
+      ? "drawio-arrow-emerald"
+      : (stroke.includes("64748b") || stroke.includes("b85450") ? "drawio-arrow-slate" : "drawio-arrow");
+
+    svgParts.push(`  <!-- Edge: ${escapeXml(edge.id)} -->`);
+    svgParts.push(`  <g id="edge-${escapeXml(edge.id)}" class="drawio-edge">`);
+    svgParts.push(`    <path d="${pathSegments.join(" ")}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" ${dashAttr} marker-end="url(#${markerId})"/>`);
+
+    // Edge Label Badge
+    if (edge.value) {
+      const rawVal = unescapeEntities(edge.value);
+      const cleanVal = rawVal.replace(/<[^>]+>/g, "").trim();
+      const textLen = cleanVal.length * 6.5 + 14;
+      svgParts.push(`    <rect x="${midX - textLen / 2}" y="${midY - 10}" width="${textLen}" height="18" rx="4" fill="#ffffff" stroke="${stroke}" stroke-width="1" filter="url(#drawio-shadow)"/>`);
+      svgParts.push(`    <text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">${escapeXml(cleanVal)}</text>`);
+    }
+
+    svgParts.push(`  </g>`);
+  }
+
+  svgParts.push(`</svg>`);
+  return svgParts.join("\n");
+}
 
 export function isSvgCode(code: string, language?: string): boolean {
   if (!code || typeof code !== "string") return false;
   const lang = (language || "").trim().toLowerCase();
-  if (lang === "svg") return true;
+  if (lang === "svg" || lang === "drawio") return true;
 
   const trimmed = code.trim();
+
+  // Draw.io XML format
+  if (isDrawioXml(trimmed)) {
+    return true;
+  }
+
   // Check if it's xml or html containing an <svg element
   if (lang === "xml" || lang === "html" || lang === "" || lang === "bash") {
     if (/<svg[\s>]/i.test(trimmed) && /<\/svg>/i.test(trimmed)) {
@@ -26,7 +363,12 @@ export function isSvgCode(code: string, language?: string): boolean {
 export function sanitizeSvg(svgString: string): string {
   if (!svgString || typeof svgString !== "string") return "";
 
-  let cleaned = svgString;
+  let cleaned = svgString.trim();
+
+  // If the input is Draw.io XML, convert it to SVG first
+  if (isDrawioXml(cleaned) && !/<svg[\s>]/i.test(cleaned)) {
+    cleaned = convertDrawioToSvg(cleaned);
+  }
 
   // 1. Remove <script> tags and everything inside them
   cleaned = cleaned.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
@@ -43,23 +385,28 @@ export function sanitizeSvg(svgString: string): string {
 export function wrapRawSvgInMarkdown(content: string): string {
   if (!content || typeof content !== "string") return "";
 
-  // If the content is already fully wrapped in code fences, do not wrap
   // Split by code fences ```...```
   const parts = content.split(/(```[\s\S]*?```)/g);
 
   return parts
     .map((part) => {
-      // If this part is a code fence, keep it untouched
       if (part.startsWith("```")) {
         return part;
       }
 
-      // In non-code-fence text, find <svg ... > ... </svg> (including optional xml/doctype prefixes)
-      // and wrap it in ```svg\n...\n```
-      return part.replace(
+      // In non-code-fence text, wrap raw SVG
+      let text = part.replace(
         /((?:<\?xml\b[^>]*\?>\s*)?(?:<!DOCTYPE\b[^>]*>\s*)?<svg\b[^>]*>[\s\S]*?<\/svg>)/gi,
         (match) => `\n\`\`\`svg\n${match.trim()}\n\`\`\`\n`
       );
+
+      // Wrap raw <mxfile> ... </mxfile> if present outside code fences
+      text = text.replace(
+        /(<mxfile\b[\s\S]*?<\/mxfile>)/gi,
+        (match) => `\n\`\`\`xml\n${match.trim()}\n\`\`\`\n`
+      );
+
+      return text;
     })
     .join("");
 }
@@ -68,7 +415,11 @@ export function isSvgFilePath(filePath: string): boolean {
   if (!filePath || typeof filePath !== "string") return false;
   // Strip query parameters and hash
   const cleanPath = filePath.split("?")[0].split("#")[0].trim().toLowerCase();
-  return cleanPath.endsWith(".svg");
+  return (
+    cleanPath.endsWith(".svg") ||
+    cleanPath.endsWith(".drawio") ||
+    cleanPath.endsWith(".drawio.xml")
+  );
 }
 
 export function resolveSvgUrl(src: string): string {
@@ -95,12 +446,11 @@ export interface ExtractedSvgItem {
   title: string;
   code?: string;
   url?: string;
+  isDrawio?: boolean;
 }
 
 /**
- * Extracts all SVG diagrams generated or retrieved by tool traces in a chat message.
- * This guarantees that when a tool like workspace_write_file, workspace_read_file,
- * or a CLI script writes or outputs an SVG, it renders immediately inline in the chat bubble.
+ * Extracts all SVG and Draw.io diagrams generated or retrieved by tool traces in a chat message.
  */
 export function extractSvgsFromMessage(message: {
   id: string;
@@ -171,7 +521,8 @@ export function extractSvgsFromMessage(message: {
           id: `${message.id}-trace-${i}`,
           title: title || "Vector Graphic",
           code,
-          url: pathArg ? resolveSvgUrl(pathArg) : undefined
+          url: pathArg ? resolveSvgUrl(pathArg) : undefined,
+          isDrawio: isDrawioXml(code || "") || (pathArg ? pathArg.includes(".drawio") : false)
         });
       }
     }

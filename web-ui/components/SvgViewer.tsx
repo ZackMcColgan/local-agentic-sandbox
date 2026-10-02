@@ -15,9 +15,10 @@ import {
   Loader2,
   AlertCircle,
   FileCode,
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from "lucide-react";
-import { sanitizeSvg } from "@/lib/svgUtils";
+import { sanitizeSvg, isDrawioXml } from "@/lib/svgUtils";
 
 export interface SvgViewerProps {
   code?: string;
@@ -102,23 +103,28 @@ export function SvgViewer({
     return sanitizeSvg(rawSvg);
   }, [rawSvg]);
 
+  const isDrawio = useMemo(() => {
+    return isDrawioXml(rawSvg) || (url ? url.includes(".drawio") : false) || (title ? title.includes(".drawio") : false);
+  }, [rawSvg, url, title]);
+
   // Extract dimensions or viewBox if available
   const dimensions = useMemo(() => {
-    if (!rawSvg) return null;
-    const vbMatch = rawSvg.match(/viewBox\s*=\s*["']([^"']+)["']/i);
+    const target = sanitized || rawSvg;
+    if (!target) return null;
+    const vbMatch = target.match(/viewBox\s*=\s*["']([^"']+)["']/i);
     if (vbMatch) {
       const parts = vbMatch[1].trim().split(/[\s,]+/);
       if (parts.length === 4) {
         return `${parts[2]}×${parts[3]}`;
       }
     }
-    const wMatch = rawSvg.match(/width\s*=\s*["']([^"']+)["']/i);
-    const hMatch = rawSvg.match(/height\s*=\s*["']([^"']+)["']/i);
+    const wMatch = target.match(/width\s*=\s*["']([^"']+)["']/i);
+    const hMatch = target.match(/height\s*=\s*["']([^"']+)["']/i);
     if (wMatch && hMatch) {
       return `${wMatch[1]}×${hMatch[1]}`;
     }
     return null;
-  }, [rawSvg]);
+  }, [sanitized, rawSvg]);
 
   const handleCopy = () => {
     if (!rawSvg) return;
@@ -129,12 +135,15 @@ export function SvgViewer({
 
   const handleDownload = () => {
     if (!rawSvg) return;
-    const blob = new Blob([rawSvg], { type: "image/svg+xml;charset=utf-8" });
+    const isXml = isDrawio && !rawSvg.startsWith("<svg");
+    const mime = isXml ? "application/xml;charset=utf-8" : "image/svg+xml;charset=utf-8";
+    const blob = new Blob([rawSvg], { type: mime });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
     const cleanTitle = title.replace(/[^a-zA-Z0-9_.-]/g, "_").toLowerCase();
-    a.download = cleanTitle.endsWith(".svg") ? cleanTitle : `${cleanTitle}.svg`;
+    const ext = isXml ? ".drawio" : ".svg";
+    a.download = cleanTitle.endsWith(ext) || cleanTitle.endsWith(".svg") ? cleanTitle : `${cleanTitle}${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -167,6 +176,11 @@ export function SvgViewer({
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="truncate max-w-[200px] sm:max-w-xs">{title}</span>
           </div>
+          {isDrawio && (
+            <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
+              Draw.io
+            </span>
+          )}
           {dimensions && (
             <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
               {dimensions}
@@ -299,12 +313,26 @@ export function SvgViewer({
             )}
           </button>
 
+          {/* Open in Diagrams.net Button for Draw.io diagrams */}
+          {isDrawio && rawSvg && (
+            <a
+              href={`https://viewer.diagrams.net/?highlight=0000ff&edit=_blank&layers=1&nav=1#R${encodeURIComponent(rawSvg)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] transition-colors"
+              title="Open in Diagrams.net"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span className="hidden sm:inline text-[10px]">Diagrams.net</span>
+            </a>
+          )}
+
           {/* Download Button */}
           <button
             type="button"
             onClick={handleDownload}
             className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
-            title="Download SVG file"
+            title={isDrawio && !rawSvg.startsWith("<svg") ? "Download Draw.io XML file" : "Download SVG file"}
           >
             <Download className="h-3 w-3 text-slate-500" />
             <span className="hidden sm:inline text-[10px]">Download</span>
@@ -368,7 +396,9 @@ export function SvgViewer({
 
       {/* 3. Footer Bar */}
       <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
-        <span className="font-mono truncate">SVG Vector Format • Scalable</span>
+        <span className="font-mono truncate">
+          {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
+        </span>
         {activeTab === "preview" && (
           <span className="hidden sm:inline text-slate-400 dark:text-zinc-500 shrink-0">
             Click +/- or zoom buttons to inspect details

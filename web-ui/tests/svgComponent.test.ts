@@ -216,6 +216,90 @@ describe("SVG Viewer Component Suite", () => {
     // 4. Assert proof drawer is still collapsed by default while the SVG is fully visible
     assert.ok(renderedText.includes("Expand Proof"), "Proof drawer remains collapsed without hiding the SVG");
   });
+
+  it("SvgViewer converts Draw.io XML into rendered vector shapes and provides external diagram link", async () => {
+    const drawioXml = `<mxfile host="app.diagrams.net">
+      <diagram id="d1" name="Two Tier">
+        <mxGraphModel>
+          <root>
+            <mxCell id="0"/>
+            <mxCell id="1" parent="0"/>
+            <mxCell id="alb" value="ALB Load Balancer" style="shape=cylinder;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+              <mxGeometry x="100" y="50" width="140" height="70" as="geometry"/>
+            </mxCell>
+          </root>
+        </mxGraphModel>
+      </diagram>
+    </mxfile>`;
+
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(React.createElement(SvgViewer, { code: drawioXml, title: "two_tier_aws.drawio.svg" }));
+    });
+
+    const renderedText = container.textContent || "";
+    assert.ok(renderedText.includes("two_tier_aws.drawio.svg") || renderedText.includes("Draw.io"), "Displays title or Draw.io badge");
+
+    // Must render SVG DOM element containing converted shapes (not an empty canvas!)
+    const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
+    assert.ok(svgElem !== null, "Must contain rendered SVG DOM element");
+    assert.ok(svgElem.innerHTML.includes("ALB Load Balancer"), "Must contain rendered node text");
+
+    // Assert Diagrams.net action button exists
+    const buttons = Array.from(container.querySelectorAll("button, a"));
+    const drawioBtn = buttons.find((b) => b.getAttribute("title")?.includes("Diagrams.net") || b.textContent?.includes("Diagrams.net"));
+    assert.ok(drawioBtn !== undefined, "Diagrams.net action button must be available");
+  });
+
+  it("ChatStream renders Draw.io XML files inline from tool traces", async () => {
+    const { ChatStream } = await import("../components/ChatStream.js");
+
+    const testMessages = [
+      {
+        id: "msg-drawio-trace",
+        role: "assistant" as const,
+        content: "I have created the architecture diagram and saved it to two_tier_aws_architecture.drawio.svg.",
+        traces: [
+          {
+            tool: "workspace_write_file",
+            durationMs: 5,
+            timestamp: new Date().toISOString(),
+            args: {
+              path: "two_tier_aws_architecture.drawio.svg",
+              content: `<mxfile host="app.diagrams.net"><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="ec2" value="App Server" vertex="1" parent="1"><mxGeometry x="10" y="10" width="100" height="50" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>`
+            },
+            result: {
+              content: [{ type: "text", text: '{"status":"SUCCESS","path":"two_tier_aws_architecture.drawio.svg"}' }]
+            }
+          }
+        ]
+      }
+    ];
+
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: testMessages,
+          setMessages: () => {}
+        })
+      );
+    });
+
+    const renderedText = container.textContent || "";
+    assert.ok(
+      renderedText.includes("two_tier_aws_architecture.drawio.svg"),
+      "Must render inline vector diagram for drawio.svg"
+    );
+
+    const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
+    assert.ok(svgElem !== null, "Must render SVG DOM element for Draw.io file");
+    assert.ok(svgElem.innerHTML.includes("App Server"), "Must render App Server inside SVG");
+  });
 });
+
 
 
