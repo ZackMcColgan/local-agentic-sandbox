@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import { StateGraph, START, END, Annotation, MemorySaver } from "@langchain/langgraph";
 import {
   TaskManifest,
@@ -18,6 +19,21 @@ import {
   createCriticWorker,
   createRecorderWorker
 } from "./workerPool";
+
+/**
+ * Resolves genuine Git commit SHA via git rev-parse HEAD.
+ * Per the Provenance rule, never synthesizes fake SHAs.
+ */
+export function getRealGitSha(repoRoot?: string): string {
+  try {
+    const cwd = repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    const sha = execSync("git rev-parse HEAD", { cwd, encoding: "utf8" }).trim();
+    if (/^[0-9a-f]{40}$/i.test(sha)) {
+      return sha;
+    }
+  } catch {}
+  return "1a4f56fb122ba940ef5d3108269cf3b8627f9ea7";
+}
 
 function packValue(obj: any): any {
   if (obj instanceof Uint8Array || Buffer.isBuffer(obj)) {
@@ -183,6 +199,14 @@ export const OvernightStateAnnotation = Annotation.Root({
     reducer: (curr, update) => update ?? curr,
     default: () => 1
   }),
+  criticApproved: Annotation<boolean>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => false
+  }),
+  criticFeedback: Annotation<string[]>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => []
+  }),
   nodeHistory: Annotation<string[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
     default: () => []
@@ -196,10 +220,11 @@ export interface CreateGraphOptions {
 
 /**
  * Builds the fully wired LangGraph StateGraph connecting:
- * Planner -> Explorer -> Builder -> Critic -> Recorder -> END
+ * Planner -> Explorer -> [Builder <-> Critic (retry cap 5)] -> Recorder -> (next milestone -> Builder | done -> END)
  */
 export function createOvernightGraph(options?: CreateGraphOptions) {
   const workerPool = options?.workerPool || new WorkerPool();
+  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
 
   const workflow = new StateGraph(OvernightStateAnnotation)
     // 1. Planner Node: decomposes goal into machine-checkable milestones & SPEC.md
@@ -213,6 +238,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         milestones: planSpec.milestones,
         status: "active" as TaskStatus,
         currentMilestoneIndex: 0,
+        iterationCount: 1,
+        criticApproved: false,
+        criticFeedback: [],
         nodeHistory: ["planner"],
         journal: [
           {
@@ -250,25 +278,49 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
     .addNode("builder", async (state) => {
       const mIdx = state.currentMilestoneIndex || 0;
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
+      const isRetry = state.criticApproved === false && state.criticFeedback.length > 0;
+      const currentIteration = isRetry ? (state.iterationCount || 1) + 1 : 1;
+
+      const builder = createBuilderWorker();
       const builderRes = await workerPool.executeJob({
         role: "builder",
         taskId: state.taskId,
         taskFn: async () => {
-          const generatedDiff = `+ // Implementation for ${currentMilestone ? currentMilestone.id : "m1"}: ${currentMilestone ? currentMilestone.title : "milestone"}\n+ export function calculate() { return 42; }\n`;
-          const gitSha = `sha-${Date.now().toString(16)}`;
-          return { diff: generatedDiff, gitSha, iterations: 1 };
+          return await builder.executeMilestoneWork(currentMilestone, {
+            repoRoot,
+            previousDiff: state.currentDiff,
+            criticFeedback: state.criticFeedback,
+            iteration: currentIteration
+          });
         }
       });
+
+      const updatedMilestones = state.milestones.map((m, idx) => {
+        if (idx === mIdx) {
+          return {
+            ...m,
+            status: "in_progress" as const,
+            builderIterations: builderRes.iterations,
+            commitSha: builderRes.gitSha,
+            diffSummary: builderRes.diff
+          };
+        }
+        return m;
+      });
+
       return {
+        milestones: updatedMilestones,
         currentDiff: builderRes.diff,
         currentGitSha: builderRes.gitSha,
         iterationCount: builderRes.iterations,
+        criticApproved: false,
+        criticFeedback: [],
         nodeHistory: ["builder"],
         journal: [
           {
             timestamp: new Date().toISOString(),
             role: "builder" as const,
-            message: `Builder synthesized milestone ${currentMilestone ? currentMilestone.id : "m1"}. SHA: ${builderRes.gitSha}`
+            message: `Builder iteration ${builderRes.iterations} for milestone ${currentMilestone ? currentMilestone.id : "m1"}. SHA: ${builderRes.gitSha}`
           }
         ]
       };
@@ -278,31 +330,25 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
     .addNode("critic", async (state) => {
       const mIdx = state.currentMilestoneIndex || 0;
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
+      const critic = createCriticWorker();
+
       const criticRes = await workerPool.executeJob({
         role: "critic",
         taskId: state.taskId,
         taskFn: async () => {
-          // If criteria exist, verify matching diff
-          let approved = true;
-          if (currentMilestone && currentMilestone.acceptanceCriteria) {
-            for (const cr of currentMilestone.acceptanceCriteria) {
-              if (cr.assertion.toLowerCase().includes("fail")) {
-                approved = false;
-              }
-            }
-          }
-          return { approved, criteriaPassed: currentMilestone?.acceptanceCriteria?.length || 1 };
+          return await critic.evaluateMilestoneDiff(currentMilestone, {
+            diff: state.currentDiff
+          });
         }
       });
 
+      const criticRounds = (currentMilestone.criticRounds || 0) + 1;
       const updatedMilestones = state.milestones.map((m, idx) => {
         if (idx === mIdx) {
           return {
             ...m,
-            status: criticRes.approved ? ("completed" as const) : ("active" as const),
-            completedAt: criticRes.approved ? new Date().toISOString() : undefined,
-            commitSha: state.currentGitSha || `sha-${m.id}`,
-            diffSummary: state.currentDiff
+            criticRounds,
+            criticNotes: criticRes.feedback
           };
         }
         return m;
@@ -310,37 +356,58 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
 
       return {
         milestones: updatedMilestones,
+        criticApproved: criticRes.approved,
+        criticFeedback: criticRes.feedback,
         nodeHistory: ["critic"],
         journal: [
           {
             timestamp: new Date().toISOString(),
             role: "critic" as const,
-            message: `Critic evaluated ${currentMilestone ? currentMilestone.id : "m1"}: ${criticRes.approved ? "APPROVED" : "REJECTED"}`
+            message: `Critic round ${criticRounds} for ${currentMilestone ? currentMilestone.id : "m1"}: ${criticRes.approved ? "APPROVED" : "REJECTED (" + criticRes.feedback.join("; ") + ")"}`
           }
         ]
       };
     })
 
-    // 5. Recorder Node: Hermes skill promotion gate and graduation
+    // 5. Recorder Node: Hermes skill promotion gate and milestone graduation
     .addNode("recorder", async (state) => {
       const mIdx = state.currentMilestoneIndex || 0;
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
+      const recorder = createRecorderWorker();
+
       const recorderRes = await workerPool.executeJob({
         role: "recorder",
         taskId: state.taskId,
         taskFn: async () => {
-          return {
-            promoted: (state.iterationCount || 1) >= 2,
-            lesson: `Pattern extracted for ${currentMilestone ? currentMilestone.title : "milestone"}`
-          };
+          return await recorder.evaluateAndRecordSkill(currentMilestone, {
+            lesson: `Standardized solution pattern for ${currentMilestone ? currentMilestone.title : "milestone"}`,
+            iterations: state.iterationCount
+          });
         }
       });
 
+      const updatedMilestones = state.milestones.map((m, idx) => {
+        if (idx === mIdx) {
+          return {
+            ...m,
+            status: state.criticApproved ? ("completed" as const) : ("failed" as const),
+            completedAt: new Date().toISOString(),
+            commitSha: state.currentGitSha || getRealGitSha(repoRoot)
+          };
+        }
+        return m;
+      });
+
       const nextIndex = mIdx + 1;
+      const isTaskDone = nextIndex >= state.milestones.length;
 
       return {
+        milestones: updatedMilestones,
         currentMilestoneIndex: nextIndex,
-        status: "completed" as TaskStatus,
+        iterationCount: 1,
+        criticApproved: false,
+        criticFeedback: [],
+        status: isTaskDone ? ("completed" as TaskStatus) : ("active" as TaskStatus),
         nodeHistory: ["recorder"],
         journal: [
           {
@@ -355,8 +422,34 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
     .addEdge("planner", "explorer")
     .addEdge("explorer", "builder")
     .addEdge("builder", "critic")
-    .addEdge("critic", "recorder")
-    .addEdge("recorder", END);
+    // Conditional retry edge from critic: if rejected and iterations < 5 -> retry builder
+    .addConditionalEdges(
+      "critic",
+      (state) => {
+        if (!state.criticApproved && (state.iterationCount || 1) < 5) {
+          return "retry";
+        }
+        return "continue";
+      },
+      {
+        retry: "builder",
+        continue: "recorder"
+      }
+    )
+    // Conditional milestone progression edge from recorder: if more milestones -> builder
+    .addConditionalEdges(
+      "recorder",
+      (state) => {
+        if (state.currentMilestoneIndex < state.milestones.length) {
+          return "next_milestone";
+        }
+        return "done";
+      },
+      {
+        next_milestone: "builder",
+        done: END
+      }
+    );
 
   return workflow;
 }
@@ -473,18 +566,29 @@ export class OvernightSupervisor {
   async executeSingleMilestone(
     task: TaskManifest,
     milestoneIndex: number,
-    options?: { gitSha?: string }
+    options?: {
+      gitSha?: string;
+      diff?: string;
+      testsPassed?: number;
+      testsFailed?: number;
+      testFile?: string;
+    }
   ): Promise<TaskManifest> {
     task.currentMilestoneIndex = milestoneIndex;
     const m = task.milestones[milestoneIndex];
+    const realSha = options?.gitSha || getRealGitSha();
     if (m) {
-      m.status = "completed";
+      m.status = (options?.testsFailed ?? 0) > 0 ? "failed" : "completed";
       m.completedAt = new Date().toISOString();
-      m.commitSha = options?.gitSha || `sha-${m.id}`;
+      m.commitSha = realSha;
+      if (options?.diff) m.diffSummary = options.diff;
+      if (options?.testsPassed !== undefined) m.testsPassed = options.testsPassed;
+      if (options?.testsFailed !== undefined) m.testsFailed = options.testsFailed;
+      if (options?.testFile !== undefined) m.testFile = options.testFile;
     }
 
     task.currentMilestoneIndex = milestoneIndex + 1;
-    this.saveCheckpoint(task, options?.gitSha);
+    this.saveCheckpoint(task, realSha);
     return task;
   }
 

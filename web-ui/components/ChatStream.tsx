@@ -29,6 +29,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { DiffViewer } from "./DiffViewer";
+import { SvgViewer, SvgFileLink } from "./SvgViewer";
+import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown } from "@/lib/svgUtils";
 import { AgentMode } from "@/config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
 
@@ -88,7 +90,22 @@ function fileToBase64(file: File): Promise<string> {
 function CodeBlock({ language, code }: { language?: string; code: string }) {
   const [copied, setCopied] = useState(false);
 
+  // If this code block contains or represents an SVG, render the interactive SvgViewer!
+  if (isSvgCode(code, language)) {
+    return (
+      <div className="my-3">
+        <SvgViewer
+          code={code}
+          title={language ? `${language.toUpperCase()} Vector Graphic` : "SVG Vector Graphic"}
+          initialTab="preview"
+          allowFullscreen={true}
+        />
+      </div>
+    );
+  }
+
   const handleCopy = () => {
+
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -219,7 +236,7 @@ export function ChatStream({
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+      const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name);
       
       try {
         const base64 = await fileToBase64(file);
@@ -582,10 +599,11 @@ export function ChatStream({
                           code: ({ inline, className, children, ...props }: any) => {
                             const match = /language-(\w+)/.exec(className || "");
                             const codeString = String(children).replace(/\n$/, "");
-                            if (!inline && (match || codeString.includes("\n"))) {
+                            const isSvg = isSvgCode(codeString, match ? match[1] : undefined);
+                            if (!inline && (match || codeString.includes("\n") || isSvg)) {
                               return (
                                 <CodeBlock
-                                  language={match ? match[1] : "bash"}
+                                  language={match ? match[1] : (isSvg ? "svg" : "bash")}
                                   code={codeString}
                                 />
                               );
@@ -597,6 +615,40 @@ export function ChatStream({
                               >
                                 {children}
                               </code>
+                            );
+                          },
+                          img: ({ src, alt, ...props }: any) => {
+                            if (!src) return null;
+                            const isSvg = isSvgFilePath(src) || src.startsWith("data:image/svg+xml");
+                            const resolvedSrc = resolveSvgUrl(src);
+
+                            if (isSvg) {
+                              return (
+                                <div className="my-3">
+                                  <SvgViewer
+                                    url={resolvedSrc}
+                                    title={alt || src.split("/").pop() || "Vector Graphic"}
+                                    initialTab="preview"
+                                    allowFullscreen={true}
+                                  />
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="my-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
+                                <img
+                                  src={resolvedSrc}
+                                  alt={alt || "Image"}
+                                  className="max-w-full h-auto rounded-lg mx-auto"
+                                  {...props}
+                                />
+                                {alt && (
+                                  <div className="px-3 py-1 bg-slate-50 dark:bg-zinc-800 text-[11px] text-slate-500 dark:text-zinc-400 font-mono text-center">
+                                    {alt}
+                                  </div>
+                                )}
+                              </div>
                             );
                           },
                           p: ({ children }: any) => (
@@ -623,20 +675,33 @@ export function ChatStream({
                           strong: ({ children }: any) => (
                             <strong className="font-semibold text-slate-900 dark:text-white">{children}</strong>
                           ),
-                          a: ({ href, children }: any) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-cyan-600 dark:text-cyan-400 hover:underline underline-offset-2 font-medium"
-                            >
-                              {children}
-                            </a>
-                          )
+                          a: ({ href, children }: any) => {
+                            if (!href) return <>{children}</>;
+                            const isSvg = isSvgFilePath(href);
+                            if (isSvg) {
+                              const resolved = resolveSvgUrl(href);
+                              return (
+                                <SvgFileLink href={resolved} rawHref={href}>
+                                  {children}
+                                </SvgFileLink>
+                              );
+                            }
+                            return (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-cyan-600 dark:text-cyan-400 hover:underline underline-offset-2 font-medium"
+                              >
+                                {children}
+                              </a>
+                            );
+                          }
                         }}
                       >
-                        {m.content}
+                        {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
+
                     </div>
                   )}
                 </div>
@@ -783,6 +848,27 @@ export function ChatStream({
                                   />
                                 </div>
                               )}
+
+                              {/* Visual SVG Inspector in Execution Trace */}
+                              {trace.args?.path && isSvgFilePath(trace.args.path) && (
+                                <div className="pt-2">
+                                  <SvgViewer
+                                    url={resolveSvgUrl(trace.args.path)}
+                                    title={trace.args.path}
+                                    initialTab="preview"
+                                  />
+                                </div>
+                              )}
+                              {!trace.args?.path && isSvgCode(stdoutPreview) && (
+                                <div className="pt-2">
+                                  <SvgViewer
+                                    code={stdoutPreview}
+                                    title={`${trace.tool} SVG Output`}
+                                    initialTab="preview"
+                                  />
+                                </div>
+                              )}
+
 
                               {/* Direct Jump to System Tab */}
                               {onViewSecurityTelemetry && (

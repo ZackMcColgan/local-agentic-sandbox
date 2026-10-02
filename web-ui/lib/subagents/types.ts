@@ -25,6 +25,9 @@ export interface Milestone {
   criticNotes?: string[];
   commitSha?: string;
   diffSummary?: string;
+  testsPassed?: number;
+  testsFailed?: number;
+  testFile?: string;
   completedAt?: string;
 }
 

@@ -175,8 +175,8 @@ export async function GET(req: Request) {
         title: m.title,
         status: m.status,
         commitSha: m.commitSha,
-        testsPassed: m.status === "completed" ? 2 : 0,
-        testsFailed: 0,
+        testsPassed: m.testsPassed ?? 0,
+        testsFailed: m.testsFailed ?? 0,
         diffSummary: m.diffSummary
       })),
       ambiguityFlags: task.ambiguityFlags,
