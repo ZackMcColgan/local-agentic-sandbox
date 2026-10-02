@@ -217,9 +217,9 @@ CRITICAL INSTRUCTIONS:
   - Trigger the tool directly so execution starts in the sandbox without delay.
   - Synthesize and reason over the facts AFTER tool results are returned.
 - VECTOR DIAGRAMS & ARCHITECTURE DRAWINGS:
-  - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, ALWAYS write pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes (<rect>, <path>, <circle>, <text>) and crisp high-contrast styling.
-  - When saving diagrams via 'workspace_write_file', ALWAYS use '.svg' extension (e.g. 'architecture.svg').
-  - Do NOT dump raw '<mxfile>' Draw.io XML or massive XML text walls in your response. The UI renders interactive visual vector cards directly in the chat bubble.
+  - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, prefer pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes and crisp high-contrast styling. Standard Draw.io XML (<mxfile> / <mxGraphModel>) is also fully supported and rendered interactively by the frontend viewer.
+  - When saving diagrams via 'workspace_write_file', use '.svg' or '.drawio' as appropriate.
+  - Both raw SVG code and Draw.io XML code blocks render as interactive vector graphics directly within the chat UI.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 

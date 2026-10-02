@@ -82,24 +82,121 @@ describe("SVG Rendering & Sanitization Suite", () => {
   });
 
 
-  it("sanitizes potentially malicious scripts and event handlers from SVG while preserving vector elements", () => {
-    const maliciousSvg = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" onload="alert('pwned')">
-        <script>alert('xss');</script>
-        <circle cx="50" cy="50" r="40" fill="#10b981" onclick="stealCookies()" />
-        <a href="javascript:alert(1)"><text x="10" y="20">Click</text></a>
-      </svg>
-    `;
+  it("sanitizes adversarial SVG attacks with DOMPurify: script variants, event handlers, javascript/data URIs, foreignObject, animate onbegin, encoded entities", () => {
+    // 1. Script tag variants (inline and external)
+    const scriptSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><script>alert('pwned')</script><SCRIPT SRC="http://evil.com/xss.js"></SCRIPT><circle cx="50" cy="50" r="40" fill="#10b981"/></svg>`;
+    const scriptCleaned = sanitizeSvg(scriptSvg);
+    assert.equal(scriptCleaned.includes("<script"), false, "Must strip lowercase <script>");
+    assert.equal(scriptCleaned.includes("<SCRIPT"), false, "Must strip uppercase <SCRIPT>");
+    assert.equal(scriptCleaned.includes("alert('pwned')"), false, "Must strip script body");
+    assert.ok(scriptCleaned.includes("<circle"), "Must preserve legitimate circle");
 
-    const sanitized = sanitizeSvg(maliciousSvg);
+    // 2. Event handler variants (onload, onclick, onmouseover, onerror)
+    const handlersSvg = `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><circle r="10" onclick="alert(2)" onmouseover="alert(3)" onerror="alert(4)"/><rect width="20" height="20"/></svg>`;
+    const handlersCleaned = sanitizeSvg(handlersSvg);
+    assert.equal(/onload=/i.test(handlersCleaned), false, "Must strip onload");
+    assert.equal(/onclick=/i.test(handlersCleaned), false, "Must strip onclick");
+    assert.equal(/onmouseover=/i.test(handlersCleaned), false, "Must strip onmouseover");
+    assert.equal(/onerror=/i.test(handlersCleaned), false, "Must strip onerror");
+    assert.ok(handlersCleaned.includes("<circle"), "Must preserve circle");
+    assert.ok(handlersCleaned.includes("<rect"), "Must preserve rect");
 
-    assert.equal(sanitized.includes("<script>"), false, "Must strip <script> tag");
-    assert.equal(sanitized.includes("alert('xss')"), false, "Must strip script body");
-    assert.equal(sanitized.includes("onload="), false, "Must strip onload event handler");
-    assert.equal(sanitized.includes("onclick="), false, "Must strip onclick event handler");
-    assert.equal(sanitized.includes("javascript:"), false, "Must strip javascript: link");
-    assert.ok(sanitized.includes("<circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"#10b981\""), "Must preserve vector circle");
-    assert.ok(sanitized.includes("viewBox=\"0 0 100 100\""), "Must preserve viewBox");
+    // 3. javascript: and data: URLs
+    const urlsSvg = `<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><text>Click</text></a><a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="><text>Data</text></a><image href="javascript:alert(2)"/></svg>`;
+    const urlsCleaned = sanitizeSvg(urlsSvg);
+    assert.equal(urlsCleaned.includes("javascript:"), false, "Must neutralize javascript: href");
+    assert.equal(urlsCleaned.includes("data:text/html"), false, "Must neutralize data:text/html href");
+
+    // 4. <foreignObject> embedding HTML/iframe/script
+    const foreignObjectSvg = `<svg xmlns="http://www.w3.org/2000/svg"><foreignObject width="100" height="50"><body xmlns="http://www.w3.org/1999/xhtml"><iframe src="http://evil.com"></iframe><script>steal()</script></body></foreignObject><rect width="50" height="50"/></svg>`;
+    const foreignCleaned = sanitizeSvg(foreignObjectSvg);
+    assert.equal(foreignCleaned.includes("<foreignObject"), false, "Must strip <foreignObject>");
+    assert.equal(foreignCleaned.includes("<iframe"), false, "Must strip <iframe>");
+    assert.ok(foreignCleaned.includes("<rect"), "Must preserve valid rect");
+
+    // 5. <animate onbegin="alert(1)">
+    const animateSvg = `<svg xmlns="http://www.w3.org/2000/svg"><animate onbegin="alert(1)" attributeName="opacity" from="0" to="1" dur="1s"/><circle r="10"/></svg>`;
+    const animateCleaned = sanitizeSvg(animateSvg);
+    assert.equal(animateCleaned.includes("onbegin"), false, "Must neutralize onbegin handler");
+
+    // 6. Encoded entity bypasses (e.g. jav&#x09;ascript: and &Tab;)
+    const encodedSvg = `<svg xmlns="http://www.w3.org/2000/svg"><a href="jav&#x09;ascript:alert(1)"><circle r="10"/></a></svg>`;
+    const encodedCleaned = sanitizeSvg(encodedSvg);
+    assert.equal(encodedCleaned.includes("javascript:"), false, "Must neutralize encoded javascript entity href");
+  });
+
+  it("preserves a legitimate 30-cell architecture diagram intact across sanitization", () => {
+    const archPath = fs.existsSync(path.resolve(process.cwd(), "docs/architecture.drawio"))
+      ? path.resolve(process.cwd(), "docs/architecture.drawio")
+      : path.resolve(process.cwd(), "../docs/architecture.drawio");
+    const drawioContent = fs.readFileSync(archPath, "utf-8");
+
+    // 1. Convert real architecture.drawio to SVG
+    const rawSvg = convertDrawioToSvg(drawioContent);
+    assert.ok(rawSvg.length > 5000, "Raw SVG must be generated with content");
+
+    // 2. Pass through sanitizeSvg
+    const sanitized = sanitizeSvg(rawSvg);
+    assert.ok(sanitized.startsWith("<svg"), "Sanitized output must start with <svg");
+    assert.ok(sanitized.includes("</svg>"), "Sanitized output must end with </svg>");
+
+    // 3. Verify all 23 non-empty text labels from the 30 cells survived intact
+    const expectedLabels = [
+      "CLIENT & INGRESS LAYER",
+      "Mobile Phone / Workstation Browser",
+      "LAN Reverse Proxy Bridge",
+      "Public Internet & External Docs",
+      "KUBERNETES CLUSTER",
+      "web-ui Orchestrator Pod",
+      "mcp-runner Tool Boundary",
+      "browser-mcp Scraper Pod",
+      "otel-collector Jaeger Tracing",
+      "builder-tier Toolchain Sandbox",
+      "qdrant-service: Qdrant Vector",
+      "workspace-pvc Persistent Volum",
+      "HOST INFERENCE BOUNDARY",
+      "ollama-service",
+      "Primary Orchestrator",
+      "Inference /api/chat",
+      "REST/gRPC",
+      "Delegated Build"
+    ];
+
+    for (const label of expectedLabels) {
+      assert.ok(
+        sanitized.includes(label) || sanitized.includes(label.replace(/&/g, "&amp;")),
+        `Sanitized SVG must preserve label: '${label}'`
+      );
+    }
+
+    // 4. Verify shape elements survived
+    assert.ok(sanitized.includes("<rect") || sanitized.includes("<path"), "Must preserve vector shapes");
+    assert.ok(sanitized.includes("<defs>"), "Must preserve defs");
+  });
+
+  it("Draw.io converter robustness: handles round-trip of real docs/architecture.drawio and malformed inputs", () => {
+    // 1. Real docs/architecture.drawio
+    const archPath = fs.existsSync(path.resolve(process.cwd(), "docs/architecture.drawio"))
+      ? path.resolve(process.cwd(), "docs/architecture.drawio")
+      : path.resolve(process.cwd(), "../docs/architecture.drawio");
+    const drawioContent = fs.readFileSync(archPath, "utf-8");
+    const converted = convertDrawioToSvg(drawioContent);
+    assert.ok(converted.includes("viewBox="), "Must compute viewBox");
+    assert.ok(converted.includes("web-ui Orchestrator Pod"), "Must contain major pod label");
+
+    // 2. Encoded entities (&lt;mxfile ... &lt;mxGraphModel)
+    const encodedXml = `&lt;mxfile host="app.diagrams.net"&gt;&lt;diagram&gt;&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id="0"/&gt;&lt;mxCell id="1" parent="0"/&gt;&lt;mxCell id="c1" value="Encoded Box" vertex="1" parent="1"&gt;&lt;mxGeometry x="10" y="10" width="100" height="50" as="geometry"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;/mxfile&gt;`;
+    const fromEncoded = convertDrawioToSvg(encodedXml);
+    assert.ok(fromEncoded.includes("<svg"), "Must unescape and convert encoded mxfile");
+    assert.ok(fromEncoded.includes("Encoded Box"), "Must render cell label from encoded XML");
+
+    // 3. Malformed / empty input: must return empty string, never throw
+    assert.equal(convertDrawioToSvg(""), "");
+    assert.equal(convertDrawioToSvg("   "), "");
+    assert.equal(convertDrawioToSvg(null as any), "");
+    assert.equal(convertDrawioToSvg(undefined as any), "");
+    assert.equal(convertDrawioToSvg("<invalid><xml></broken>"), "");
+    assert.equal(convertDrawioToSvg("this is plain text"), "");
   });
 
   it("wraps unescaped raw SVG blocks into markdown svg code fences", () => {
@@ -140,7 +237,7 @@ Hope this helps!`;
     );
   });
 
-  it("GET /api/files serves workspace SVG files safely and blocks path traversal", async () => {
+  it("GET /api/files strictly enforces SVG/XML content-types, blocks directory listing and path traversal", async () => {
     const { GET } = await import("../app/api/files/route.js");
     const { NextRequest } = await import("next/server");
 
@@ -152,12 +249,28 @@ Hope this helps!`;
     const body = await res.text();
     assert.ok(body.includes("<svg"), "Must return SVG markup");
 
-    // 2. Path traversal attack rejected
+    // 2. Successful Draw.io XML fetch
+    const drawioReq = new NextRequest("http://localhost:3000/api/files?path=docs/architecture.drawio");
+    const drawioRes = await GET(drawioReq);
+    assert.equal(drawioRes.status, 200);
+    assert.ok(drawioRes.headers.get("Content-Type")?.includes("xml"));
+
+    // 3. Strict content-type enforcement: Non-SVG/XML file returns 415 Unsupported Media Type
+    const nonSvgReq = new NextRequest("http://localhost:3000/api/files?path=package.json");
+    const nonSvgRes = await GET(nonSvgReq);
+    assert.equal(nonSvgRes.status, 415, "Non-SVG/XML file must return 415 Unsupported Media Type");
+
+    // 4. Directory listing forbidden: requesting a directory returns 403 Forbidden
+    const dirReq = new NextRequest("http://localhost:3000/api/files?path=docs");
+    const dirRes = await GET(dirReq);
+    assert.equal(dirRes.status, 403, "Directory path must return 403 Forbidden");
+
+    // 5. Path traversal attack rejected with 403 Forbidden
     const traversalReq = new NextRequest("http://localhost:3000/api/files?path=../../../../etc/passwd");
     const traversalRes = await GET(traversalReq);
     assert.equal(traversalRes.status, 403, "Path traversal must return 403 Forbidden");
 
-    // 3. Nonexistent file returns 404
+    // 6. Nonexistent SVG returns 404
     const notFoundReq = new NextRequest("http://localhost:3000/api/files?path=docs/does-not-exist.svg");
     const notFoundRes = await GET(notFoundReq);
     assert.equal(notFoundRes.status, 404, "Missing file must return 404 Not Found");

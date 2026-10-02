@@ -7,20 +7,9 @@ function getMimeType(filePath: string): string {
   switch (ext) {
     case ".svg":
       return "image/svg+xml; charset=utf-8";
-    case ".png":
-      return "image/png";
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".webp":
-      return "image/webp";
-    case ".gif":
-      return "image/gif";
-    case ".json":
-      return "application/json";
-    case ".md":
-    case ".txt":
-      return "text/plain; charset=utf-8";
+    case ".drawio":
+    case ".xml":
+      return "application/xml; charset=utf-8";
     default:
       return "application/octet-stream";
   }
@@ -57,6 +46,36 @@ export async function GET(request: NextRequest) {
         : cwd
     ];
 
+    // Check if target is a directory across candidate roots (directory listing is forbidden)
+    for (const root of candidateRoots) {
+      if (!fs.existsSync(root)) continue;
+      const candidate = path.resolve(root, cleanPath);
+      const rel = path.relative(root, candidate);
+      if (!rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(candidate)) {
+        try {
+          const stat = fs.statSync(candidate);
+          if (stat.isDirectory()) {
+            return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
+          }
+        } catch {}
+      }
+    }
+
+    // Strict content-type check: only SVG and Draw.io XML files permitted
+    const ext = path.extname(cleanPath).toLowerCase();
+    const isAllowedExt =
+      ext === ".svg" ||
+      ext === ".drawio" ||
+      cleanPath.endsWith(".drawio.xml") ||
+      ext === ".xml";
+
+    if (!isAllowedExt) {
+      return NextResponse.json(
+        { error: "Unsupported media type: only SVG and Draw.io XML diagrams are permitted" },
+        { status: 415 }
+      );
+    }
+
     let resolvedPath: string | null = null;
 
     // Check each candidate root
@@ -69,6 +88,9 @@ export async function GET(request: NextRequest) {
       if (!rel1.startsWith("..") && !path.isAbsolute(rel1) && fs.existsSync(candidate1)) {
         try {
           const stat = fs.statSync(candidate1);
+          if (stat.isDirectory()) {
+            return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
+          }
           if (stat.isFile()) {
             resolvedPath = candidate1;
             break;

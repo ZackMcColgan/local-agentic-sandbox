@@ -31,18 +31,34 @@ app.get("/files", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing required 'path' query parameter" });
   }
 
+  // Strict SVG/XML content-type validation
+  const ext = path.extname(filePath).toLowerCase();
+  const isAllowedExt =
+    ext === ".svg" ||
+    ext === ".drawio" ||
+    filePath.endsWith(".drawio.xml") ||
+    ext === ".xml";
+
+  if (!isAllowedExt) {
+    return res.status(415).json({
+      error: "Unsupported media type: only SVG and Draw.io XML diagrams are permitted"
+    });
+  }
+
   try {
     const safePath = resolveSafePath(filePath);
     if (!fsSync.existsSync(safePath)) {
       return res.status(404).json({ error: "File not found" });
     }
     const stat = await fs.stat(safePath);
+    if (stat.isDirectory()) {
+      return res.status(403).json({ error: "Access forbidden: directory listing not permitted" });
+    }
     if (!stat.isFile()) {
       return res.status(400).json({ error: "Target is not a file" });
     }
     const content = await fs.readFile(safePath);
-    const ext = path.extname(safePath).toLowerCase();
-    const mime = ext === ".svg" ? "image/svg+xml; charset=utf-8" : "application/octet-stream";
+    const mime = ext === ".svg" ? "image/svg+xml; charset=utf-8" : "application/xml; charset=utf-8";
     res.setHeader("Content-Type", mime);
     res.setHeader("Content-Length", stat.size.toString());
     res.send(content);

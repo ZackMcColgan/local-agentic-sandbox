@@ -1,7 +1,63 @@
-/**
- * SVG Utility and Sanitization Library for local-agentic-sandbox UI
- * Supports standard SVG vector graphics and Draw.io XML (<mxfile>, <mxGraphModel>) diagrams.
- */
+import DOMPurify from "dompurify";
+
+let domPurifyInstance: any = null;
+let lastWindow: any = null;
+
+function patchHappyDomNode(targetWin: any) {
+  try {
+    const winNode = targetWin?.Node;
+    if (winNode && winNode.prototype) {
+      const origNodeName = Object.getOwnPropertyDescriptor(winNode.prototype, "nodeName")?.get;
+      Object.defineProperty(winNode.prototype, "nodeName", {
+        get() {
+          if ((this as any).tagName) return (this as any).tagName;
+          const name = origNodeName ? origNodeName.call(this) : "";
+          if (name) return name;
+          if (this.nodeType === 3) return "#text";
+          if (this.nodeType === 8) return "#comment";
+          if (this.nodeType === 11) return "#document-fragment";
+          if (this.nodeType === 9) return "#document";
+          return "#unknown";
+        },
+        configurable: true
+      });
+    }
+  } catch {}
+}
+
+function getPurifier() {
+  if (typeof window !== "undefined") {
+    // If the window instance changed (e.g. across tests), recreate purifier instance
+    if (domPurifyInstance && lastWindow === window) {
+      return domPurifyInstance;
+    }
+    lastWindow = window;
+    patchHappyDomNode(window);
+    if (typeof (DOMPurify as any) === "function") {
+      domPurifyInstance = (DOMPurify as any)(window);
+    } else {
+      domPurifyInstance = DOMPurify;
+    }
+    return domPurifyInstance;
+  }
+
+  // Node / SSR / Test environment without global window
+  if (domPurifyInstance && lastWindow === null) {
+    return domPurifyInstance;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GlobalWindow } = require("happy-dom");
+    const win = new GlobalWindow();
+    patchHappyDomNode(win);
+    domPurifyInstance = (DOMPurify as any)(win);
+    lastWindow = null;
+  } catch {
+    // Environment without happy-dom, fallback will be used
+  }
+  return domPurifyInstance;
+}
 
 export function isDrawioXml(code: string): boolean {
   if (!code || typeof code !== "string") return false;
@@ -43,13 +99,24 @@ function escapeXml(unsafe?: string): string {
 
 function unescapeEntities(str: string): string {
   if (!str) return "";
-  return str
+  let res = str
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"")
     .replace(/&apos;/g, "'")
     .replace(/&#xa;/gi, "\n")
     .replace(/&amp;/g, "&");
+
+  if (res.includes("&amp;") || res.includes("&lt;") || res.includes("&gt;")) {
+    res = res
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/&apos;/g, "'")
+      .replace(/&#xa;/gi, "\n")
+      .replace(/&amp;/g, "&");
+  }
+  return res;
 }
 
 /**
@@ -58,11 +125,17 @@ function unescapeEntities(str: string): string {
 export function convertDrawioToSvg(xml: string): string {
   if (!xml || typeof xml !== "string") return "";
 
-  let cleanXml = xml;
-  // If the XML is encoded inside an HTML block
-  if (cleanXml.includes("&lt;mxfile") || cleanXml.includes("&lt;mxGraphModel")) {
-    cleanXml = unescapeEntities(cleanXml);
-  }
+  try {
+    let cleanXml = xml;
+    // If the XML is encoded inside an HTML block
+    if (
+      cleanXml.includes("&lt;mxfile") ||
+      cleanXml.includes("&lt;mxGraphModel") ||
+      cleanXml.includes("&lt;mxCell") ||
+      cleanXml.includes("&lt;diagram")
+    ) {
+      cleanXml = unescapeEntities(cleanXml);
+    }
 
   // Parse mxCell elements
   const cells: Array<{
@@ -331,6 +404,9 @@ export function convertDrawioToSvg(xml: string): string {
 
   svgParts.push(`</svg>`);
   return svgParts.join("\n");
+  } catch {
+    return "";
+  }
 }
 
 export function isSvgCode(code: string, language?: string): boolean {
@@ -370,15 +446,33 @@ export function sanitizeSvg(svgString: string): string {
     cleaned = convertDrawioToSvg(cleaned);
   }
 
-  // 1. Remove <script> tags and everything inside them
+  // Pre-strip <script> tags to avoid DOM parser quirks across test and runtime engines
   cleaned = cleaned.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  cleaned = cleaned.replace(/<script\b[^>]*\/>/gi, "");
 
-  // 2. Remove inline event handlers (onload, onclick, onerror, onmouseover, etc.)
+  const purifier = getPurifier();
+  if (purifier && typeof purifier.sanitize === "function") {
+    const sanitized = purifier.sanitize(cleaned, {
+      USE_PROFILES: { svg: true, svgFilters: true },
+      FORBID_TAGS: ["foreignObject", "script", "iframe", "object", "embed"],
+      FORBID_ATTR: [
+        "onbegin", "onend", "onrepeat",
+        "onload", "onerror", "onclick", "onmouseover", "onfocus", "onblur"
+      ],
+      ADD_TAGS: [
+        "svg", "g", "defs", "marker", "filter", "feDropShadow",
+        "rect", "path", "circle", "ellipse", "line", "polyline",
+        "polygon", "text", "tspan", "title", "desc", "use"
+      ]
+    });
+    return sanitized.trim();
+  }
+
+  // Fallback regex sanitizer if DOMPurify is not available
+  cleaned = cleaned.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, "");
   cleaned = cleaned.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-
-  // 3. Remove javascript: pseudo-protocol in href, xlink:href, or src
   cleaned = cleaned.replace(/(href|xlink:href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, "$1=\"#\"");
-
+  cleaned = cleaned.replace(/(href|xlink:href|src)\s*=\s*(?:"data:text\/html[^"]*"|'data:text\/html[^']*')/gi, "$1=\"#\"");
   return cleaned.trim();
 }
 
