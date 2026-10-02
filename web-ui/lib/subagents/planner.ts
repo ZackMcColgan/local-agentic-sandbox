@@ -34,16 +34,17 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      plannedFiles: ["deploy/topology-catalog.json"],
       acceptanceCriteria: [
         {
           id: "AC-1-1",
           assertion: "Topology catalog contains mcp-runner, browser-mcp, web-ui, otel-collector, and ollama-service boundaries",
-          fileMatch: "docker-compose.yml"
+          fileMatch: "deploy/topology-catalog.json"
         },
         {
           id: "AC-1-2",
-          assertion: "Network isolation verified for ai-mesh (zero egress) and egress-mesh",
-          fileMatch: "deploy/k8s/network-policies.yaml"
+          assertion: "Network isolation cataloged for ai-mesh (zero egress) and egress-mesh",
+          fileMatch: "deploy/topology-catalog.json"
         }
       ]
     });
@@ -55,6 +56,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      plannedFiles: ["docs/architecture.drawio", "docs/architecture.drawio.svg"],
       acceptanceCriteria: [
         {
           id: "AC-2-1",
@@ -78,12 +80,13 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      plannedFiles: ["docs/topology-matrix.md"],
       acceptanceCriteria: [
         {
           id: "AC-3-1",
-          assertion: "README.md contains inline Markdown link to docs/architecture.drawio.svg",
-          fileMatch: "README.md",
-          command: "node -e \"const fs = require('fs'); const r = fs.readFileSync('README.md', 'utf8'); if (!r.includes('architecture.drawio.svg')) process.exit(1);\""
+          assertion: "Documentation matrix references docs/architecture.drawio.svg",
+          fileMatch: "docs/topology-matrix.md",
+          command: "node -e \"const fs = require('fs'); const r = fs.readFileSync('docs/topology-matrix.md', 'utf8'); if (!r.includes('architecture.drawio.svg')) process.exit(1);\""
         },
         {
           id: "AC-3-2",

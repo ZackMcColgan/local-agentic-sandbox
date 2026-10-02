@@ -124,13 +124,19 @@ export class BuilderWorker {
     const realSha = getResolvedGitSha(repoRoot);
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
 
-    const targetRelPath =
+    let targetRelPath =
       options?.targetFile ||
       milestone.plannedFiles?.[0] ||
-      milestone.acceptanceCriteria?.find((c) => c.fileMatch)?.fileMatch ||
       (milestone.title.toLowerCase().includes("diagram") ? "docs/architecture.drawio" :
        milestone.title.toLowerCase().includes("topology") ? "deploy/topology-catalog.json" :
+       milestone.title.toLowerCase().includes("doc") ? "docs/topology-matrix.md" :
+       milestone.acceptanceCriteria?.find((c) => c.fileMatch)?.fileMatch ||
        `workspace/lib/${milestone.id.toLowerCase()}.ts`);
+
+    const protectedCoreFiles = ["docker-compose.yml", "package.json", "package-lock.json", "README.md", "tsconfig.json"];
+    if (protectedCoreFiles.includes(targetRelPath) && !options?.targetFile && !milestone.plannedFiles?.includes(targetRelPath)) {
+      targetRelPath = `docs/generated/${targetRelPath}`;
+    }
 
     const fullPath = path.resolve(repoRoot, targetRelPath);
     const dir = path.dirname(fullPath);
@@ -176,6 +182,8 @@ export class BuilderWorker {
           networks: ["ai-mesh", "egress-mesh"],
           updatedAt: new Date().toISOString()
         }, null, 2);
+      } else if (titleLower.includes("doc") || titleLower.includes("matrix") || targetRelPath.endsWith(".md")) {
+        newContent = `# System Topology & Documentation Matrix\n\n![Architecture Diagram](./architecture.drawio.svg)\n\n| Boundary | Network | Role |\n| :--- | :--- | :--- |\n| ai-mesh | internal | Zero egress air-gapped LLM and code runner |\n| egress-mesh | external | Scraper and package download egress |\n`;
       } else {
         newContent = `// Implementation for [${milestone.id}]: ${milestone.title}\nexport interface ${milestone.id}Spec {\n  id: string;\n  active: boolean;\n}\nexport async function verify${milestone.id}(): Promise<boolean> {\n  return true;\n}\n`;
       }
