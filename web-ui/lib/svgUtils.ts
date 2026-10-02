@@ -455,23 +455,44 @@ export function sanitizeSvg(svgString: string): string {
 
   const purifier = getPurifier();
   if (purifier && typeof purifier.sanitize === "function") {
-    const sanitized = purifier.sanitize(cleaned, {
-      USE_PROFILES: { svg: true, svgFilters: true },
-      FORBID_TAGS: ["foreignObject", "script", "iframe", "object", "embed"],
-      FORBID_ATTR: [
-        "onbegin", "onend", "onrepeat",
-        "onload", "onerror", "onclick", "onmouseover", "onfocus", "onblur"
-      ],
-      ADD_TAGS: [
-        "svg", "g", "defs", "marker", "filter", "feDropShadow",
-        "rect", "path", "circle", "ellipse", "line", "polyline",
-        "polygon", "text", "tspan", "title", "desc", "use"
-      ]
-    });
-    return sanitized.trim();
+    try {
+      const sanitized = purifier.sanitize(cleaned, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        FORBID_TAGS: ["foreignObject", "script", "iframe", "object", "embed"],
+        FORBID_ATTR: [
+          "onbegin", "onend", "onrepeat",
+          "onload", "onerror", "onclick", "onmouseover", "onfocus", "onblur"
+        ],
+        ADD_TAGS: [
+          "svg", "g", "defs", "marker", "filter", "feDropShadow",
+          "feGaussianBlur", "feOffset", "feBlend", "feMerge", "feMergeNode",
+          "rect", "path", "circle", "ellipse", "line", "polyline",
+          "polygon", "text", "tspan", "title", "desc", "use",
+          "linearGradient", "radialGradient", "stop", "style", "pattern",
+          "clipPath", "mask", "symbol", "image"
+        ],
+        ADD_ATTR: [
+          "viewBox", "xmlns", "xmlns:xlink", "version", "width", "height",
+          "fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap",
+          "stroke-linejoin", "d", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy",
+          "r", "rx", "ry", "points", "font-family", "font-size", "font-weight",
+          "text-anchor", "transform", "opacity", "fill-opacity", "stroke-opacity",
+          "offset", "stop-color", "stop-opacity", "id", "class", "style",
+          "marker-end", "marker-start", "marker-mid", "refX", "refY",
+          "markerWidth", "markerHeight", "orient", "patternUnits", "gradientUnits",
+          "clip-path", "mask"
+        ],
+        RETURN_TRUSTED_TYPE: false
+      });
+      if (sanitized && sanitized.trim().length > 0) {
+        return sanitized.trim();
+      }
+    } catch (err) {
+      console.warn("[sanitizeSvg] DOMPurify sanitize warning, using fallback:", err);
+    }
   }
 
-  // Fallback regex sanitizer if DOMPurify is not available
+  // Fallback regex sanitizer if DOMPurify is not available or returned empty
   cleaned = cleaned.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, "");
   cleaned = cleaned.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   cleaned = cleaned.replace(/(href|xlink:href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, "$1=\"#\"");
@@ -497,9 +518,9 @@ export function wrapRawSvgInMarkdown(content: string): string {
         (match) => `\n\`\`\`svg\n${match.trim()}\n\`\`\`\n`
       );
 
-      // Wrap raw <mxfile> ... </mxfile> if present outside code fences
+      // Wrap raw <mxfile> ... </mxfile> or <mxGraphModel> ... </mxGraphModel> if present outside code fences
       text = text.replace(
-        /(<mxfile\b[\s\S]*?<\/mxfile>)/gi,
+        /(<(?:mxfile|mxGraphModel|diagram)\b[\s\S]*?<\/(?:mxfile|mxGraphModel|diagram)>)/gi,
         (match) => `\n\`\`\`xml\n${match.trim()}\n\`\`\`\n`
       );
 

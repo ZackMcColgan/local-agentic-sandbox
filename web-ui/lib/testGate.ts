@@ -228,6 +228,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
     normalizedPath.startsWith("scripts/capture-svg-render") ||
+    normalizedPath.startsWith("scripts/verify-fix3-behavioral") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/")
   ) {

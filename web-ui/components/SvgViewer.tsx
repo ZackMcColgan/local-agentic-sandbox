@@ -375,15 +375,34 @@ export function SvgViewer({
               bgClasses[bgMode]
             }`}
           >
-            <div
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: "center center",
-                transition: "transform 0.15s ease-out"
-              }}
-              className="flex items-center justify-center max-w-full [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:block"
-              dangerouslySetInnerHTML={{ __html: sanitized }}
-            />
+            {sanitized ? (
+              <div
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "center center",
+                  transition: "transform 0.15s ease-out"
+                }}
+                className="flex items-center justify-center max-w-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
+                dangerouslySetInnerHTML={{ __html: sanitized }}
+              />
+            ) : rawSvg ? (
+              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-6 w-6" />
+                <span className="text-xs font-medium">SVG preview could not be generated</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("code")}
+                  className="text-[11px] underline text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200"
+                >
+                  View markup in Code tab
+                </button>
+              </div>
+            ) : (
+              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-slate-400">
+                <FileCode className="h-6 w-6 opacity-60" />
+                <span className="text-xs">No SVG content provided</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="w-full h-full bg-slate-900 dark:bg-black p-3.5 overflow-auto">

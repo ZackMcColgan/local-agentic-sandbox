@@ -558,7 +558,37 @@ export function ChatStream({
                   }`}
                 >
                   {isUser ? (
-                    <div className="whitespace-pre-wrap font-sans">{m.content}</div>
+                    <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed text-blue-950 dark:text-slate-100">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code: ({ inline, className, children, ...props }: any) => {
+                            const match = /language-(\w+)/.exec(className || "");
+                            const codeString = String(children).replace(/\n$/, "");
+                            const isSvg = isSvgCode(codeString, match ? match[1] : undefined);
+                            if (!inline && (match || codeString.includes("\n") || isSvg)) {
+                              return (
+                                <CodeBlock
+                                  language={match ? match[1] : (isSvg ? "svg" : "bash")}
+                                  code={codeString}
+                                />
+                              );
+                            }
+                            return (
+                              <code
+                                className="px-1.5 py-0.5 rounded bg-blue-100/70 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 font-mono text-[11px]"
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            );
+                          },
+                          p: ({ children }: any) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+                        }}
+                      >
+                        {wrapRawSvgInMarkdown(m.content)}
+                      </ReactMarkdown>
+                    </div>
                   ) : (
                     <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed">
                       <ReactMarkdown

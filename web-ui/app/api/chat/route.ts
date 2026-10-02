@@ -220,6 +220,10 @@ CRITICAL INSTRUCTIONS:
   - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, prefer pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes and crisp high-contrast styling. Standard Draw.io XML (<mxfile> / <mxGraphModel>) is also fully supported and rendered interactively by the frontend viewer.
   - When saving diagrams via 'workspace_write_file', use '.svg' or '.drawio' as appropriate.
   - Both raw SVG code and Draw.io XML code blocks render as interactive vector graphics directly within the chat UI.
+- ZERO-DEFLECTION POLICY FOR IN-CHAT RENDERING:
+  - In-chat vector graphic and diagram rendering is a core product promise.
+  - You MUST NEVER tell the user "rendering fails on your side", "the SVG viewer has not caught it", "paste into an external viewer", or tell them to use diagrams.net externally.
+  - If a diagram does not render as expected, debug it, fix the markup, format the code block properly (\`\`\`svg or \`\`\`xml), or adjust the SVG/XML structure directly. Never deflect to external tools or blame the user's browser.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 
