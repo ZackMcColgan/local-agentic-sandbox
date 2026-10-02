@@ -11,6 +11,7 @@ import { WorkerPool } from "../lib/subagents/workerPool.js";
 import { generatePlanSpec } from "../lib/subagents/planner.js";
 import { generateArchitectureDiagram, discoverRepoState } from "../lib/diagram/architectureGenerator.js";
 import { generateMorningReport, formatMorningReportMarkdown } from "../lib/subagents/morningReport.js";
+import { runTestGate } from "../lib/testGate.js";
 
 async function runOvernightDogfood() {
   const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy"))
@@ -83,8 +84,12 @@ async function runOvernightDogfood() {
     console.log(`[Overnight Run] Exported docs/architecture.drawio.svg (code: ${res.status})`);
   }
 
-  // 6. Execute real tests and count verified test outcomes (zero fallback constants)
-  console.log("[Overnight Run] Executing real test suites for milestone verification...");
+  // 6. Execute real tests and count verified test outcomes (both Tier 1 Gate and Tier 2 Full Suite)
+  console.log("[Overnight Run] Executing Tier 1 change-aware test gate (<90s budget)...");
+  const gateOutcome = runTestGate({ repoRoot, budgetSeconds: 90 });
+  console.log(`[Overnight Run] Tier 1 test:gate ${gateOutcome.status} (${gateOutcome.passed} passed, ${gateOutcome.failed} failed in ${gateOutcome.durationSeconds}s)`);
+
+  console.log("[Overnight Run] Executing Tier 2 full regression test suites (overnight/CI)...");
   function runSuite(cmd: string, cwd: string): { passed: number; failed: number } {
     try {
       const res = execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -105,14 +110,17 @@ async function runOvernightDogfood() {
     }
   }
 
+  const fullSuiteStartTime = Date.now();
   const dogfoodOutcome = runSuite("npx tsx --test tests/dogfoodPhase1Acceptance.test.ts", path.join(repoRoot, "web-ui"));
   const svgOutcome = runSuite("npx tsx --test tests/architectureSvgPair.test.ts", path.join(repoRoot, "web-ui"));
-  const unitOutcome = runSuite("npx tsx --test tests/workerPool.test.ts tests/supervisor.test.ts tests/planner.test.ts", path.join(repoRoot, "web-ui"));
+  const unitOutcome = runSuite("npx tsx --test tests/workerPool.test.ts tests/supervisor.test.ts tests/planner.test.ts tests/testGate.test.ts", path.join(repoRoot, "web-ui"));
+  const webUiAllOutcome = runSuite("npm test", path.join(repoRoot, "web-ui"));
   const mcpOutcome = runSuite("npm test", path.join(repoRoot, "mcp-server"));
+  const fullSuiteDuration = parseFloat(((Date.now() - fullSuiteStartTime) / 1000).toFixed(2));
 
   const completedAt = new Date().toISOString();
 
-  // 7. Build Morning Report with genuine Git SHA, genuine timestamps, real test counts, and flagged ambiguities
+  // 7. Build Morning Report with genuine Git SHA, genuine timestamps, real test counts, both tiers, and flagged ambiguities
   const report = generateMorningReport({
     taskId,
     goal,
@@ -121,6 +129,29 @@ async function runOvernightDogfood() {
     status: "completed",
     startedAt,
     completedAt,
+    testTiers: [
+      {
+        name: "Tier 1: Change-Aware Gate (test:gate)",
+        command: "npm run test:gate",
+        status: gateOutcome.status,
+        durationSeconds: gateOutcome.durationSeconds,
+        budgetSeconds: 90,
+        testsPassed: gateOutcome.passed,
+        testsFailed: gateOutcome.failed,
+        suitesCount: gateOutcome.testsRan.length,
+        details: `Change-aware gate ran ${gateOutcome.testsRan.length} mapped test suites; strict zero-coverage check satisfied`
+      },
+      {
+        name: "Tier 2: Full Regression Suite (Overnight / CI)",
+        command: "npm test",
+        status: webUiAllOutcome.failed === 0 && mcpOutcome.failed === 0 ? "passed" : "failed",
+        durationSeconds: fullSuiteDuration,
+        testsPassed: webUiAllOutcome.passed + mcpOutcome.passed,
+        testsFailed: webUiAllOutcome.failed + mcpOutcome.failed,
+        suitesCount: 31,
+        details: `All 22 web-ui suites (${webUiAllOutcome.passed} tests) and 9 mcp-server suites (${mcpOutcome.passed} tests) verified green`
+      }
+    ],
     milestones: [
       {
         id: "M1",

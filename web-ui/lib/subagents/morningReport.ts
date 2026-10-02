@@ -11,6 +11,18 @@ export interface MorningReportMilestone {
   notes?: string;
 }
 
+export interface TestTierSummary {
+  name: string;
+  command: string;
+  status: "passed" | "failed" | "skipped";
+  durationSeconds: number;
+  budgetSeconds?: number;
+  testsPassed: number;
+  testsFailed: number;
+  suitesCount?: number;
+  details?: string;
+}
+
 export interface MorningReportInput {
   taskId: string;
   goal: string;
@@ -22,6 +34,7 @@ export interface MorningReportInput {
   milestones: MorningReportMilestone[];
   ambiguityFlags: AmbiguityFlag[];
   parkedItems: string[];
+  testTiers?: TestTierSummary[];
 }
 
 export interface MorningReport extends MorningReportInput {
@@ -117,8 +130,29 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
   lines.push("---");
   lines.push("");
 
+  let sectionNumber = 2;
+
+  // Test Verification Tiers Section (Phase C: Tier 1 Gate + Tier 2 Full Suite)
+  if (report.testTiers && report.testTiers.length > 0) {
+    lines.push(`## ${sectionNumber}. Test Verification Tiers (Phase C)`);
+    lines.push("");
+    lines.push("| Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |");
+    lines.push("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
+    for (const tier of report.testTiers) {
+      const statusIcon = tier.status === "passed" ? "✅ Passed" : tier.status === "failed" ? "❌ Failed" : "⏸️ Skipped";
+      const budgetStr = tier.budgetSeconds ? `<${tier.budgetSeconds}s` : "—";
+      lines.push(
+        `| **${tier.name}** | \`${tier.command}\` | ${statusIcon} | ${tier.durationSeconds}s | ${budgetStr} | ${tier.testsPassed} | ${tier.testsFailed} | ${tier.details || "—"} |`
+      );
+    }
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+    sectionNumber++;
+  }
+
   // Ambiguity Flags Section
-  lines.push(`## 2. Ambiguity Flags & Judgment Calls (${report.ambiguityFlags.length})`);
+  lines.push(`## ${sectionNumber}. Ambiguity Flags & Judgment Calls (${report.ambiguityFlags.length})`);
   lines.push("");
   if (report.ambiguityFlags.length === 0) {
     lines.push("No ambiguities encountered. Execution adhered strictly to the specification.");

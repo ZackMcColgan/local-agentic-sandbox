@@ -28,6 +28,7 @@ export interface Milestone {
   testsPassed?: number;
   testsFailed?: number;
   testFile?: string;
+  plannedFiles?: string[];
   completedAt?: string;
 }
 

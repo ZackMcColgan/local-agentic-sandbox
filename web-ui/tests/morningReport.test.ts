@@ -99,4 +99,41 @@ describe("Phase 1 — Morning Report Suite", () => {
     assert.ok(md.includes("⚠️ **Status: PARKED (Requires Zack's Review)**"));
     assert.ok(md.includes("Milestone M2 stalled after 20 minutes"));
   });
+
+  it("includes Phase C Test Verification Tiers in morning report markdown", () => {
+    const tieredInput: MorningReportInput = {
+      ...sampleInput,
+      testTiers: [
+        {
+          name: "Tier 1: Change-Aware Gate",
+          command: "npm run test:gate",
+          status: "passed",
+          durationSeconds: 4.2,
+          budgetSeconds: 90,
+          testsPassed: 45,
+          testsFailed: 0,
+          details: "Zero-coverage check verified across 12 modified files"
+        },
+        {
+          name: "Tier 2: Full Regression Suite",
+          command: "npm test",
+          status: "passed",
+          durationSeconds: 11.8,
+          testsPassed: 123,
+          testsFailed: 0,
+          details: "All 21 web-ui suites and 9 mcp-server suites green"
+        }
+      ]
+    };
+
+    const report = generateMorningReport(tieredInput);
+    const md = formatMorningReportMarkdown(report);
+
+    assert.ok(md.includes("## 2. Test Verification Tiers (Phase C)"), "Contains Test Verification Tiers heading");
+    assert.ok(md.includes("Tier 1: Change-Aware Gate"), "Contains Tier 1 name");
+    assert.ok(md.includes("`npm run test:gate`"), "Contains Tier 1 command");
+    assert.ok(md.includes("Tier 2: Full Regression Suite"), "Contains Tier 2 name");
+    assert.ok(md.includes("<90s"), "Contains budget constraint");
+    assert.ok(md.includes("All 21 web-ui suites and 9 mcp-server suites green"), "Contains details");
+  });
 });

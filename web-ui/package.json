@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "tsx --test tests/**/*.test.ts",
+    "test:gate": "tsx scripts/test-gate.ts",
     "test:coverage": "tsx --test --experimental-test-coverage tests/**/*.test.ts"
   },
   "dependencies": {

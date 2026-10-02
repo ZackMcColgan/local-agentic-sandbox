@@ -47,12 +47,15 @@ function getPurifier() {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { GlobalWindow } = require("happy-dom");
-    const win = new GlobalWindow();
-    patchHappyDomNode(win);
-    domPurifyInstance = (DOMPurify as any)(win);
-    lastWindow = null;
+    if (typeof window === "undefined") {
+      // Dynamic require avoids Webpack client-side static bundling of happy-dom
+      const req = (globalThis as any).__non_webpack_require__ || Function("return require")();
+      const { GlobalWindow } = req("happy-dom");
+      const win = new GlobalWindow();
+      patchHappyDomNode(win);
+      domPurifyInstance = (DOMPurify as any)(win);
+      lastWindow = null;
+    }
   } catch {
     // Environment without happy-dom, fallback will be used
   }
