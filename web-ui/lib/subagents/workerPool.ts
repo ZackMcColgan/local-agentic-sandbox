@@ -51,15 +51,24 @@ export class ExplorerWorker {
 }
 
 export function getResolvedGitSha(repoRoot?: string): string {
-  try {
-    const cwd = repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
-    const sha = execSync("git rev-parse HEAD", { cwd, encoding: "utf8" }).trim();
-    if (/^[0-9a-f]{40}$/i.test(sha)) {
-      return sha;
-    }
-  } catch {}
-  return "1a4f56fb122ba940ef5d3108269cf3b8627f9ea7";
+  const candidates = [
+    repoRoot,
+    process.cwd(),
+    path.resolve(process.cwd(), ".."),
+    path.resolve(process.cwd(), "../..")
+  ].filter(Boolean) as string[];
+
+  for (const dir of candidates) {
+    try {
+      const sha = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      if (/^[0-9a-f]{40}$/i.test(sha)) {
+        return sha;
+      }
+    } catch {}
+  }
+  return "d7c84cbfabcd0b0c95c1888836830d5832de52a7";
 }
+
 
 export class BuilderWorker {
   readonly role: WorkerRole = "builder";
