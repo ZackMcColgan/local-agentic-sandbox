@@ -238,11 +238,14 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
   const workflow = new StateGraph(OvernightStateAnnotation)
     // 1. Planner Node: decomposes goal into machine-checkable milestones & SPEC.md
     .addNode("planner", async (state) => {
-      const planSpec = await generatePlanSpec({
-        taskId: state.taskId,
-        goal: state.goal,
-        toolchain: state.toolchain || "node:22"
-      });
+      const existingMilestones = state.milestones && state.milestones.length > 0;
+      const planSpec = existingMilestones
+        ? { milestones: state.milestones }
+        : await generatePlanSpec({
+            taskId: state.taskId,
+            goal: state.goal,
+            toolchain: state.toolchain || "node:22"
+          });
       return {
         milestones: planSpec.milestones,
         status: "active" as TaskStatus,

@@ -83,44 +83,32 @@ async function runOvernightDogfood() {
     console.log(`[Overnight Run] Exported docs/architecture.drawio.svg (code: ${res.status})`);
   }
 
-  // 6. Execute real tests and count verified test outcomes
+  // 6. Execute real tests and count verified test outcomes (zero fallback constants)
   console.log("[Overnight Run] Executing real test suites for milestone verification...");
-  let dogfoodTestsPassed = 0;
-  let dogfoodTestsFailed = 0;
-  try {
-    const tfRes = execSync("npx tsx --test tests/dogfoodPhase1Acceptance.test.ts", { cwd: path.join(repoRoot, "web-ui"), encoding: "utf8" });
-    const passMatches = tfRes.match(/ok \d+ -/g);
-    dogfoodTestsPassed = passMatches ? passMatches.length : 6;
-  } catch (err: any) {
-    dogfoodTestsFailed = 1;
+  function runSuite(cmd: string, cwd: string): { passed: number; failed: number } {
+    try {
+      const res = execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      const passMatches = res.match(/ok \d+ -/g);
+      const failMatches = res.match(/not ok \d+ -/g);
+      return {
+        passed: passMatches ? passMatches.length : 0,
+        failed: failMatches ? failMatches.length : 0
+      };
+    } catch (err: any) {
+      const stdout = err.stdout ? err.stdout.toString() : "";
+      const passMatches = stdout.match(/ok \d+ -/g);
+      const failMatches = stdout.match(/not ok \d+ -/g);
+      return {
+        passed: passMatches ? passMatches.length : 0,
+        failed: failMatches && failMatches.length > 0 ? failMatches.length : 1
+      };
+    }
   }
 
-  let svgTestsPassed = 0;
-  try {
-    const svgRes = execSync("npx tsx --test tests/architectureSvgPair.test.ts", { cwd: path.join(repoRoot, "web-ui"), encoding: "utf8" });
-    const passMatches = svgRes.match(/ok \d+ -/g);
-    svgTestsPassed = passMatches ? passMatches.length : 3;
-  } catch (err: any) {
-    svgTestsPassed = 0;
-  }
-
-  let unitTestsPassed = 0;
-  try {
-    const fullRes = execSync("npx tsx --test tests/workerPool.test.ts tests/supervisor.test.ts tests/planner.test.ts", { cwd: path.join(repoRoot, "web-ui"), encoding: "utf8" });
-    const passMatches = fullRes.match(/ok \d+ -/g);
-    unitTestsPassed = passMatches ? passMatches.length : 13;
-  } catch (err: any) {
-    unitTestsPassed = 13;
-  }
-
-  let mcpTestsPassed = 0;
-  try {
-    const mcpRes = execSync("npm test", { cwd: path.join(repoRoot, "mcp-server"), encoding: "utf8" });
-    const passMatches = mcpRes.match(/ok \d+ -/g);
-    mcpTestsPassed = passMatches ? passMatches.length : 25;
-  } catch (err: any) {
-    mcpTestsPassed = 25;
-  }
+  const dogfoodOutcome = runSuite("npx tsx --test tests/dogfoodPhase1Acceptance.test.ts", path.join(repoRoot, "web-ui"));
+  const svgOutcome = runSuite("npx tsx --test tests/architectureSvgPair.test.ts", path.join(repoRoot, "web-ui"));
+  const unitOutcome = runSuite("npx tsx --test tests/workerPool.test.ts tests/supervisor.test.ts tests/planner.test.ts", path.join(repoRoot, "web-ui"));
+  const mcpOutcome = runSuite("npm test", path.join(repoRoot, "mcp-server"));
 
   const completedAt = new Date().toISOString();
 
@@ -139,8 +127,8 @@ async function runOvernightDogfood() {
         title: "Repository Architecture & Topology Discovery",
         status: "completed",
         commitSha: realGitSha,
-        testsPassed: mcpTestsPassed,
-        testsFailed: 0,
+        testsPassed: mcpOutcome.passed,
+        testsFailed: mcpOutcome.failed,
         diffSummary: `Cataloged ${repoSnapshot.discoveredServices.length} microservices, ${repoSnapshot.discoveredVolumes.length} persistent volumes, and 2 zero-trust network boundaries`
       },
       {
@@ -148,8 +136,8 @@ async function runOvernightDogfood() {
         title: "Superset draw.io Architecture Diagram Synthesis",
         status: "completed",
         commitSha: realGitSha,
-        testsPassed: dogfoodTestsPassed,
-        testsFailed: dogfoodTestsFailed,
+        testsPassed: dogfoodOutcome.passed,
+        testsFailed: dogfoodOutcome.failed,
         diffSummary: `Generated docs/architecture.drawio with 30 mxCells (15.3 KB), restoring all 12 lost elements from v2 baseline and adding v2.5 builder sandbox and Qdrant oracle`
       },
       {
@@ -157,8 +145,8 @@ async function runOvernightDogfood() {
         title: "Critic Independent Diff Verification & Acceptance",
         status: "completed",
         commitSha: realGitSha,
-        testsPassed: svgTestsPassed,
-        testsFailed: 0,
+        testsPassed: svgOutcome.passed,
+        testsFailed: svgOutcome.failed,
         diffSummary: "Critic verified zero regressions, strict schema compliance, pure white canvas background (#ffffff), and zero-trust egress boundaries"
       },
       {
@@ -166,8 +154,8 @@ async function runOvernightDogfood() {
         title: "Hermes Skill Promotion Gate & Test Suite Verification",
         status: "completed",
         commitSha: realGitSha,
-        testsPassed: unitTestsPassed,
-        testsFailed: 0,
+        testsPassed: unitOutcome.passed,
+        testsFailed: unitOutcome.failed,
         diffSummary: "Verified full test suite passes and promoted reusable architecture-generator skill"
       }
     ],

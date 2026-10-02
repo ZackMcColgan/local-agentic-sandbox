@@ -137,17 +137,23 @@ test('Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite', async (
       stepTrail.push(step);
     }
 
-    // Assert graph executed planner -> explorer -> builder -> critic -> recorder
-    assert.ok(stepTrail.includes('builder'));
-    assert.ok(stepTrail.includes('critic'));
-    assert.ok(stepTrail.includes('recorder'));
+    // 1. Assert genuine critic rejection and subsequent builder retry occurred in the LangGraph graph
+    const builderRuns = stepTrail.filter((s) => s === 'builder').length;
+    const criticRuns = stepTrail.filter((s) => s === 'critic').length;
+    assert.strictEqual(builderRuns, 2, 'Builder must run twice: initial flawed pass and retry pass');
+    assert.strictEqual(criticRuns, 2, 'Critic must run twice: first rejecting, then approving');
+    assert.deepStrictEqual(stepTrail, ['planner', 'explorer', 'builder', 'critic', 'builder', 'critic', 'recorder']);
 
+    // 2. Assert retry counts in final state
     const finalState = await app.getState({ configurable: { thread_id: taskId } });
     assert.strictEqual(finalState.values.status, 'completed');
     const m1 = finalState.values.milestones[0];
     assert.strictEqual(m1.status, 'completed');
+    assert.strictEqual(m1.builderIterations, 2, 'Milestone must record 2 builder iterations');
+    assert.strictEqual(m1.criticRounds, 2, 'Milestone must record 2 critic rounds');
+    assert.ok(m1.diffSummary?.includes('egress-mesh'), 'Final diff must contain egress-mesh fix applied by builder');
 
-    // Verify git SHA resolution
+    // 3. Verify git SHA resolution
     const verifiedSha = execSync(`git rev-parse --verify ${m1.commitSha}`, {
       encoding: 'utf8'
     }).trim();
