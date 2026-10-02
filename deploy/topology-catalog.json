@@ -1,0 +1,16 @@
+{
+  "services": [
+    "web-ui",
+    "mcp-runner",
+    "browser-mcp",
+    "otel-collector",
+    "ollama-service",
+    "builder-tier",
+    "qdrant"
+  ],
+  "networks": [
+    "ai-mesh",
+    "egress-mesh"
+  ],
+  "updatedAt": "2026-10-02T18:55:06.693Z"
+}

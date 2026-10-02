@@ -1,7 +1,7 @@
 # Autonomous Morning Report: task-overnight-dogfood-v2.5
 
-✅ **Status: COMPLETED** | Branch: `feat/v2.5-overnight` | Duration: 20s
-Git HEAD: `03f4a5a75246bca23322a210448bf040b7ab4307` | Started: 2026-10-02T18:54:32.112Z | Finished: 2026-10-02T18:54:52.211Z
+✅ **Status: COMPLETED** | Branch: `feat/v2.5-overnight` | Duration: 19s
+Git HEAD: `6a9871559a3f0082fed145cc314fbfecdbabf38a` | Started: 2026-10-02T18:55:06.443Z | Finished: 2026-10-02T18:55:25.160Z
 
 ### Goal
 > Build a draw.io architecture diagram of this repo's current state, README-ready
@@ -12,10 +12,10 @@ Git HEAD: `03f4a5a75246bca23322a210448bf040b7ab4307` | Started: 2026-10-02T18:54
 
 | Milestone | Status | Commit SHA | Tests Passed | Tests Failed | Diff Summary |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **M1: Repository Architecture & Topology Discovery** | completed | `03f4a5a` | 35 passed | 0 failed | Cataloged 7 microservices, 3 persistent volumes, and 2 zero-trust network boundaries |
-| **M2: Superset draw.io Architecture Diagram Synthesis** | completed | `03f4a5a` | 7 passed | 0 failed | Generated docs/architecture.drawio with 30 mxCells (15.3 KB), restoring all 12 lost elements from v2 baseline and adding v2.5 builder sandbox and Qdrant oracle |
-| **M3: Critic Independent Diff Verification & Acceptance** | completed | `03f4a5a` | 4 passed | 0 failed | Critic verified zero regressions, strict schema compliance, pure white canvas background (#ffffff), and zero-trust egress boundaries |
-| **M4: Hermes Skill Promotion Gate & Test Suite Verification** | completed | `03f4a5a` | 21 passed | 0 failed | Verified full test suite passes and promoted reusable architecture-generator skill |
+| **M1: Repository Architecture & Topology Discovery** | completed | `6a98715` | 35 passed | 0 failed | Cataloged 7 microservices, 3 persistent volumes, and 2 zero-trust network boundaries |
+| **M2: Superset draw.io Architecture Diagram Synthesis** | completed | `6a98715` | 7 passed | 0 failed | Generated docs/architecture.drawio with 30 mxCells (15.3 KB), restoring all 12 lost elements from v2 baseline and adding v2.5 builder sandbox and Qdrant oracle |
+| **M3: Critic Independent Diff Verification & Acceptance** | completed | `6a98715` | 4 passed | 0 failed | Critic verified zero regressions, strict schema compliance, pure white canvas background (#ffffff), and zero-trust egress boundaries |
+| **M4: Hermes Skill Promotion Gate & Test Suite Verification** | completed | `6a98715` | 21 passed | 0 failed | Verified full test suite passes and promoted reusable architecture-generator skill |
 
 **Total Test Suite Result**: **67 passed**, **0 failed**.
 
@@ -25,8 +25,8 @@ Git HEAD: `03f4a5a75246bca23322a210448bf040b7ab4307` | Started: 2026-10-02T18:54
 
 | Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1: Change-Aware Gate (test:gate)** | `npm run test:gate` | ✅ Passed | 6.659s | <90s | 152 | 0 | Change-aware gate ran 22 mapped test suites; strict zero-coverage check satisfied |
-| **Tier 2: Full Regression Suite (Overnight / CI)** | `npm test` | ✅ Passed | 11.63s | — | 159 | 0 | All 22 web-ui suites (124 tests) and 9 mcp-server suites (35 tests) verified green |
+| **Tier 1: Change-Aware Gate (test:gate)** | `npm run test:gate` | ✅ Passed | 5.916s | <90s | 152 | 0 | Change-aware gate ran 22 mapped test suites; strict zero-coverage check satisfied |
+| **Tier 2: Full Regression Suite (Overnight / CI)** | `npm test` | ✅ Passed | 10.94s | — | 159 | 0 | All 22 web-ui suites (124 tests) and 9 mcp-server suites (35 tests) verified green |
 
 ---
 
@@ -38,7 +38,7 @@ The following judgment calls were made, committed, and flagged for morning revie
 ### [AMB-20261002-01] (M2): Should draw.io canvas default to pure white (#ffffff) or dark canvas matching the IDE theme?
 - **Judgment Call**: Selected pure white (#ffffff) per Zack's standing UI & visual inspection rule.
 - **Reasoning**: Rule 2.A specifies Light Mode Purity / crisp white background for root README diagram visibility across light/dark GitHub themes.
-- **Revert Action**: `git_revert 03f4a5a75246bca23322a210448bf040b7ab4307`
+- **Revert Action**: `git_revert 6a9871559a3f0082fed145cc314fbfecdbabf38a`
 - **Reviewed**: ⏳ Pending Zack's Review
 
 ### [AMB-20261002-02] (M1): Should Qdrant vector database service expose a NodePort / LAN proxy or remain strictly cluster-internal?
