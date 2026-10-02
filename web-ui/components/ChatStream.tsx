@@ -30,6 +30,7 @@ import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { DiffViewer } from "./DiffViewer";
 import { AgentMode } from "@/config/models";
+import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
 
 export interface AttachedFileItem {
   id: string;
@@ -65,6 +66,8 @@ interface ChatStreamProps {
   reasoningEffort: "low" | "medium" | "xhigh";
   onViewSecurityTelemetry?: () => void;
   activeBranch?: string;
+  messages?: ChatMessage[];
+  setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -149,16 +152,15 @@ export function ChatStream({
   agentMode = "auto",
   reasoningEffort,
   onViewSecurityTelemetry,
-  activeBranch
+  activeBranch,
+  messages: propsMessages,
+  setMessages: propsSetMessages
 }: ChatStreamProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "initial-welcome",
-      role: "assistant",
-      content: "Welcome! I'm your local AI agent. How can I help you today?",
-      modelUsed: activeModel
-    }
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
+    getInitialWelcomeMessage(activeModel)
   ]);
+  const messages = propsMessages ?? localMessages;
+  const setMessages = propsSetMessages ?? setLocalMessages;
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -207,14 +209,8 @@ export function ChatStream({
   }, [input]);
 
   const handleClearHistory = () => {
-    setMessages([
-      {
-        id: `welcome-${Date.now()}`,
-        role: "assistant",
-        content: "Chat cleared. How can I help you today?",
-        modelUsed: activeModel
-      }
-    ]);
+    const cleared = clearChatHistory(activeModel);
+    setMessages(cleared);
   };
 
   const processFiles = async (files: FileList | File[]) => {

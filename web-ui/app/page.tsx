@@ -3,11 +3,16 @@
 import React, { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { SandboxGauge } from "@/components/SandboxGauge";
-import { ChatStream } from "@/components/ChatStream";
+import { ChatStream, ChatMessage } from "@/components/ChatStream";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { Layers, ShieldCheck, Globe, Cpu, ArrowLeft, RefreshCw } from "lucide-react";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
+import {
+  getInitialWelcomeMessage,
+  loadChatHistory,
+  saveChatHistory
+} from "@/lib/chatHistory";
 
 export default function Home() {
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
@@ -25,6 +30,9 @@ export default function Home() {
   const [securityPosture, setSecurityPosture] = useState<any>(undefined);
   const [activeTab, setActiveTab] = useState<"chat" | "security">("chat");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    getInitialWelcomeMessage(selectedModel)
+  ]);
 
   const applyTheme = (newTheme: "dark" | "light") => {
     try {
@@ -71,10 +79,19 @@ export default function Home() {
       } else if (savedMode === "pro") {
         setSelectedModel("qwen3.8:27b-q3_k_m");
       }
+
+      // Rehydrate chat history from localStorage
+      const savedHistory = loadChatHistory(savedMode === "pro" ? "qwen3.8:27b-q3_k_m" : "gemma4:e4b");
+      setMessages(savedHistory);
     } catch {
       applyTheme("dark");
     }
   }, []);
+
+  // Persist chat history to localStorage on change
+  useEffect(() => {
+    saveChatHistory(messages);
+  }, [messages]);
 
   const handleAgentModeChange = (newMode: AgentMode) => {
     setAgentMode(newMode);
@@ -163,6 +180,8 @@ export default function Home() {
             {/* Direct Full-Screen Chat View */}
             <div className="flex-1 min-h-0 overflow-hidden">
               <ChatStream
+                messages={messages}
+                setMessages={setMessages}
                 onTracesUpdate={handleTracesUpdate}
                 activeModel={selectedModel}
                 agentMode={agentMode}

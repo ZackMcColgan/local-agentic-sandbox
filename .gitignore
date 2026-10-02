@@ -10,6 +10,7 @@ out/
 build/
 coverage/
 .nyc_output/
+*.tsbuildinfo
 
 # Next.js telemetry & cache
 .next/cache/

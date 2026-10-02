@@ -28,6 +28,63 @@ export interface AutonomousExecutionResult {
   skillsLearned: string[];
 }
 
+export function isVerificationCommand(command?: string): boolean {
+  if (!command) return false;
+  const trimmed = command.trim();
+  // Reject trivial shell commands even if they contain the substring "test"
+  if (/^(?:echo|cat|head|tail|grep|touch|ls|dir|find|pwd|which|sleep)\b/i.test(trimmed)) {
+    return false;
+  }
+  // Must match known test runners or test scripts
+  const testRunners = [
+    /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/i,
+    /^(?:npx\s+)?(?:jest|vitest|mocha|ava|playwright|cypress)\b/i,
+    /^(?:pytest|python\d*\s+-m\s+unittest)\b/i,
+    /^cargo\s+test\b/i,
+    /^go\s+test\b/i,
+    /^node\s+(?:--test\b|tests?\/)/i,
+    /^make\s+test\b/i,
+    /^\.\/(?:test|scripts\/test|run-tests)/i,
+  ];
+  return testRunners.some(regex => regex.test(trimmed));
+}
+
+export function isVerificationOutputPassed(stdout?: string): boolean {
+  if (!stdout) return false;
+  const passIndicators = [
+    /\b\d+\s+passed\b/i,
+    /\btests?:\s+\d+\s+passed\b/i,
+    /#\s+pass\s+\d+/i,
+    /\b\d+\s+passing\b/i,
+    /\btest result:\s*ok\b/i,
+    /\bPASS\b/,
+    /\bok\s+[\w./-]+\s+[\d.]+s/i,
+  ];
+  return passIndicators.some(regex => regex.test(stdout));
+}
+
+export function evaluateTaskCompletion(params: {
+  toolName: string;
+  command?: string;
+  exitCode?: number;
+  stdout?: string;
+  planObjective?: string;
+}): boolean {
+  if (params.toolName !== "workspace_run_command") {
+    return false;
+  }
+  if (params.exitCode !== 0) {
+    return false;
+  }
+  if (!isVerificationCommand(params.command)) {
+    return false;
+  }
+  if (!isVerificationOutputPassed(params.stdout)) {
+    return false;
+  }
+  return true;
+}
+
 export class AutonomousEngine {
   private ollamaUrl: string;
   private mcpUrl: string;
@@ -152,6 +209,7 @@ OPERATING RULES:
             messages: conversationMessages,
             tools: ollamaTools,
             stream: false,
+            keep_alive: "24h",
             options: {
               temperature: 0.2,
               num_ctx: currentModel.includes("gemma4") ? 16384 : 8192
@@ -170,7 +228,18 @@ OPERATING RULES:
         // If no tool calls, check if objective is fulfilled or output message
         if (toolCalls.length === 0) {
           finalSummary = msg.content || "Autonomous execution complete.";
-          if (finalSummary.toLowerCase().includes("passed") || finalSummary.toLowerCase().includes("complete")) {
+          const hasVerifiedPassingStep = steps.some(
+            (s) =>
+              s.tool === "workspace_run_command" &&
+              evaluateTaskCompletion({
+                toolName: s.tool,
+                command: s.args?.command,
+                exitCode: s.exit_code,
+                stdout: s.stdout,
+                planObjective: objective
+              })
+          );
+          if (hasVerifiedPassingStep) {
             isTaskComplete = true;
           }
           break;
@@ -221,10 +290,19 @@ OPERATING RULES:
 
           // Check if test command was executed
           if (toolName === "workspace_run_command") {
+            const executedCommand = toolArgs?.command || parsedResult.command;
             if (parsedResult.exit_code === 0) {
               consecutiveFailures = 0;
-              // Check if all tests passed
-              if (parsedResult.stdout?.includes("passed") || parsedResult.command?.includes("test")) {
+              // Check if genuine test runner passed (tightened heuristic against trivial exit 0 commands)
+              if (
+                evaluateTaskCompletion({
+                  toolName,
+                  command: executedCommand,
+                  exitCode: parsedResult.exit_code,
+                  stdout: parsedResult.stdout,
+                  planObjective: objective
+                })
+              ) {
                 isTaskComplete = true;
               }
             } else {

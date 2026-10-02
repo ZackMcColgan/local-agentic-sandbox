@@ -76,6 +76,7 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
         ],
         format: "json",
         stream: false,
+        keep_alive: "24h",
         options: {
           temperature: 0.1,
           num_ctx: 2048,
@@ -307,6 +308,7 @@ CRITICAL INSTRUCTIONS:
       model: activeModel,
       messages: conversationMessages,
       stream: false,
+      keep_alive: "24h",
       options: computeOptions(activeModel)
     };
 

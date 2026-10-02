@@ -31,7 +31,8 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Rule 2: Allow HTTPS strictly to GitHub IP endpoints for git operations (clone/push)
+    # Rule 2: Allow HTTPS strictly to GitHub IP endpoints for git operations (clone/push).
+    # Default GitHub IP CIDRs below can be overridden/parameterized via Helm (.Values.networkPolicies.githubCIDRs).
     - to:
         - ipBlock:
             cidr: 140.82.112.0/20

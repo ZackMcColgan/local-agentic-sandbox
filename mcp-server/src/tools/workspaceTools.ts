@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -7,14 +7,20 @@ import path from "path";
 import { z } from "zod";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Determine Workspace Root: /workspace in container, or local fallback in repo root
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
 
-// Helper: exec git commands with safe directory and user config flags to guarantee zero-trust sandbox compatibility
-async function execGit(gitSubCmd: string, cwd: string = WORKSPACE_DIR) {
-  const fullCmd = `git -c safe.directory=* -c user.name="Autonomous Agent" -c user.email="agent@local-sandbox.internal" ${gitSubCmd}`;
-  return execAsync(fullCmd, {
+// Helper: exec git commands using argv array (no shell interpolation) to prevent shell command injection
+async function execGit(args: string[], cwd: string = WORKSPACE_DIR) {
+  const baseArgs = [
+    "-c", "safe.directory=*",
+    "-c", "user.name=Autonomous Agent",
+    "-c", "user.email=agent@local-sandbox.internal",
+    ...args
+  ];
+  return execFileAsync("git", baseArgs, {
     cwd,
     env: {
       ...process.env,
@@ -32,19 +38,19 @@ async function ensureWorkspaceInitialized() {
 
     const gitDir = path.join(WORKSPACE_DIR, ".git");
     if (!fsSync.existsSync(gitDir)) {
-      await execGit("init -b main", WORKSPACE_DIR);
+      await execGit(["init", "-b", "main"], WORKSPACE_DIR);
     }
 
     // Ensure repo has at least one commit so HEAD is born and branches can be created
     try {
-      await execGit("rev-parse HEAD", WORKSPACE_DIR);
+      await execGit(["rev-parse", "HEAD"], WORKSPACE_DIR);
     } catch {
       const readmePath = path.join(WORKSPACE_DIR, "README.md");
       if (!fsSync.existsSync(readmePath)) {
         await fs.writeFile(readmePath, "# Autonomous Agent Workspace\n\nPersistent workspace for code, branches, tests, and architecture diagrams.\n", "utf8");
       }
-      await execGit("add -A", WORKSPACE_DIR);
-      await execGit('commit -m "chore: initialize persistent agent workspace"', WORKSPACE_DIR);
+      await execGit(["add", "-A"], WORKSPACE_DIR);
+      await execGit(["commit", "-m", "chore: initialize persistent agent workspace"], WORKSPACE_DIR);
     }
   } catch (err: any) {
     console.warn("[WorkspaceTools] Workspace initialization notice:", err.message);
@@ -74,6 +80,37 @@ const IGNORED_DIRS = new Set([
   ".venv",
   ".cache"
 ]);
+
+// Helper: Guard against Catastrophic Backtracking (ReDoS) and excessive complexity
+export function validateRegexPattern(pattern: string): { safe: boolean; reason?: string } {
+  if (pattern.length > 500) {
+    return {
+      safe: false,
+      reason: `Regex pattern length (${pattern.length}) exceeds safety limit of 500 characters.`
+    };
+  }
+
+  // Detect catastrophic backtracking / nested repetition constructs:
+  // e.g. (a+)+, (a*)*, ([a-zA-Z]+)*, ([0-9]+)+, (a|aa)+, (.*a){10}
+  const dangerousConstructs = [
+    /\([^)]*[*+]\??[^)]*\)\s*(\{[0-9]+,?[0-9]*\}|[*+])/, // (x+)+, (x*)*, ([a-z]+)*, (.*a){10}
+    /\([^)]*\{[0-9]+,?[0-9]*\}[^)]*\)\s*(\{[0-9]+,?[0-9]*\}|[*+])/, // (x{1,5})+
+    /\([^)]+\|[^)]+\)[*+]/,                     // (a|aa)+
+    /([*+]\??)\1+/,                             // ++, **, +*
+    /(\.\*|\.\+){2,}/                           // .*.*, .+.+
+  ];
+
+  for (const regex of dangerousConstructs) {
+    if (regex.test(pattern)) {
+      return {
+        safe: false,
+        reason: `Catastrophic backtracking (ReDoS) guard: pattern contains dangerous nested or overlapping quantifiers.`
+      };
+    }
+  }
+
+  return { safe: true };
+}
 
 export function registerWorkspaceTools(mcp: McpServer) {
   // Initialize workspace at startup
@@ -151,7 +188,35 @@ export function registerWorkspaceTools(mcp: McpServer) {
     },
     async ({ pattern, file_glob }) => {
       await ensureWorkspaceInitialized();
-      const regex = new RegExp(pattern, "i");
+
+      const validation = validateRegexPattern(pattern);
+      if (!validation.safe) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: validation.reason
+            }, null, 2)
+          }]
+        };
+      }
+
+      let regex: RegExp;
+      try {
+        regex = new RegExp(pattern, "i");
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: `Invalid regular expression syntax: ${err.message}`
+            }, null, 2)
+          }]
+        };
+      }
+
       const matches: Array<{ file: string; line: number; text: string }> = [];
       const MAX_MATCHES = 100;
 
@@ -370,14 +435,14 @@ export function registerWorkspaceTools(mcp: McpServer) {
       await ensureWorkspaceInitialized();
 
       try {
-        const branchRes = await execGit("branch --show-current", WORKSPACE_DIR);
+        const branchRes = await execGit(["branch", "--show-current"], WORKSPACE_DIR);
         const branch = branchRes.stdout.trim() || "main";
 
-        const statusRes = await execGit("status --porcelain=v1", WORKSPACE_DIR);
+        const statusRes = await execGit(["status", "--porcelain=v1"], WORKSPACE_DIR);
         const statusLines = statusRes.stdout.trim().split("\n").filter(Boolean);
 
-        const diffCmd = cached ? "diff --cached" : "diff";
-        const diffRes = await execGit(diffCmd, WORKSPACE_DIR);
+        const diffArgs = cached ? ["diff", "--cached"] : ["diff"];
+        const diffRes = await execGit(diffArgs, WORKSPACE_DIR);
 
         return {
           content: [{
@@ -417,8 +482,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
       await ensureWorkspaceInitialized();
 
       try {
-        const flag = create_new ? "-B" : "";
-        const res = await execGit(`checkout ${flag} ${branch_name}`, WORKSPACE_DIR);
+        const checkoutArgs = create_new ? ["checkout", "-B", branch_name] : ["checkout", branch_name];
+        const res = await execGit(checkoutArgs, WORKSPACE_DIR);
 
         return {
           content: [{
@@ -455,8 +520,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
       await ensureWorkspaceInitialized();
 
       try {
-        await execGit("add -A", WORKSPACE_DIR);
-        const commitRes = await execGit(`commit -m "${message.replace(/"/g, '\\"')}"`, WORKSPACE_DIR);
+        await execGit(["add", "-A"], WORKSPACE_DIR);
+        const commitRes = await execGit(["commit", "-m", message], WORKSPACE_DIR);
 
         return {
           content: [{

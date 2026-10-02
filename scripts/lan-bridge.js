@@ -20,6 +20,9 @@ const PORTS = process.env.LISTEN_PORTS
   ? process.env.LISTEN_PORTS.split(",").map((p) => parseInt(p.trim(), 10))
   : [80, 3000];
 
+const DEFAULT_BIND_HOST = "0.0.0.0";
+const STARTUP_WARNING = '[LAN Bridge] WARNING: unauthenticated — any device on the local network can reach the UI and execute shell commands via workspace_run_command. See README.md "LAN bridge security" section.';
+
 function createProxyServer(listenPort) {
   const server = http.createServer((req, res) => {
     const clientIp = req.socket.remoteAddress || "unknown";
@@ -108,8 +111,8 @@ function createProxyServer(listenPort) {
     });
   });
 
-  server.listen(listenPort, "0.0.0.0", () => {
-    console.log(`[LAN Bridge Active] Listening on 0.0.0.0:${listenPort} -> Forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
+  server.listen(listenPort, DEFAULT_BIND_HOST, () => {
+    console.log(`[LAN Bridge Active] Listening on ${DEFAULT_BIND_HOST}:${listenPort} -> Forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
     if (listenPort === 80) {
       console.log(`  -> Direct Browser URL: http://192.168.50.254/ (no port needed)`);
     } else {
@@ -124,7 +127,20 @@ function createProxyServer(listenPort) {
   return server;
 }
 
-console.log("================================================================");
-console.log("Starting LAN Reverse Proxy Bridges (Windows Defender Firewall Permitted)...");
-PORTS.forEach(createProxyServer);
-console.log("================================================================");
+if (require.main === module) {
+  console.log("================================================================");
+  console.log(STARTUP_WARNING);
+  console.log("----------------------------------------------------------------");
+  console.log("Starting LAN Reverse Proxy Bridges (Windows Defender Firewall Permitted)...");
+  PORTS.forEach(createProxyServer);
+  console.log("================================================================");
+}
+
+module.exports = {
+  createProxyServer,
+  STARTUP_WARNING,
+  DEFAULT_BIND_HOST,
+  PORTS,
+  TARGET_PORT,
+  TARGET_HOST
+};
