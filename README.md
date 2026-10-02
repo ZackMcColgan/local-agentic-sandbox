@@ -6,48 +6,30 @@ A full-stack, zero-trust autonomous AI coding platform. Orchestrates local LLMs 
 
 ## Architecture Overview
 
-```
-                      INTERNET
-                         │
-                         ▼ (egress-mesh)
-               ┌───────────────────┐
-               │      web-ui       │ ◄── Next.js 15 Web Portal & Multi-MCP Orchestrator
-               └─────────┬─────────┘
-                         │
-  ═══════════════════════╪═══════════════════════════════════════════════════
-                         ├─────────────────────────────┐
-                         ▼ (egress-mesh)               ▼ (ai-mesh: zero egress)
-        ┌──────────────────────────────────┐  ┌──────────────────────────────┐
-        │        browser-mcp (8081)        │  │       mcp-server (8080)      │
-        │ • Web search (DuckDuckGo)        │  │ • Python Code & Pytest Runner│
-        │ • SSRF Protection Guard          │  │ • read_only rootfs           │
-        │ • HTML-to-Markdown Scraper       │  │ • cap_drop: ALL              │
-        │ • user: 10002:10002              │  │ • user: 10001:10001          │
-        └──────────────────────────────────┘  └──────────────┬───────────────┘
-                                                             │ (ai-mesh)
-                                                             ▼
-                                              ┌──────────────────────────────┐
-                                              │      ollama (Air-Gapped)     │
-                                              │ • Qwen 3.8 27B Q3_K_M        │
-                                              │ • GPU Accelerated            │
-                                              └──────────────────────────────┘
-```
+[![local-agentic-sandbox Architecture](./docs/architecture.drawio.svg)](./docs/architecture.drawio.svg)
+*Figure 1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, air-gapped MCP execution boundary, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio).*
 
-* **Local AI Inference Engine**: Self-hosted `qwen3.8:27b-q3_k_m` (~13.8 GB VRAM footprint) running 100% on GPU with ~2.2 GB headroom on 16 GB GPUs (e.g. AMD Radeon RX 9070 XT).
-* **Hardened Execution Boundary (`mcp-server`)**: Completely air-gapped on `ai-mesh` (`internal: true`). Non-root (`uid: 10001`), `read_only: true` rootfs, `cap_drop: ALL`, and ephemeral `tmpfs` execution buffer.
-* **Isolated Browser Boundary (`browser-mcp`)**: Separate egress-enabled scraper on port 8081 (`uid: 10002`) with built-in SSRF protection to securely fetch documentation without exposing the code runner or host network.
-* **Web Portal & Orchestrator (`web-ui`)**: Next.js 15 streaming interface with dynamic model routing, reasoning effort controls, and visual execution traces.
+### Core Platform Capabilities
+* **Tri-Mode Model Dispatcher (`[ ✨ Auto | ⚡ Flash | 🧠 Pro ]`)**: Clean segmented header control (zero prompt pills). Automatically classifies query complexity: fast triage & navigation on `gemma4:e4b` (~80 tok/s), deep architectural synthesis on `qwen3.8:27b-q3_k_m`.
+* **Multimodal Architecture Ingestion Pipeline**: Ingests visual architecture diagrams, draw.io exports, whiteboard photos, and UI wireframes via `gemma4:e4b`, translating them into structured markdown system specifications for downstream code generation.
+* **Autonomous Git & Workspace Developer Engine**: 8 native MCP tools (`workspace_get_tree`, `workspace_grep`, `workspace_read_file`, `workspace_write_file`, `workspace_run_command`, `git_status`, `git_checkout_branch`, `git_commit`) operating in `/workspace:rw` with automated test-and-repair loops until `exit_code == 0`.
+* **Zero-Cold-Start VRAM Leases**: All inference queries automatically refresh a 24-hour model lease (`keep_alive: "24h"`), preventing Ollama from evicting models from the 16 GB GPU VRAM during idle periods.
+* **Hardened Execution Boundary (`mcp-server`)**: Air-gapped on `ai-mesh` with unprivileged UID (`10001`), `read_only: true` rootfs, `cap_drop: ALL`, argv-safe git execution immune to shell injection, and ReDoS-guarded regex searching.
+* **Isolated Browser Boundary (`browser-mcp`)**: Separate egress-enabled scraper on port 8081 (`uid: 10002`) with built-in SSRF protection (blocking RFC 1918 private subnets) to securely search DuckDuckGo and fetch documentation.
+* **OpenTelemetry Distributed Tracing**: Full distributed span propagation from user turns down to tool invocations and shell execution, synchronized with a real-time Jaeger trace waterfall dashboard.
+* **Session Chat Persistence**: Conversation history survives tab switches and page reloads via sanitized local storage (`local_agent_chat_history_v1`).
 
 ---
 
 ## Security Boundary Matrix
 
-| Container | Network | Filesystem | Linux Capabilities | User ID | Role |
+| Container / Pod | Placement | Filesystem | Linux Capabilities | User ID | Role & Network Isolation |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`mcp-server`** | `ai-mesh` (zero egress) | `read_only: true` | `cap_drop: ALL` | `10001:10001` | Air-Gapped Code Execution |
-| **`browser-mcp`** | `ai-mesh`, `egress-mesh` | Read-Only App | Default (No Privs) | `10002:10002` | Isolated Web Documentation Scraper |
-| **`ollama`** | `ai-mesh` (zero egress) | Volume Mounted | Default | Root (in-container) | Air-Gapped LLM Inference |
-| **`web-ui`** | `ai-mesh`, `egress-mesh` | Read-Write | Default | Non-Root | Web Client & Multi-MCP Dispatcher |
+| **`mcp-runner`** | `local-agentic-sandbox` | `read_only: true` | `cap_drop: ALL` | `10001:10001` | Air-Gapped Code Execution (NetworkPolicy: Deny-All Egress except DNS + GitHub) |
+| **`browser-mcp`** | `local-agentic-sandbox` | Read-Only App | Default (No Privs) | `10002:10002` | Isolated Web Documentation Scraper (NetworkPolicy: HTTP/HTTPS Egress Only) |
+| **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal & Multi-MCP Dispatcher (Port 3000 / NodePort 30300) |
+| **`otel-collector`**| `local-agentic-sandbox` | Ephemeral | Default (No Privs) | Non-Root | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686) |
+| **`ollama`** | Host Passthrough / PCIe | Local Drive | Host Native | Host User | Air-Gapped GPU Inference (AMD Radeon RX 9070 XT 16GB VRAM, ROCm, Port 11434) |
 
 ---
 
@@ -63,10 +45,26 @@ make pull-primary
 ```
 
 ### 2. Launch the Platform
+
+#### Option A: Docker Compose
 ```bash
 make up
 # OR: npm run up
 ```
+
+#### Option B: Kubernetes (Docker Desktop / Production)
+All workloads reside in the `local-agentic-sandbox` namespace:
+```bash
+# Apply with Kustomize
+kubectl apply -k deploy/k8s
+
+# OR deploy with Helm
+helm install local-agentic-sandbox deploy/helm/local-agentic-sandbox -n local-agentic-sandbox --create-namespace
+
+# Verify all pods are running
+kubectl get all -n local-agentic-sandbox
+```
+*(Note: Docker Desktop GUI defaults to the `default` namespace; use `-n local-agentic-sandbox` or switch namespaces in the GUI.)*
 
 ### 3. Run Automated Tests & Code Coverage
 ```bash
