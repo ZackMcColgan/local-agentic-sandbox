@@ -12,6 +12,8 @@ resources:
   - ollama-service.yaml
   - network-policies.yaml
   - observability.yaml
+  - builder-tier.yaml
+  - qdrant.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: local-agentic-sandbox
