@@ -13,7 +13,8 @@ import {
   Activity,
   Github,
   Sun,
-  Moon
+  Moon,
+  Hammer
 } from "lucide-react";
 import { ModelProfile, AgentMode } from "@/config/models";
 import { ModelSelector } from "@/components/ModelSelector";
@@ -32,8 +33,8 @@ interface NavbarProps {
   onReasoningChange: (effort: "low" | "medium" | "xhigh") => void;
   installedModels: string[];
   profiles: ModelProfile[];
-  activeTab: "chat" | "security";
-  onTabChange: (tab: "chat" | "security") => void;
+  activeTab: "chat" | "overnight" | "security";
+  onTabChange: (tab: "chat" | "overnight" | "security") => void;
   traceCount: number;
   theme: "dark" | "light";
   onThemeChange: (theme: "dark" | "light") => void;
@@ -103,7 +104,7 @@ export function Navbar({
             <ModelSelector mode={agentMode} onModeChange={onAgentModeChange} />
           </div>
 
-          {/* Center Tabs: Chat vs System & Security */}
+          {/* Center Tabs: Chat vs Builder (Overnight) vs System & Security */}
           <div className="flex items-center bg-slate-100 dark:bg-zinc-900 p-0.5 sm:p-1 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-inner shrink-0">
             <button
               type="button"
@@ -116,6 +117,20 @@ export function Navbar({
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span>Chat</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTabChange("overnight")}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === "overnight"
+                  ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-300 border border-slate-200 dark:border-zinc-700 shadow-sm"
+                  : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              <Hammer className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Builder</span>
+              <span className="sm:hidden">Build</span>
             </button>
 
             <button

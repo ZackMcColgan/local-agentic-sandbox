@@ -6,7 +6,28 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { ChatStream, ChatMessage } from "@/components/ChatStream";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { TraceWaterfall } from "@/components/TraceWaterfall";
-import { Layers, ShieldCheck, Globe, Cpu, ArrowLeft, RefreshCw } from "lucide-react";
+import { WorkerTiles, WorkerTileItem } from "@/components/WorkerTiles";
+import { MorningReportView } from "@/components/MorningReportView";
+import { MorningReport } from "@/lib/subagents/morningReport";
+import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
+import {
+  Layers,
+  ShieldCheck,
+  Globe,
+  Cpu,
+  ArrowLeft,
+  RefreshCw,
+  Hammer,
+  Play,
+  StopCircle,
+  Clock,
+  CheckCircle2,
+  GitBranch,
+  GitCommit,
+  Terminal,
+  AlertTriangle,
+  FileText
+} from "lucide-react";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
   getInitialWelcomeMessage,
@@ -22,17 +43,28 @@ export default function Home() {
     airGapped: true
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
-  const [activeBranch, setActiveBranch] = useState<string>("agent/v2-autonomous-platform");
+  const [activeBranch, setActiveBranch] = useState<string>("feat/v2.5-overnight");
   const [selectedModel, setSelectedModel] = useState<string>("gemma4:e4b");
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("low");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
   const [securityPosture, setSecurityPosture] = useState<any>(undefined);
-  const [activeTab, setActiveTab] = useState<"chat" | "security">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "overnight" | "security">("chat");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(selectedModel)
   ]);
+
+  // Overnight Builder States
+  const [overnightGoal, setOvernightGoal] = useState<string>(
+    "Build a draw.io architecture diagram of this repo's current state, README-ready"
+  );
+  const [selectedToolchain, setSelectedToolchain] = useState<ToolchainType>("node:22");
+  const [isSubmittingTask, setIsSubmittingTask] = useState<boolean>(false);
+  const [isCancellingTask, setIsCancellingTask] = useState<boolean>(false);
+  const [activeTask, setActiveTask] = useState<TaskManifest | null>(null);
+  const [morningReport, setMorningReport] = useState<MorningReport | null>(null);
+  const [workerTiles, setWorkerTiles] = useState<WorkerTileItem[]>([]);
 
   const applyTheme = (newTheme: "dark" | "light") => {
     try {
@@ -67,7 +99,7 @@ export default function Home() {
       setTheme(savedTheme);
       applyTheme(savedTheme);
 
-      const queryTab = urlParams.get("tab") as "chat" | "security" | null;
+      const queryTab = urlParams.get("tab") as "chat" | "overnight" | "security" | null;
       if (queryTab) {
         setActiveTab(queryTab);
       }
@@ -145,8 +177,112 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // Poll task status if active
+  useEffect(() => {
+    if (!activeTask || activeTask.status !== "active") return;
+
+    const pollTask = async () => {
+      try {
+        const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.task) {
+            setActiveTask(data.task);
+          }
+          if (data.morningReport) {
+            setMorningReport(data.morningReport);
+            setWorkerTiles([]);
+          }
+        }
+      } catch (err) {
+        console.warn("Task poll notice:", err);
+      }
+    };
+
+    const interval = setInterval(pollTask, 3000);
+    return () => clearInterval(interval);
+  }, [activeTask?.taskId, activeTask?.status]);
+
   const handleTracesUpdate = (newTraces: ExecutionTraceItem[]) => {
     setTraces((prev) => [...newTraces, ...prev]);
+  };
+
+  // Launch Overnight Task
+  const handleStartOvernightTask = async () => {
+    if (!overnightGoal.trim()) return;
+    setIsSubmittingTask(true);
+    setMorningReport(null);
+
+    // Initial worker status
+    setWorkerTiles([
+      { role: "Explorer", status: "active", detail: "Cataloging system boundaries & docker-compose.yml" }
+    ]);
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal: overnightGoal,
+          toolchain: selectedToolchain
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setActiveTask(data.manifest);
+      }
+    } catch (err: any) {
+      console.error("Failed to start overnight task:", err);
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
+  // Cancel Task via Kill Switch
+  const handleCancelTask = async () => {
+    if (!activeTask) return;
+    setIsCancellingTask(true);
+    try {
+      const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
+        setWorkerTiles([]);
+      }
+    } finally {
+      setIsCancellingTask(false);
+    }
+  };
+
+  // Handle Ambiguity Flag Revert
+  const handleRevertFlag = async (flagId: string) => {
+    if (!activeTask) return;
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "revert",
+        taskId: activeTask.taskId,
+        flagId
+      })
+    });
+  };
+
+  // Handle Ambiguity Flag Guidance Adjust
+  const handleAdjustFlag = async (flagId: string, instruction: string) => {
+    if (!activeTask) return;
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "adjust",
+        taskId: activeTask.taskId,
+        flagId,
+        instruction
+      })
+    });
   };
 
   return (
@@ -191,9 +327,173 @@ export default function Home() {
               />
             </div>
           </div>
+        ) : activeTab === "overnight" ? (
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 sm:space-y-6 p-3 sm:p-0 pb-12 animate-in fade-in duration-200">
+            {/* Top Bar for Overnight Builder */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
+                  <Hammer className="h-5 w-5 text-indigo-500" />
+                  <span>Mode A: Overnight Autonomous Builder</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Plans, builds, tests, commits, and self-heals across checkpoints. Zero stalls on ambiguity.
+                </p>
+              </div>
+
+              {activeTask && (
+                <button
+                  type="button"
+                  onClick={handleCancelTask}
+                  disabled={isCancellingTask || activeTask.status === "cancelled"}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 transition-colors shadow-sm disabled:opacity-50"
+                  title="Kill switch: Immediately abort all workers and release VRAM within 30s"
+                >
+                  <StopCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  <span>{isCancellingTask ? "Halting..." : "Kill Switch"}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Task Submission Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm transition-colors">
+              <label className="block text-xs font-bold text-slate-800 dark:text-zinc-200 mb-2">
+                Overnight Task Prompt (One Sentence)
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={overnightGoal}
+                  onChange={(e) => setOvernightGoal(e.target.value)}
+                  placeholder="e.g. Build a draw.io architecture diagram of this repo's current state, README-ready"
+                  disabled={isSubmittingTask || (activeTask !== null && activeTask.status === "active")}
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
+
+                <select
+                  value={selectedToolchain}
+                  onChange={(e) => setSelectedToolchain(e.target.value as any)}
+                  disabled={isSubmittingTask || (activeTask !== null && activeTask.status === "active")}
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-800 dark:text-zinc-200 focus:outline-none"
+                >
+                  <option value="node:22">Toolchain: Node.js 22</option>
+                  <option value="python:3.12">Toolchain: Python 3.12</option>
+                  <option value="go">Toolchain: Go 1.23</option>
+                  <option value="rust">Toolchain: Rust 1.80</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleStartOvernightTask}
+                  disabled={isSubmittingTask || !overnightGoal.trim() || (activeTask !== null && activeTask.status === "active")}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {isSubmittingTask ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  <span>Launch Builder</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Worker Status Tiles (Docked Minimal Cards, Auto-Collapsing, ZERO Pills) */}
+            <WorkerTiles workers={workerTiles} />
+
+            {/* If Morning Report is available: render MorningReportView */}
+            {morningReport ? (
+              <MorningReportView
+                report={morningReport}
+                onRevertFlag={handleRevertFlag}
+                onAdjustFlag={handleAdjustFlag}
+              />
+            ) : activeTask ? (
+              <div className="space-y-4">
+                {/* Active Run Header Card */}
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        {activeTask.status}
+                      </span>
+                      <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
+                        {activeTask.taskId}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm font-bold text-slate-900 dark:text-zinc-100">
+                      {activeTask.goal}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs font-mono text-slate-600 dark:text-zinc-400 shrink-0">
+                    <div className="flex items-center gap-1">
+                      <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
+                      <span>{activeTask.branch}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>{new Date(activeTask.startedAt).toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Milestone Progress */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-wider">
+                    SPEC.md Milestones ({activeTask.milestones.length})
+                  </h3>
+                  {activeTask.milestones.map((m) => (
+                    <div
+                      key={m.id}
+                      className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs font-mono text-slate-900 dark:text-zinc-100">
+                            [{m.id}]
+                          </span>
+                          <span className="text-xs font-medium text-slate-800 dark:text-zinc-200 truncate">
+                            {m.title}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400 truncate">
+                          {m.description}
+                        </p>
+                      </div>
+
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 shrink-0">
+                        {m.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Live Run Journal Tail */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Run Journal Tail</span>
+                  </h3>
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 max-h-48 overflow-y-auto space-y-1">
+                    {activeTask.journal.map((j, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span className="text-slate-500 shrink-0">
+                          {new Date(j.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className="text-emerald-400 font-semibold shrink-0">
+                          [{j.role}]
+                        </span>
+                        <span className="text-slate-200">{j.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-6 p-3 sm:p-0 pb-12 animate-in fade-in duration-200">
-            
             {/* Top Bar for Security Tab */}
             <div className="flex items-center justify-between">
               <div>
@@ -232,8 +532,8 @@ export default function Home() {
                   <Globe className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-mono uppercase text-slate-400 dark:text-zinc-400">Egress Scraper</div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100">SSRF Blocklist Enforced</div>
+                  <div className="text-[10px] font-mono uppercase text-slate-400 dark:text-zinc-400">Scraping Boundary</div>
+                  <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100">SSRF Filtered (UID 10002)</div>
                 </div>
               </div>
 

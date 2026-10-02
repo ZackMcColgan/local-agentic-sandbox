@@ -194,16 +194,18 @@ export class WorkerPool {
       });
     }
 
-    const promise = (async () => {
-      try {
-        return await job.taskFn(abortController.signal);
-      } finally {
-        this.activeJobs.delete(promise);
-      }
-    })();
+    let cleanupTracking: () => void = () => {};
+    const trackingPromise = new Promise<void>((r) => {
+      cleanupTracking = r;
+    });
+    this.activeJobs.add(trackingPromise);
 
-    this.activeJobs.add(promise);
-    return await promise;
+    try {
+      return await job.taskFn(abortController.signal);
+    } finally {
+      this.activeJobs.delete(trackingPromise);
+      cleanupTracking();
+    }
   }
 }
 

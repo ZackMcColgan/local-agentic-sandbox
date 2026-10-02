@@ -79,6 +79,8 @@ async function run() {
   await capture('http://127.0.0.1:3001/?theme=dark', 390, 844, true, 'test_ui_mobile_dark.png');
   await capture('http://127.0.0.1:3001/?theme=dark&tab=security', 1280, 900, false, 'test_ui_telemetry_desktop.png');
   await capture('http://127.0.0.1:3001/?theme=light&tab=security', 390, 844, true, 'test_ui_telemetry_mobile.png');
+  await capture('http://127.0.0.1:3001/?theme=light&tab=overnight', 1280, 800, false, 'test_ui_builder_desktop_light.png');
+  await capture('http://127.0.0.1:3001/?theme=dark&tab=overnight', 390, 844, true, 'test_ui_builder_mobile_dark.png');
   console.log('All visual screenshots captured successfully!');
   process.exit(0);
 }

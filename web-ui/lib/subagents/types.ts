@@ -60,6 +60,7 @@ export interface TaskManifest {
   goal: string;
   toolchain: ToolchainType;
   branchName: string;
+  branch?: string;
   status: TaskStatus;
   milestones: Milestone[];
   currentMilestoneIndex: number;

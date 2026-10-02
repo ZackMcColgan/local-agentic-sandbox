@@ -172,6 +172,7 @@ export function ChatStream({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const [isOracleMode, setIsOracleMode] = useState<boolean>(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -310,6 +311,7 @@ export function ChatStream({
           model: activeModel,
           mode: agentMode,
           reasoning_effort: reasoningEffort,
+          is_oracle: isOracleMode,
           attachments: currentAttachments.map(a => ({
             name: a.name,
             type: a.type,
@@ -977,13 +979,15 @@ export function ChatStream({
               placeholder={
                 attachedFiles.length > 0
                   ? "Ask about the attached files..."
+                  : isOracleMode
+                  ? "Oracle Mode: Grounded Q&A over repos/docs with file:line citations..."
                   : "Ask agent anything, run code, search web..."
               }
               className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-2 py-1 leading-relaxed max-h-36 min-h-[40px]"
             />
           </div>
 
-          {/* Bottom Actions Row: Paperclip on Left, Helper/Send on Right */}
+          {/* Bottom Actions Row: Paperclip & Oracle on Left, Helper/Send on Right */}
           <div className="flex items-center justify-between pt-0.5 px-0.5">
             <div className="flex items-center gap-1.5">
               <button
@@ -995,6 +999,20 @@ export function ChatStream({
               >
                 <Paperclip className="h-4 w-4" />
                 <span className="text-[11px] hidden sm:inline">Attach</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsOracleMode(!isOracleMode)}
+                className={`p-1.5 sm:p-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-medium ${
+                  isOracleMode
+                    ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                    : "text-slate-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                }`}
+                title="Toggle Mode B: Local Oracle (Grounded Q&A over local repo with file:line citations)"
+              >
+                <Sparkles className="h-4 w-4 text-indigo-500" />
+                <span className="text-[11px] hidden sm:inline">Oracle {isOracleMode ? "ON" : "OFF"}</span>
               </button>
 
               <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono hidden sm:inline">

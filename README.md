@@ -6,6 +6,13 @@ A full-stack, zero-trust autonomous AI coding platform. Orchestrates local LLMs 
 
 ## Architecture Overview
 
+<p align="center">
+  <img src="docs/architecture.drawio.svg" alt="local-agentic-sandbox v2.5 Architecture Diagram" width="100%" />
+</p>
+<p align="center">
+  <em>Figure 1: Full-stack zero-trust architecture, LangGraph supervisor, two-tier sandbox (build vs. exec), and air-gapped inference. Editable source: <a href="docs/architecture.drawio">docs/architecture.drawio</a>.</em>
+</p>
+
 ```
                       INTERNET
                          │

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="LocalAgenticSandbox" version="2.5">
+  <diagram id="arch-v2.5" name="local-agentic-sandbox v2.5 Architecture">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Host Machine Boundary -->
+        <mxCell id="host" value="Host Machine Boundary (AMD Ryzen 7 5700X3D + Radeon RX 9070 XT 16GB VRAM ROCm)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#475569;fontColor=#0f172a;fontSize=13;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="1120" height="830" as="geometry"/>
+        </mxCell>
+
+        <!-- LAN & Client Ingress -->
+        <mxCell id="client" value="Client / Mobile Web UI&#xa;(http://192.168.50.254:3000)&#xa;Maximized Viewport, Zero Pills" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;fontColor=#0f172a;fontSize=11;fontStyle=1;shadow=1;" vertex="1" parent="host">
+          <mxGeometry x="450" y="40" width="220" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Container: web-ui (Orchestrator) -->
+        <mxCell id="web-ui" value="Container: web-ui (Next.js 15 Orchestrator)&#xa;Ports: 3000 (LAN) / 3001 (Host Forward)&#xa;Mode A: Overnight Builder | Mode B: Local Oracle&#xa;LangGraph Supervision &amp; Checkpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6366f1;fontColor=#0f172a;fontSize=11;fontStyle=1;shadow=1;" vertex="1" parent="host">
+          <mxGeometry x="420" y="140" width="280" height="85" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-client-webui" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="host" source="client" target="web-ui">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Network: ai-mesh (air-gapped, zero egress) -->
+        <mxCell id="ai-mesh" value="Network: ai-mesh (internal: true, zero internet egress)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;fontColor=#065f46;fontSize=12;fontStyle=1;startSize=26;" vertex="1" parent="host">
+          <mxGeometry x="40" y="260" width="480" height="540" as="geometry"/>
+        </mxCell>
+
+        <!-- Container: Ollama Engine -->
+        <mxCell id="ollama" value="Container: ollama&#xa;Port: 11434&#xa;Air-Gapped GPU Inference&#xa;Volume: ollama_data&#xa;Hardware: Host ROCm Passthrough" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;fontColor=#0f172a;fontSize=11;shadow=1;" vertex="1" parent="ai-mesh">
+          <mxGeometry x="30" y="50" width="200" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- Exec Tier: mcp-server -->
+        <mxCell id="mcp-server" value="Exec Tier: mcp-server (Hardened Runner)&#xa;Port: 8080 (SSE)&#xa;Security Boundary:&#xa;• read_only: true rootfs&#xa;• cap_drop: ALL linux caps&#xa;• UID: 10001 (unprivileged)&#xa;• tmpfs: /tmp (noexec, nosuid, 64M)&#xa;• Air-gapped zero internet egress&#xa;Volume Mount: ./workspace:/workspace:rw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#059669;fontColor=#0f172a;fontSize=10;shadow=1;" vertex="1" parent="ai-mesh">
+          <mxGeometry x="30" y="180" width="230" height="150" as="geometry"/>
+        </mxCell>
+
+        <!-- Observability: jaeger -->
+        <mxCell id="jaeger" value="Container: jaeger / otel-collector&#xa;Ports: 16686 (UI), 4318 (HTTP), 4317 (gRPC)&#xa;Distributed Tracing &amp; Span Collection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontColor=#0f172a;fontSize=10;shadow=1;" vertex="1" parent="ai-mesh">
+          <mxGeometry x="30" y="360" width="220" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- Network: egress-mesh (isolated egress) -->
+        <mxCell id="egress-mesh" value="Network: egress-mesh (bridge, restricted egress)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;fontColor=#0369a1;fontSize=12;fontStyle=1;startSize=26;" vertex="1" parent="host">
+          <mxGeometry x="580" y="260" width="500" height="540" as="geometry"/>
+        </mxCell>
+
+        <!-- Container: browser-mcp -->
+        <mxCell id="browser-mcp" value="Container: browser-mcp (Dedicated Scraper)&#xa;Port: 8081 (SSE)&#xa;Security Boundary:&#xa;• UID: 10002 (unprivileged)&#xa;• no-new-privileges: true&#xa;• Strict SSRF Protection Guard&#xa;• HTML-to-Markdown Distillation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;fontColor=#0f172a;fontSize=10;shadow=1;" vertex="1" parent="egress-mesh">
+          <mxGeometry x="30" y="50" width="230" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Build Tier: Toolchains & Disk Budget -->
+        <mxCell id="build-tier" value="Build Tier: Pre-Baked Toolchains (New)&#xa;Dockerfiles in deploy/builder-*/&#xa;• builder-node:22 (Node, npm, yarn, pnpm)&#xa;• builder-python:3.12 (Python, pip, poetry)&#xa;• builder-go:latest, builder-rust:latest&#xa;Security Boundary:&#xa;• Egress allowlisted ONLY to package registries&#xa;  (npm, PyPI, Crates, Go Proxy) &amp; GitHub&#xa;• Writable /workspace volume&#xa;• Named volume: build-cache (20GB Cap)&#xa;• 7-day automatic cache pruning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;fontColor=#0f172a;fontSize=10;shadow=1;" vertex="1" parent="egress-mesh">
+          <mxGeometry x="30" y="200" width="250" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- Inter-service connections -->
+        <mxCell id="edge-webui-ollama" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#10b981;strokeWidth=1.5;" edge="1" parent="host" source="web-ui" target="ollama">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-webui-mcpserver" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=1.5;" edge="1" parent="host" source="web-ui" target="mcp-server">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-webui-browsermcp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=1.5;" edge="1" parent="host" source="web-ui" target="browser-mcp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-webui-buildtier" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#8b5cf6;strokeWidth=1.5;" edge="1" parent="host" source="web-ui" target="build-tier">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
