@@ -55,6 +55,13 @@ export interface CheckpointState {
 
 export type TaskStatus = "queued" | "active" | "completed" | "parked" | "cancelled";
 
+export interface TaskJournalEntry {
+  timestamp: string;
+  role: string;
+  message: string;
+  data?: any;
+}
+
 export interface TaskManifest {
   taskId: string;
   goal: string;
@@ -66,7 +73,7 @@ export interface TaskManifest {
   currentMilestoneIndex: number;
   checkpoints: CheckpointState[];
   ambiguityFlags: AmbiguityFlag[];
-  journal: Array<{ timestamp: string; role: string; message: string; data?: any }>;
+  journal: TaskJournalEntry[];
   startedAt: string;
   updatedAt: string;
   completedAt?: string;

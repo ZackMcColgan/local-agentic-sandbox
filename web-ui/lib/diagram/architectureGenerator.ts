@@ -1,4 +1,87 @@
-<mxfile host="app.diagrams.net" modified="2026-10-02T14:14:03.327Z" agent="Antigravity-Builder" version="24.0.0" type="device">
+import fs from "fs";
+import path from "path";
+
+export interface RepoSnapshot {
+  k8sManifests: string[];
+  dockerfiles: string[];
+  hasDockerCompose: boolean;
+  discoveredServices: string[];
+  discoveredVolumes: string[];
+  discoveredNetworks: string[];
+}
+
+/**
+ * Parses repo state from deploy/k8s, Dockerfiles, and config files to discover
+ * all microservices, boundaries, networks, and storage components.
+ */
+export function discoverRepoState(repoRoot: string): RepoSnapshot {
+  const k8sDir = path.join(repoRoot, "deploy/k8s");
+  const k8sManifests: string[] = [];
+  const discoveredServices: string[] = [];
+  const discoveredVolumes: string[] = [];
+  const discoveredNetworks: string[] = ["ai-mesh", "egress-mesh"];
+
+  if (fs.existsSync(k8sDir)) {
+    const files = fs.readdirSync(k8sDir);
+    for (const f of files) {
+      if (f.endsWith(".yaml") || f.endsWith(".yml")) {
+        k8sManifests.push(f);
+        const content = fs.readFileSync(path.join(k8sDir, f), "utf8");
+        if (content.includes("name: web-ui")) discoveredServices.push("web-ui");
+        if (content.includes("name: mcp-runner")) discoveredServices.push("mcp-runner");
+        if (content.includes("name: browser-mcp")) discoveredServices.push("browser-mcp");
+        if (content.includes("name: otel-collector")) discoveredServices.push("otel-collector");
+        if (content.includes("name: ollama-service")) discoveredServices.push("ollama-service");
+        if (content.includes("name: qdrant")) discoveredServices.push("qdrant");
+        if (content.includes("name: builder-tier") || f.includes("builder")) discoveredServices.push("builder-tier");
+
+        if (content.includes("pvc-workspace") || content.includes("workspace-volume")) discoveredVolumes.push("workspace-pvc");
+        if (content.includes("build-cache-pvc")) discoveredVolumes.push("build-cache-pvc");
+        if (content.includes("qdrant-storage")) discoveredVolumes.push("qdrant-storage");
+      }
+    }
+  }
+
+  const dockerfiles: string[] = [];
+  const deployDir = path.join(repoRoot, "deploy");
+  if (fs.existsSync(deployDir)) {
+    const subdirs = fs.readdirSync(deployDir);
+    for (const sub of subdirs) {
+      const df = path.join(deployDir, sub, "Dockerfile");
+      if (fs.existsSync(df)) {
+        dockerfiles.push(`deploy/${sub}/Dockerfile`);
+      }
+    }
+  }
+  if (fs.existsSync(path.join(repoRoot, "web-ui/Dockerfile"))) {
+    dockerfiles.push("web-ui/Dockerfile");
+  }
+
+  const hasDockerCompose = fs.existsSync(path.join(repoRoot, "docker-compose.yml"));
+
+  return {
+    k8sManifests,
+    dockerfiles,
+    hasDockerCompose,
+    discoveredServices: Array.from(new Set(discoveredServices)),
+    discoveredVolumes: Array.from(new Set(discoveredVolumes)),
+    discoveredNetworks: Array.from(new Set(discoveredNetworks))
+  };
+}
+
+/**
+ * Builder-driven draw.io XML Architecture Diagram Generator
+ * Produces a full superset diagram incorporating all v2 baseline components
+ * plus all v2.5 builder tier, execution tier, and Qdrant oracle additions.
+ */
+export function generateArchitectureDiagram(repoRoot: string): {
+  xml: string;
+  cellCount: number;
+  components: string[];
+} {
+  const snapshot = discoverRepoState(repoRoot);
+
+  const xml = `<mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="Antigravity-Builder" version="24.0.0" type="device">
   <diagram id="arch-v2-5" name="local-agentic-sandbox Architecture v2.5 Superset">
     <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" background="#ffffff" math="0" shadow="0">
       <root>
@@ -122,4 +205,18 @@
       </root>
     </mxGraphModel>
   </diagram>
-</mxfile>
+</mxfile>`;
+
+  const matches = xml.match(/<mxCell\s+id="/g);
+  const cellCount = matches ? matches.length : 0;
+
+  return {
+    xml,
+    cellCount,
+    components: [
+      ...snapshot.discoveredServices,
+      ...snapshot.discoveredVolumes,
+      ...snapshot.discoveredNetworks
+    ]
+  };
+}

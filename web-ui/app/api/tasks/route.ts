@@ -129,10 +129,21 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const taskId = url.searchParams.get("taskId");
 
-  if (!taskId) {
-    // Return all recent tasks
-    const list = Array.from(tasksRegistry.values());
-    return NextResponse.json({ tasks: list });
+  // Rehydrate all tasks from disk checkpoints
+  const diskTasks = await supervisor.listAllTasks();
+  for (const dt of diskTasks) {
+    if (!tasksRegistry.has(dt.taskId) || tasksRegistry.get(dt.taskId)?.status === "active") {
+      tasksRegistry.set(dt.taskId, dt);
+    }
+  }
+
+  const activeQuery = url.searchParams.get("active") === "true";
+  if (!taskId || activeQuery) {
+    const list = Array.from(tasksRegistry.values()).sort(
+      (a, b) => new Date(b.updatedAt || b.startedAt).getTime() - new Date(a.updatedAt || a.startedAt).getTime()
+    );
+    const activeTask = list.find((t) => t.status === "active") || list[0] || null;
+    return NextResponse.json({ tasks: list, activeTask });
   }
 
   let task = tasksRegistry.get(taskId);

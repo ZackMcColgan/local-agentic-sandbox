@@ -177,6 +177,44 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // Rehydrate active task from API on page mount (preserves active run across refresh)
+  useEffect(() => {
+    const fetchActiveTask = async () => {
+      try {
+        const res = await fetch("/api/tasks?active=true");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.activeTask) {
+            setActiveTask(data.activeTask);
+            if (data.activeTask.status === "active") {
+              const currentM = data.activeTask.milestones[data.activeTask.currentMilestoneIndex];
+              setWorkerTiles([
+                {
+                  role: "Builder",
+                  status: "active",
+                  detail: `Building ${currentM ? currentM.title : "milestone"}`
+                }
+              ]);
+            } else if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
+              const detailRes = await fetch(`/api/tasks?taskId=${data.activeTask.taskId}`);
+              if (detailRes.ok) {
+                const detailData = await detailRes.json();
+                if (detailData.morningReport) {
+                  setMorningReport(detailData.morningReport);
+                  setWorkerTiles([]);
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not rehydrate active task on mount:", err);
+      }
+    };
+
+    fetchActiveTask();
+  }, []);
+
   // Poll task status if active
   useEffect(() => {
     if (!activeTask || activeTask.status !== "active") return;
@@ -188,6 +226,16 @@ export default function Home() {
           const data = await res.json();
           if (data.task) {
             setActiveTask(data.task);
+            if (data.task.status === "active") {
+              const currentM = data.task.milestones[data.task.currentMilestoneIndex];
+              setWorkerTiles([
+                {
+                  role: "Builder",
+                  status: "active",
+                  detail: `Building ${currentM ? currentM.title : "milestone"}`
+                }
+              ]);
+            }
           }
           if (data.morningReport) {
             setMorningReport(data.morningReport);

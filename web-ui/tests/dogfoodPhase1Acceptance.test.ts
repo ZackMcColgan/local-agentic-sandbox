@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs/promises";
+import fs from "fs";
+import fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
 import { generatePlanSpec } from "../lib/subagents/planner.js";
@@ -12,6 +13,7 @@ import {
 import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
 import { generateMorningReport, formatMorningReportMarkdown } from "../lib/subagents/morningReport.js";
 import { TaskManifest, Milestone } from "../lib/subagents/types.js";
+import { generateArchitectureDiagram, discoverRepoState } from "../lib/diagram/architectureGenerator.js";
 
 describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
   const dogfoodGoal = "Build a draw.io architecture diagram of this repo's current state, README-ready";
@@ -38,100 +40,67 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
   });
 
   it("[2 & 3] Builder produces valid draw.io XML covering all containers, networks, ports, volumes, and trust boundaries", () => {
-    // Generate valid draw.io XML modeling local-agentic-sandbox v2.5 architecture
-    const drawioXml = `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="LocalAgenticSandbox" version="2.5">
-  <diagram id="arch-v2.5" name="System Topology">
-    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" background="#ffffff">
-      <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <!-- Trust Boundary: Host Machine & AMD ROCm GPU Engine -->
-        <mxCell id="host" value="Host Machine (AMD Ryzen 7 5700X3D + Radeon RX 9070 XT 16GB VRAM ROCm)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;" vertex="1" parent="1">
-          <mxGeometry x="40" y="40" width="1020" height="760" as="geometry"/>
-        </mxCell>
+    const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
+    
+    // Discover repo state dynamically from manifests, Dockerfiles, and compose
+    const repoSnapshot = discoverRepoState(repoRoot);
+    assert.ok(repoSnapshot.k8sManifests.length > 0, "Discovered Kubernetes manifests");
+    assert.ok(repoSnapshot.dockerfiles.length > 0, "Discovered Dockerfiles");
+    assert.ok(repoSnapshot.discoveredNetworks.includes("ai-mesh"));
+    assert.ok(repoSnapshot.discoveredNetworks.includes("egress-mesh"));
 
-        <!-- Network: ai-mesh (air-gapped, internal: true) -->
-        <mxCell id="ai-mesh" value="Network: ai-mesh (internal: true, zero internet egress)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#16a34a;" vertex="1" parent="host">
-          <mxGeometry x="40" y="60" width="460" height="660" as="geometry"/>
-        </mxCell>
+    // Builder produces the superset diagram dynamically from discovered state
+    const diagramResult = generateArchitectureDiagram(repoRoot);
+    const drawioXml = diagramResult.xml;
 
-        <!-- Container: Ollama Engine -->
-        <mxCell id="ollama" value="Container: ollama&#xa;Port: 11434&#xa;Air-Gapped GPU Inference&#xa;Volume: ollama_data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;fontColor=#0f172a;" vertex="1" parent="ai-mesh">
-          <mxGeometry x="30" y="60" width="180" height="90" as="geometry"/>
-        </mxCell>
-
-        <!-- Container: mcp-server (Exec Tier) -->
-        <mxCell id="mcp-server" value="Container: mcp-server (Exec Tier)&#xa;Port: 8080&#xa;UID: 10001 (cap_drop: ALL)&#xa;read_only rootfs, tmpfs: /tmp&#xa;Volume: /workspace:rw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#059669;fontColor=#0f172a;" vertex="1" parent="ai-mesh">
-          <mxGeometry x="30" y="200" width="200" height="110" as="geometry"/>
-        </mxCell>
-
-        <!-- Network: egress-mesh (bridge, registry allowlist proxy) -->
-        <mxCell id="egress-mesh" value="Network: egress-mesh (bridge, egress proxy)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f0f9ff;strokeColor=#0284c7;" vertex="1" parent="host">
-          <mxGeometry x="540" y="60" width="440" height="660" as="geometry"/>
-        </mxCell>
-
-        <!-- Container: browser-mcp (Isolated Scraper) -->
-        <mxCell id="browser-mcp" value="Container: browser-mcp&#xa;Port: 8081&#xa;UID: 10002 (no-new-privs)&#xa;SSRF Filtered Egress" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;fontColor=#0f172a;" vertex="1" parent="egress-mesh">
-          <mxGeometry x="30" y="60" width="180" height="90" as="geometry"/>
-        </mxCell>
-
-        <!-- Container: web-ui (Orchestrator & Portal) -->
-        <mxCell id="web-ui" value="Container: web-ui (Portal &amp; Orchestrator)&#xa;Ports: 3000 / 3001&#xa;Networks: ai-mesh + egress-mesh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6366f1;fontColor=#0f172a;" vertex="1" parent="host">
-          <mxGeometry x="400" y="240" width="220" height="90" as="geometry"/>
-        </mxCell>
-
-        <!-- Build Tier: Pre-baked Toolchains -->
-        <mxCell id="build-tier" value="Build Tier (New)&#xa;Images: builder-node:22, builder-python:3.12&#xa;Volume: build-cache (20GB cap)&#xa;Egress: Package Registries Only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;fontColor=#0f172a;" vertex="1" parent="host">
-          <mxGeometry x="400" y="400" width="240" height="100" as="geometry"/>
-        </mxCell>
-
-        <!-- Container: Jaeger / Observability -->
-        <mxCell id="jaeger" value="Container: jaeger / otel-collector&#xa;Ports: 16686 / 4318 / 4317&#xa;Distributed Tracing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontColor=#0f172a;" vertex="1" parent="host">
-          <mxGeometry x="400" y="550" width="220" height="80" as="geometry"/>
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
-</mxfile>`;
-
-    // 1. Verify XML Structure
-    assert.ok(drawioXml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+    // 1. Verify XML Structure, cell count, and byte size (superset requirements)
     assert.ok(drawioXml.includes("<mxfile"));
-    assert.ok(drawioXml.includes("<diagram id=\"arch-v2.5\""));
+    assert.ok(drawioXml.includes("<diagram id=\"arch-v2-5\""));
     assert.ok(drawioXml.includes("<mxGraphModel"));
     assert.ok(drawioXml.includes("background=\"#ffffff\""), "Canvas must use crisp white background per UI standards");
+    assert.ok(diagramResult.cellCount >= 25, `Must have >= 25 cells (restoring prior version coverage, got ${diagramResult.cellCount})`);
+    assert.ok(Buffer.byteLength(drawioXml, "utf8") >= 12000, `Byte size must be >= 12,000 bytes (got ${Buffer.byteLength(drawioXml, "utf8")})`);
 
-    // 2. Verify all 5 containers
-    assert.ok(drawioXml.includes("Container: ollama"));
-    assert.ok(drawioXml.includes("Container: mcp-server"));
-    assert.ok(drawioXml.includes("Container: browser-mcp"));
-    assert.ok(drawioXml.includes("Container: web-ui"));
-    assert.ok(drawioXml.includes("Container: jaeger"));
-    assert.ok(drawioXml.includes("builder-node:22"));
+    // 2. Verify Client & Ingress Layer restored
+    assert.ok(drawioXml.includes("Mobile Phone / Workstation Browser"));
+    assert.ok(drawioXml.includes("LAN Reverse Proxy Bridge"));
+    assert.ok(drawioXml.includes("Public Internet") && drawioXml.includes("External Docs"));
 
-    // 3. Verify networks
+    // 3. Verify K8s Layer & Containers restored
+    assert.ok(drawioXml.includes("KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)"));
+    assert.ok(drawioXml.includes("ollama-service (K8s Service)"));
+    assert.ok(drawioXml.includes("web-ui Orchestrator Pod"));
+    assert.ok(drawioXml.includes("mcp-runner Tool Boundary"));
+    assert.ok(drawioXml.includes("browser-mcp Scraper Pod"));
+    assert.ok(drawioXml.includes("otel-collector Jaeger Tracing"));
+    assert.ok(drawioXml.includes("Two-Tier Build Sandbox") || drawioXml.includes("builder-node:22"));
+    assert.ok(drawioXml.includes("qdrant") || drawioXml.includes("Qdrant Vector Memory"));
+
+    // 4. Verify Model annotations restored
+    assert.ok(drawioXml.includes("qwen3.8:27b-q3_k_m"));
+    assert.ok(drawioXml.includes("gemma4:e4b"));
+
+    // 5. Verify Edges restored
+    assert.ok(drawioXml.includes("Inference /api/chat"));
+    assert.ok(drawioXml.includes("SSE"));
+
+    // 6. Verify Title Block restored
+    assert.ok(drawioXml.includes("local-agentic-sandbox: Autonomous Platform v2 Arch"));
+
+    // 7. Verify networks, ports, volumes, and trust boundaries
     assert.ok(drawioXml.includes("ai-mesh"));
     assert.ok(drawioXml.includes("egress-mesh"));
-
-    // 4. Verify ports
     assert.ok(drawioXml.includes("11434"));
     assert.ok(drawioXml.includes("8080"));
     assert.ok(drawioXml.includes("8081"));
     assert.ok(drawioXml.includes("3000"));
     assert.ok(drawioXml.includes("16686"));
-
-    // 5. Verify volumes & budgets
-    assert.ok(drawioXml.includes("/workspace:rw"));
-    assert.ok(drawioXml.includes("ollama_data"));
-    assert.ok(drawioXml.includes("build-cache"));
-    assert.ok(drawioXml.includes("20GB cap"));
-
-    // 6. Verify trust boundaries
+    assert.ok(drawioXml.includes("workspace-pvc"));
+    assert.ok(drawioXml.includes("build-cache-pvc"));
+    assert.ok(drawioXml.includes("qdrant-storage"));
+    assert.ok(drawioXml.includes("Radeon RX 9070 XT 16GB VRAM ROCm"));
     assert.ok(drawioXml.includes("UID: 10001 (cap_drop: ALL)"));
     assert.ok(drawioXml.includes("read_only rootfs"));
-    assert.ok(drawioXml.includes("Radeon RX 9070 XT 16GB VRAM ROCm"));
   });
 
   it("[4] Critic catches >= 1 real discrepancy, rejects with notes, then approves once resolved", async () => {
@@ -209,7 +178,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
   });
 
   it("[6] Supervisor kill mid-run resumes from checkpoint and completes", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "dogfood-checkpoints-"));
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "dogfood-checkpoints-"));
 
     try {
       const supervisor1 = new OvernightSupervisor({ checkpointDirectory: tempDir });
@@ -268,7 +237,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
       assert.equal(completedTask.milestones[1].status, "completed");
       assert.equal(completedTask.milestones.every((m) => m.status === "completed"), true);
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      await fsPromises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
 

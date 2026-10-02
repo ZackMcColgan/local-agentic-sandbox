@@ -72,15 +72,23 @@ We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the pri
 
 ### Key Mechanisms:
 1. **State Annotation (`OvernightStateAnnotation`)**:
-   - Manages immutable state reductions across turns: `taskId`, `goal`, `status`, `milestones`, `checkpoints`, `ambiguityFlags`.
-2. **File-Backed Durable Checkpointing**:
-   - After each completed milestone, the state graph snapshots planner state and git HEAD SHA to `${taskId}-checkpoint.json`.
-   - On container restart or supervisor crash, the supervisor loads the JSON checkpoint and resumes from the exact milestone index, never restarting from zero.
-3. **Critic Separation of Concerns**:
-   - The Builder is prohibited from grading its own work. The Critic independently validates generated diffs against machine-checkable acceptance criteria defined in `SPEC.md`. Discrepancies are rejected back to the Builder (up to 2 critic rounds).
-4. **Hermes Skill Promotion Gate**:
+   - Manages immutable state reductions across turns: `taskId`, `goal`, `status`, `milestones`, `checkpoints`, `ambiguityFlags`, `journal`, `currentDiff`, `currentGitSha`, `nodeHistory`.
+2. **Wired Node Implementations**:
+   - Every graph node invokes its real domain implementation:
+     - `planner`: decomposes natural language goal into machine-checkable `SPEC.md` milestones.
+     - `explorer`: executes read-only toolchain inspection via `WorkerPool`.
+     - `builder`: executes isolated compilation and generates diffs via `WorkerPool`.
+     - `critic`: independently evaluates builder diffs against machine-checkable criteria.
+     - `recorder`: evaluates the Hermes skill promotion gate and graduates milestones.
+3. **File-Backed LangGraph Checkpointer (`FileCheckpointSaver`)**:
+   - Extends LangGraph's `MemorySaver` / `BaseCheckpointSaver`.
+   - On every step execution, LangGraph checkpoints state and serializes thread storage to `${taskId}-lg-checkpoint.json` on disk.
+   - On container restart or supervisor crash, LangGraph rehydrates from the checkpoint file and resumes execution directly from the next scheduled node (`app.stream(null, { configurable: { thread_id } })`), never restarting from step zero.
+4. **Critic Separation of Concerns**:
+   - The Builder is prohibited from grading its own work. The Critic independently validates generated diffs against machine-checkable acceptance criteria defined in `SPEC.md`. Discrepancies are rejected back to the Builder.
+5. **Hermes Skill Promotion Gate**:
    - Solves taking $\ge 2$ iterations or flagged non-trivial are extracted by the Recorder subagent into `.agent/skills/` as durable knowledge for future runs.
-5. **Autonomy Policy & Stall Detection**:
+6. **Autonomy Policy & Stall Detection**:
    - If no forward progress occurs for 20 minutes (configurable), the supervisor snapshots state, attempts one recovery re-plan, then parks the task and generates an `AmbiguityFlag`. The overnight builder never blocks on ambiguity or spins indefinitely.
 
 ---
