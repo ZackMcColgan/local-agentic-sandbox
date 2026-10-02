@@ -5,12 +5,14 @@ import {
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
-  AGENT_MODES
+  AGENT_MODES,
+  isReasoningEffortSupported
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
+import { computeModelOptions, resolveEffectiveReasoningEffort } from "@/lib/chatUtils";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -206,7 +208,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const reasoningEffort = requestedReasoning || (activeModel.includes("qwen3.8") ? "medium" : "low");
+    // Resolve honest effective reasoning effort
+    let effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
 
     // 2. Connect to Sandboxed Code-Runner / Workspace MCP
     const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
@@ -279,11 +282,11 @@ CRITICAL INSTRUCTIONS:
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 
     let effortDirective = "";
-    if (reasoningEffort === "low") {
+    if (effectiveReasoningEffort === "low") {
       effortDirective = "\n\nREASONING EFFORT: FAST / DIRECT. Provide direct, concise answers without <think> tags or verbose preamble. Call tools immediately.";
-    } else if (reasoningEffort === "xhigh") {
+    } else if (effectiveReasoningEffort === "xhigh") {
       effortDirective = "\n\nREASONING EFFORT: DEEP. Think deeply step-by-step before answering.";
-    } else {
+    } else if (effectiveReasoningEffort === "medium") {
       effortDirective = "\n\nREASONING EFFORT: BALANCED. Keep reasoning concise before executing tools.";
     }
 
@@ -338,22 +341,6 @@ CRITICAL INSTRUCTIONS:
       });
     }
 
-    const computeOptions = (modelToUse: string) => {
-      const opts: any = {};
-      opts.num_ctx = modelToUse.includes("gemma4") ? 16384 : 8192;
-      if (reasoningEffort === "low") {
-        opts.temperature = 0.2;
-        opts.num_predict = 4096;
-      } else if (reasoningEffort === "xhigh") {
-        opts.temperature = 0.7;
-        opts.num_predict = 8192;
-      } else {
-        opts.temperature = 0.5;
-        opts.num_predict = 4096;
-      }
-      return opts;
-    };
-
     // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
     const getEffectiveToolCalls = (msg: any) => {
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
@@ -384,7 +371,7 @@ CRITICAL INSTRUCTIONS:
           type: "meta",
           model: activeModel,
           mode,
-          reasoning_effort: reasoningEffort,
+          reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult
         });
 
@@ -403,7 +390,7 @@ CRITICAL INSTRUCTIONS:
             model: activeModel,
             messages: conversationMessages,
             keep_alive: "24h",
-            options: computeOptions(activeModel)
+            options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
           if (ollamaTools.length > 0) {
@@ -533,13 +520,15 @@ CRITICAL INSTRUCTIONS:
             ) {
               console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
               activeModel = DEFAULT_PRIMARY_MODEL;
+              effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
               await sendEvent({
                 type: "status",
                 status: "Auto-escalating to Pro Reasoning Model (Qwen 27B)..."
               });
               await sendEvent({
                 type: "meta",
-                model: activeModel
+                model: activeModel,
+                reasoning_effort: effectiveReasoningEffort
               });
               conversationMessages.push({
                 role: "system",
@@ -568,7 +557,7 @@ CRITICAL INSTRUCTIONS:
           for await (const chunk of streamOllamaChat(OLLAMA_URL, {
             model: activeModel,
             messages: conversationMessages,
-            options: computeOptions(activeModel)
+            options: computeModelOptions(activeModel, effectiveReasoningEffort)
           })) {
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
@@ -606,7 +595,7 @@ CRITICAL INSTRUCTIONS:
           traces,
           model: activeModel,
           mode,
-          reasoning_effort: reasoningEffort,
+          reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult,
           trace_session: {
             sessionId: tracer.getSessionId(),

@@ -1,39 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-
-// Helper function tested directly
-function parseThinkingAndContent(raw: string): { thought?: string; content: string } {
-  const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
-  const match = raw.match(thinkRegex);
-  if (match) {
-    const thought = match[1].trim();
-    const content = raw.replace(thinkRegex, "").trim();
-    return { thought, content };
-  }
-
-  if (raw.includes("<think>")) {
-    const parts = raw.split(/<think>/i);
-    const beforeThink = parts[0];
-    const afterThink = parts.slice(1).join("<think>");
-    if (afterThink.includes("</think>")) {
-      const sub = afterThink.split(/<\/think>/i);
-      return {
-        thought: sub[0].trim(),
-        content: (beforeThink + "\n" + sub.slice(1).join("</think>")).trim()
-      };
-    } else {
-      return {
-        thought: afterThink,
-        content: beforeThink.trim()
-      };
-    }
-  }
-
-  return { content: raw };
-}
+import fs from "fs";
+import path from "path";
+import {
+  parseThinkingAndContent,
+  computeModelOptions,
+  resolveEffectiveReasoningEffort
+} from "../lib/chatUtils.js";
+import { isReasoningEffortSupported, PRESET_MODEL_PROFILES } from "../config/models.js";
 
 describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
-  it("parses completed <think>...</think> blocks into thought and content", () => {
+  it("parses completed <think>...</think> blocks into thought and content using real implementation", () => {
     const input = "<think>\nLet's plan the architecture.\n1. Add SVG viewer.\n</think>\nHere is the diagram.";
     const parsed = parseThinkingAndContent(input);
     assert.equal(parsed.thought, "Let's plan the architecture.\n1. Add SVG viewer.");
@@ -82,5 +59,67 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
     const parsed = parseThinkingAndContent(accumulated);
     assert.equal(parsed.thought, "planning step 1");
     assert.equal(parsed.content, "Done");
+  });
+
+  it("threads reasoning effort options to supported models (Qwen 3.8 / Gemma 4)", () => {
+    assert.equal(isReasoningEffortSupported("qwen3.8:27b-q3_k_m"), true);
+    assert.equal(isReasoningEffortSupported("gemma4:e4b"), true);
+
+    // High reasoning effort
+    const highEffort = resolveEffectiveReasoningEffort("qwen3.8:27b-q3_k_m", "xhigh");
+    assert.equal(highEffort, "xhigh");
+    const highOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "xhigh");
+    assert.equal(highOpts.temperature, 0.7);
+    assert.equal(highOpts.num_predict, 8192);
+
+    // Low reasoning effort
+    const lowEffort = resolveEffectiveReasoningEffort("qwen3.8:27b-q3_k_m", "low");
+    assert.equal(lowEffort, "low");
+    const lowOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "low");
+    assert.equal(lowOpts.temperature, 0.2);
+    assert.equal(lowOpts.num_predict, 4096);
+  });
+
+  it("disables and omits reasoning effort for unsupported models (Hermes 3)", () => {
+    assert.equal(isReasoningEffortSupported("hermes3:8b"), false);
+    assert.equal(isReasoningEffortSupported("hermes3:70b-q3_k_m"), false);
+
+    // Even if requested, effective effort resolves to undefined
+    const unsupportedEffort = resolveEffectiveReasoningEffort("hermes3:8b", "xhigh");
+    assert.equal(unsupportedEffort, undefined, "Must return undefined for unsupported models");
+
+    const unsupportedOpts = computeModelOptions("hermes3:8b", "xhigh");
+    assert.equal(unsupportedOpts.temperature, 0.7, "Must use standard unbiased defaults");
+    assert.equal(unsupportedOpts.num_predict, 4096);
+  });
+
+  it("CI standing rule: no test file re-implements functions exported by implementation modules", () => {
+    const testsDir = path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "tests")) ? "tests" : "web-ui/tests");
+    const testFiles = fs.readdirSync(testsDir).filter((f) => f.endsWith(".test.ts"));
+
+    const bannedFunctionNames = [
+      "parseThinkingAndContent",
+      "computeModelOptions",
+      "resolveEffectiveReasoningEffort",
+      "sanitizeSvg",
+      "convertDrawioToSvg",
+      "isSvgCode"
+    ];
+
+    for (const file of testFiles) {
+      if (file === "chatStreaming.test.ts") continue; // self-exempt test definition
+      const content = fs.readFileSync(path.join(testsDir, file), "utf8");
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes("import") || line.includes("from") || line.includes("//")) continue;
+        for (const fnName of bannedFunctionNames) {
+          const fnDecl = new RegExp(`\\bfunction\\s+${fnName}\\s*\\(|\\b(?:const|let|var)\\s+${fnName}\\s*=\\s*(?:\\([^)]*\\)|function|async)`);
+          if (fnDecl.test(line)) {
+            assert.fail(`Process violation: ${file}:${i + 1} re-implements ${fnName}. All tests must import from implementation modules.`);
+          }
+        }
+      }
+    }
   });
 });

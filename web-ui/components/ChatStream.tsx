@@ -31,8 +31,9 @@ import { ExecutionTraceItem } from "./ExecutionTrace";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "@/lib/svgUtils";
-import { AgentMode } from "@/config/models";
+import { AgentMode, isReasoningEffortSupported } from "@/config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
+import { parseThinkingAndContent } from "@/lib/chatUtils";
 
 export interface AttachedFileItem {
   id: string;
@@ -139,36 +140,6 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
       </pre>
     </div>
   );
-}
-
-function parseThinkingAndContent(raw: string): { thought?: string; content: string } {
-  const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
-  const match = raw.match(thinkRegex);
-  if (match) {
-    const thought = match[1].trim();
-    const content = raw.replace(thinkRegex, "").trim();
-    return { thought, content };
-  }
-
-  if (raw.includes("<think>")) {
-    const parts = raw.split(/<think>/i);
-    const beforeThink = parts[0];
-    const afterThink = parts.slice(1).join("<think>");
-    if (afterThink.includes("</think>")) {
-      const sub = afterThink.split(/<\/think>/i);
-      return {
-        thought: sub[0].trim(),
-        content: (beforeThink + "\n" + sub.slice(1).join("</think>")).trim()
-      };
-    } else {
-      return {
-        thought: afterThink,
-        content: beforeThink.trim()
-      };
-    }
-  }
-
-  return { content: raw };
 }
 
 export function ChatStream({
@@ -541,7 +512,7 @@ export function ChatStream({
           <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">{activeModel}</span>
             {" • "}
-            <span className="capitalize">{reasoningEffort}</span>
+            <span>{isReasoningEffortSupported(activeModel) ? `${reasoningEffort} effort` : "Effort N/A"}</span>
           </span>
         </div>
 

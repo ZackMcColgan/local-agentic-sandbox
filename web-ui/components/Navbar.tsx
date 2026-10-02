@@ -16,7 +16,7 @@ import {
   Moon,
   Hammer
 } from "lucide-react";
-import { ModelProfile, AgentMode } from "@/config/models";
+import { ModelProfile, AgentMode, isReasoningEffortSupported } from "@/config/models";
 import { ModelSelector } from "@/components/ModelSelector";
 
 interface NavbarProps {
@@ -157,49 +157,58 @@ export function Navbar({
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
             {/* Desktop Thinking / Reasoning Effort Selector */}
-            <div className="hidden md:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
-              <button
-                type="button"
-                onClick={() => onReasoningChange("low")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "low"
-                    ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Fast Mode: Direct answer"
-              >
-                <Zap className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                <span>Fast</span>
-              </button>
+            {isReasoningEffortSupported(selectedModel) ? (
+              <div className="hidden md:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("low")}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "low"
+                      ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Fast Mode: Direct answer"
+                >
+                  <Zap className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+                  <span>Fast</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onReasoningChange("medium")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "medium"
-                    ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Balanced Mode: Standard reasoning & planning"
-              >
-                <Scale className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
-                <span>Balanced</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("medium")}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "medium"
+                      ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Balanced Mode: Standard reasoning & planning"
+                >
+                  <Scale className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
+                  <span>Balanced</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onReasoningChange("xhigh")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "xhigh"
-                    ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Deep Mode: Exhaustive chain-of-thought"
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("xhigh")}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "xhigh"
+                      ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Deep Mode: Exhaustive chain-of-thought"
+                >
+                  <Brain className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
+                  <span>Deep</span>
+                </button>
+              </div>
+            ) : (
+              <div
+                className="hidden md:flex items-center px-2 py-1 rounded-lg bg-slate-100/70 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-400 dark:text-zinc-500 cursor-not-allowed"
+                title="Reasoning effort control is not supported by the selected model"
               >
-                <Brain className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
-                <span>Deep</span>
-              </button>
-            </div>
+                <span>Effort N/A</span>
+              </div>
+            )}
 
             {/* Model Switcher Dropdown (Desktop) */}
             <div className="relative hidden lg:block">

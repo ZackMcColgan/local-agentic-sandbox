@@ -53,9 +53,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/architectureSvgPair.test.ts"
     ]
   },
-  // ChatStream and chat history components
+  // ChatStream, chatUtils, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("lib/chatUtils"),
     tests: [
       "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
@@ -344,6 +344,38 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
 }
 
 /**
+ * Parses authoritative TAP summary test counts (# pass <N>, # fail <N>).
+ */
+export function parseTapCounts(output: string): { passed: number; failed: number } {
+  const passMatches = Array.from(output.matchAll(/# pass (\d+)/g));
+  const failMatches = Array.from(output.matchAll(/# fail (\d+)/g));
+
+  let passed = 0;
+  let failed = 0;
+
+  if (passMatches.length > 0) {
+    for (const match of passMatches) {
+      passed += parseInt(match[1], 10);
+    }
+  }
+  if (failMatches.length > 0) {
+    for (const match of failMatches) {
+      failed += parseInt(match[1], 10);
+    }
+  }
+
+  // Fallback if no TAP summary line found
+  if (passMatches.length === 0 && failMatches.length === 0) {
+    const okMatches = output.match(/^ok \d+ -/gm);
+    const notOkMatches = output.match(/^not ok \d+ -/gm);
+    passed = okMatches ? okMatches.length : 0;
+    failed = notOkMatches ? notOkMatches.length : 0;
+  }
+
+  return { passed, failed };
+}
+
+/**
  * Runs the change-aware test gate.
  * Budgeted (<90s), zero-coverage-is-an-error.
  */
@@ -419,18 +451,16 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         timeout: remainingTime
       });
       testOutput += out;
-      const passMatches = out.match(/ok \d+ -/g);
-      const failMatches = out.match(/not ok \d+ -/g);
-      passedCount += passMatches ? passMatches.length : webUiTestsToRun.length;
-      failedCount += failMatches ? failMatches.length : 0;
+      const counts = parseTapCounts(out);
+      passedCount += counts.passed > 0 ? counts.passed : webUiTestsToRun.length;
+      failedCount += counts.failed;
     } catch (err: any) {
       const stdout = err.stdout ? err.stdout.toString() : "";
       const stderr = err.stderr ? err.stderr.toString() : "";
       testOutput += `${stdout}\n${stderr}`;
-      const passMatches = testOutput.match(/ok \d+ -/g);
-      const failMatches = testOutput.match(/not ok \d+ -/g);
-      passedCount += passMatches ? passMatches.length : 0;
-      failedCount += failMatches && failMatches.length > 0 ? failMatches.length : 1;
+      const counts = parseTapCounts(testOutput);
+      passedCount += counts.passed;
+      failedCount += counts.failed > 0 ? counts.failed : 1;
       runError = err.message;
     }
   }
@@ -446,18 +476,16 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         timeout: remainingTime
       });
       testOutput += `\n--- MCP Server Test Suite ---\n${mcpOut}`;
-      const passMatches = mcpOut.match(/ok \d+ -/g);
-      const failMatches = mcpOut.match(/not ok \d+ -/g);
-      passedCount += passMatches ? passMatches.length : 1;
-      failedCount += failMatches ? failMatches.length : 0;
+      const counts = parseTapCounts(mcpOut);
+      passedCount += counts.passed > 0 ? counts.passed : 1;
+      failedCount += counts.failed;
     } catch (err: any) {
       const stdout = err.stdout ? err.stdout.toString() : "";
       const stderr = err.stderr ? err.stderr.toString() : "";
       testOutput += `\n--- MCP Server Failure ---\n${stdout}\n${stderr}`;
-      const passMatches = stdout.match(/ok \d+ -/g);
-      const failMatches = stdout.match(/not ok \d+ -/g);
-      passedCount += passMatches ? passMatches.length : 0;
-      failedCount += failMatches && failMatches.length > 0 ? failMatches.length : 1;
+      const counts = parseTapCounts(stdout + "\n" + stderr);
+      passedCount += counts.passed;
+      failedCount += counts.failed > 0 ? counts.failed : 1;
       runError = err.message;
     }
   }
