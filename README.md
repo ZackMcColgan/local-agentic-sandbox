@@ -64,7 +64,6 @@ helm install local-agentic-sandbox deploy/helm/local-agentic-sandbox -n local-ag
 # Verify all pods are running
 kubectl get all -n local-agentic-sandbox
 ```
-*(Note: Docker Desktop GUI defaults to the `default` namespace; use `-n local-agentic-sandbox` or switch namespaces in the GUI.)*
 
 ### 3. Run Automated Tests & Code Coverage
 ```bash
