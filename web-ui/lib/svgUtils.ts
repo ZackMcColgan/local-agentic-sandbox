@@ -54,11 +54,11 @@ export function wrapRawSvgInMarkdown(content: string): string {
         return part;
       }
 
-      // In non-code-fence text, find <svg ... > ... </svg>
+      // In non-code-fence text, find <svg ... > ... </svg> (including optional xml/doctype prefixes)
       // and wrap it in ```svg\n...\n```
       return part.replace(
-        /(<svg\b[^>]*>[\s\S]*?<\/svg>)/gi,
-        (match) => `\n\`\`\`svg\n${match}\n\`\`\`\n`
+        /((?:<\?xml\b[^>]*\?>\s*)?(?:<!DOCTYPE\b[^>]*>\s*)?<svg\b[^>]*>[\s\S]*?<\/svg>)/gi,
+        (match) => `\n\`\`\`svg\n${match.trim()}\n\`\`\`\n`
       );
     })
     .join("");
@@ -88,4 +88,94 @@ export function resolveSvgUrl(src: string): string {
   // Strip leading slash or relative prefix
   const clean = trimmed.replace(/^\.?\//, "");
   return `/api/files?path=${encodeURIComponent(clean)}`;
+}
+
+export interface ExtractedSvgItem {
+  id: string;
+  title: string;
+  code?: string;
+  url?: string;
+}
+
+/**
+ * Extracts all SVG diagrams generated or retrieved by tool traces in a chat message.
+ * This guarantees that when a tool like workspace_write_file, workspace_read_file,
+ * or a CLI script writes or outputs an SVG, it renders immediately inline in the chat bubble.
+ */
+export function extractSvgsFromMessage(message: {
+  id: string;
+  content: string;
+  traces?: Array<{
+    tool: string;
+    args?: Record<string, any>;
+    result?: any;
+  }>;
+}): ExtractedSvgItem[] {
+  const svgs: ExtractedSvgItem[] = [];
+  const seenKeys = new Set<string>();
+
+  if (!message.traces || !Array.isArray(message.traces)) {
+    return svgs;
+  }
+
+  for (let i = 0; i < message.traces.length; i++) {
+    const trace = message.traces[i];
+    const pathArg = (trace.args?.path || trace.args?.file || trace.args?.filename || "") as string;
+    const contentArg = (trace.args?.content || trace.args?.code || "") as string;
+    const isPathSvg = pathArg ? isSvgFilePath(pathArg) : false;
+
+    // Check stdout / result output
+    let stdoutSvg = "";
+    try {
+      if (trace.result?.content?.[0]?.text) {
+        try {
+          const parsed = JSON.parse(trace.result.content[0].text);
+          stdoutSvg = parsed.content || parsed.stdout || parsed.output || (typeof parsed === "string" ? parsed : "");
+        } catch {
+          stdoutSvg = trace.result.content[0].text;
+        }
+      } else if (typeof trace.result === "string") {
+        stdoutSvg = trace.result;
+      }
+    } catch {
+      stdoutSvg = "";
+    }
+
+    if (stdoutSvg && (stdoutSvg.includes("<svg") || isSvgCode(stdoutSvg))) {
+      if (/^\s*\d+\s*\|/m.test(stdoutSvg)) {
+        stdoutSvg = stdoutSvg.replace(/^\s*\d+\s*\|\s*/gm, "");
+      }
+    } else {
+      stdoutSvg = "";
+    }
+
+    let code: string | undefined = undefined;
+    if (contentArg && (isSvgCode(contentArg) || isPathSvg)) {
+      code = contentArg;
+    } else if (stdoutSvg && isSvgCode(stdoutSvg)) {
+      code = stdoutSvg;
+    }
+
+    if (code || isPathSvg) {
+      const title = pathArg ? pathArg.split(/[/\\]/).pop() || pathArg : `${trace.tool} Vector Graphic`;
+      const key = pathArg || (code ? code.slice(0, 100) : `trace-${i}`);
+
+      const alreadyInContent = code && code.length > 30 && message.content.includes(code.slice(0, 50));
+
+      if (!seenKeys.has(key) && !alreadyInContent) {
+        seenKeys.add(key);
+        if (pathArg) seenKeys.add(pathArg);
+        if (code) seenKeys.add(code.slice(0, 100));
+
+        svgs.push({
+          id: `${message.id}-trace-${i}`,
+          title: title || "Vector Graphic",
+          code,
+          url: pathArg ? resolveSvgUrl(pathArg) : undefined
+        });
+      }
+    }
+  }
+
+  return svgs;
 }

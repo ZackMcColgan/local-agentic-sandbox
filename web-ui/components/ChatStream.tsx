@@ -30,7 +30,7 @@ import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
-import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown } from "@/lib/svgUtils";
+import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "@/lib/svgUtils";
 import { AgentMode } from "@/config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
 
@@ -608,6 +608,13 @@ export function ChatStream({
                                 />
                               );
                             }
+                            if (inline && isSvgFilePath(codeString)) {
+                              return (
+                                <SvgFileLink href={resolveSvgUrl(codeString)} rawHref={codeString}>
+                                  {children}
+                                </SvgFileLink>
+                              );
+                            }
                             return (
                               <code
                                 className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] border border-slate-200 dark:border-zinc-700"
@@ -702,6 +709,32 @@ export function ChatStream({
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
 
+                      {/* Tool Generated / Retrieved SVG Visual Artifacts */}
+                      {(() => {
+                        const messageSvgs = extractSvgsFromMessage(m);
+                        if (messageSvgs.length === 0) return null;
+                        return (
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose">
+                            {messageSvgs.map((svg) => (
+                              <div key={svg.id} className="space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                                  <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    <span>Rendered Vector Diagram: {svg.title}</span>
+                                  </span>
+                                </div>
+                                <SvgViewer
+                                  code={svg.code}
+                                  url={svg.url}
+                                  title={svg.title}
+                                  initialTab="preview"
+                                  allowFullscreen={true}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -853,6 +886,7 @@ export function ChatStream({
                               {trace.args?.path && isSvgFilePath(trace.args.path) && (
                                 <div className="pt-2">
                                   <SvgViewer
+                                    code={trace.args?.content}
                                     url={resolveSvgUrl(trace.args.path)}
                                     title={trace.args.path}
                                     initialTab="preview"

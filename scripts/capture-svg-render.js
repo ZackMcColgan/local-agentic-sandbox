@@ -2,7 +2,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-async function waitForPort(port, maxRetries = 15) {
+async function waitForPort(port, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json`);
@@ -17,36 +17,69 @@ const mockMessages = JSON.stringify([
   {
     id: "user-1",
     role: "user",
-    content: "Can you generate a secure cluster architecture diagram and render the SVG vector graphic?"
+    content: "Draw an architecture diagram for a two-tier application in SVG format."
   },
   {
     id: "assistant-1",
     role: "assistant",
-    content: `Here is the requested SVG vector diagram:
-
-\`\`\`svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 180" width="100%" height="180">
+    content: "There we go! The SVG has been written via the tool call to `two_tier_architecture.svg` in your workspace, featuring web presentation and server data tiers with secure boundary isolation.",
+    traces: [
+      {
+        tool: "workspace_write_file",
+        durationMs: 6,
+        timestamp: "2026-10-02T16:09:00.000Z",
+        args: {
+          path: "two_tier_architecture.svg",
+          content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="100%" height="240">
   <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
+    <linearGradient id="gClient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#0284c7;stop-opacity:1" />
     </linearGradient>
+    <linearGradient id="gServer" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#047857;stop-opacity:1" />
+    </linearGradient>
   </defs>
-  <rect x="10" y="10" width="520" height="160" rx="14" fill="#ffffff" stroke="#10b981" stroke-width="2" />
-  <circle cx="60" cy="90" r="30" fill="url(#grad1)" />
-  <text x="110" y="70" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#0f172a">Zero-Trust Kubernetes AI Sandbox</text>
-  <text x="110" y="95" font-family="system-ui, sans-serif" font-size="12" fill="#475569">Real-time vector rendering with zoom, pan, and code inspection</text>
-  <rect x="110" y="115" width="120" height="26" rx="6" fill="#10b981" />
-  <text x="130" y="132" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#ffffff">SLSA-3 Verified</text>
-  <rect x="240" y="115" width="130" height="26" rx="6" fill="#0284c7" />
-  <text x="252" y="132" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#ffffff">Air-Gapped Mesh</text>
-</svg>
-\`\`\`
+  <rect x="5" y="5" width="590" height="230" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="300" y="32" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="bold" fill="#0f172a">Two-Tier Application Architecture</text>
+  
+  <!-- Tier 1 -->
+  <rect x="30" y="55" width="240" height="155" rx="10" fill="#f0f9ff" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4,3" />
+  <text x="150" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="bold" fill="#0284c7">TIER 1: PRESENTATION</text>
+  <rect x="50" y="95" width="200" height="42" rx="8" fill="url(#gClient)" />
+  <text x="150" y="121" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">Web &amp; Mobile UI</text>
+  <rect x="50" y="148" width="200" height="42" rx="8" fill="#e0f2fe" stroke="#7dd3fc" />
+  <text x="150" y="174" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#0369a1">Client State &amp; Validation</text>
 
-You can also view the repository architecture diagram file:
-![Architecture Diagram](docs/architecture.drawio.svg)
+  <!-- Flow Arrow -->
+  <path d="M 280 135 L 320 135" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)" />
+  <text x="300" y="125" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#475569">HTTPS</text>
 
-File link: [docs/architecture.drawio.svg](docs/architecture.drawio.svg)`
+  <!-- Tier 2 -->
+  <rect x="330" y="55" width="240" height="155" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4,3" />
+  <text x="450" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="bold" fill="#047857">TIER 2: DATA &amp; LOGIC</text>
+  <rect x="350" y="95" width="200" height="42" rx="8" fill="url(#gServer)" />
+  <text x="450" y="121" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">Backend API Service</text>
+  <rect x="350" y="148" width="200" height="42" rx="8" fill="#d1fae5" stroke="#6ee7b7" />
+  <text x="450" y="174" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#065f46">PostgreSQL &amp; Storage</text>
+</svg>`
+        },
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                status: "SUCCESS",
+                path: "two_tier_architecture.svg",
+                bytes_written: 2450,
+                is_diagram: true
+              })
+            }
+          ]
+        }
+      }
+    ]
   }
 ]);
 
@@ -93,9 +126,9 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
               }
             })
           );
-        }, 600);
+        }, 500);
 
-        // 3. Wait for reload and capture screenshot
+        // 3. Wait for reload, DOM render, and capture screenshot
         setTimeout(() => {
           ws.send(
             JSON.stringify({
@@ -104,7 +137,7 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
               params: { format: 'png' },
             })
           );
-        }, 2200);
+        }, 2500);
       };
 
       ws.onmessage = (event) => {
@@ -128,7 +161,7 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
 }
 
 async function run() {
-  const targetHost = "http://127.0.0.1:3005";
+  const targetHost = "http://127.0.0.1:3001";
   console.log("Starting SVG visual verification capture suite across 4 viewports...");
 
   await captureSvg(`${targetHost}/?theme=light`, 1280, 900, false, "test_svg_desktop_light.png");
@@ -139,7 +172,6 @@ async function run() {
   console.log("All visual screenshots captured successfully!");
   process.exit(0);
 }
-
 
 run().catch((err) => {
   console.error("SVG visual capture failed:", err);

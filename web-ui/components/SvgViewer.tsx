@@ -133,7 +133,7 @@ export function SvgViewer({
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    const cleanTitle = title.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const cleanTitle = title.replace(/[^a-zA-Z0-9_.-]/g, "_").toLowerCase();
     a.download = cleanTitle.endsWith(".svg") ? cleanTitle : `${cleanTitle}.svg`;
     document.body.appendChild(a);
     a.click();

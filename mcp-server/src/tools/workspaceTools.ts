@@ -10,7 +10,7 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // Determine Workspace Root: /workspace in container, or local fallback in repo root
-const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
+export const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
 
 // Helper: exec git commands using argv array (no shell interpolation) to prevent shell command injection
 async function execGit(args: string[], cwd: string = WORKSPACE_DIR) {
@@ -58,7 +58,7 @@ async function ensureWorkspaceInitialized() {
 }
 
 // Ensure safe path resolution within WORKSPACE_DIR
-function resolveSafePath(userPath: string): string {
+export function resolveSafePath(userPath: string): string {
   const normalized = path.normalize(userPath).replace(/^(\/|\\)/, "");
   const resolved = path.resolve(WORKSPACE_DIR, normalized);
   const rootResolved = path.resolve(WORKSPACE_DIR);

@@ -36,21 +36,99 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing required 'path' query parameter" }, { status: 400 });
     }
 
-    const repoRoot = fs.existsSync(path.join(process.cwd(), "docs"))
-      ? process.cwd()
-      : fs.existsSync(path.resolve(process.cwd(), "..", "docs"))
-      ? path.resolve(process.cwd(), "..")
-      : process.cwd();
+    // Clean leading slashes
+    const cleanPath = requestedPath.replace(/^[\/\\]+/, "").trim();
 
-    const resolvedPath = path.resolve(repoRoot, requestedPath);
-    const relative = path.relative(repoRoot, resolvedPath);
-
-    // Strict path-traversal prevention: resolved file MUST be inside repoRoot
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    // Prevent path traversal
+    if (cleanPath.includes("..")) {
       return NextResponse.json({ error: "Access forbidden: path traversal detected" }, { status: 403 });
     }
 
-    if (!fs.existsSync(resolvedPath)) {
+    // Determine candidate root directories where files might reside
+    const cwd = process.cwd();
+    const candidateRoots = [
+      process.env.WORKSPACE_DIR || "/workspace",
+      path.resolve(cwd, "..", "workspace"),
+      path.resolve(cwd, "workspace"),
+      fs.existsSync(path.join(cwd, "docs"))
+        ? cwd
+        : fs.existsSync(path.resolve(cwd, "..", "docs"))
+        ? path.resolve(cwd, "..")
+        : cwd
+    ];
+
+    let resolvedPath: string | null = null;
+
+    // Check each candidate root
+    for (const root of candidateRoots) {
+      if (!fs.existsSync(root)) continue;
+
+      // Try with direct cleanPath
+      const candidate1 = path.resolve(root, cleanPath);
+      const rel1 = path.relative(root, candidate1);
+      if (!rel1.startsWith("..") && !path.isAbsolute(rel1) && fs.existsSync(candidate1)) {
+        try {
+          const stat = fs.statSync(candidate1);
+          if (stat.isFile()) {
+            resolvedPath = candidate1;
+            break;
+          }
+        } catch {}
+      }
+
+      // If cleanPath starts with "workspace/", strip it when searching inside workspace root
+      if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
+        const stripped = cleanPath.replace(/^workspace[\/\\]/, "");
+        const candidate2 = path.resolve(root, stripped);
+        const rel2 = path.relative(root, candidate2);
+        if (!rel2.startsWith("..") && !path.isAbsolute(rel2) && fs.existsSync(candidate2)) {
+          try {
+            const stat = fs.statSync(candidate2);
+            if (stat.isFile()) {
+              resolvedPath = candidate2;
+              break;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // If file not found locally on disk, try proxying to mcp-server if available
+    if (!resolvedPath) {
+      const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
+      const mcpBase = mcpEnv
+        ? mcpEnv.replace(/\/sse\/?$/, "")
+        : "http://localhost:8080";
+
+      try {
+        const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {
+          signal: AbortSignal.timeout(3000)
+        });
+        if (mcpFileRes.ok) {
+          const fileBuffer = await mcpFileRes.arrayBuffer();
+          const mimeType = getMimeType(cleanPath);
+          if (asJson) {
+            const textContent = new TextDecoder().decode(fileBuffer);
+            return NextResponse.json({
+              path: cleanPath,
+              size: fileBuffer.byteLength,
+              mimeType,
+              content: textContent
+            });
+          }
+          return new NextResponse(Buffer.from(fileBuffer), {
+            status: 200,
+            headers: {
+              "Content-Type": mimeType,
+              "Content-Length": fileBuffer.byteLength.toString(),
+              "Cache-Control": "public, max-age=60"
+            }
+          });
+        }
+      } catch {
+        // Fallback network attempt failed, proceed to 404
+      }
+
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
@@ -64,7 +142,7 @@ export async function GET(request: NextRequest) {
     if (asJson) {
       const content = fs.readFileSync(resolvedPath, "utf8");
       return NextResponse.json({
-        path: requestedPath,
+        path: cleanPath,
         size: stat.size,
         mimeType,
         content

@@ -99,5 +99,80 @@ Hope this helps!`;
     const notFoundRes = await GET(notFoundReq);
     assert.equal(notFoundRes.status, 404, "Missing file must return 404 Not Found");
   });
+
+  it("extractSvgsFromMessage extracts vector SVGs from tool traces (write, read, stdout)", async () => {
+    const { extractSvgsFromMessage } = await import("../lib/svgUtils.js");
+
+    // Case 1: workspace_write_file trace
+    const msgWithWrite = {
+      id: "msg-tool-write",
+      content: "The architecture diagram has been generated and saved to two_tier_architecture.svg",
+      traces: [
+        {
+          tool: "workspace_write_file",
+          args: {
+            path: "two_tier_architecture.svg",
+            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#10b981"/></svg>'
+          },
+          result: {
+            content: [{ type: "text", text: '{"status":"SUCCESS","path":"two_tier_architecture.svg"}' }]
+          }
+        }
+      ]
+    };
+
+    const svgs1 = extractSvgsFromMessage(msgWithWrite);
+    assert.equal(svgs1.length, 1);
+    assert.equal(svgs1[0].title, "two_tier_architecture.svg");
+    assert.ok(svgs1[0].code?.includes("<svg"), "Contains in-memory SVG code");
+    assert.ok(svgs1[0].url?.includes("two_tier_architecture.svg"), "Contains resolved file URL");
+
+    // Case 2: workspace_read_file trace with line numbers in stdout
+    const msgWithRead = {
+      id: "msg-tool-read",
+      content: "Here is the existing diagram:",
+      traces: [
+        {
+          tool: "workspace_read_file",
+          args: { path: "docs/existing.svg" },
+          result: {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                status: "SUCCESS",
+                path: "docs/existing.svg",
+                content: "1 | <svg viewBox=\"0 0 50 50\">\n2 |   <circle r=\"20\" fill=\"red\"/>\n3 | </svg>"
+              })
+            }]
+          }
+        }
+      ]
+    };
+
+    const svgs2 = extractSvgsFromMessage(msgWithRead);
+    assert.equal(svgs2.length, 1);
+    assert.equal(svgs2[0].title, "existing.svg");
+    assert.ok(!svgs2[0].code?.includes("1 |"), "Line numbers must be stripped from SVG code");
+    assert.ok(svgs2[0].code?.includes("<circle"), "Clean SVG code preserved");
+
+    // Case 3: Deduplication if content already has the same SVG code inline
+    const msgDuplicate = {
+      id: "msg-duplicate",
+      content: 'Here is the diagram: ```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>\n```',
+      traces: [
+        {
+          tool: "workspace_write_file",
+          args: {
+            path: "dup.svg",
+            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>'
+          }
+        }
+      ]
+    };
+
+    const svgs3 = extractSvgsFromMessage(msgDuplicate);
+    assert.equal(svgs3.length, 0, "Must not duplicate SVG if already rendered inline in content");
+  });
 });
+
 
