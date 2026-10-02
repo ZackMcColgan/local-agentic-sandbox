@@ -150,12 +150,20 @@ function parseThinkingAndContent(raw: string): { thought?: string; content: stri
     return { thought, content };
   }
 
-  if (raw.startsWith("<think>")) {
-    const parts = raw.split("</think>");
-    if (parts.length > 1) {
+  if (raw.includes("<think>")) {
+    const parts = raw.split(/<think>/i);
+    const beforeThink = parts[0];
+    const afterThink = parts.slice(1).join("<think>");
+    if (afterThink.includes("</think>")) {
+      const sub = afterThink.split(/<\/think>/i);
       return {
-        thought: parts[0].replace("<think>", "").trim(),
-        content: parts.slice(1).join("</think>").trim()
+        thought: sub[0].trim(),
+        content: (beforeThink + "\n" + sub.slice(1).join("</think>")).trim()
+      };
+    } else {
+      return {
+        thought: afterThink,
+        content: beforeThink.trim()
       };
     }
   }
@@ -180,6 +188,7 @@ export function ChatStream({
   const setMessages = propsSetMessages ?? setLocalMessages;
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
@@ -316,6 +325,7 @@ export function ChatStream({
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setIsLoading(true);
+    setStreamStatus("Connecting to model...");
 
     const startTime = performance.now();
 
@@ -338,18 +348,14 @@ export function ChatStream({
         })
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "Failed to orchestrate request");
+        let errMessage = "Failed to orchestrate request";
+        try {
+          const errJson = await res.json();
+          errMessage = errJson.error || errMessage;
+        } catch {}
+        throw new Error(errMessage);
       }
-
-      if (data.traces && data.traces.length > 0) {
-        onTracesUpdate(data.traces);
-      }
-
-      const durationMs = Math.round(performance.now() - startTime);
-      const parsed = parseThinkingAndContent(data.content || "I didn't receive a response. Please try again.");
 
       const assistantMsgId = `assistant-${Date.now()}`;
       setMessages((prev) => [
@@ -357,18 +363,106 @@ export function ChatStream({
         {
           id: assistantMsgId,
           role: "assistant",
-          content: parsed.content,
-          thought: parsed.thought,
-          traces: data.traces,
-          modelUsed: data.model || activeModel,
-          durationMs
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: activeModel
         }
       ]);
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error("No readable stream received from server");
+      }
+
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
+      let accumulatedRawContent = "";
+      let currentTraces: ExecutionTraceItem[] = [];
+      let currentModel = activeModel;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        streamBuffer += decoder.decode(value, { stream: true });
+        const blocks = streamBuffer.split("\n\n");
+        streamBuffer = blocks.pop() || "";
+
+        for (const block of blocks) {
+          const trimmed = block.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, "");
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === "meta") {
+              if (event.model) currentModel = event.model;
+            } else if (event.type === "status") {
+              setStreamStatus(event.status);
+            } else if (event.type === "token") {
+              accumulatedRawContent += event.content || "";
+              const parsed = parseThinkingAndContent(accumulatedRawContent);
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        content: parsed.content,
+                        thought: parsed.thought,
+                        modelUsed: currentModel
+                      }
+                    : msg
+                )
+              );
+            } else if (event.type === "trace") {
+              currentTraces = [...currentTraces, event.trace];
+              onTracesUpdate(currentTraces);
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        traces: currentTraces
+                      }
+                    : msg
+                )
+              );
+            } else if (event.type === "done") {
+              const durationMs = Math.round(performance.now() - startTime);
+              const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        content: parsed.content,
+                        thought: event.thought !== undefined ? event.thought : parsed.thought,
+                        traces: event.traces || currentTraces,
+                        modelUsed: event.model || currentModel,
+                        durationMs: event.durationMs || durationMs
+                      }
+                    : msg
+                )
+              );
+            } else if (event.type === "error") {
+              throw new Error(event.error || "Streaming error encountered");
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
+              throw parseErr;
+            }
+          }
+        }
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
     } finally {
       setIsLoading(false);
+      setStreamStatus(null);
     }
   };
 
@@ -471,7 +565,7 @@ export function ChatStream({
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
-          const isThoughtOpen = !!expandedThoughts[m.id];
+          const isThoughtOpen = expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
           const isLastAssistant =
             !isUser &&
             (idx === messages.length - 1 ||
@@ -494,15 +588,15 @@ export function ChatStream({
               <div className={`max-w-[94%] sm:max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
                 
                 {/* Reasoning Thought Accordion (Assistant only) */}
-                {!isUser && m.thought && (
+                {!isUser && (m.thought || (isLoading && idx === messages.length - 1 && !m.content)) && (
                   <div className="mb-2">
                     <button
                       type="button"
                       onClick={() => toggleThought(m.id)}
                       className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 bg-slate-100 dark:bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 transition-colors"
                     >
-                      <Sparkles className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                      <span>Reasoning Process</span>
+                      <Sparkles className={`h-3 w-3 ${isLoading && idx === messages.length - 1 && !m.content ? "text-amber-500 animate-spin" : "text-amber-500 dark:text-amber-400"}`} />
+                      <span>{isLoading && idx === messages.length - 1 && !m.content ? "Reasoning & Thinking (Live Stream)..." : "Reasoning Process"}</span>
                       {isThoughtOpen ? (
                         <ChevronUp className="h-3 w-3 text-slate-400" />
                       ) : (
@@ -512,7 +606,10 @@ export function ChatStream({
 
                     {isThoughtOpen && (
                       <div className="mt-1.5 p-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/90 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                        {m.thought}
+                        {m.thought || "Analyzing prompt and formulating execution plan..."}
+                        {isLoading && idx === messages.length - 1 && !m.content && (
+                          <span className="inline-block w-2 h-3.5 ml-1 bg-amber-500 animate-pulse align-middle" />
+                        )}
                       </div>
                     )}
                   </div>
@@ -1052,7 +1149,7 @@ export function ChatStream({
             </div>
             <div className="rounded-2xl rounded-tl-sm p-3.5 sm:p-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-400 flex items-center gap-2.5 shadow-sm">
               <Terminal className="h-4 w-4 text-cyan-500 dark:text-cyan-400 animate-pulse" />
-              <span>Orchestrating autonomous workflow...</span>
+              <span>{streamStatus || "Orchestrating autonomous workflow..."}</span>
             </div>
           </div>
         )}

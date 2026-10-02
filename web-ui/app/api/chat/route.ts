@@ -27,7 +27,6 @@ interface TraceItem {
   tier?: "sandbox" | "browser" | "workspace";
 }
 
-
 async function connectMcpClient(url: string, name: string) {
   const sseUrl = normalizeMcpUrl(url);
   try {
@@ -98,6 +97,58 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
   } catch (err) {
     console.warn("[Triage] Error classifying complexity, defaulting to SIMPLE_EXECUTION:", err);
     return "SIMPLE_EXECUTION";
+  }
+}
+
+/**
+ * Async generator for streaming NDJSON chunks from Ollama /api/chat
+ */
+async function* streamOllamaChat(ollamaUrl: string, payload: any) {
+  const res = await fetch(`${ollamaUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, stream: true })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Ollama engine returned ${res.status}: ${errText}`);
+  }
+
+  if (!res.body) {
+    throw new Error("Ollama returned empty response body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const json = JSON.parse(trimmed);
+          yield json;
+        } catch (err) {
+          console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      try {
+        yield JSON.parse(buffer.trim());
+      } catch {}
+    }
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -300,46 +351,8 @@ CRITICAL INSTRUCTIONS:
         opts.temperature = 0.5;
         opts.num_predict = 4096;
       }
-      if (modelToUse.includes("qwen3.8")) {
-        opts.reasoning_effort = reasoningEffort;
-      }
       return opts;
     };
-
-    // Step 1: Initial query to Ollama with OpenTelemetry reasoning span
-    const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
-      model: activeModel,
-      round: 0
-    });
-
-    const ollamaPayload: any = {
-      model: activeModel,
-      messages: conversationMessages,
-      stream: false,
-      keep_alive: "24h",
-      options: computeOptions(activeModel)
-    };
-
-    if (ollamaTools.length > 0) {
-      ollamaPayload.tools = ollamaTools;
-    }
-
-    const aiRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ollamaPayload)
-    });
-
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      reasoningSpan.end("error", { error: errText });
-      throw new Error(`Ollama engine returned ${aiRes.status}: ${errText}`);
-    }
-
-    const aiData = await aiRes.json();
-    reasoningSpan.end("ok");
-    const assistantMessage = aiData.message;
-    const traces: TraceItem[] = [];
 
     // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
     const getEffectiveToolCalls = (msg: any) => {
@@ -349,203 +362,286 @@ CRITICAL INSTRUCTIONS:
       return parseToolCallsFromText(msg.content, toolClientMap);
     };
 
-    // Step 2: Handle Autonomous Multi-Round Tool Execution Loop
-    let currentAssistantMessage = assistantMessage;
-    let round = 0;
-    const MAX_TOOL_ROUNDS = 8;
-    let consecutiveFailures = 0;
+    // Create TransformStream for Real-Time SSE Token & Trace Streaming
+    const encoder = new TextEncoder();
+    const stream = new TransformStream();
+    const writer = stream.writable.getWriter();
 
-    while (round < MAX_TOOL_ROUNDS) {
-      const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
-      if (!toolCalls || toolCalls.length === 0) {
-        break;
+    const sendEvent = async (data: any) => {
+      try {
+        await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      } catch (err) {
+        console.warn("[SSE sendEvent error]:", err);
       }
+    };
 
-      round++;
-      const assistantMsgToPush = {
-        ...currentAssistantMessage,
-        tool_calls: toolCalls
-      };
-      conversationMessages.push(assistantMsgToPush);
-
-      for (const toolCall of toolCalls) {
-        const toolName = toolCall.function.name;
-        const toolArgs =
-          typeof toolCall.function.arguments === "string"
-            ? JSON.parse(toolCall.function.arguments)
-            : toolCall.function.arguments;
-
-        const target = toolClientMap.get(toolName);
-        if (!target) {
-          throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
-        }
-
-        const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
-          tool: toolName,
-          tier: target.tier
+    // Run async orchestrator pipeline in background feeding SSE stream
+    (async () => {
+      const traces: TraceItem[] = [];
+      try {
+        // Send initial metadata
+        await sendEvent({
+          type: "meta",
+          model: activeModel,
+          mode,
+          reasoning_effort: reasoningEffort,
+          triage: triageComplexityResult
         });
 
-        let bashSpan: any = null;
-        if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
-          bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
-            command: toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python")
+        let currentAssistantMessage: any = { role: "assistant", content: "" };
+        let round = 0;
+        const MAX_TOOL_ROUNDS = 8;
+        let consecutiveFailures = 0;
+
+        while (round < MAX_TOOL_ROUNDS) {
+          const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
+            model: activeModel,
+            round
           });
-        }
 
-        const startTime = performance.now();
-        const result = await target.client.callTool({
-          name: toolName,
-          arguments: toolArgs
-        });
-        const durationMs = Math.round(performance.now() - startTime);
+          const ollamaPayload: any = {
+            model: activeModel,
+            messages: conversationMessages,
+            keep_alive: "24h",
+            options: computeOptions(activeModel)
+          };
 
-        // Track test / command failure for auto-escalation
-        let isExecutionError = false;
-        try {
-          const resultStr = JSON.stringify(result);
-          if (
-            resultStr.includes('"status":"EXECUTION_ERROR"') ||
-            resultStr.includes('"exit_code":1') ||
-            (result as any).isError
-          ) {
-            isExecutionError = true;
+          if (ollamaTools.length > 0) {
+            ollamaPayload.tools = ollamaTools;
           }
-        } catch {}
 
-        if (bashSpan) {
-          bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
+          let fullRoundContent = "";
+          let toolCallsFromMessage: any[] = [];
+
+          for await (const chunk of streamOllamaChat(OLLAMA_URL, ollamaPayload)) {
+            if (chunk.message?.content) {
+              const textChunk = chunk.message.content;
+              fullRoundContent += textChunk;
+              await sendEvent({ type: "token", content: textChunk });
+            }
+            if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+              toolCallsFromMessage.push(...chunk.message.tool_calls);
+            }
+          }
+
+          reasoningSpan.end("ok");
+          currentAssistantMessage = {
+            role: "assistant",
+            content: fullRoundContent,
+            tool_calls: toolCallsFromMessage.length > 0 ? toolCallsFromMessage : undefined
+          };
+
+          const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          if (!toolCalls || toolCalls.length === 0) {
+            break;
+          }
+
+          round++;
+          const assistantMsgToPush = {
+            ...currentAssistantMessage,
+            tool_calls: toolCalls
+          };
+          conversationMessages.push(assistantMsgToPush);
+
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function.name;
+            const toolArgs =
+              typeof toolCall.function.arguments === "string"
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments;
+
+            await sendEvent({
+              type: "status",
+              status: `Executing tool ${toolName}...`
+            });
+
+            const target = toolClientMap.get(toolName);
+            if (!target) {
+              throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
+            }
+
+            const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
+              tool: toolName,
+              tier: target.tier
+            });
+
+            let bashSpan: any = null;
+            if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
+              bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
+                command: toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python")
+              });
+            }
+
+            const startTime = performance.now();
+            const result = await target.client.callTool({
+              name: toolName,
+              arguments: toolArgs
+            });
+            const durationMs = Math.round(performance.now() - startTime);
+
+            // Track test / command failure for auto-escalation
+            let isExecutionError = false;
+            try {
+              const resultStr = JSON.stringify(result);
+              if (
+                resultStr.includes('"status":"EXECUTION_ERROR"') ||
+                resultStr.includes('"exit_code":1') ||
+                (result as any).isError
+              ) {
+                isExecutionError = true;
+              }
+            } catch {}
+
+            if (bashSpan) {
+              bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
+            }
+            toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
+
+            if (isExecutionError) {
+              consecutiveFailures++;
+            } else {
+              consecutiveFailures = 0;
+            }
+
+            const traceItem: TraceItem = {
+              tool: toolName,
+              args: toolArgs,
+              result,
+              durationMs,
+              timestamp: new Date().toISOString(),
+              model: activeModel,
+              tier: target.tier
+            };
+            traces.push(traceItem);
+
+            await sendEvent({
+              type: "trace",
+              trace: traceItem
+            });
+
+            conversationMessages.push({
+              role: "tool",
+              name: toolName,
+              content: JSON.stringify(result)
+            });
+
+            // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
+            if (
+              mode === "auto" &&
+              activeModel.includes("gemma4") &&
+              consecutiveFailures >= 2
+            ) {
+              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
+              activeModel = DEFAULT_PRIMARY_MODEL;
+              await sendEvent({
+                type: "status",
+                status: "Auto-escalating to Pro Reasoning Model (Qwen 27B)..."
+              });
+              await sendEvent({
+                type: "meta",
+                model: activeModel
+              });
+              conversationMessages.push({
+                role: "system",
+                content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+              });
+            }
+          }
         }
-        toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
 
-        if (isExecutionError) {
-          consecutiveFailures++;
-        } else {
-          consecutiveFailures = 0;
-        }
-
-        traces.push({
-          tool: toolName,
-          args: toolArgs,
-          result,
-          durationMs,
-          timestamp: new Date().toISOString(),
-          model: activeModel,
-          tier: target.tier
-        });
-
-        conversationMessages.push({
-          role: "tool",
-          name: toolName,
-          content: JSON.stringify(result)
-        });
-
-        // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
-        if (
-          mode === "auto" &&
-          activeModel.includes("gemma4") &&
-          consecutiveFailures >= 2
-        ) {
-          console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
-          activeModel = DEFAULT_PRIMARY_MODEL;
+        // Post-tool synthesis safety pass if lingering tool calls or empty text:
+        const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
+        if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+          const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
+          conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({
-            role: "system",
-            content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+            role: "user",
+            content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
           });
+
+          await sendEvent({
+            type: "status",
+            status: "Synthesizing final answer..."
+          });
+
+          let synthContent = "";
+          for await (const chunk of streamOllamaChat(OLLAMA_URL, {
+            model: activeModel,
+            messages: conversationMessages,
+            options: computeOptions(activeModel)
+          })) {
+            if (chunk.message?.content) {
+              synthContent += chunk.message.content;
+              await sendEvent({ type: "token", content: chunk.message.content });
+            }
+          }
+
+          if (synthContent.trim()) {
+            currentAssistantMessage = { role: "assistant", content: synthContent };
+          }
+          synthSpan.end("ok");
         }
-      }
 
-      // Query model with updated tool results
-      const nextPayload: any = {
-        model: activeModel,
-        messages: conversationMessages,
-        stream: false
-      };
+        // Clean residual tool tags
+        let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
 
-      if (round < MAX_TOOL_ROUNDS && ollamaTools.length > 0) {
-        nextPayload.tools = ollamaTools;
-      }
+        if (!cleanedContent) {
+          if (traces.length > 0) {
+            cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+          } else if (currentAssistantMessage.content?.trim()) {
+            cleanedContent = currentAssistantMessage.content.trim();
+          } else {
+            cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+          }
+        }
 
-      nextPayload.options = computeOptions(activeModel);
+        rootSpan.end("ok", {
+          tracesCount: traces.length,
+          modelUsed: activeModel
+        });
 
-      const nextReasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
-        model: activeModel,
-        round
-      });
-
-      const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextPayload)
-      });
-
-      if (!nextRes.ok) {
-        nextReasoningSpan.end("error");
-        throw new Error(`Ollama synthesis failed: ${await nextRes.text()}`);
-      }
-
-      const nextData = await nextRes.json();
-      nextReasoningSpan.end("ok");
-      currentAssistantMessage = nextData.message;
-    }
-
-    // Post-tool synthesis safety pass:
-    const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-    if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
-      const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
-      conversationMessages.push(currentAssistantMessage);
-      conversationMessages.push({
-        role: "user",
-        content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
-      });
-
-      const finalRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        await sendEvent({
+          type: "done",
+          content: cleanedContent,
+          traces,
           model: activeModel,
-          messages: conversationMessages,
-          stream: false,
-          options: computeOptions(activeModel)
-        })
-      });
+          mode,
+          reasoning_effort: reasoningEffort,
+          triage: triageComplexityResult,
+          trace_session: {
+            sessionId: tracer.getSessionId(),
+            traceId: tracer.getTraceId()
+          }
+        });
 
-      if (finalRes.ok) {
-        const finalData = await finalRes.json();
-        if (finalData.message?.content?.trim()) {
-          currentAssistantMessage = finalData.message;
+      } catch (err: any) {
+        if (rootSpan) {
+          try {
+            rootSpan.end("error", { error: err.message });
+          } catch {}
         }
+        console.error("[Agent Orchestrator Streaming Error]:", err);
+        await sendEvent({
+          type: "error",
+          error: err.message || "Internal orchestrator error"
+        });
+      } finally {
+        for (const session of activeSessions) {
+          try {
+            await session.client.close();
+          } catch {}
+        }
+        try {
+          await writer.close();
+        } catch {}
       }
-      synthSpan.end("ok");
-    }
+    })();
 
-    // Clean residual tool tags
-    let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
-
-    if (!cleanedContent) {
-      if (traces.length > 0) {
-        cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
-      } else if (currentAssistantMessage.content?.trim()) {
-        cleanedContent = currentAssistantMessage.content.trim();
-      } else {
-        cleanedContent = "I am ready to assist you. What would you like to build or explore?";
-      }
-    }
-
-    rootSpan.end("ok", {
-      tracesCount: traces.length,
-      modelUsed: activeModel
-    });
-
-    return NextResponse.json({
-      content: cleanedContent,
-      traces,
-      model: activeModel,
-      mode,
-      reasoning_effort: reasoningEffort,
-      triage: triageComplexityResult,
-      trace_session: {
-        sessionId: tracer.getSessionId(),
-        traceId: tracer.getTraceId()
+    return new Response(stream.readable, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive"
       }
     });
 
@@ -555,7 +651,7 @@ CRITICAL INSTRUCTIONS:
         rootSpan.end("error", { error: err.message });
       } catch {}
     }
-    console.error("[Agent Orchestrator Error]:", err);
+    console.error("[Agent Orchestrator Setup Error]:", err);
     return NextResponse.json(
       {
         error: err.message || "Internal orchestrator error",
@@ -563,13 +659,5 @@ CRITICAL INSTRUCTIONS:
       },
       { status: 500 }
     );
-  } finally {
-    for (const session of activeSessions) {
-      try {
-        await session.client.close();
-      } catch {
-        // Ignored on teardown
-      }
-    }
   }
 }

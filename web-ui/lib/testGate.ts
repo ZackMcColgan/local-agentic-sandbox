@@ -57,6 +57,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("components/ChatStream"),
     tests: [
+      "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
       "tests/chatHistory.test.ts",
       "tests/frontendRefreshRehydration.test.ts"
@@ -70,6 +71,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("app/api/chat/route"),
     tests: [
+      "tests/chatStreaming.test.ts",
       "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts"
