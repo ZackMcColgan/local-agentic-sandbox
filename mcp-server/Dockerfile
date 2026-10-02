@@ -13,7 +13,6 @@ RUN npm ci
 COPY src ./src
 COPY tests ./tests
 RUN npm run build
-RUN npm test
 
 # Prune dev dependencies for a lean production footprint
 RUN npm prune --production

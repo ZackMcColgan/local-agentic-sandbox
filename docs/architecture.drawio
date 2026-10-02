@@ -90,11 +90,12 @@
         <mxCell id="46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;" edge="1" parent="1" source="22" target="25">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="47" value="Inference /api/chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;fontColor=#7c3aed;" edge="1" parent="1" source="21" target="31">
+        <mxCell id="47" value="Inference /api/chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;fontColor=#6d28d9;fillColor=#ffffff;" edge="1" parent="1" source="21" target="31">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="630" y="650" />
-              <mxPoint x="225" y="650" />
+              <mxPoint x="880" y="470" />
+              <mxPoint x="880" y="648" />
+              <mxPoint x="225" y="648" />
             </Array>
           </mxGeometry>
         </mxCell>

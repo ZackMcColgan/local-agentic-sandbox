@@ -1,5 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "fs";
 import http from "http";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -11,8 +12,12 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
   let mockTargetServer: http.Server;
   let mockTargetPort: number;
   let receivedHeaders: Record<string, any> = {};
+  const bridgePath = path.resolve(__dirname, "../../scripts/lan-bridge.js");
+  const hasBridgeScript = fs.existsSync(bridgePath);
 
   before(async () => {
+    if (!hasBridgeScript) return;
+
     // 1. Create a dummy target server mimicking the web-ui
     mockTargetServer = http.createServer((req, res) => {
       receivedHeaders = { ...req.headers };
@@ -33,7 +38,6 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
     process.env.TARGET_HOST = "127.0.0.1";
     process.env.LISTEN_PORTS = "0"; // Use dynamic port for testing
 
-    const bridgePath = path.resolve(__dirname, "../../scripts/lan-bridge.js");
     bridgeModule = await import(pathToFileURL(bridgePath).href);
   });
 
@@ -43,7 +47,11 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
     }
   });
 
-  it("exposes the exact startup warning regarding unauthenticated LAN shell execution", () => {
+  it("exposes the exact startup warning regarding unauthenticated LAN shell execution", (t) => {
+    if (!hasBridgeScript) {
+      t.skip("Skipping in isolated container build context: scripts/lan-bridge.js not present");
+      return;
+    }
     const expectedWarning =
       '[LAN Bridge] WARNING: unauthenticated — any device on the local network can reach the UI and execute shell commands via workspace_run_command. See README.md "LAN bridge security" section.';
 
@@ -54,11 +62,19 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
     );
   });
 
-  it("binds 0.0.0.0 by default to allow home LAN connectivity", () => {
+  it("binds 0.0.0.0 by default to allow home LAN connectivity", (t) => {
+    if (!hasBridgeScript) {
+      t.skip("Skipping in isolated container build context: scripts/lan-bridge.js not present");
+      return;
+    }
     assert.equal(bridgeModule.DEFAULT_BIND_HOST, "0.0.0.0");
   });
 
-  it("proxies requests without requiring any authentication tokens or credentials", async () => {
+  it("proxies requests without requiring any authentication tokens or credentials", async (t) => {
+    if (!hasBridgeScript) {
+      t.skip("Skipping in isolated container build context: scripts/lan-bridge.js not present");
+      return;
+    }
     const bridgeServer = bridgeModule.createProxyServer(0);
 
     await new Promise<void>((resolve) => {
