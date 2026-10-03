@@ -20,6 +20,9 @@ export function ThreadsSidebar({
   onDeleteThread
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [swipedThreadId, setSwipedThreadId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const touchStartXRef = React.useRef<number>(0);
 
   const filteredThreads = threads.filter((t) => {
     if (!searchQuery.trim()) return true;
@@ -87,12 +90,33 @@ export function ThreadsSidebar({
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
             const timeAgo = thread.timeLabel || formatThreadTimestamp(thread.updatedAt || thread.createdAt);
+            const isSwiped = swipedThreadId === thread.id;
+            const isConfirming = confirmDeleteId === thread.id;
 
             return (
               <div
                 key={thread.id}
-                onClick={() => onSelectThread(thread.id)}
-                className={`group relative flex items-center cursor-pointer transition-all ${
+                onTouchStart={(e) => {
+                  touchStartXRef.current = e.touches[0].clientX;
+                }}
+                onTouchEnd={(e) => {
+                  const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+                  if (deltaX < -40) {
+                    setSwipedThreadId(thread.id);
+                  } else if (deltaX > 40) {
+                    setSwipedThreadId(null);
+                    setConfirmDeleteId(null);
+                  }
+                }}
+                onClick={() => {
+                  if (isSwiped) {
+                    setSwipedThreadId(null);
+                    setConfirmDeleteId(null);
+                  } else {
+                    onSelectThread(thread.id);
+                  }
+                }}
+                className={`group relative flex items-center overflow-hidden cursor-pointer transition-all ${
                   isSelected
                     ? "bg-[#ede7fe] dark:bg-indigo-950/40"
                     : "hover:bg-slate-50 dark:hover:bg-zinc-900/40"
@@ -103,7 +127,7 @@ export function ThreadsSidebar({
                   <div className="w-1.5 self-stretch bg-[#5b32e6] rounded-r shrink-0" />
                 )}
 
-                <div className={`flex-1 p-3.5 min-w-0 ${!isSelected ? "pl-5" : "pl-3.5"}`}>
+                <div className={`flex-1 p-3.5 min-w-0 transition-transform ${!isSelected ? "pl-5" : "pl-3.5"} ${isSwiped ? "-translate-x-20" : ""}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={`text-xs sm:text-sm truncate ${
@@ -112,20 +136,31 @@ export function ThreadsSidebar({
                           : "font-semibold text-slate-900 dark:text-zinc-200"
                       }`}
                     >
-                      {thread.title || "Untitled Thread"}
+                      {thread.title || "New thread"}
                     </span>
 
+                    {/* Desktop quick-delete trigger without any ⋮ menu */}
                     {onDeleteThread && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteThread(thread.id);
+                          if (isConfirming) {
+                            onDeleteThread(thread.id);
+                            setConfirmDeleteId(null);
+                            setSwipedThreadId(null);
+                          } else {
+                            setConfirmDeleteId(thread.id);
+                          }
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 transition-opacity"
-                        title="Delete thread"
+                        className={`opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                          isConfirming
+                            ? "opacity-100 bg-rose-600 text-white"
+                            : "text-slate-400 hover:text-rose-500"
+                        }`}
+                        title={isConfirming ? "Confirm delete" : "Delete session"}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {isConfirming ? "Confirm?" : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
                     )}
                   </div>
@@ -154,6 +189,26 @@ export function ThreadsSidebar({
                     )}
                   </div>
                 </div>
+
+                {/* Swiped Action Button */}
+                {isSwiped && onDeleteThread && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isConfirming) {
+                        onDeleteThread(thread.id);
+                        setConfirmDeleteId(null);
+                        setSwipedThreadId(null);
+                      } else {
+                        setConfirmDeleteId(thread.id);
+                      }
+                    }}
+                    className="absolute right-0 top-0 bottom-0 px-4 bg-rose-600 text-white font-medium text-xs flex items-center justify-center transition-all z-10"
+                  >
+                    {isConfirming ? "Confirm?" : "Delete"}
+                  </button>
+                )}
               </div>
             );
           })

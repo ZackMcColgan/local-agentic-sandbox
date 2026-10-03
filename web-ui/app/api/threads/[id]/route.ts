@@ -89,7 +89,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const ok = threadStore.deleteThread(id);
+    const ok = await threadStore.deleteThread(id);
     return NextResponse.json({ success: ok });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

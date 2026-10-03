@@ -260,6 +260,7 @@ export default function Home() {
       await fetch(`/api/threads/${threadId}`, { method: "DELETE" });
       setThreads((prev) => prev.filter((t) => t.id !== threadId));
       if (selectedThreadId === threadId) {
+        setActiveTask(null);
         const remaining = threads.filter((t) => t.id !== threadId);
         setSelectedThreadId(remaining.length > 0 ? remaining[0].id : null);
         if (remaining.length === 0) setMessages([]);
@@ -419,7 +420,7 @@ export default function Home() {
               agentMode={agentMode}
               reasoningEffort={reasoningEffort}
               threadId={currentThread?.id}
-              threadTitle={currentThread?.title || "New task"}
+              threadTitle={currentThread?.title || "New thread"}
               threadStatus={currentThread?.status}
               activeTask={activeTask}
               onStopTask={handleStopRun}
@@ -427,6 +428,7 @@ export default function Home() {
               onOpenModelSheet={() => setIsModelSheetOpen(true)}
               onLaunchTask={handleLaunchTask}
               onNewThread={handleNewThread}
+              onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
               onViewSecurityTelemetry={() => setViewMode("security")}
             />
           </div>

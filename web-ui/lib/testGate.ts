@@ -86,7 +86,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/unifiedUi.test.ts"]
+    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),

@@ -27,15 +27,15 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
-import { copyText } from "@/lib/clipboard";
+import { copyText } from "../lib/clipboard";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
-import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "@/lib/svgUtils";
-import { AgentMode, isReasoningEffortSupported } from "@/config/models";
-import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
-import { parseThinkingAndContent } from "@/lib/chatUtils";
-import { TaskManifest } from "@/lib/subagents/types";
+import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
+import { AgentMode, isReasoningEffortSupported } from "../config/models";
+import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
+import { parseThinkingAndContent } from "../lib/chatUtils";
+import { TaskManifest } from "../lib/subagents/types";
 
 export interface AttachedFileItem {
   id: string;
@@ -85,6 +85,8 @@ interface ChatStreamProps {
   onOpenModelSheet?: () => void;
   onLaunchTask?: (goal: string, attachments?: any[]) => Promise<void>;
   onNewThread?: () => void;
+  onDeleteThread?: () => void;
+  onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -172,7 +174,9 @@ export function ChatStream({
   onBackToList,
   onOpenModelSheet,
   onLaunchTask,
-  onNewThread
+  onNewThread,
+  onDeleteThread,
+  onSendMessage
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -526,11 +530,12 @@ export function ChatStream({
     }
   };
 
-  const shortModelLabel = activeModel.includes("qwen")
+  const modelSafe = activeModel || "qwen3.8:27b-q3_k_m";
+  const shortModelLabel = modelSafe.includes("qwen")
     ? "qwen3.8"
-    : activeModel.includes("gemma")
+    : modelSafe.includes("gemma")
     ? "gemma4:e4b"
-    : activeModel.split(":")[0];
+    : modelSafe.split(":")[0];
 
   return (
     <div
@@ -638,13 +643,22 @@ export function ChatStream({
                     Security telemetry
                   </button>
                 )}
+                {onDeleteThread && (
+                  <button
+                    type="button"
+                    onClick={onDeleteThread}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                  >
+                    Delete session
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
                     const seed = clearChatHistory(activeModel);
                     setMessages(seed);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                 >
                   Clear messages
                 </button>

@@ -18,8 +18,8 @@ import {
   Sparkles,
   ExternalLink
 } from "lucide-react";
-import { sanitizeSvg, isDrawioXml } from "@/lib/svgUtils";
-import { copyText } from "@/lib/clipboard";
+import { sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
+import { copyText } from "../lib/clipboard";
 
 export interface SvgViewerProps {
   code?: string;
