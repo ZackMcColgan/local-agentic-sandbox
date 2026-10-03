@@ -167,10 +167,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/ingestion"),
     tests: ["tests/ingestionPipeline.test.ts"]
   },
-  // Models config
+  // Models config & modelfiles
   {
-    match: (p) => p.includes("config/models"),
-    tests: ["tests/models.test.ts", "tests/agentEngine.test.ts"]
+    match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles"),
+    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts", "tests/agentEngine.test.ts"]
   },
   // Sandbox tier runner
   {
