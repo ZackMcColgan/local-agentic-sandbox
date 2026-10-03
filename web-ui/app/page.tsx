@@ -19,8 +19,13 @@ import {
   ArrowLeft,
   Hammer,
   Shield,
-  Activity
+  Activity,
+  Menu
 } from "lucide-react";
+import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
+import { SettingsView } from "@/components/SettingsView";
+import { BuildsView } from "@/components/BuildsView";
+import { SkillsView } from "@/components/SkillsView";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
   getInitialWelcomeMessage,
@@ -49,6 +54,8 @@ export default function Home() {
   const [securityPosture, setSecurityPosture] = useState<any>(undefined);
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -132,9 +139,27 @@ export default function Home() {
         if (Array.isArray(data.threads)) {
           setThreads(data.threads);
           if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
-            // Find active thread or pick first
-            const active = data.threads.find((t: Thread) => t.status === "active") || data.threads[0];
-            setSelectedThreadId(active.id);
+            const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+            const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+            const explicitThread = urlParams?.get("thread");
+            const explicitView = urlParams?.get("view") as NavView;
+            const drawerQuery = urlParams?.get("drawer");
+
+            if (drawerQuery === "open" || drawerQuery === "true") {
+              setIsDrawerOpen(true);
+            }
+
+            if (explicitView) {
+              setActiveNavView(explicitView);
+            }
+
+            if (explicitThread) {
+              const matched = data.threads.find((t: Thread) => t.id === explicitThread);
+              if (matched) setSelectedThreadId(matched.id);
+            } else if (!isMobile) {
+              const active = data.threads.find((t: Thread) => t.status === "active") || data.threads[0];
+              setSelectedThreadId(active.id);
+            }
           }
         }
       }
@@ -252,6 +277,7 @@ export default function Home() {
   const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId);
     setViewMode("unified");
+    setActiveNavView("sessions");
     try {
       window.history.pushState({ threadId }, "", `?thread=${encodeURIComponent(threadId)}`);
     } catch {}
@@ -381,6 +407,21 @@ export default function Home() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans">
+      {/* Material 3 Navigation Drawer matching Mockup media_1791044464191.webp */}
+      <NavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        activeView={activeNavView}
+        onNavigate={(view) => {
+          setActiveNavView(view);
+          if (view === "sessions") {
+            setSelectedThreadId(null);
+          }
+        }}
+        onNewSession={handleNewThread}
+        pendingSkillsCount={0}
+      />
+
       {/* Modal Bottom Sheet for Model & Thinking Effort */}
       <ModelBottomSheet
         isOpen={isModelSheetOpen}
@@ -396,8 +437,54 @@ export default function Home() {
         installedModels={installedModels}
       />
 
-      {/* Main Unified View: Sidebar + Thread View */}
-      {viewMode === "security" ? (
+      {/* Main View Router */}
+      {activeNavView === "settings" ? (
+        <SettingsView
+          onBack={() => setActiveNavView("sessions")}
+          selectedModel={selectedModel}
+          reasoningEffort={reasoningEffort}
+          onOpenModelSheet={() => setIsModelSheetOpen(true)}
+        />
+      ) : activeNavView === "builds" ? (
+        <BuildsView
+          onOpenDrawer={() => setIsDrawerOpen(true)}
+          activeTask={activeTask}
+          onStopTask={handleStopRun}
+          onSelectThread={handleSelectThread}
+        />
+      ) : activeNavView === "skills" ? (
+        <SkillsView
+          onOpenDrawer={() => setIsDrawerOpen(true)}
+          pendingCount={0}
+        />
+      ) : activeNavView === "morning-report" ? (
+        <div className="flex-1 min-h-0 flex flex-col bg-[#f4f3f7] dark:bg-zinc-950 overflow-y-auto">
+          <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Open menu"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+                  Morning Report
+                </h1>
+              </div>
+            </div>
+            {morningReport ? (
+              <MorningReportView report={morningReport} />
+            ) : (
+              <div className="p-8 text-center text-slate-400 dark:text-zinc-500 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-100 dark:border-zinc-800">
+                No overnight report generated yet. Reports synthesize at completion of overnight supervisor runs.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : viewMode === "security" ? (
         <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-zinc-950">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
             <div>
@@ -414,7 +501,7 @@ export default function Home() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Back to Threads</span>
+              <span>Back to Sessions</span>
             </button>
           </div>
 
@@ -432,7 +519,7 @@ export default function Home() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* Threads Sidebar: On desktop visible side-by-side; on mobile visible if no thread selected */}
+          {/* Sessions List: On desktop visible side-by-side; on mobile visible if no thread selected */}
           <div
             className={`${
               selectedThreadId !== null ? "hidden sm:flex" : "flex"
@@ -444,6 +531,7 @@ export default function Home() {
               onSelectThread={handleSelectThread}
               onNewThread={handleNewThread}
               onDeleteThread={handleDeleteThread}
+              onOpenDrawer={() => setIsDrawerOpen(true)}
             />
           </div>
 
@@ -461,16 +549,18 @@ export default function Home() {
               agentMode={agentMode}
               reasoningEffort={reasoningEffort}
               threadId={currentThread?.id}
-              threadTitle={currentThread?.title || "New thread"}
+              threadTitle={currentThread?.title || "New session"}
               threadStatus={currentThread?.status}
               activeTask={activeTask}
               onStopTask={handleStopRun}
               onBackToList={handleBackToList}
               onOpenModelSheet={() => setIsModelSheetOpen(true)}
+              onOpenDrawer={() => setIsDrawerOpen(true)}
               onLaunchTask={handleLaunchTask}
               onNewThread={handleNewThread}
               onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
               onViewSecurityTelemetry={() => setViewMode("security")}
+              placeholder="Message..."
             />
           </div>
         </div>

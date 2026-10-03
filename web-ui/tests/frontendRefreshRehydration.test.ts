@@ -74,8 +74,8 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
     });
 
     const html = container.innerHTML;
-    assert.ok(html.includes("Describe the engineering task…"), "Must render M3 unified input field in empty state");
-    assert.ok(html.includes("Threads"), "Must render Threads header in empty state");
+    assert.ok(html.includes("Message..."), "Must render M3 unified input field in empty state");
+    assert.ok(html.includes("Sessions"), "Must render Sessions header in empty state");
     assert.ok(!html.includes("Milestone checklist"), "Empty state must not show active run checklist");
   });
 

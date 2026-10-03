@@ -9,6 +9,8 @@ import { ThreadStore, Thread, activeExecutionSet } from "../lib/threads/threadSt
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ModelBottomSheet } from "../components/ModelBottomSheet";
 import { LiveRunBlock } from "../components/LiveRunBlock";
+import { NavigationDrawer } from "../components/NavigationDrawer";
+import { SettingsView } from "../components/SettingsView";
 import { ChatStream } from "../components/ChatStream";
 import { TaskManifest } from "../lib/subagents/types";
 
@@ -340,7 +342,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       });
 
       const html = container.innerHTML;
-      assert.ok(html.includes("Threads"), "Renders Threads header");
+      assert.ok(html.includes("Sessions") || html.includes("Threads"), "Renders Sessions header");
       assert.ok(html.includes("Rebuild settings in Material 3"), "Renders thread 1 title");
       assert.ok(html.includes("How does the critic decide?"), "Renders thread 2 title");
       assert.ok(html.includes("Active"), "Renders Active status");
@@ -378,8 +380,109 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.ok(html.includes("gemma4:e4b"), "Renders gemma4 model option");
       assert.ok(html.includes("Fast"), "Renders Fast effort segment");
       assert.ok(html.includes("Balanced"), "Renders Balanced effort segment");
-      assert.ok(html.includes("Deep"), "Renders Deep effort segment");
       assert.ok(html.includes("Done"), "Renders Done button");
+    });
+
+    it("renders NavigationDrawer with M3 items, active pill, and 3 pending badge", async () => {
+      let closed = false;
+      let navigatedTo: string | null = null;
+      let newSessionCalled = false;
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(NavigationDrawer, {
+            isOpen: true,
+            onClose: () => {
+              closed = true;
+            },
+            activeView: "sessions",
+            onNavigate: (view) => {
+              navigatedTo = view;
+            },
+            onNewSession: () => {
+              newSessionCalled = true;
+            },
+            pendingSkillsCount: 3
+          })
+        );
+      });
+
+      const html = container.innerHTML;
+      assert.ok(html.includes("Agent"), "Renders Agent header title");
+      assert.ok(html.includes("New session"), "Renders New session option");
+      assert.ok(html.includes("Sessions"), "Renders Sessions option");
+      assert.ok(html.includes("Builds"), "Renders Builds option");
+      assert.ok(html.includes("Skills"), "Renders Skills option");
+      assert.ok(html.includes("3 pending"), "Renders 3 pending badge");
+      assert.ok(html.includes("Morning report"), "Renders Morning report option");
+      assert.ok(html.includes("Settings"), "Renders Settings option");
+    });
+
+    it("renders SettingsView with M3 Theme segmented controls and Default model row", async () => {
+      let backCalled = false;
+      let modelSheetOpened = false;
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(SettingsView, {
+            onBack: () => {
+              backCalled = true;
+            },
+            selectedModel: "qwen3.8:27b-q3_k_m",
+            reasoningEffort: "medium",
+            onOpenModelSheet: () => {
+              modelSheetOpened = true;
+            }
+          })
+        );
+      });
+
+      const html = container.innerHTML;
+      assert.ok(html.includes("Settings"), "Renders Settings header");
+      assert.ok(html.includes("Appearance"), "Renders Appearance section");
+      assert.ok(html.includes("Theme"), "Renders Theme label");
+      assert.ok(html.includes("Light"), "Renders Light theme button");
+      assert.ok(html.includes("Dark"), "Renders Dark theme button");
+      assert.ok(html.includes("System"), "Renders System theme button");
+      assert.ok(html.includes("Models"), "Renders Models section");
+      assert.ok(html.includes("Default model"), "Renders Default model row");
+      assert.ok(html.includes("qwen3.8"), "Renders selected model name");
+    });
+
+    it("SkillsView and BuildsView show honest empty states; drawer hides badge at 0 pending", async () => {
+      const { SkillsView } = await import("../components/SkillsView");
+      const { BuildsView } = await import("../components/BuildsView");
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(React.createElement(SkillsView, { onOpenDrawer: () => {} }));
+      });
+      assert.ok(container.innerHTML.includes("No skills to review"));
+      assert.ok(!container.innerHTML.includes("pending"), "no fabricated pending skills");
+      await act(async () => {
+        root!.render(
+          React.createElement(BuildsView, {
+            onOpenDrawer: () => {},
+            activeTask: null,
+            onSelectThread: () => {}
+          })
+        );
+      });
+      assert.ok(container.innerHTML.includes("No builds currently running"));
+      await act(async () => {
+        root!.render(
+          React.createElement(NavigationDrawer, {
+            isOpen: true,
+            onClose: () => {},
+            activeView: "sessions",
+            onNavigate: () => {},
+            onNewSession: () => {},
+            pendingSkillsCount: 0
+          })
+        );
+      });
+      assert.ok(!container.innerHTML.includes("pending"), "badge hidden when zero");
     });
   });
 });

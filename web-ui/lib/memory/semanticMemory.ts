@@ -54,7 +54,7 @@ export async function generateOllamaEmbedding(
         model,
         prompt: text.slice(0, 500)
       }),
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(Number(process.env.OLLAMA_EMBED_TIMEOUT_MS) || 60000)
     });
 
     if (!res.ok) {
