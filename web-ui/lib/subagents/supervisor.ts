@@ -20,6 +20,7 @@ import {
   createRecorderWorker,
   getResolvedGitSha
 } from "./workerPool";
+import { TelemetryTracer, formatTraceparent } from "../telemetry";
 
 /**
  * Resolves genuine Git commit SHA via getResolvedGitSha.
@@ -206,12 +207,37 @@ export const OvernightStateAnnotation = Annotation.Root({
   nodeHistory: Annotation<string[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
     default: () => []
+  }),
+  traceId: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
+  }),
+  supervisorSpanId: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
+  }),
+  plannerSpanId: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
+  }),
+  workerSpanId: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
+  }),
+  criticSpanId: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
+  }),
+  traceparent: Annotation<string>({
+    reducer: (curr, update) => update ?? curr,
+    default: () => ""
   })
 });
 
 export interface CreateGraphOptions {
   checkpointer?: FileCheckpointSaver | MemorySaver;
   workerPool?: WorkerPool;
+  tracer?: TelemetryTracer;
 }
 
 /**
@@ -220,11 +246,34 @@ export interface CreateGraphOptions {
  */
 export function createOvernightGraph(options?: CreateGraphOptions) {
   const workerPool = options?.workerPool || new WorkerPool();
+  const tracer = options?.tracer;
   const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
 
   const workflow = new StateGraph(OvernightStateAnnotation)
     // 1. Planner Node: decomposes goal into machine-checkable milestones & SPEC.md
     .addNode("planner", async (state) => {
+      let supervisorSpanId = state.supervisorSpanId;
+      let plannerSpanId = state.plannerSpanId;
+      let currentTraceId = state.traceId;
+      let currentTraceparent = state.traceparent;
+
+      if (tracer) {
+        if (!supervisorSpanId) {
+          const supSpan = tracer.startSpan("supervisor.task", undefined, {
+            taskId: state.taskId,
+            goal: state.goal
+          });
+          supervisorSpanId = supSpan.spanId;
+        }
+        currentTraceId = tracer.getTraceId();
+        const plannerSpan = tracer.startSpan("supervisor.planner", supervisorSpanId, {
+          taskId: state.taskId,
+          goal: state.goal
+        });
+        plannerSpanId = plannerSpan.spanId;
+        currentTraceparent = tracer.getTraceparent(plannerSpanId);
+      }
+
       const existingMilestones = state.milestones && state.milestones.length > 0;
       const planSpec = existingMilestones
         ? { milestones: state.milestones }
@@ -233,6 +282,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
             goal: state.goal,
             toolchain: state.toolchain || "node:22"
           });
+
       return {
         milestones: planSpec.milestones,
         status: "active" as TaskStatus,
@@ -241,6 +291,10 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         criticApproved: false,
         criticFeedback: [],
         nodeHistory: ["planner"],
+        traceId: currentTraceId,
+        supervisorSpanId,
+        plannerSpanId,
+        traceparent: currentTraceparent,
         journal: [
           {
             timestamp: new Date().toISOString(),
@@ -253,6 +307,13 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
 
     // 2. Explorer Node: inspects workspace tree and provides distilled inventory
     .addNode("explorer", async (state) => {
+      let explorerSpan: any;
+      if (tracer) {
+        explorerSpan = tracer.startSpan("supervisor.explorer", state.plannerSpanId || state.supervisorSpanId, {
+          taskId: state.taskId
+        });
+      }
+
       const explorer = createExplorerWorker();
       const inventory = await workerPool.executeJob({
         role: "explorer",
@@ -261,6 +322,11 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           return await explorer.exploreWorkspace({ path: "workspace" });
         }
       });
+
+      if (explorerSpan) {
+        explorerSpan.end("ok", { inventoryLength: inventory.length });
+      }
+
       return {
         nodeHistory: ["explorer"],
         journal: [
@@ -280,6 +346,19 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       const isRetry = state.criticApproved === false && state.criticFeedback.length > 0;
       const currentIteration = isRetry ? (state.iterationCount || 1) + 1 : 1;
 
+      let builderSpan: any;
+      let workerSpanId = state.workerSpanId;
+      if (tracer) {
+        // Parent is plannerSpanId (supervisor -> planner -> worker)
+        const parentSpan = state.plannerSpanId || state.supervisorSpanId;
+        builderSpan = tracer.startSpan("supervisor.builder", parentSpan, {
+          taskId: state.taskId,
+          milestoneId: currentMilestone?.id,
+          iteration: currentIteration
+        });
+        workerSpanId = builderSpan.spanId;
+      }
+
       const builder = createBuilderWorker({ model: workerPool.getModelForRole("builder") });
       const builderRes = await workerPool.executeJob({
         role: "builder",
@@ -293,6 +372,14 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           });
         }
       });
+
+      if (builderSpan) {
+        builderSpan.end("ok", {
+          gitSha: builderRes.gitSha,
+          diffLength: builderRes.diff.length,
+          iterations: builderRes.iterations
+        });
+      }
 
       const updatedMilestones = state.milestones.map((m, idx) => {
         if (idx === mIdx) {
@@ -312,6 +399,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         currentDiff: builderRes.diff,
         currentGitSha: builderRes.gitSha,
         iterationCount: builderRes.iterations,
+        workerSpanId,
         criticApproved: false,
         criticFeedback: [],
         nodeHistory: ["builder"],
@@ -331,6 +419,19 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
       const critic = createCriticWorker({ model: workerPool.getModelForRole("critic") });
 
+      let criticSpan: any;
+      let criticSpanId = state.criticSpanId;
+      if (tracer) {
+        // Parent is workerSpanId (supervisor -> planner -> worker -> critic)
+        const parentSpan = state.workerSpanId || state.plannerSpanId || state.supervisorSpanId;
+        criticSpan = tracer.startSpan("supervisor.critic", parentSpan, {
+          taskId: state.taskId,
+          milestoneId: currentMilestone?.id,
+          iteration: state.iterationCount
+        });
+        criticSpanId = criticSpan.spanId;
+      }
+
       const criticRes = await workerPool.executeJob({
         role: "critic",
         taskId: state.taskId,
@@ -340,6 +441,14 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           });
         }
       });
+
+      if (criticSpan) {
+        criticSpan.end(criticRes.approved ? "ok" : "error", {
+          approved: criticRes.approved,
+          feedbackCount: criticRes.feedback.length,
+          feedback: criticRes.feedback.join("; ")
+        });
+      }
 
       const criticRounds = (currentMilestone.criticRounds || 0) + 1;
       const updatedMilestones = state.milestones.map((m, idx) => {
@@ -357,6 +466,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         milestones: updatedMilestones,
         criticApproved: criticRes.approved,
         criticFeedback: criticRes.feedback,
+        criticSpanId,
         nodeHistory: ["critic"],
         journal: [
           {
@@ -374,6 +484,15 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
       const recorder = createRecorderWorker();
 
+      let recorderSpan: any;
+      if (tracer) {
+        const parentSpan = state.criticSpanId || state.workerSpanId || state.supervisorSpanId;
+        recorderSpan = tracer.startSpan("supervisor.recorder", parentSpan, {
+          taskId: state.taskId,
+          milestoneId: currentMilestone?.id
+        });
+      }
+
       const recorderRes = await workerPool.executeJob({
         role: "recorder",
         taskId: state.taskId,
@@ -384,6 +503,10 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           });
         }
       });
+
+      if (recorderSpan) {
+        recorderSpan.end("ok", { promoted: recorderRes.promoted });
+      }
 
       const updatedMilestones = state.milestones.map((m, idx) => {
         if (idx === mIdx) {
@@ -456,6 +579,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
 export interface SupervisorOptions {
   checkpointDirectory?: string;
   stallTimeoutMs?: number;
+  tracer?: TelemetryTracer;
 }
 
 export interface StepExecutorOptions {
@@ -474,6 +598,7 @@ export class OvernightSupervisor {
   readonly checkpointDirectory: string;
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
+  readonly tracer?: TelemetryTracer;
 
   constructor(options?: SupervisorOptions) {
     this.checkpointDirectory =
@@ -482,6 +607,76 @@ export class OvernightSupervisor {
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
+    this.tracer = options?.tracer;
+  }
+
+  /**
+   * Executes a task milestone lifecycle with distributed telemetry tracing.
+   * Spans propagate with strict parent-child linkage:
+   * supervisor -> planner -> worker (builder) -> critic
+   */
+  async executeMilestoneWithTelemetry(
+    task: TaskManifest,
+    milestoneIndex: number,
+    executor: (milestone: Milestone) => Promise<{ diff: string; gitSha: string; approved: boolean; feedback: string[] }>
+  ): Promise<{
+    milestone: Milestone;
+    traceId: string;
+    supervisorSpanId: string;
+    plannerSpanId: string;
+    workerSpanId: string;
+    criticSpanId: string;
+  }> {
+    const tracer = this.tracer || new TelemetryTracer(`task_${task.taskId}`);
+    const traceId = tracer.getTraceId();
+
+    // 1. Root Supervisor Span
+    const supSpan = tracer.startSpan("supervisor.task", undefined, {
+      taskId: task.taskId,
+      milestoneIndex
+    });
+    const supervisorSpanId = supSpan.spanId;
+
+    // 2. Planner Span (Child of Supervisor)
+    const plannerSpan = tracer.startSpan("supervisor.planner", supervisorSpanId, {
+      taskId: task.taskId,
+      milestoneId: task.milestones[milestoneIndex]?.id
+    });
+    const plannerSpanId = plannerSpan.spanId;
+    plannerSpan.end("ok");
+
+    // 3. Worker / Builder Span (Child of Planner)
+    const workerSpan = tracer.startSpan("supervisor.worker", plannerSpanId, {
+      taskId: task.taskId,
+      milestoneId: task.milestones[milestoneIndex]?.id
+    });
+    const workerSpanId = workerSpan.spanId;
+
+    const milestone = task.milestones[milestoneIndex];
+    const execRes = await executor(milestone);
+    workerSpan.end("ok", { gitSha: execRes.gitSha, diffLength: execRes.diff.length });
+
+    // 4. Critic Span (Child of Worker)
+    const criticSpan = tracer.startSpan("supervisor.critic", workerSpanId, {
+      taskId: task.taskId,
+      milestoneId: milestone?.id
+    });
+    const criticSpanId = criticSpan.spanId;
+    criticSpan.end(execRes.approved ? "ok" : "error", {
+      approved: execRes.approved,
+      feedback: execRes.feedback.join("; ")
+    });
+
+    supSpan.end("ok");
+
+    return {
+      milestone,
+      traceId,
+      supervisorSpanId,
+      plannerSpanId,
+      workerSpanId,
+      criticSpanId
+    };
   }
 
   getCheckpointFilePath(taskId: string): string {

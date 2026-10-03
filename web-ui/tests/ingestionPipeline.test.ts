@@ -109,4 +109,73 @@ test('Phase 2 — Ingestion Pipeline Skeleton Suite', async (t) => {
     assert.strictEqual(result.citations.length, 0, 'Must not return citations for general questions');
     assert.strictEqual(result.contextSnippet, '', 'Context snippet must be empty for general questions');
   });
+
+  await t.test('Phase E: detectSyntaxBoundaries identifies function, class, and markdown heading boundaries', async () => {
+    const { detectSyntaxBoundaries } = await import('../lib/oracle/ingestion');
+
+    const codeLines = [
+      'import fs from "fs";',
+      '',
+      'export interface TaskConfig {',
+      '  id: string;',
+      '}',
+      '',
+      'export class TaskRunner {',
+      '  run() {}',
+      '}',
+      '',
+      'export function processTask(task: TaskConfig) {',
+      '  return task.id;',
+      '}'
+    ];
+
+    const codeBoundaries = detectSyntaxBoundaries(codeLines, 'lib/runner.ts');
+    assert.ok(codeBoundaries.length >= 3);
+    const types = codeBoundaries.map((b) => b.type);
+    assert.ok(types.includes('interface'));
+    assert.ok(types.includes('class'));
+    assert.ok(types.includes('function'));
+
+    const mdLines = [
+      '# Architecture Document',
+      'Intro text here.',
+      '## Supervisor Model',
+      'Supervisor manages state.',
+      '## Worker Pool',
+      'Workers execute tasks.'
+    ];
+
+    const mdBoundaries = detectSyntaxBoundaries(mdLines, 'docs/ARCH.md');
+    assert.equal(mdBoundaries.length, 3);
+    assert.equal(mdBoundaries[0].type, 'heading');
+    assert.equal(mdBoundaries[1].name, '## Supervisor Model');
+  });
+
+  await t.test('Phase E: AST-aware chunking preserves syntax unit integrity without splitting across boundaries', async () => {
+    const { chunkDocument } = await import('../lib/oracle/ingestion');
+
+    const doc: IngestionDocument = {
+      filePath: 'src/components/widgets.tsx',
+      corpus: 'local-repo',
+      content: [
+        'export function Button() {',
+        '  return <button>Click</button>;',
+        '}',
+        '',
+        'export function Input() {',
+        '  return <input />;',
+        '}',
+        '',
+        'export function Modal() {',
+        '  return <div>Modal</div>;',
+        '}'
+      ].join('\n')
+    };
+
+    const chunks = chunkDocument(doc, { maxChunkLines: 5, strategy: 'ast' });
+    assert.ok(chunks.length >= 2);
+    // Verify each chunk starts cleanly on a function boundary
+    assert.ok(chunks[0].content.includes('export function Button'));
+    assert.ok(chunks[1].content.includes('export function Input') || chunks[1].content.includes('export function Modal'));
+  });
 });

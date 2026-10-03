@@ -9,6 +9,70 @@ export interface IngestionDocument {
 export interface ChunkOptions {
   maxChunkLines?: number;
   overlapLines?: number;
+  strategy?: "line" | "ast" | "syntax";
+}
+
+export interface SyntaxBoundary {
+  lineIndex: number; // 0-indexed
+  type: "function" | "class" | "interface" | "type" | "heading" | "block";
+  name?: string;
+}
+
+/**
+ * Detects syntax boundaries (functions, classes, interfaces, markdown headings)
+ * to align chunks with natural code/doc structural boundaries.
+ */
+export function detectSyntaxBoundaries(lines: string[], filePath: string): SyntaxBoundary[] {
+  const boundaries: SyntaxBoundary[] = [];
+  const ext = (filePath.split('.').pop() || '').toLowerCase();
+  const isMd = ext === 'md' || ext === 'markdown';
+  const isCode = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext);
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (isMd) {
+      if (/^#{1,6}\s+/.test(trimmed)) {
+        boundaries.push({ lineIndex: i, type: "heading", name: trimmed });
+      } else if (/^---$/.test(trimmed)) {
+        boundaries.push({ lineIndex: i, type: "block", name: "separator" });
+      }
+    } else if (isCode) {
+      // Top-level or exported functions
+      const fnMatch = trimmed.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_$]+)/);
+      if (fnMatch) {
+        boundaries.push({ lineIndex: i, type: "function", name: fnMatch[1] });
+        continue;
+      }
+      // Top-level classes
+      const classMatch = trimmed.match(/^(?:export\s+)?(?:abstract\s+)?class\s+([a-zA-Z0-9_$]+)/);
+      if (classMatch) {
+        boundaries.push({ lineIndex: i, type: "class", name: classMatch[1] });
+        continue;
+      }
+      // Interfaces, types, enums
+      const ifaceMatch = trimmed.match(/^(?:export\s+)?(?:interface|type|enum)\s+([a-zA-Z0-9_$]+)/);
+      if (ifaceMatch) {
+        boundaries.push({ lineIndex: i, type: "interface", name: ifaceMatch[1] });
+        continue;
+      }
+      // Const arrow functions
+      const constFnMatch = trimmed.match(/^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/);
+      if (constFnMatch) {
+        boundaries.push({ lineIndex: i, type: "function", name: constFnMatch[1] });
+        continue;
+      }
+      // Test definitions
+      const testMatch = trimmed.match(/^(?:test|describe|it)\s*\(\s*["'`]([^"'`]+)/);
+      if (testMatch) {
+        boundaries.push({ lineIndex: i, type: "block", name: testMatch[1] });
+        continue;
+      }
+    }
+  }
+  return boundaries;
 }
 
 export interface DocumentChunk {
@@ -45,7 +109,8 @@ export interface QdrantPoint {
 }
 
 /**
- * Deterministically chunks a document with line range awareness and citation anchors
+ * Deterministically chunks a document with line range awareness, citation anchors,
+ * and syntax boundary / AST awareness (functions, classes, interfaces, markdown headings).
  */
 export function chunkDocument(
   doc: IngestionDocument,
@@ -53,15 +118,38 @@ export function chunkDocument(
 ): DocumentChunk[] {
   const maxChunkLines = options.maxChunkLines ?? 50;
   const overlapLines = options.overlapLines ?? 10;
+  const strategy = options.strategy ?? "ast";
   const lines = doc.content.split('\n');
   const chunks: DocumentChunk[] = [];
+
+  if (lines.length === 0) return chunks;
+
+  // Detect syntax boundaries for ast/syntax strategy
+  const boundaries = strategy === "line" ? [] : detectSyntaxBoundaries(lines, doc.filePath);
 
   let currentLine = 0;
   let chunkIdx = 0;
 
   while (currentLine < lines.length) {
     const startLine = currentLine + 1; // 1-indexed
-    const chunkEnd = Math.min(currentLine + maxChunkLines, lines.length);
+    let chunkEnd = Math.min(currentLine + maxChunkLines, lines.length);
+
+    if (boundaries.length > 0 && chunkEnd < lines.length) {
+      // Look for the best syntax boundary in [currentLine + 1, chunkEnd]
+      const candidateBoundaries = boundaries.filter(
+        (b) => b.lineIndex > currentLine && b.lineIndex <= chunkEnd
+      );
+
+      if (candidateBoundaries.length > 0) {
+        const minLines = Math.max(3, Math.floor(maxChunkLines * 0.3));
+        const eligible = candidateBoundaries.filter((b) => b.lineIndex - currentLine >= minLines);
+        if (eligible.length > 0) {
+          const chosen = eligible[eligible.length - 1];
+          chunkEnd = chosen.lineIndex;
+        }
+      }
+    }
+
     const chunkSlice = lines.slice(currentLine, chunkEnd);
     const endLine = chunkEnd;
 
@@ -85,7 +173,12 @@ export function chunkDocument(
     if (chunkEnd >= lines.length) {
       break;
     }
-    currentLine += maxChunkLines - overlapLines;
+
+    if (boundaries.length > 0 && chunkEnd < lines.length) {
+      currentLine = chunkEnd;
+    } else {
+      currentLine += Math.max(1, maxChunkLines - overlapLines);
+    }
   }
 
   return chunks;
