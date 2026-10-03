@@ -72,8 +72,19 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
       "tests/chatHistory.test.ts",
-      "tests/frontendRefreshRehydration.test.ts"
+      "tests/frontendRefreshRehydration.test.ts",
+      "tests/unifiedUi.test.ts"
     ]
+  },
+  // Unified Agent UI (Material 3) components, threads store & API
+  {
+    match: (p) =>
+      p.includes("lib/threads") ||
+      p.includes("app/api/threads") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("components/ModelBottomSheet") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/unifiedUi.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),

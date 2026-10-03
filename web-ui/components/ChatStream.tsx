@@ -12,18 +12,17 @@ import {
   ShieldCheck,
   Copy,
   Check,
-  Edit3,
   RotateCcw,
   ChevronDown,
   ChevronUp,
   Globe,
-  Cpu,
   Trash2,
-  ArrowRight,
   Paperclip,
   FileText,
   X,
-  Image as ImageIcon
+  Square,
+  ChevronLeft,
+  MoreHorizontal
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -31,10 +30,12 @@ import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "@/lib/clipboard";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
+import { LiveRunBlock } from "./LiveRunBlock";
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "@/lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "@/config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "@/lib/chatHistory";
 import { parseThinkingAndContent } from "@/lib/chatUtils";
+import { TaskManifest } from "@/lib/subagents/types";
 
 export interface AttachedFileItem {
   id: string;
@@ -61,6 +62,8 @@ export interface ChatMessage {
   }>;
   modelUsed?: string;
   durationMs?: number;
+  taskId?: string;
+  isStopped?: boolean;
 }
 
 interface ChatStreamProps {
@@ -72,6 +75,15 @@ interface ChatStreamProps {
   activeBranch?: string;
   messages?: ChatMessage[];
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  threadId?: string;
+  threadTitle?: string;
+  threadStatus?: "active" | "stopped" | "completed" | "failed";
+  activeTask?: TaskManifest | null;
+  onStopTask?: () => Promise<void> | void;
+  onBackToList?: () => void;
+  onOpenModelSheet?: () => void;
+  onLaunchTask?: (goal: string, attachments?: any[]) => Promise<void>;
+  onNewThread?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -92,7 +104,6 @@ function fileToBase64(file: File): Promise<string> {
 function CodeBlock({ language, code }: { language?: string; code: string }) {
   const [copied, setCopied] = useState(false);
 
-  // If this code block contains or represents an SVG, render the interactive SvgViewer!
   if (isSvgCode(code, language)) {
     return (
       <div className="my-3">
@@ -115,29 +126,28 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   };
 
   return (
-    <div className="my-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-900 dark:bg-black overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800/80 dark:bg-zinc-900 border-b border-slate-700/60 dark:border-zinc-800 text-[11px] font-mono text-slate-400">
+    <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-900 dark:bg-black overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-800/80 dark:bg-zinc-900 border-b border-slate-700/60 dark:border-zinc-800 text-[11px] font-mono text-slate-400">
         <span className="text-emerald-400 font-medium">{language || "bash"}</span>
         <button
-          onClick={handleCopy}
           type="button"
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-slate-700 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-200 transition-colors"
-          title="Copy code"
+          onClick={handleCopy}
+          className="flex items-center gap-1 hover:text-white transition-colors"
         >
           {copied ? (
             <>
               <Check className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-400 text-[10px]">Copied!</span>
+              <span className="text-emerald-400">Copied</span>
             </>
           ) : (
             <>
               <Copy className="h-3 w-3" />
-              <span className="text-[10px]">Copy</span>
+              <span>Copy</span>
             </>
           )}
         </button>
       </div>
-      <pre className="p-3 text-[11px] font-mono text-emerald-300/90 overflow-x-auto leading-relaxed">
+      <pre className="p-3.5 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
@@ -152,22 +162,35 @@ export function ChatStream({
   onViewSecurityTelemetry,
   activeBranch,
   messages: propsMessages,
-  setMessages: propsSetMessages
+  setMessages: propsSetMessages,
+  threadId,
+  threadTitle,
+  threadStatus,
+  activeTask,
+  onStopTask,
+  onBackToList,
+  onOpenModelSheet,
+  onLaunchTask,
+  onNewThread
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
   ]);
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
+
+  // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isStoppingTask, setIsStoppingTask] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
-  
-  // Attached files state (Images, PDFs, Word docs)
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
+  // Attached files state
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
@@ -175,10 +198,14 @@ export function ChatStream({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const isTaskActive = activeTask?.status === "active";
+  const isGeneratingOrRunning = isLoading || isTaskActive;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isTaskActive]);
 
   const toggleThought = (msgId: string) => {
     setExpandedThoughts((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
@@ -196,59 +223,47 @@ export function ChatStream({
     }
   };
 
-  const handleEditPrompt = (text: string) => {
-    setInput(text);
-    textareaRef.current?.focus();
-  };
-
-  // Dynamically adjust textarea height to prevent clipping and support multi-line prompts
+  // Auto-expanding textarea: min 3 rows (72px), grows smoothly with content, never truncates
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(Math.max(textareaRef.current.scrollHeight, 40), 144)}px`;
+      const scrollH = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.max(scrollH, 72)}px`;
     }
   }, [input]);
 
-  const handleClearHistory = () => {
-    const cleared = clearChatHistory(activeModel);
-    setMessages(cleared);
-  };
-
-  const processFiles = async (files: FileList | File[]) => {
+  const processFiles = async (fileList: FileList) => {
     const newItems: AttachedFileItem[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name);
-      
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i];
+      const isImg = f.type.startsWith("image/");
       try {
-        const base64 = await fileToBase64(file);
+        const b64 = await fileToBase64(f);
         newItems.push({
-          id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: file.name,
-          type: file.type || "application/octet-stream",
-          size: file.size,
-          previewUrl: isImage ? base64 : undefined,
-          base64,
-          isImage
+          id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+          name: f.name,
+          type: f.type || "application/octet-stream",
+          size: f.size,
+          previewUrl: isImg ? b64 : undefined,
+          base64: b64,
+          isImage: isImg
         });
       } catch (err) {
-        console.error("Failed to read file", file.name, err);
+        console.error("Failed to read attached file:", f.name, err);
       }
     }
-
     setAttachedFiles((prev) => [...prev, ...newItems]);
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       processFiles(e.target.files);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      e.target.value = "";
     }
   };
 
   const handleRemoveAttachment = (id: string) => {
-    setAttachedFiles((prev) => prev.filter((item) => item.id !== id));
+    setAttachedFiles((prev) => prev.filter((a) => a.id !== id));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -272,12 +287,48 @@ export function ChatStream({
     }
   };
 
+  // Stop Generation / Abort Controller
+  const handleStop = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (onStopTask && isTaskActive) {
+      setIsStoppingTask(true);
+      try {
+        await onStopTask();
+      } finally {
+        setIsStoppingTask(false);
+      }
+    }
+    setIsLoading(false);
+    setStreamStatus(null);
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (last.role === "assistant") {
+        return [
+          ...prev.slice(0, -1),
+          {
+            ...last,
+            isStopped: true,
+            content: last.content ? `${last.content}\n\n*[Stopped by user]*` : "*[Stopped by user]*"
+          }
+        ];
+      }
+      return prev;
+    });
+  };
+
   const handleSend = async (textToSend?: string) => {
     const prompt = (textToSend || input).trim();
-    if ((!prompt && attachedFiles.length === 0) || isLoading) return;
+    if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
     setErrorMsg(null);
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "72px";
+    }
 
     const currentAttachments = [...attachedFiles];
     setAttachedFiles([]);
@@ -298,20 +349,43 @@ export function ChatStream({
 
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
+
+    // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
+    const isBuilderPrompt = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i.test(prompt);
+
+    if (isBuilderPrompt && onLaunchTask) {
+      setIsLoading(true);
+      setStreamStatus("Planning autonomous milestones with real Ollama model...");
+      try {
+        await onLaunchTask(prompt, currentAttachments);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to launch builder task");
+      } finally {
+        setIsLoading(false);
+        setStreamStatus(null);
+      }
+      return;
+    }
+
+    // Otherwise, dispatch to standard streaming chat path
     setIsLoading(true);
     setStreamStatus("Connecting to model...");
 
     const startTime = performance.now();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           model: activeModel,
           mode: agentMode,
           reasoning_effort: reasoningEffort,
+          threadId,
           attachments: currentAttachments.map(a => ({
             name: a.name,
             type: a.type,
@@ -431,20 +505,16 @@ export function ChatStream({
         }
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+      if (err.name === "AbortError") {
+        console.log("Chat stream aborted by user");
+      } else {
+        console.error(err);
+        setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+      }
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
-    }
-  };
-
-  const handleRegenerate = () => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") {
-        handleSend(messages[i].content);
-        break;
-      }
+      abortControllerRef.current = null;
     }
   };
 
@@ -455,13 +525,19 @@ export function ChatStream({
     }
   };
 
+  const shortModelLabel = activeModel.includes("qwen")
+    ? "qwen3.8"
+    : activeModel.includes("gemma")
+    ? "gemma4:e4b"
+    : activeModel.split(":")[0];
+
   return (
     <div
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative flex flex-col h-full rounded-none sm:rounded-2xl border-0 sm:border transition-colors bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 shadow-md overflow-hidden ${
-        isDraggingOver ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20" : ""
+      className={`relative flex flex-col h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
+        isDraggingOver ? "bg-purple-50/30 dark:bg-indigo-950/20" : ""
       }`}
     >
       {/* Hidden File Input */}
@@ -469,7 +545,7 @@ export function ChatStream({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.doc,.docx,.txt,.md,.json,.csv,.py"
+        accept="image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv"
         onChange={handleFileInputChange}
         className="hidden"
       />
@@ -496,206 +572,193 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Header Bar */}
-      <div className="px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-            <Bot className="h-3.5 w-3.5" />
-          </div>
-          <div>
-            <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 block">Workspace</span>
-          </div>
-          {activeBranch && (
-            <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 shadow-xs">
-              <span className="text-[10px]">🌿</span>
-              <span>{activeBranch}</span>
-            </span>
-          )}
-          <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium">{activeModel}</span>
-            {" • "}
-            <span>{isReasoningEffortSupported(activeModel) ? `${reasoningEffort} effort` : "Effort N/A"}</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {messages.length > 1 && (
+      {/* Top Bar matching Mockup 1 & 3 */}
+      <header className="px-4 py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {onBackToList && (
             <button
-              onClick={handleClearHistory}
               type="button"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-slate-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
-              title="Clear chat history"
+              onClick={onBackToList}
+              className="sm:hidden p-1.5 -ml-1 rounded-full text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Back to threads"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Clear</span>
+              <ChevronLeft className="h-5 w-5" />
             </button>
           )}
-        </div>
-      </div>
 
-      {/* Scrollable Conversation Thread */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-4 bg-white dark:bg-zinc-900">
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate">
+            {threadTitle || "New task"}
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Model Chip Button: opens ModelBottomSheet on tap */}
+          <button
+            type="button"
+            onClick={onOpenModelSheet}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-850 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 shadow-xs transition-colors"
+            title="Configure model and thinking effort"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+            <span>{shortModelLabel}</span>
+          </button>
+
+          {/* Overflow Menu Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+              className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              title="More options"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+
+            {showOverflowMenu && (
+              <div
+                className="absolute right-0 mt-1 w-48 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                onClick={() => setShowOverflowMenu(false)}
+              >
+                {onNewThread && (
+                  <button
+                    type="button"
+                    onClick={onNewThread}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
+                  >
+                    New thread
+                  </button>
+                )}
+                {onViewSecurityTelemetry && (
+                  <button
+                    type="button"
+                    onClick={onViewSecurityTelemetry}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
+                  >
+                    Security telemetry
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const seed = clearChatHistory(activeModel);
+                    setMessages(seed);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                >
+                  Clear messages
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Conversation Thread Messages */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
           const isThoughtOpen = expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
-          const isLastAssistant =
-            !isUser &&
-            (idx === messages.length - 1 ||
-              (idx === messages.length - 2 && messages[messages.length - 1].role === "user"));
+          const hasLinkedTask = m.taskId || (activeTask && idx === messages.length - 1 && activeTask.status === "active");
 
           return (
             <div
               key={m.id}
-              className={`flex gap-2.5 sm:gap-3.5 ${
-                isUser ? "justify-end" : "justify-start"
-              } group`}
+              className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-2`}
             >
-              {/* Assistant Avatar */}
-              {!isUser && (
-                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 shadow-sm">
-                  <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {/* Attached Files rendering in user message */}
+              {isUser && m.attachments && m.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 justify-end max-w-md">
+                  {m.attachments.map((att, aIdx) => (
+                    <div key={aIdx} className="relative group/att">
+                      {att.isImage && att.previewUrl ? (
+                        <div
+                          onClick={() => setPreviewModalImage(att.previewUrl || null)}
+                          className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-700 shadow-xs"
+                        >
+                          <img
+                            src={att.previewUrl}
+                            alt={att.name}
+                            className="h-20 w-20 object-cover hover:scale-105 transition-transform"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-medium shadow-xs">
+                          <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                          <span className="max-w-[140px] truncate">{att.name}</span>
+                          <span className="text-[10px] text-slate-400">({formatFileSize(att.size)})</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              <div className={`max-w-[94%] sm:max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
-                
-                {/* Reasoning Thought Accordion (Assistant only) */}
-                {!isUser && (m.thought || (isLoading && idx === messages.length - 1 && !m.content)) && (
-                  <div className="mb-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleThought(m.id)}
-                      className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 bg-slate-100 dark:bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 transition-colors"
+              {/* User Bubble: vibrant rounded purple pill matching Mockup 1 & 3 */}
+              {isUser ? (
+                <div className="bg-[#5b32e6] text-white rounded-3xl rounded-tr-md p-4 max-w-[88%] sm:max-w-lg shadow-sm text-sm font-medium leading-relaxed">
+                  <div className="prose prose-invert max-w-none text-sm text-white">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code: ({ children }: any) => (
+                          <code className="px-1.5 py-0.5 rounded bg-white/20 text-white font-mono text-xs">
+                            {children}
+                          </code>
+                        ),
+                        p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-white">{children}</p>
+                      }}
                     >
-                      <Sparkles className={`h-3 w-3 ${isLoading && idx === messages.length - 1 && !m.content ? "text-amber-500 animate-spin" : "text-amber-500 dark:text-amber-400"}`} />
-                      <span>{isLoading && idx === messages.length - 1 && !m.content ? "Reasoning & Thinking (Live Stream)..." : "Reasoning Process"}</span>
-                      {isThoughtOpen ? (
-                        <ChevronUp className="h-3 w-3 text-slate-400" />
-                      ) : (
-                        <ChevronDown className="h-3 w-3 text-slate-400" />
-                      )}
-                    </button>
-
-                    {isThoughtOpen && (
-                      <div className="mt-1.5 p-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950/90 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                        {m.thought || "Analyzing prompt and formulating execution plan..."}
-                        {isLoading && idx === messages.length - 1 && !m.content && (
-                          <span className="inline-block w-2 h-3.5 ml-1 bg-amber-500 animate-pulse align-middle" />
-                        )}
-                      </div>
-                    )}
+                      {m.content}
+                    </ReactMarkdown>
                   </div>
-                )}
-
-                {/* Attached Files rendering in user message */}
-                {isUser && m.attachments && m.attachments.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-1.5 justify-end">
-                    {m.attachments.map((att, aIdx) => (
-                      <div key={aIdx} className="relative group/att">
-                        {att.isImage && att.previewUrl ? (
-                          <div
-                            onClick={() => setPreviewModalImage(att.previewUrl || null)}
-                            className="cursor-pointer overflow-hidden rounded-xl border border-white/20 shadow-sm"
-                          >
-                            <img
-                              src={att.previewUrl}
-                              alt={att.name}
-                              className="h-20 w-20 object-cover hover:scale-105 transition-transform"
-                            />
-                            <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] px-1 rounded">
-                              {att.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-200/80 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-mono shadow-sm">
-                            <FileText className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                            <span className="max-w-[140px] truncate">{att.name}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-zinc-400">({formatFileSize(att.size)})</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Main Message Bubble */}
-                <div
-                  className={`rounded-2xl p-3.5 sm:p-4 text-xs leading-relaxed ${
-                    isUser
-                      ? "bg-blue-50/90 dark:bg-blue-500/15 border border-blue-200/80 dark:border-blue-500/30 text-blue-950 dark:text-slate-100 rounded-2xl rounded-tr-sm shadow-sm"
-                      : "w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 rounded-tl-sm shadow-sm"
-                  }`}
-                >
-                  {isUser ? (
-                    <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed text-blue-950 dark:text-slate-100">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ inline, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || "");
-                            const codeString = String(children).replace(/\n$/, "");
-                            const isSvg = isSvgCode(codeString, match ? match[1] : undefined);
-                            if (!inline && (match || codeString.includes("\n") || isSvg)) {
-                              return (
-                                <CodeBlock
-                                  language={match ? match[1] : (isSvg ? "svg" : "bash")}
-                                  code={codeString}
-                                />
-                              );
-                            }
-                            return (
-                              <code
-                                className="px-1.5 py-0.5 rounded bg-blue-100/70 dark:bg-blue-900/40 text-blue-900 dark:text-blue-200 font-mono text-[11px]"
-                                {...props}
-                              >
-                                {children}
-                              </code>
-                            );
-                          },
-                          p: ({ children }: any) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
-                        }}
+                </div>
+              ) : (
+                /* Assistant Message View */
+                <div className="w-full max-w-2xl space-y-3">
+                  {/* Reasoning Thought Accordion */}
+                  {(m.thought || (isLoading && idx === messages.length - 1 && !m.content)) && (
+                    <div className="w-full">
+                      <button
+                        type="button"
+                        onClick={() => toggleThought(m.id)}
+                        className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-zinc-300 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-1.5 rounded-2xl border border-slate-200/70 dark:border-zinc-800 transition-colors"
                       >
-                        {wrapRawSvgInMarkdown(m.content)}
-                      </ReactMarkdown>
+                        <Sparkles className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+                        <span>Thinking process</span>
+                        {isThoughtOpen ? (
+                          <ChevronUp className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                        )}
+                      </button>
+
+                      {isThoughtOpen && (
+                        <div className="mt-2 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/60 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                          {m.thought || "Analyzing prompt and formulating execution plan..."}
+                          {isLoading && idx === messages.length - 1 && !m.content && (
+                            <span className="inline-block w-2 h-3.5 ml-1 bg-[#5b32e6] animate-pulse align-middle" />
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed">
+                  )}
+
+                  {/* Inline Live Run Block if this message represents a builder task */}
+                  {hasLinkedTask && activeTask && (
+                    <LiveRunBlock
+                      task={activeTask}
+                      onStopRun={onStopTask}
+                      isStopping={isStoppingTask}
+                    />
+                  )}
+
+                  {/* Text Markdown Content */}
+                  {m.content && (
+                    <div className="text-sm leading-relaxed text-slate-900 dark:text-zinc-100 prose dark:prose-invert max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          table: ({ children }: any) => (
-                            <div className="my-3 overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm">
-                              <table className="w-full text-left text-xs border-collapse font-sans min-w-[280px]">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          thead: ({ children }: any) => (
-                            <thead className="bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-700 uppercase text-[10px] tracking-wider font-bold">
-                              {children}
-                            </thead>
-                          ),
-                          tbody: ({ children }: any) => (
-                            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 text-slate-800 dark:text-zinc-100 font-medium">
-                              {children}
-                            </tbody>
-                          ),
-                          tr: ({ children }: any) => (
-                            <tr className="odd:bg-white dark:odd:bg-zinc-900 even:bg-slate-50/70 dark:even:bg-zinc-850/50 hover:bg-slate-100/60 dark:hover:bg-zinc-800/60 transition-colors">
-                              {children}
-                            </tr>
-                          ),
-                          th: ({ children }: any) => (
-                            <th className="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white text-left">
-                              {children}
-                            </th>
-                          ),
-                          td: ({ children }: any) => (
-                            <td className="px-3.5 py-2.5 text-slate-800 dark:text-zinc-100 whitespace-normal text-left font-normal leading-normal">
-                              {children}
-                            </td>
-                          ),
                           code: ({ inline, className, children, ...props }: any) => {
                             const match = /language-(\w+)/.exec(className || "");
                             const codeString = String(children).replace(/\n$/, "");
@@ -717,99 +780,24 @@ export function ChatStream({
                             }
                             return (
                               <code
-                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] border border-slate-200 dark:border-zinc-700"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-850 text-[#5b32e6] dark:text-indigo-400 font-mono text-xs border border-slate-200 dark:border-zinc-750"
                                 {...props}
                               >
                                 {children}
                               </code>
                             );
                           },
-                          img: ({ src, alt, ...props }: any) => {
-                            if (!src) return null;
-                            const isSvg = isSvgFilePath(src) || src.startsWith("data:image/svg+xml");
-                            const resolvedSrc = resolveSvgUrl(src);
-
-                            if (isSvg) {
-                              return (
-                                <div className="my-3">
-                                  <SvgViewer
-                                    url={resolvedSrc}
-                                    title={alt || src.split("/").pop() || "Vector Graphic"}
-                                    initialTab="preview"
-                                    allowFullscreen={true}
-                                  />
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="my-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
-                                <img
-                                  src={resolvedSrc}
-                                  alt={alt || "Image"}
-                                  className="max-w-full h-auto rounded-lg mx-auto"
-                                  {...props}
-                                />
-                                {alt && (
-                                  <div className="px-3 py-1 bg-slate-50 dark:bg-zinc-800 text-[11px] text-slate-500 dark:text-zinc-400 font-mono text-center">
-                                    {alt}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          },
                           p: ({ children }: any) => (
-                            <p className="mb-2.5 last:mb-0 leading-relaxed text-slate-800 dark:text-zinc-100">
+                            <p className="mb-2.5 last:mb-0 leading-relaxed text-slate-800 dark:text-zinc-200">
                               {children}
                             </p>
-                          ),
-                          ul: ({ children }: any) => (
-                            <ul className="mb-2.5 list-disc list-inside space-y-1 text-slate-700 dark:text-zinc-200 pl-1">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }: any) => (
-                            <ol className="mb-2.5 list-decimal list-inside space-y-1 text-slate-700 dark:text-zinc-200 pl-1">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }: any) => <li className="leading-relaxed">{children}</li>,
-                          blockquote: ({ children }: any) => (
-                            <blockquote className="border-l-2 border-emerald-500 pl-3 my-2 text-slate-600 dark:text-zinc-400 italic bg-slate-50 dark:bg-zinc-950 py-1 rounded-r">
-                              {children}
-                            </blockquote>
-                          ),
-                          strong: ({ children }: any) => (
-                            <strong className="font-semibold text-slate-900 dark:text-white">{children}</strong>
-                          ),
-                          a: ({ href, children }: any) => {
-                            if (!href) return <>{children}</>;
-                            const isSvg = isSvgFilePath(href);
-                            if (isSvg) {
-                              const resolved = resolveSvgUrl(href);
-                              return (
-                                <SvgFileLink href={resolved} rawHref={href}>
-                                  {children}
-                                </SvgFileLink>
-                              );
-                            }
-                            return (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-cyan-600 dark:text-cyan-400 hover:underline underline-offset-2 font-medium"
-                              >
-                                {children}
-                              </a>
-                            );
-                          }
+                          )
                         }}
                       >
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
 
-                      {/* Tool Generated / Retrieved SVG Visual Artifacts */}
+                      {/* Tool Generated SVG Visual Artifacts */}
                       {(() => {
                         const messageSvgs = extractSvgsFromMessage(m);
                         if (messageSvgs.length === 0) return null;
@@ -837,299 +825,111 @@ export function ChatStream({
                       })()}
                     </div>
                   )}
-                </div>
 
-                {/* Inline Expandable Sandbox & Telemetry Badges (Demo Flex) */}
-                {!isUser && m.traces && m.traces.length > 0 && (
-                  <div className="mt-2.5 space-y-2 w-full">
-                    {m.traces.map((trace, tIdx) => {
-                      const proofKey = `${m.id}-${tIdx}`;
-                      const isExpanded = !!expandedProofs[proofKey];
-                      const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
+                  {/* Inline Expandable Sandbox & Telemetry Badges */}
+                  {!isUser && m.traces && m.traces.length > 0 && (
+                    <div className="mt-2.5 space-y-2 w-full">
+                      {m.traces.map((trace, tIdx) => {
+                        const proofKey = `${m.id}-${tIdx}`;
+                        const isExpanded = !!expandedProofs[proofKey];
+                        const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
 
-                      let stdoutPreview = "";
-                      let parsedJson: any = null;
-                      try {
-                        if (trace.result?.content?.[0]?.text) {
-                          parsedJson = JSON.parse(trace.result.content[0].text);
-                          stdoutPreview = parsedJson.stdout || parsedJson.output || (typeof parsedJson === "string" ? parsedJson : JSON.stringify(parsedJson, null, 2));
-                        } else if (trace.result) {
-                          stdoutPreview = typeof trace.result === "string" ? trace.result : JSON.stringify(trace.result, null, 2);
-                        }
-                      } catch {
-                        stdoutPreview = trace.result?.content?.[0]?.text || String(trace.result || "");
-                      }
-
-                      return (
-                        <div
-                          key={tIdx}
-                          className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-950/70 overflow-hidden shadow-sm transition-all"
-                        >
-                          {/* Execution Proof Header Badge */}
-                          <button
-                            type="button"
-                            onClick={() => toggleProof(proofKey)}
-                            className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-900/80 transition-colors text-xs font-mono"
+                        return (
+                          <div
+                            key={tIdx}
+                            className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
                           >
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {isBrowser ? (
-                                <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
-                                  <Globe className="h-3.5 w-3.5" />
-                                  <span>Isolated Egress Mesh</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                                  <ShieldCheck className="h-3.5 w-3.5" />
-                                  <span>Executed in Docker Sandbox</span>
-                                </span>
-                              )}
-                              <span className="text-slate-400 dark:text-zinc-600">•</span>
-                              <span className="text-slate-600 dark:text-zinc-300 font-medium">{trace.tool}</span>
-                              <span className="text-slate-400 dark:text-zinc-600">•</span>
-                              <span className="text-slate-500 dark:text-zinc-400">{trace.durationMs}ms</span>
-                              <span className="text-slate-400 dark:text-zinc-600 hidden xs:inline">•</span>
-                              <span className="text-slate-600 dark:text-zinc-400 hidden xs:inline">
-                                {isBrowser ? "UID: 10002" : "UID: 10001"}
-                              </span>
-                              <span className="text-slate-400 dark:text-zinc-600 hidden sm:inline">•</span>
-                              <span className="text-slate-600 dark:text-zinc-400 hidden sm:inline">
-                                {isBrowser ? "SSRF Guard: ON" : "CapDrop: ALL"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
-                              <span>{isExpanded ? "Hide Proof" : "Expand Proof"}</span>
-                              {isExpanded ? (
-                                <ChevronUp className="h-3.5 w-3.5" />
-                              ) : (
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              )}
-                            </div>
-                          </button>
-
-                          {/* Collapsible Sandbox Terminal Drawer */}
-                          {isExpanded && (
-                            <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 dark:bg-black p-3.5 space-y-3 font-mono text-[11px] text-slate-300 animate-in fade-in duration-150">
-                              
-                              {/* Security Primitives Attestation Bar */}
-                              <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-800 text-[10px]">
-                                <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center gap-1">
-                                  <ShieldCheck className="h-3 w-3" />
-                                  SLSA-3 Verified Runtime
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-sky-400 border border-zinc-800">
-                                  {isBrowser ? "container: browser-mcp-toolchain" : "container: sandboxed-mcp-toolchain"}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
-                                  {isBrowser ? "user: 10002:10002" : "user: 10001:10001"}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
-                                  {isBrowser ? "network: egress-mesh" : "network: ai-mesh (air-gapped)"}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 border border-zinc-800">
-                                  {isBrowser ? "ssrf_guard: ACTIVE" : "cap_drop: ALL"}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
-                                  {isBrowser ? "no_new_privs: true" : "rootfs: READ_ONLY | /tmp: tmpfs"}
-                                </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleProof(proofKey)}
+                              className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                            >
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {isBrowser ? (
+                                  <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
+                                    <Globe className="h-3.5 w-3.5" />
+                                    <span>Isolated Egress Mesh</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                    <span>Executed in Docker Sandbox</span>
+                                  </span>
+                                )}
+                                <span className="text-slate-400 dark:text-zinc-600">•</span>
+                                <span className="text-slate-600 dark:text-zinc-300 font-medium">{trace.tool}</span>
+                                <span className="text-slate-400 dark:text-zinc-600">•</span>
+                                <span className="text-slate-500 dark:text-zinc-400">{trace.durationMs}ms</span>
                               </div>
 
-                              {/* Tool Stdin Payload */}
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
-                                  Input Payload:
-                                </div>
-                                <pre className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-cyan-300 overflow-x-auto max-h-36 whitespace-pre-wrap leading-relaxed">
-                                  {trace.args?.code ? trace.args.code : JSON.stringify(trace.args, null, 2)}
+                              <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
+                                <span>{isExpanded ? "Hide Proof" : "Expand Proof"}</span>
+                                {isExpanded ? (
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                )}
+                              </div>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
+                                <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                                  {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
                                 </pre>
                               </div>
-
-                              {/* Tool Stdout & Execution Output */}
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
-                                  <span>Sandbox Stdout Output:</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => copyToClipboard(stdoutPreview, proofKey)}
-                                    className="text-slate-400 hover:text-white flex items-center gap-1 text-[10px] font-sans"
-                                  >
-                                    {copiedMessageId === proofKey ? (
-                                      <>
-                                        <Check className="h-3 w-3 text-emerald-400" />
-                                        <span className="text-emerald-400">Copied</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="h-3 w-3" />
-                                        <span>Copy Stdout</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                                <pre className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-emerald-300/90 overflow-x-auto max-h-48 whitespace-pre-wrap leading-relaxed">
-                                  {stdoutPreview || "Process exited with code 0 (no output)"}
-                                </pre>
-                              </div>
-
-                              {/* Visual Unified Diff Inspector */}
-                              {parsedJson?.diff && (
-                                <div className="pt-1">
-                                  <DiffViewer
-                                    branch={parsedJson.branch || activeBranch || "main"}
-                                    diff={parsedJson.diff}
-                                    modifiedFiles={parsedJson.modified_files}
-                                  />
-                                </div>
-                              )}
-
-                              {/* Visual SVG Inspector in Execution Trace */}
-                              {trace.args?.path && isSvgFilePath(trace.args.path) && (
-                                <div className="pt-2">
-                                  <SvgViewer
-                                    code={trace.args?.content}
-                                    url={resolveSvgUrl(trace.args.path)}
-                                    title={trace.args.path}
-                                    initialTab="preview"
-                                  />
-                                </div>
-                              )}
-                              {!trace.args?.path && isSvgCode(stdoutPreview) && (
-                                <div className="pt-2">
-                                  <SvgViewer
-                                    code={stdoutPreview}
-                                    title={`${trace.tool} SVG Output`}
-                                    initialTab="preview"
-                                  />
-                                </div>
-                              )}
-
-
-                              {/* Direct Jump to System Tab */}
-                              {onViewSecurityTelemetry && (
-                                <div className="pt-1 flex items-center justify-between text-[11px] font-sans">
-                                  <span className="text-slate-400">Full host GPU & Docker Scout telemetry available:</span>
-                                  <button
-                                    type="button"
-                                    onClick={onViewSecurityTelemetry}
-                                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-medium"
-                                  >
-                                    <span>System Architecture Tab</span>
-                                    <ArrowRight className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              )}
-
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Message Action Footer (Copy, Edit, Regenerate, Metrics) */}
-                <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-500 dark:text-zinc-500 font-mono">
-                  {isUser ? (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => handleEditPrompt(m.content)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 transition-colors"
-                        title="Edit prompt in input box"
-                      >
-                        <Edit3 className="h-3 w-3" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(m.content, m.id)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 transition-colors"
-                        title="Copy prompt"
-                      >
-                        {isCopied ? (
-                          <>
-                            <Check className="h-3 w-3 text-emerald-500" />
-                            <span className="text-emerald-500">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3 w-3" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(m.content, m.id)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 transition-colors"
-                        title="Copy response markdown"
-                      >
-                        {isCopied ? (
-                          <>
-                            <Check className="h-3 w-3 text-emerald-500" />
-                            <span className="text-emerald-500">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3 w-3" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-
-                      {isLastAssistant && (
-                        <button
-                          type="button"
-                          onClick={handleRegenerate}
-                          disabled={isLoading}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 disabled:opacity-40 transition-colors"
-                          title="Regenerate response"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          <span>Regenerate</span>
-                        </button>
-                      )}
-
-                      {m.durationMs && (
-                        <span>
-                          {m.durationMs > 1000 ? `${(m.durationMs / 1000).toFixed(1)}s` : `${m.durationMs}ms`}
-                        </span>
-                      )}
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                </div>
 
-              </div>
+                  {/* Grounded File Citation Card */}
+                  {m.traces && m.traces.some(t => t.tool.includes("file") || t.args?.path) && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {m.traces.filter(t => t.args?.path).slice(0, 3).map((t, cIdx) => (
+                        <div
+                          key={cIdx}
+                          className="flex items-center gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-2xs text-xs font-mono text-slate-800 dark:text-zinc-200"
+                        >
+                          <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                          <span className="font-semibold">{t.args?.path}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(t.args?.path, `${m.id}-${cIdx}`)}
+                            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                            title="Copy path"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-              {/* User Avatar */}
-              {isUser && (
-                <div className="hidden sm:flex h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-blue-500/10 border border-blue-500/30 items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5 shadow-sm">
-                  <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  {/* Partial output stopped indicator */}
+                  {m.isStopped && (
+                    <div className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400 text-xs font-mono border border-slate-200 dark:border-zinc-800">
+                      • Stopped
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
 
-        {/* Loading Indicator */}
+        {/* Live Loading Indicator */}
         {isLoading && (
-          <div className="flex gap-2.5 sm:gap-3.5 justify-start">
-            <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </div>
-            <div className="rounded-2xl rounded-tl-sm p-3.5 sm:p-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-400 flex items-center gap-2.5 shadow-sm">
-              <Terminal className="h-4 w-4 text-cyan-500 dark:text-cyan-400 animate-pulse" />
-              <span>{streamStatus || "Orchestrating autonomous workflow..."}</span>
-            </div>
+          <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-400 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 w-fit">
+            <Loader2 className="h-4 w-4 animate-spin text-[#5b32e6] dark:text-indigo-400" />
+            <span>{streamStatus || "Synthesizing response..."}</span>
           </div>
         )}
 
-        {/* Error Notification */}
         {errorMsg && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+          <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
             <span>{errorMsg}</span>
           </div>
@@ -1138,119 +938,102 @@ export function ChatStream({
         <div ref={scrollRef} />
       </div>
 
-      {/* Modern Docked Floating Prompt Bar with Unified Card Architecture */}
-      <div className="sticky bottom-0 z-20 p-2.5 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200 dark:border-zinc-800 backdrop-blur-md">
+      {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 */}
+      <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
         
-        {/* Unified Input Form Card */}
+        {/* Attachment Chips above input */}
+        {attachedFiles.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-2xl mx-auto">
+            {attachedFiles.map((att) => (
+              <div
+                key={att.id}
+                className="group relative flex items-center gap-1.5 p-1.5 pr-2.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
+              >
+                {att.isImage && att.previewUrl ? (
+                  <img
+                    src={att.previewUrl}
+                    alt={att.name}
+                    className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
+                  />
+                ) : (
+                  <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                )}
+                <div className="flex flex-col">
+                  <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
+                    {att.name}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    {formatFileSize(att.size)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(att.id)}
+                  className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                  title="Remove file"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input Bar Card */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="relative rounded-2xl sm:rounded-3xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 shadow-md shadow-slate-900/5 dark:shadow-black/40 focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all p-2 sm:p-2.5 flex flex-col gap-1.5"
+          className="max-w-2xl mx-auto relative rounded-3xl bg-slate-100/90 dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 p-2 sm:p-2.5 flex items-end gap-2 focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6] transition-all"
         >
-          {/* Attachment Chips inside card if files exist */}
-          {attachedFiles.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pb-2 mb-1 border-b border-slate-100 dark:border-zinc-800/80">
-              {attachedFiles.map((att) => (
-                <div
-                  key={att.id}
-                  className="group relative flex items-center gap-1.5 p-1 pr-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
-                >
-                  {att.isImage && att.previewUrl ? (
-                    <img
-                      src={att.previewUrl}
-                      alt={att.name}
-                      className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
-                    />
-                  ) : (
-                    <FileText className="h-4 w-4 text-cyan-500 dark:text-cyan-400 shrink-0" />
-                  )}
-                  <div className="flex flex-col">
-                    <span className="max-w-[120px] sm:max-w-[160px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
-                      {att.name}
-                    </span>
-                    <span className="text-[9px] text-slate-400 dark:text-zinc-400 font-mono">
-                      {formatFileSize(att.size)}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAttachment(att.id)}
-                    className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-0.5"
-                    title="Remove file"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Paperclip Button on left */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-200/70 dark:hover:bg-zinc-800 transition-colors shrink-0 mb-0.5"
+            title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
 
-          {/* Text Area */}
-          <div className="flex items-start">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              disabled={isLoading}
-              placeholder={
-                attachedFiles.length > 0
-                  ? "Ask about the attached files..."
-                  : "Ask agent anything, run code, search web, query codebase..."
-              }
-              className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-2 py-1 leading-relaxed max-h-36 min-h-[40px]"
-            />
-          </div>
+          {/* Auto-expanding Filled Textarea */}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={3}
+            placeholder="Describe the engineering task…"
+            className="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none py-1.5 leading-relaxed min-h-[72px]"
+          />
 
-          {/* Bottom Actions Row: Paperclip on Left, Helper/Send on Right */}
-          <div className="flex items-center justify-between pt-0.5 px-0.5">
-            <div className="flex items-center gap-1.5">
+          {/* Send / Stop Morphed Button */}
+          <div className="shrink-0 mb-0.5">
+            {isGeneratingOrRunning ? (
+              /* Morph into dark stop button (■) while generating or running */
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-medium"
-                title="Attach images (PNG, JPG) or documents (PDF, DOCX, Code)"
+                onClick={handleStop}
+                className="h-10 w-10 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
+                title="Stop generation / halt workers"
               >
-                <Paperclip className="h-4 w-4" />
-                <span className="text-[11px] hidden sm:inline">Attach</span>
+                <Square className="h-4 w-4 fill-current stroke-none" />
               </button>
-
-              <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono hidden sm:inline">
-                • Zero-Trust UID 10001
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
+            ) : (
+              /* Normal purple circle send button with paper airplane */
               <button
                 type="submit"
-                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
-                className={`h-8 w-8 sm:h-9 sm:w-9 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all ${
-                  (!input.trim() && attachedFiles.length === 0) || isLoading
-                    ? "bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-600 cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 active:scale-95"
-                }`}
-                title="Send prompt"
+                disabled={!input.trim() && attachedFiles.length === 0}
+                className="h-10 w-10 rounded-full bg-[#5b32e6] hover:bg-[#4d28cc] text-white flex items-center justify-center shadow-md shadow-[#5b32e6]/25 active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                title="Send task or message"
               >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-white" />
-                ) : (
-                  <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                )}
+                <Send className="h-4 w-4 text-white" />
               </button>
-            </div>
+            )}
           </div>
         </form>
-
-        <div className="mt-1 hidden sm:flex items-center justify-between text-[10px] text-slate-400 dark:text-zinc-500 px-2 font-mono">
-          <span>Supports PNG, JPG, PDF, DOCX, TXT, CSV, Code • Drag & Drop enabled</span>
-          <span>Shift+Enter for newline • Enter ↵ to send</span>
-        </div>
       </div>
-
     </div>
   );
 }
