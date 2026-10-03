@@ -83,7 +83,9 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/threads") ||
       p.includes("components/LiveRunBlock") ||
       p.includes("components/ModelBottomSheet") ||
-      p.includes("components/ThreadsSidebar"),
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("tailwind.config") ||
+      p.includes("app/layout.tsx"),
     tests: ["tests/unifiedUi.test.ts"]
   },
   {

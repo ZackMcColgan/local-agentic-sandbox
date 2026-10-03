@@ -48,55 +48,40 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
   const displayedThinking = showAllThinking ? thinkingEntries : thinkingEntries.slice(-4);
 
   return (
-    <div className="w-full max-w-2xl my-3 p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-sm transition-all space-y-4">
+    <div className="w-full max-w-2xl my-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-md transition-all space-y-3.5">
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-full flex items-center justify-center ${
-            isRunning ? "bg-[#ede7fc] text-[#5b32e6] dark:bg-indigo-950 dark:text-indigo-300" :
-            isCompleted ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" :
-            "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
-          }`}>
-            <RotateCcw className={`h-4 w-4 ${isRunning ? "animate-spin" : ""}`} />
+          <div className="w-6 h-6 rounded-full bg-[#3b0799] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <RotateCcw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           </div>
-          <div>
-            <div className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold text-slate-900 dark:text-zinc-100">
               Live run
-            </div>
-            {task.goal && (
-              <div className="text-xs text-slate-500 dark:text-zinc-400 truncate max-w-xs sm:max-w-md">
-                {task.goal}
-              </div>
+            </span>
+            {isRunning && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#ede7fe] text-[#5b32e6] flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#5b32e6]" />
+                <span>Running</span>
+              </span>
+            )}
+            {isStopped && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
+                • Stopped
+              </span>
+            )}
+            {isCompleted && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                • Completed
+              </span>
             )}
           </div>
-        </div>
-
-        {/* Status Pill */}
-        <div>
-          {isRunning ? (
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#ede7fc] dark:bg-indigo-950 text-[#5b32e6] dark:text-indigo-300 border border-[#5b32e6]/20 flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#5b32e6] animate-pulse" />
-              <span>Running</span>
-            </span>
-          ) : isStopped ? (
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
-              • Stopped
-            </span>
-          ) : isCompleted ? (
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              • Completed
-            </span>
-          ) : (
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-              • Failed
-            </span>
-          )}
         </div>
       </div>
 
       {/* Milestone Checklist */}
-      <div className="space-y-2.5 pt-1">
-        <div className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
+      <div className="space-y-2.5">
+        <div className="inline-block px-2 py-0.5 rounded bg-[#f3f4f8] dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-xs">
           Milestone checklist
         </div>
 
@@ -111,22 +96,22 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     {isMilestoneCompleted ? (
-                      <div className="h-5 w-5 rounded-full bg-[#5b32e6] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <div className="h-5 w-5 rounded-full bg-[#3b0799] text-white flex items-center justify-center shrink-0 shadow-xs">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
                     ) : isMilestoneActive ? (
-                      <div className="h-5 w-5 rounded-full border-2 border-[#5b32e6] border-t-transparent animate-spin shrink-0" />
+                      <div className="h-5 w-5 rounded-full border-2 border-[#5b32e6] shrink-0" />
                     ) : (
                       <div className="h-5 w-5 rounded-full border-2 border-slate-300 dark:border-zinc-700 shrink-0" />
                     )}
 
                     <span
-                      className={`text-xs truncate ${
+                      className={`text-xs sm:text-sm truncate ${
                         isMilestoneCompleted
-                          ? "font-medium text-slate-700 dark:text-zinc-300 line-through decoration-slate-300 dark:decoration-zinc-600"
+                          ? "font-medium text-slate-800 dark:text-zinc-200"
                           : isMilestoneActive
-                          ? "font-bold text-slate-900 dark:text-zinc-100"
-                          : "text-slate-500 dark:text-zinc-400"
+                          ? "font-semibold text-slate-900 dark:text-zinc-100"
+                          : "text-slate-600 dark:text-zinc-400"
                       }`}
                     >
                       {m.title}
@@ -134,16 +119,16 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
                   </div>
 
                   {isMilestoneActive && (
-                    <span className="text-xs font-mono font-bold text-[#5b32e6] dark:text-indigo-400 shrink-0">
+                    <span className="text-xs font-semibold text-[#5b32e6] dark:text-indigo-400 shrink-0">
                       {activeProgressPercent}%
                     </span>
                   )}
                 </div>
 
                 {isMilestoneActive && (
-                  <div className="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden ml-7.5">
+                  <div className="w-full h-1.5 bg-[#e9ecf4] dark:bg-zinc-800 rounded-full overflow-hidden ml-7.5">
                     <div
-                      className="h-full bg-[#5b32e6] rounded-full transition-all duration-300"
+                      className="h-full bg-[#3b0799] rounded-full transition-all duration-300"
                       style={{ width: `${activeProgressPercent}%` }}
                     />
                   </div>
@@ -156,7 +141,7 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
 
       {/* Worker Thinking Section */}
       {thinkingEntries.length > 0 && (
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/60 border border-slate-200/60 dark:border-zinc-800/80 space-y-2">
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/60 dark:border-zinc-700/60 space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-zinc-200">
             <div className="flex items-center gap-2">
               <Bot className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
@@ -193,9 +178,9 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
           type="button"
           onClick={onStopRun}
           disabled={isStopping}
-          className="w-full py-2.5 px-4 rounded-2xl bg-[#ede7fc] hover:bg-[#e0d6fa] dark:bg-indigo-950/80 dark:hover:bg-indigo-900 text-[#4d28cc] dark:text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+          className="w-full py-2.5 px-4 rounded-xl bg-[#ede7fe] hover:bg-[#e0d6fd] dark:bg-indigo-950 dark:hover:bg-indigo-900 text-[#5b32e6] dark:text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
         >
-          <Square className="h-4 w-4 fill-current stroke-none" />
+          <Square className="h-3.5 w-3.5 stroke-[2.5] fill-none" />
           <span>{isStopping ? "Stopping run..." : "Stop run"}</span>
         </button>
       )}

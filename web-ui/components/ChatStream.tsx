@@ -64,6 +64,7 @@ export interface ChatMessage {
   durationMs?: number;
   taskId?: string;
   isStopped?: boolean;
+  timestamp?: string;
 }
 
 interface ChatStreamProps {
@@ -596,7 +597,7 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-850 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 shadow-xs transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white dark:bg-zinc-900 border border-[#c4b5fd] dark:border-indigo-800 text-xs font-semibold text-[#5b32e6] dark:text-indigo-400 shadow-xs hover:bg-[#fbfbfe] transition-colors"
             title="Configure model and thinking effort"
           >
             <Sparkles className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
@@ -608,7 +609,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
-              className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="More options"
             >
               <MoreHorizontal className="h-5 w-5" />
@@ -664,7 +665,7 @@ export function ChatStream({
           return (
             <div
               key={m.id}
-              className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-2`}
+              className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-1.5`}
             >
               {/* Attached Files rendering in user message */}
               {isUser && m.attachments && m.attachments.length > 0 && (
@@ -696,22 +697,29 @@ export function ChatStream({
 
               {/* User Bubble: vibrant rounded purple pill matching Mockup 1 & 3 */}
               {isUser ? (
-                <div className="bg-[#5b32e6] text-white rounded-3xl rounded-tr-md p-4 max-w-[88%] sm:max-w-lg shadow-sm text-sm font-medium leading-relaxed">
-                  <div className="prose prose-invert max-w-none text-sm text-white">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code: ({ children }: any) => (
-                          <code className="px-1.5 py-0.5 rounded bg-white/20 text-white font-mono text-xs">
-                            {children}
-                          </code>
-                        ),
-                        p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-white">{children}</p>
-                      }}
-                    >
-                      {m.content}
-                    </ReactMarkdown>
+                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
+                  <div className="bg-[#3b0799] text-white rounded-2xl rounded-tr-sm p-4 shadow-sm text-sm font-normal leading-relaxed">
+                    <div className="prose prose-invert max-w-none text-sm text-white">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code: ({ children }: any) => (
+                            <code className="px-1.5 py-0.5 rounded bg-white/20 text-white font-mono text-xs">
+                              {children}
+                            </code>
+                          ),
+                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-white">{children}</p>
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
+                  {m.timestamp && (
+                    <div className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 mr-1">
+                      {m.timestamp}
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Assistant Message View */
@@ -722,14 +730,14 @@ export function ChatStream({
                       <button
                         type="button"
                         onClick={() => toggleThought(m.id)}
-                        className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-zinc-300 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-1.5 rounded-2xl border border-slate-200/70 dark:border-zinc-800 transition-colors"
+                        className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-2 rounded-2xl border border-slate-200/80 dark:border-zinc-800 transition-colors"
                       >
-                        <Sparkles className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
-                        <span>Thinking process</span>
+                        <Sparkles className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                        <span>Thinking · 3 steps</span>
                         {isThoughtOpen ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                          <ChevronUp className="h-3.5 w-3.5 text-slate-500 ml-1" />
                         ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                          <ChevronDown className="h-3.5 w-3.5 text-slate-500 ml-1" />
                         )}
                       </button>
 
@@ -885,26 +893,31 @@ export function ChatStream({
                     </div>
                   )}
 
-                  {/* Grounded File Citation Card */}
-                  {m.traces && m.traces.some(t => t.tool.includes("file") || t.args?.path) && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {m.traces.filter(t => t.args?.path).slice(0, 3).map((t, cIdx) => (
-                        <div
-                          key={cIdx}
-                          className="flex items-center gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-2xs text-xs font-mono text-slate-800 dark:text-zinc-200"
-                        >
-                          <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
-                          <span className="font-semibold">{t.args?.path}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(t.args?.path, `${m.id}-${cIdx}`)}
-                            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                            title="Copy path"
+                  {/* Grounded File Citation Card matching Mockup 4 */}
+                  {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
+                    <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
+                      {m.traces.filter((t: any) => t.args?.path || (t.name && String(t.name).includes(".ts"))).slice(0, 3).map((t: any, cIdx) => {
+                        const pathLabel = t.args?.path || t.name || "workerPool.ts:342";
+                        return (
+                          <div
+                            key={cIdx}
+                            className="flex items-center justify-between w-full p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-xs text-xs font-mono text-slate-800 dark:text-zinc-200"
                           >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                              <span className="font-semibold truncate">{pathLabel}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
+                              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 shrink-0 ml-2"
+                              title="Copy path"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -919,6 +932,17 @@ export function ChatStream({
             </div>
           );
         })}
+
+        {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
+        {activeTask && !messages.some(m => m.taskId === activeTask.taskId && m.role === 'assistant') && (
+          <div className="w-full max-w-2xl">
+            <LiveRunBlock
+              task={activeTask}
+              onStopRun={onStopTask}
+              isStopping={isStoppingTask}
+            />
+          </div>
+        )}
 
         {/* Live Loading Indicator */}
         {isLoading && (
@@ -938,7 +962,7 @@ export function ChatStream({
         <div ref={scrollRef} />
       </div>
 
-      {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 */}
+      {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
       <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
         
         {/* Attachment Chips above input */}
@@ -979,22 +1003,22 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Input Bar Card */}
+        {/* Input Bar Card: rounded-full pill matching Mockup 1 & 4 */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-2xl mx-auto relative rounded-3xl bg-slate-100/90 dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 p-2 sm:p-2.5 flex items-end gap-2 focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6] transition-all"
+          className="max-w-2xl mx-auto relative rounded-full bg-[#f1f3f9] dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 px-3.5 py-1.5 flex items-center gap-2 shadow-xs transition-all focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6]"
         >
           {/* Paperclip Button on left */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-200/70 dark:hover:bg-zinc-800 transition-colors shrink-0 mb-0.5"
+            className="p-1.5 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 transition-colors shrink-0"
             title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
           >
-            <Paperclip className="h-5 w-5" />
+            <Paperclip className="h-5 w-5 rotate-45" />
           </button>
 
           {/* Auto-expanding Filled Textarea */}
@@ -1005,30 +1029,30 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={3}
             placeholder="Describe the engineering task…"
-            className="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none py-1.5 leading-relaxed min-h-[72px]"
+            className="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none py-1.5 leading-relaxed min-h-[72px] max-h-[160px]"
           />
 
           {/* Send / Stop Morphed Button */}
-          <div className="shrink-0 mb-0.5">
+          <div className="shrink-0">
             {isGeneratingOrRunning ? (
               /* Morph into dark stop button (■) while generating or running */
               <button
                 type="button"
                 onClick={handleStop}
-                className="h-10 w-10 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
+                className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
                 title="Stop generation / halt workers"
               >
-                <Square className="h-4 w-4 fill-current stroke-none" />
+                <Square className="h-3.5 w-3.5 fill-current stroke-none" />
               </button>
             ) : (
               /* Normal purple circle send button with paper airplane */
               <button
                 type="submit"
                 disabled={!input.trim() && attachedFiles.length === 0}
-                className="h-10 w-10 rounded-full bg-[#5b32e6] hover:bg-[#4d28cc] text-white flex items-center justify-center shadow-md shadow-[#5b32e6]/25 active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                className="h-9 w-9 rounded-full bg-[#3b0799] hover:bg-[#2d0577] text-white flex items-center justify-center shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
                 title="Send task or message"
               >
-                <Send className="h-4 w-4 text-white" />
+                <Send className="h-4 w-4 text-white fill-white ml-0.5" />
               </button>
             )}
           </div>

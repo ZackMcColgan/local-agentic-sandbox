@@ -65,7 +65,7 @@ export function ThreadsSidebar({
 
       {/* Search Threads Input */}
       <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-900">
-        <div className="relative flex items-center bg-slate-100/90 dark:bg-zinc-900 rounded-full px-3.5 py-2 border border-slate-200/60 dark:border-zinc-800">
+        <div className="relative flex items-center bg-[#edf1f7] dark:bg-zinc-900 rounded-full px-3.5 py-2 border border-slate-200/50 dark:border-zinc-800">
           <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
           <input
             type="text"
@@ -86,7 +86,7 @@ export function ThreadsSidebar({
         ) : (
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
-            const timeAgo = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
+            const timeAgo = thread.timeLabel || formatThreadTimestamp(thread.updatedAt || thread.createdAt);
 
             return (
               <div
@@ -94,13 +94,13 @@ export function ThreadsSidebar({
                 onClick={() => onSelectThread(thread.id)}
                 className={`group relative flex items-center cursor-pointer transition-all ${
                   isSelected
-                    ? "bg-[#f3efff] dark:bg-indigo-950/40"
+                    ? "bg-[#ede7fe] dark:bg-indigo-950/40"
                     : "hover:bg-slate-50 dark:hover:bg-zinc-900/40"
                 }`}
               >
                 {/* Active left indicator strip */}
                 {isSelected && (
-                  <div className="w-1.5 self-stretch bg-[#5b32e6] rounded-r-sm shrink-0" />
+                  <div className="w-1.5 self-stretch bg-[#5b32e6] rounded-r shrink-0" />
                 )}
 
                 <div className={`flex-1 p-3.5 min-w-0 ${!isSelected ? "pl-5" : "pl-3.5"}`}>
@@ -109,7 +109,7 @@ export function ThreadsSidebar({
                       className={`text-xs sm:text-sm truncate ${
                         isSelected
                           ? "font-bold text-slate-900 dark:text-zinc-100"
-                          : "font-medium text-slate-800 dark:text-zinc-200"
+                          : "font-semibold text-slate-900 dark:text-zinc-200"
                       }`}
                     >
                       {thread.title || "Untitled Thread"}
@@ -133,26 +133,25 @@ export function ThreadsSidebar({
                   {/* Subtitle with status and timestamp */}
                   <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-zinc-400">
                     {thread.status === "active" ? (
-                      <span className="flex items-center gap-1 font-semibold text-[#5b32e6] dark:text-indigo-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#5b32e6] animate-pulse" />
-                        <span>Active</span>
+                      <span className="flex items-center gap-1 font-medium text-slate-600 dark:text-zinc-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#5b32e6] shrink-0" />
+                        <span className="font-semibold text-[#5b32e6] dark:text-indigo-400">Active</span>
+                        <span className="text-slate-400">·</span>
+                        <span>{thread.workerInfo || "Worker 2"}</span>
                       </span>
                     ) : thread.status === "stopped" ? (
-                      <span className="text-slate-600 dark:text-zinc-400">
-                        Stopped
+                      <span className="text-slate-500 dark:text-zinc-400">
+                        Stopped · {timeAgo}
                       </span>
                     ) : thread.status === "completed" ? (
-                      <span className="text-slate-600 dark:text-zinc-400">
-                        Completed
+                      <span className="text-slate-500 dark:text-zinc-400">
+                        Completed · {timeAgo}
                       </span>
                     ) : (
                       <span className="text-rose-600 dark:text-rose-400">
-                        Failed
+                        Failed · {timeAgo}
                       </span>
                     )}
-
-                    <span>·</span>
-                    <span>{timeAgo}</span>
                   </div>
                 </div>
               </div>

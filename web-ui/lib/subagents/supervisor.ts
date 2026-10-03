@@ -76,10 +76,14 @@ export class FileCheckpointSaver extends MemorySaver {
   constructor(checkpointDir: string) {
     super();
     this.checkpointDir = checkpointDir;
-    if (!fs.existsSync(this.checkpointDir)) {
-      fs.mkdirSync(this.checkpointDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.checkpointDir)) {
+        fs.mkdirSync(this.checkpointDir, { recursive: true });
+      }
+      this.loadFromDisk();
+    } catch (err) {
+      console.warn("Could not initialize FileCheckpointSaver on disk:", err);
     }
-    this.loadFromDisk();
   }
 
   getFilePath(threadId: string): string {
@@ -601,9 +605,28 @@ export class OvernightSupervisor {
   readonly tracer?: TelemetryTracer;
 
   constructor(options?: SupervisorOptions) {
-    this.checkpointDirectory =
-      options?.checkpointDirectory ||
-      path.resolve(process.cwd(), "../workspace/.agent/checkpoints");
+    let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR;
+    if (!resolvedDir) {
+      const candidates = [
+        fs.existsSync(path.resolve(process.cwd(), "../workspace"))
+          ? path.resolve(process.cwd(), "../workspace/.agent/checkpoints")
+          : null,
+        path.resolve(process.cwd(), ".agent/checkpoints"),
+        path.resolve("/tmp/.agent/checkpoints")
+      ].filter(Boolean) as string[];
+
+      for (const dir of candidates) {
+        try {
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          fs.accessSync(dir, fs.constants.W_OK);
+          resolvedDir = dir;
+          break;
+        } catch {}
+      }
+    }
+    this.checkpointDirectory = resolvedDir || path.resolve("/tmp/.agent/checkpoints");
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);

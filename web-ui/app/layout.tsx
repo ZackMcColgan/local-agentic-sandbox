@@ -34,17 +34,17 @@ export default function RootLayout({
                   var urlParams = new URLSearchParams(window.location.search);
                   var queryTheme = urlParams.get('theme');
                   var saved = queryTheme || localStorage.getItem('app-theme');
-                  var isLight = saved === 'light';
-                  if (isLight) {
-                    document.documentElement.classList.remove('dark');
-                    document.documentElement.classList.add('light');
-                    document.documentElement.setAttribute('data-theme', 'light');
-                    document.documentElement.style.colorScheme = 'light';
-                  } else {
+                  var isDark = saved === 'dark';
+                  if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.classList.remove('light');
                     document.documentElement.setAttribute('data-theme', 'dark');
                     document.documentElement.style.colorScheme = 'dark';
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.style.colorScheme = 'light';
                   }
                 } catch(e) {}
               })();
