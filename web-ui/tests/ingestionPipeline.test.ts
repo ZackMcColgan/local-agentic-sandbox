@@ -91,4 +91,22 @@ test('Phase 2 — Ingestion Pipeline Skeleton Suite', async (t) => {
     assert.strictEqual(points[0].payload.corpus, 'docs');
     assert.strictEqual(points[0].payload.startLine, 1);
   });
+
+  await t.test('Oracle grounding: retrieves supervisor file:line citations for worker crash query', async () => {
+    const { searchOracleCodebase } = await import('../lib/oracle/ingestion');
+    const result = await searchOracleCodebase('how does the supervisor handle a crashed worker?');
+
+    assert.ok(result.citations.length > 0, 'Must return at least one citation');
+    const supervisorCitation = result.citations.find((c) => c.includes('supervisor.ts'));
+    assert.ok(supervisorCitation, `Must cite supervisor.ts, got: ${result.citations.join(', ')}`);
+    assert.ok(result.contextSnippet.includes('supervisor.ts'), 'Context snippet must include supervisor source');
+  });
+
+  await t.test('Oracle grounding: does not fabricate citations for general ungrounded questions', async () => {
+    const { searchOracleCodebase } = await import('../lib/oracle/ingestion');
+    const result = await searchOracleCodebase('write a haiku about rain');
+
+    assert.strictEqual(result.citations.length, 0, 'Must not return citations for general questions');
+    assert.strictEqual(result.contextSnippet, '', 'Context snippet must be empty for general questions');
+  });
 });

@@ -74,7 +74,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatStreaming.test.ts",
       "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
-      "tests/fileParser.test.ts"
+      "tests/fileParser.test.ts",
+      "tests/ingestionPipeline.test.ts"
     ]
   },
   // Tasks API route
@@ -227,6 +228,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("deploy/") ||
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
+    normalizedPath.includes(".tmp") ||
+    normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
     normalizedPath.startsWith("scripts/capture-svg-render") ||
@@ -315,7 +318,7 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
         const trimmed = line.trim();
         if (trimmed) files.add(trimmed);
       }
-    } else {
+    } else if (files.size === 0) {
       // Find merge-base with feat/v2-autonomous-platform or HEAD~1
       let baseSha = "";
       try {

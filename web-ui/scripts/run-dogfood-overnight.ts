@@ -11,7 +11,7 @@ import { WorkerPool } from "../lib/subagents/workerPool.js";
 import { generatePlanSpec } from "../lib/subagents/planner.js";
 import { generateArchitectureDiagram, discoverRepoState } from "../lib/diagram/architectureGenerator.js";
 import { generateMorningReport, formatMorningReportMarkdown } from "../lib/subagents/morningReport.js";
-import { runTestGate } from "../lib/testGate.js";
+import { runTestGate, parseTapCounts } from "../lib/testGate.js";
 
 async function runOvernightDogfood() {
   const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy"))
@@ -93,20 +93,15 @@ async function runOvernightDogfood() {
   function runSuite(cmd: string, cwd: string): { passed: number; failed: number } {
     try {
       const res = execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-      const passMatches = res.match(/ok \d+ -/g);
-      const failMatches = res.match(/not ok \d+ -/g);
-      return {
-        passed: passMatches ? passMatches.length : 0,
-        failed: failMatches ? failMatches.length : 0
-      };
+      return parseTapCounts(res);
     } catch (err: any) {
       const stdout = err.stdout ? err.stdout.toString() : "";
-      const passMatches = stdout.match(/ok \d+ -/g);
-      const failMatches = stdout.match(/not ok \d+ -/g);
-      return {
-        passed: passMatches ? passMatches.length : 0,
-        failed: failMatches && failMatches.length > 0 ? failMatches.length : 1
-      };
+      const stderr = err.stderr ? err.stderr.toString() : "";
+      const counts = parseTapCounts(stdout + "\n" + stderr);
+      if (counts.passed === 0 && counts.failed === 0) {
+        return { passed: 0, failed: 1 };
+      }
+      return counts;
     }
   }
 
@@ -148,8 +143,8 @@ async function runOvernightDogfood() {
         durationSeconds: fullSuiteDuration,
         testsPassed: webUiAllOutcome.passed + mcpOutcome.passed,
         testsFailed: webUiAllOutcome.failed + mcpOutcome.failed,
-        suitesCount: 31,
-        details: `All 22 web-ui suites (${webUiAllOutcome.passed} tests) and 9 mcp-server suites (${mcpOutcome.passed} tests) verified green`
+        suitesCount: 32,
+        details: `All 23 web-ui suites (${webUiAllOutcome.passed} tests) and 9 mcp-server suites (${mcpOutcome.passed} tests) verified green`
       }
     ],
     milestones: [

@@ -293,7 +293,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       const isRetry = state.criticApproved === false && state.criticFeedback.length > 0;
       const currentIteration = isRetry ? (state.iterationCount || 1) + 1 : 1;
 
-      const builder = createBuilderWorker();
+      const builder = createBuilderWorker({ model: workerPool.getModelForRole("builder") });
       const builderRes = await workerPool.executeJob({
         role: "builder",
         taskId: state.taskId,
@@ -342,7 +342,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
     .addNode("critic", async (state) => {
       const mIdx = state.currentMilestoneIndex || 0;
       const currentMilestone = state.milestones[mIdx] || state.milestones[0];
-      const critic = createCriticWorker();
+      const critic = createCriticWorker({ model: workerPool.getModelForRole("critic") });
 
       const criticRes = await workerPool.executeJob({
         role: "critic",

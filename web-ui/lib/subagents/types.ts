@@ -23,6 +23,7 @@ export interface Milestone {
   builderIterations: number;
   criticRounds: number;
   criticNotes?: string[];
+  forcedFlaw?: boolean;
   commitSha?: string;
   diffSummary?: string;
   testsPassed?: number;

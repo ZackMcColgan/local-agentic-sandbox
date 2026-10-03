@@ -13,6 +13,7 @@ import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import { computeModelOptions, resolveEffectiveReasoningEffort } from "@/lib/chatUtils";
+import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -278,6 +279,10 @@ CRITICAL INSTRUCTIONS:
   - In-chat vector graphic and diagram rendering is a core product promise.
   - You MUST NEVER tell the user "rendering fails on your side", "the SVG viewer has not caught it", "paste into an external viewer", or tell them to use diagrams.net externally.
   - If a diagram does not render as expected, debug it, fix the markup, format the code block properly (\`\`\`svg or \`\`\`xml), or adjust the SVG/XML structure directly. Never deflect to external tools or blame the user's browser.
+- LOCAL CODEBASE ORACLE & GROUNDING:
+  - The system automatically consults local repository source files and documentation.
+  - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
+  - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 
@@ -320,6 +325,24 @@ CRITICAL INSTRUCTIONS:
       }
     }
 
+    // 4. Grounding via Local Repository Oracle (consults local repos/docs)
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const userPrompt = lastUserMsg?.content || "";
+    let oracleSnippet = "";
+    let oracleCitations: string[] = [];
+
+    if (userPrompt.trim()) {
+      try {
+        const oracleResult = await searchOracleCodebase(userPrompt);
+        if (oracleResult.contextSnippet) {
+          oracleSnippet = oracleResult.contextSnippet;
+          oracleCitations = oracleResult.citations;
+        }
+      } catch (err: any) {
+        console.warn("[ChatRoute] Oracle retrieval warning:", err.message);
+      }
+    }
+
     const conversationMessages = [...messages];
     if (conversationMessages.length > 0) {
       const lastIdx = conversationMessages.length - 1;
@@ -330,6 +353,9 @@ CRITICAL INSTRUCTIONS:
       }
       if (imagePayloads.length > 0) {
         lastMsg.images = imagePayloads;
+      }
+      if (oracleSnippet) {
+        lastMsg.content = `${lastMsg.content || ""}\n${oracleSnippet}`;
       }
       conversationMessages[lastIdx] = lastMsg;
     }
@@ -372,7 +398,8 @@ CRITICAL INSTRUCTIONS:
           model: activeModel,
           mode,
           reasoning_effort: effectiveReasoningEffort,
-          triage: triageComplexityResult
+          triage: triageComplexityResult,
+          citations: oracleCitations
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };

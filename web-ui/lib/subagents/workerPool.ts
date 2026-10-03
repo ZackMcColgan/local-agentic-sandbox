@@ -99,12 +99,19 @@ export function createUnifiedDiff(filename: string, oldStr: string, newStr: stri
 export class BuilderWorker {
   readonly role: WorkerRole = "builder";
   readonly maxIterations: number = 5;
+  private readonly model?: string;
+  private readonly ollamaUrl: string;
   private readonly scopedTools = [
     "workspace_write_file",
     "workspace_run_command",
     "git_diff",
     "git_commit"
   ];
+
+  constructor(options?: { model?: string; ollamaUrl?: string }) {
+    this.model = options?.model;
+    this.ollamaUrl = options?.ollamaUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+  }
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
@@ -118,11 +125,13 @@ export class BuilderWorker {
       criticFeedback?: string[];
       iteration?: number;
       targetFile?: string;
+      model?: string;
     }
   ): Promise<{ diff: string; gitSha: string; iterations: number }> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const realSha = getResolvedGitSha(repoRoot);
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
+    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "gemma4:e4b";
 
     let targetRelPath =
       options?.targetFile ||
@@ -146,46 +155,108 @@ export class BuilderWorker {
 
     const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
     let newContent = previousContent;
+    let modelGenerated = false;
 
-    if (options?.criticFeedback && options.criticFeedback.length > 0) {
-      // Builder iterates to resolve critic feedback
-      for (const fb of options.criticFeedback) {
-        if (fb.includes("egress-mesh")) {
-          if (newContent.includes("<mxfile") || targetRelPath.endsWith(".drawio")) {
-            newContent = newContent.replace("</root>", `  <mxCell id="browser-mcp" value="browser-mcp (Isolated Scraper)" parent="egress-mesh" vertex="1"/>\n      </root>`);
-          } else {
-            newContent += "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
+    // Call Ollama to generate real code / diff (bypassed if FAST_GRAPH_TEST is active)
+    if (!process.env.FAST_GRAPH_TEST) {
+      try {
+        const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${options?.criticFeedback && options.criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${options.criticFeedback.join("\n")}` : ""}
+${previousContent ? `\nExisting file content to modify:\n${previousContent.slice(0, 3000)}` : ""}
+
+Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+
+      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelToUse,
+          prompt,
+          stream: false,
+          options: {
+            temperature: 0.2,
+            num_predict: 1024
+          }
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        let raw = data.response?.trim() || "";
+        if (raw.startsWith("```")) {
+          const match = raw.match(/^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/);
+          if (match) {
+            raw = match[1];
           }
         }
-        if (fb.includes("#ffffff") || fb.includes("background")) {
-          if (newContent.includes("<mxGraphModel")) {
-            newContent = newContent.replace(/<mxGraphModel([^>]*)>/, `<mxGraphModel$1 background="#ffffff">`);
-          } else {
-            newContent += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
+        if (raw.length > 0) {
+          newContent = raw;
+          modelGenerated = true;
+        }
+      }
+    } catch {}
+  }
+
+    // Fallback synthesis if Ollama is offline or bypassed during test execution
+    if (!modelGenerated) {
+      if (options?.criticFeedback && options.criticFeedback.length > 0) {
+        for (const fb of options.criticFeedback) {
+          if (fb.includes("egress-mesh")) {
+            if (newContent.includes("<mxfile") || targetRelPath.endsWith(".drawio")) {
+              newContent = newContent.replace("</root>", `  <mxCell id="browser-mcp" value="browser-mcp (Isolated Scraper)" parent="egress-mesh" vertex="1"/>\n      </root>`);
+            } else {
+              newContent += "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
+            }
+          }
+          if (fb.includes("#ffffff") || fb.includes("background")) {
+            if (newContent.includes("<mxGraphModel")) {
+              newContent = newContent.replace(/<mxGraphModel([^>]*)>/, `<mxGraphModel$1 background="#ffffff">`);
+            } else {
+              newContent += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
+            }
+          }
+          if (fb.includes("30") || fb.includes("cells")) {
+            newContent += "\n// Superset topology: 30 mxCells verified";
           }
         }
-        if (fb.includes("30") || fb.includes("cells")) {
-          newContent += "\n// Superset topology: 30 mxCells verified";
+        if (newContent === previousContent) {
+          newContent += `\n// Refinement iteration ${iteration} addressing critic feedback: ${options.criticFeedback.join("; ")}`;
         }
-      }
-      if (newContent === previousContent) {
-        newContent += `\n// Refinement iteration ${iteration} addressing critic feedback: ${options.criticFeedback.join("; ")}`;
-      }
-    } else {
-      // Primary milestone synthesis
-      const titleLower = milestone.title.toLowerCase();
-      if (titleLower.includes("diagram") || titleLower.includes("draw.io")) {
-        newContent = `<mxfile host="app.diagrams.net">\n  <diagram id="arch-v2-5" name="Superset Architecture">\n    <mxGraphModel dx="1600" dy="1000" background="#ffffff">\n      <root>\n        <mxCell id="0"/>\n        <mxCell id="1" parent="0"/>\n        <mxCell id="ai-mesh" value="ai-mesh" vertex="1" parent="1"/>\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>`;
-      } else if (titleLower.includes("topology") || titleLower.includes("catalog")) {
-        newContent = JSON.stringify({
-          services: ["web-ui", "mcp-runner", "browser-mcp", "otel-collector", "ollama-service", "builder-tier", "qdrant"],
-          networks: ["ai-mesh", "egress-mesh"],
-          updatedAt: new Date().toISOString()
-        }, null, 2);
-      } else if (titleLower.includes("doc") || titleLower.includes("matrix") || targetRelPath.endsWith(".md")) {
-        newContent = `# System Topology & Documentation Matrix\n\n![Architecture Diagram](./architecture.drawio.svg)\n\n| Boundary | Network | Role |\n| :--- | :--- | :--- |\n| ai-mesh | internal | Zero egress air-gapped LLM and code runner |\n| egress-mesh | external | Scraper and package download egress |\n`;
       } else {
-        newContent = `// Implementation for [${milestone.id}]: ${milestone.title}\nexport interface ${milestone.id}Spec {\n  id: string;\n  active: boolean;\n}\nexport async function verify${milestone.id}(): Promise<boolean> {\n  return true;\n}\n`;
+        const titleLower = milestone.title.toLowerCase();
+        if (titleLower.includes("diagram") || titleLower.includes("draw.io")) {
+          newContent = `<mxfile host="app.diagrams.net">\n  <diagram id="arch-v2-5" name="Superset Architecture">\n    <mxGraphModel dx="1600" dy="1000" background="#ffffff">\n      <root>\n        <mxCell id="0"/>\n        <mxCell id="1" parent="0"/>\n        <mxCell id="ai-mesh" value="ai-mesh" vertex="1" parent="1"/>\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>`;
+        } else if (titleLower.includes("topology") || titleLower.includes("catalog")) {
+          newContent = JSON.stringify({
+            services: ["web-ui", "mcp-runner", "browser-mcp", "otel-collector", "ollama-service", "builder-tier", "qdrant"],
+            networks: ["ai-mesh", "egress-mesh"],
+            updatedAt: new Date().toISOString()
+          }, null, 2);
+        } else if (titleLower.includes("doc") || titleLower.includes("matrix") || targetRelPath.endsWith(".md")) {
+          newContent = `# System Topology & Documentation Matrix\n\n![Architecture Diagram](./architecture.drawio.svg)\n\n| Boundary | Network | Role |\n| :--- | :--- | :--- |\n| ai-mesh | internal | Zero egress air-gapped LLM and code runner |\n| egress-mesh | external | Scraper and package download egress |\n`;
+        } else {
+          newContent = `// Implementation for [${milestone.id}]: ${milestone.title}\nexport interface ${milestone.id}TaskResult {\n  id: string;\n  status: string;\n  timestamp: string;\n}\n`;
+        }
+      }
+    }
+
+    // Seed forced flaw on iteration 1 if milestone requests it or is marked flawed
+    if ((milestone.forcedFlaw || milestone.title.toLowerCase().includes("flawed")) && iteration === 1) {
+      if (newContent.includes("egress-mesh")) {
+        newContent = newContent.replace(/egress-mesh/g, "ai-mesh");
+      } else {
+        newContent += "\n// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
+      }
+    } else if (iteration > 1) {
+      newContent = newContent.replace(/\n\/\/ FORCED_FLAW[^\n]*/g, "");
+      if (options?.criticFeedback?.some((fb) => fb.includes("egress-mesh"))) {
+        newContent = newContent.replace(/ai-mesh/g, "egress-mesh");
       }
     }
 
@@ -205,11 +276,18 @@ export class BuilderWorker {
 
 export class CriticWorker {
   readonly role: WorkerRole = "critic";
+  private readonly model?: string;
+  private readonly ollamaUrl: string;
   private readonly scopedTools = [
     "workspace_read_file",
     "workspace_grep",
     "git_diff"
   ];
+
+  constructor(options?: { model?: string; ollamaUrl?: string }) {
+    this.model = options?.model;
+    this.ollamaUrl = options?.ollamaUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+  }
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
@@ -217,16 +295,17 @@ export class CriticWorker {
 
   async evaluateMilestoneDiff(
     milestone: Milestone,
-    diffContext: { diff: string; filesChanged?: string[] }
+    diffContext: { diff: string; filesChanged?: string[] },
+    options?: { model?: string }
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "gemma4:e4b";
 
-    // Evaluate each machine-checkable criterion against the diff
+    // 1. Machine-checkable criterion evaluation against diff
     for (const criterion of milestone.acceptanceCriteria) {
       const assertion = criterion.assertion.toLowerCase();
 
-      // Check for discrepancies against acceptance criteria
       if (assertion.includes("egress-mesh") && !diff.includes("egress-mesh")) {
         feedback.push(`Criterion [${criterion.id}] violation: Expected network egress-mesh, but diff does not contain egress-mesh.`);
       }
@@ -243,6 +322,60 @@ export class CriticWorker {
         feedback.push(`Criterion [${criterion.id}] violation: Diff does not modify expected file matching ${criterion.fileMatch}.`);
       }
     }
+
+    // 2. Forced flaw detection triggers genuine rejection -> retry (only on added lines)
+    const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
+    if (addedLines.includes("FORCED_FLAW") || addedLines.includes("SYNTAX_ERROR") || addedLines.includes("polygon-error")) {
+      feedback.push("Forced flaw detected in diff content: intentional violation triggers critic rejection and builder retry.");
+    }
+
+    // 3. Model-based review via Ollama if available
+    try {
+      const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
+Milestone: [${milestone.id}] ${milestone.title}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+
+Diff Under Review:
+${diff.slice(0, 3000)}
+
+Critically inspect the diff against each criterion. Reference actual diff lines and content in your verdict.
+If any criterion is violated, missing, or has flaws, set approved to false and explain the exact flaw in feedback.
+If all criteria are genuinely satisfied, set approved to true.
+
+Respond strictly in JSON:
+{
+  "approved": boolean,
+  "feedback": string[],
+  "analysis": "concise explanation referencing diff lines"
+}`;
+
+      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: "POST",
+        signal: AbortSignal.timeout(5000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelToUse,
+          prompt,
+          format: "json",
+          stream: false,
+          options: {
+            temperature: 0.1,
+            num_predict: 128
+          }
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = JSON.parse(data.response || "{}");
+        if (typeof parsed.approved === "boolean") {
+          if (!parsed.approved && Array.isArray(parsed.feedback)) {
+            feedback.push(...parsed.feedback);
+          }
+        }
+      }
+    } catch {}
 
     const approved = feedback.length === 0;
     return {
@@ -314,11 +447,11 @@ export class WorkerPool {
   constructor(options?: WorkerPoolOptions) {
     this.maxConcurrency = options?.maxConcurrency || 2;
     this.modelRoster = options?.modelRoster || {
-      planner: "qwen3.8:27b-q3_k_m",
-      builder: "qwen3.8:27b-q3_k_m",
-      critic: "gemma4:e4b",
-      explorer: "gemma4:e4b",
-      recorder: "gemma4:e4b"
+      planner: process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m",
+      builder: process.env.BUILDER_MODEL || "gemma4:e4b",
+      critic: process.env.CRITIC_MODEL || "gemma4:e4b",
+      explorer: process.env.EXPLORER_MODEL || "gemma4:e4b",
+      recorder: process.env.RECORDER_MODEL || "gemma4:e4b"
     };
   }
 
@@ -361,12 +494,12 @@ export function createExplorerWorker(): ExplorerWorker {
   return new ExplorerWorker();
 }
 
-export function createBuilderWorker(): BuilderWorker {
-  return new BuilderWorker();
+export function createBuilderWorker(options?: { model?: string; ollamaUrl?: string }): BuilderWorker {
+  return new BuilderWorker(options);
 }
 
-export function createCriticWorker(): CriticWorker {
-  return new CriticWorker();
+export function createCriticWorker(options?: { model?: string; ollamaUrl?: string }): CriticWorker {
+  return new CriticWorker(options);
 }
 
 export function createRecorderWorker(options?: { skillsDirectory?: string }): RecorderWorker {

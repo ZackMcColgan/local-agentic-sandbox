@@ -11,6 +11,8 @@ import {
 import { WorkerPool } from '../lib/subagents/workerPool';
 import { Milestone } from '../lib/subagents/types';
 
+process.env.FAST_GRAPH_TEST = "1";
+
 test('Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite', async (t) => {
   const testCheckpointDir = path.resolve(process.cwd(), '.tmp-lg-nodes-test');
   if (!fs.existsSync(testCheckpointDir)) {
@@ -101,6 +103,7 @@ test('Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite', async (
       status: 'pending',
       builderIterations: 0,
       criticRounds: 0,
+      forcedFlaw: true,
       acceptanceCriteria: [
         {
           id: 'AC-NET-1',
