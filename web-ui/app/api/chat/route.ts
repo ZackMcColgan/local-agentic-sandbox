@@ -20,6 +20,7 @@ import {
   extractDurablePreferences,
   recordProfileEntry
 } from "@/lib/memory/profile";
+import { searchSemanticMemory } from "@/lib/memory/semanticMemory";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -354,13 +355,19 @@ CRITICAL INSTRUCTIONS:
 
     if (userPrompt.trim()) {
       try {
-        const oracleResult = await searchOracleCodebase(userPrompt);
-        if (oracleResult.contextSnippet) {
-          oracleSnippet = oracleResult.contextSnippet;
-          oracleCitations = oracleResult.citations;
+        const semanticRes = await searchSemanticMemory(userPrompt);
+        if (!semanticRes.degraded && semanticRes.citations.length > 0) {
+          oracleSnippet = semanticRes.contextSnippet;
+          oracleCitations = semanticRes.citations;
+        } else {
+          const oracleResult = await searchOracleCodebase(userPrompt);
+          if (oracleResult.contextSnippet) {
+            oracleSnippet = oracleResult.contextSnippet;
+            oracleCitations = oracleResult.citations;
+          }
         }
       } catch (err: any) {
-        console.warn("[ChatRoute] Oracle retrieval warning:", err.message);
+        console.warn("[ChatRoute] Semantic memory retrieval warning:", err.message);
       }
     }
 

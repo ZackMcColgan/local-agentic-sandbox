@@ -305,7 +305,7 @@ export class CriticWorker {
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "gemma4:e4b";
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "qwen3.8:27b-q3_k_m";
 
     // 1. Machine-checkable criterion evaluation against diff
     for (const criterion of milestone.acceptanceCriteria) {
@@ -362,10 +362,11 @@ Respond strictly in JSON:
 
     let verdictText: string;
     try {
+      const useJsonFormat = !modelToUse.toLowerCase().includes("gemma");
       const result = await generate({
         model: modelToUse,
         prompt,
-        format: "json",
+        ...(useJsonFormat ? { format: "json" } : {}),
         keepAlive: this.keepAlive,
         signal: options?.signal,
         options: { temperature: 0.1, num_predict: 512 }
@@ -541,7 +542,7 @@ export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
     planner: process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m",
     builder: process.env.BUILDER_MODEL || "gemma4:e4b",
-    critic: process.env.CRITIC_MODEL || "gemma4:e4b",
+    critic: process.env.CRITIC_MODEL || "qwen3.8:27b-q3_k_m",
     explorer: process.env.EXPLORER_MODEL || "gemma4:e4b",
     recorder: process.env.RECORDER_MODEL || "gemma4:e4b"
   };

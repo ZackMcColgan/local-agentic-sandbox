@@ -79,10 +79,15 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
-  // Memory profile & durable facts
+  // Memory profile, durable facts & semantic memory
   {
     match: (p) => p.includes("lib/memory"),
-    tests: ["tests/userProfile.test.ts"]
+    tests: ["tests/userProfile.test.ts", "tests/semanticMemory.test.ts"]
+  },
+  // Skill gate
+  {
+    match: (p) => p.includes("lib/subagents/skillGate"),
+    tests: ["tests/semanticMemory.test.ts"]
   },
   // Chat API route
   {
@@ -93,7 +98,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
-      "tests/userProfile.test.ts"
+      "tests/userProfile.test.ts",
+      "tests/semanticMemory.test.ts"
     ]
   },
   // Tasks API route
@@ -222,6 +228,23 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("scripts/run-dogfood-overnight"),
     tests: ["tests/dogfoodPhase1Acceptance.test.ts", "tests/realReportTestCounts.test.ts"]
+  },
+  // Memory evaluation, ingestion and verification scripts
+  {
+    match: (p) =>
+      p.includes("scripts/eval-memory") ||
+      p.includes("scripts/ingest-docs") ||
+      p.includes("scripts/verify-phase-d") ||
+      p.includes("eval/"),
+    tests: ["tests/semanticMemory.test.ts"]
+  },
+  {
+    match: (p) => p.includes("scripts/verify-phase-c"),
+    tests: ["tests/userProfile.test.ts"]
+  },
+  {
+    match: (p) => p.includes("scripts/verify-lan-copy"),
+    tests: ["tests/clipboard.test.ts"]
   },
   // Architecture diagrams
   {

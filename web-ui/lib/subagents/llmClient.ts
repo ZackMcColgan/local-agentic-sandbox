@@ -96,7 +96,34 @@ export function createOllamaGenerate(options?: {
       throw new ModelUnavailableError(req.model, endpoint, `invalid JSON response: ${err?.message}`);
     }
 
-    const text = typeof data?.response === "string" ? data.response.trim() : "";
+    let text = typeof data?.response === "string" ? data.response.trim() : "";
+    if (!text && !req.signal?.aborted) {
+      // Transient model warm-up/context switch glitch in Ollama: wait 300ms and retry once
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      try {
+        const retryRes = await fetchImpl(endpoint, {
+          method: "POST",
+          signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: req.model,
+            prompt: req.prompt,
+            stream: false,
+            ...(req.format ? { format: req.format } : {}),
+            ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
+            options: req.options || {}
+          })
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          text = typeof retryData?.response === "string" ? retryData.response.trim() : "";
+          if (text) {
+            data = retryData;
+          }
+        }
+      } catch (_) {}
+    }
+
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }
