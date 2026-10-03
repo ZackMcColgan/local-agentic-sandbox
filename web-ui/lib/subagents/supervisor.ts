@@ -933,4 +933,21 @@ export class OvernightSupervisor {
 
     return task;
   }
+
+  /**
+   * Parks the task when user stops the run or halts execution.
+   * Sets task status to "stopped", logs journal entry, and persists checkpoint to disk.
+   */
+  parkTask(task: TaskManifest, reason: string = "User stopped run"): TaskManifest {
+    task.status = "stopped";
+    task.parkedReason = reason;
+    task.updatedAt = new Date().toISOString();
+    task.journal.push({
+      timestamp: new Date().toISOString(),
+      role: "supervisor",
+      message: `Task stopped: ${reason}. Workers halted, VRAM released.`
+    });
+    this.saveCheckpoint(task);
+    return task;
+  }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
+import { unloadAllModels } from "@/lib/subagents/residency";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
@@ -41,17 +42,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         activeExecutionSet.delete(thread.taskId);
         const task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
         if (task) {
-          task.status = "cancelled";
-          task.updatedAt = new Date().toISOString();
-          task.journal.push({
-            timestamp: new Date().toISOString(),
-            role: "supervisor",
-            message: "User stopped run. Workers halted, VRAM released."
-          });
-          supervisor.saveCheckpoint(task);
+          supervisor.parkTask(task, "User stopped run");
         }
       }
       activeExecutionSet.delete(thread.id);
+
+      // Unload all models from Ollama VRAM immediately
+      await unloadAllModels();
 
       // Mark the last assistant message as stopped
       for (let i = thread.messages.length - 1; i >= 0; i--) {

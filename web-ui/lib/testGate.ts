@@ -87,7 +87,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts"]
+    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
@@ -119,7 +119,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
-    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts"]
+    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
   },
   // Files API route
   {
@@ -132,7 +132,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/supervisor.test.ts",
       "tests/langgraphSupervisorNodes.test.ts",
-      "tests/activeTaskRehydration.test.ts"
+      "tests/activeTaskRehydration.test.ts",
+      "tests/taskControls.test.ts"
     ]
   },
   {

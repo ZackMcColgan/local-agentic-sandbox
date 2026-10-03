@@ -183,3 +183,28 @@ export async function enforceResidency(
 
   return actions;
 }
+
+/**
+ * Immediately unloads all models currently resident in Ollama VRAM.
+ * Sends POST /api/generate with keep_alive: 0 for every loaded model.
+ */
+export async function unloadAllModels(
+  baseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  fetchImpl: typeof fetch = fetch
+): Promise<string[]> {
+  const unloaded: string[] = [];
+  try {
+    const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
+    for (const m of loaded) {
+      await fetchImpl(`${baseUrl}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: m.name, keep_alive: 0 })
+      });
+      unloaded.push(m.name);
+    }
+  } catch (err: any) {
+    console.warn("Notice: could not unload models from Ollama:", err.message);
+  }
+  return unloaded;
+}

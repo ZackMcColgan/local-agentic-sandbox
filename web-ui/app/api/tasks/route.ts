@@ -4,6 +4,7 @@ import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { generateMorningReport, MorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 import { activeExecutionSet } from "@/lib/threads/threadStore";
+import { unloadAllModels } from "@/lib/subagents/residency";
 
 // In-memory task store & active cancellation tokens
 const tasksRegistry = new Map<string, TaskManifest>();
@@ -25,11 +26,10 @@ export async function POST(req: Request) {
       }
       const task = tasksRegistry.get(taskId);
       if (task) {
-        task.status = "cancelled";
-        task.updatedAt = new Date().toISOString();
-        supervisor.saveCheckpoint(task);
+        supervisor.parkTask(task, "User cancelled task");
       }
-      return NextResponse.json({ status: "cancelled", activeWorkers: 0 });
+      await unloadAllModels();
+      return NextResponse.json({ status: "stopped", activeWorkers: 0 });
     }
 
     // 2. Action: Revert Ambiguity Flag
@@ -220,6 +220,7 @@ export async function DELETE(req: Request) {
     });
     supervisor.saveCheckpoint(task);
   }
+  await unloadAllModels();
 
   return NextResponse.json({
     status: "cancelled",

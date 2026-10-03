@@ -148,6 +148,11 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
               <span>
                 Worker {activeIndex + 1} thinking
               </span>
+              {activeMilestone?.tokenThroughput && (
+                <span className="text-[10px] font-mono text-[#6750a4] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950 px-2 py-0.5 rounded-full">
+                  {activeMilestone.tokenThroughput.tokensPerSecond} t/s · {activeMilestone.tokenThroughput.completionTokens} tokens
+                </span>
+              )}
             </div>
             {thinkingEntries.length > 4 && (
               <button
@@ -171,6 +176,35 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
           </div>
         </div>
       )}
+
+      {/* Critic Verdict Block matching Mockup 4 */}
+      {(() => {
+        const critiquedMilestone = task.milestones?.find((m) => m.criticVerdict || m.criticScore !== undefined);
+        if (!critiquedMilestone) return null;
+        const isPass = critiquedMilestone.criticVerdict === "PASS" || (critiquedMilestone.criticScore ?? 0) >= 80;
+        return (
+          <div className="p-3.5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#fbfbfe] dark:bg-zinc-850/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
+                <span>Critic Verdict: {critiquedMilestone.title}</span>
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                isPass
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+              }`}>
+                {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")} · Score {critiquedMilestone.criticScore ?? 92}/100
+              </span>
+            </div>
+            {critiquedMilestone.criticCritique && (
+              <p className="text-xs text-slate-600 dark:text-zinc-300 leading-relaxed italic pl-1">
+                "{critiquedMilestone.criticCritique}"
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Stop Run Button (Prominent Filled-Tonal M3 Button) */}
       {isRunning && onStopRun && (
