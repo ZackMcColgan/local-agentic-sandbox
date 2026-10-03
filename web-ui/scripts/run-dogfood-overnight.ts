@@ -111,6 +111,7 @@ async function runOvernightDogfood() {
   const unitOutcome = runSuite("npx tsx --test tests/workerPool.test.ts tests/supervisor.test.ts tests/planner.test.ts tests/testGate.test.ts", path.join(repoRoot, "web-ui"));
   const webUiAllOutcome = runSuite("npm test", path.join(repoRoot, "web-ui"));
   const mcpOutcome = runSuite("npm test", path.join(repoRoot, "mcp-server"));
+  const browserMcpOutcome = runSuite("npm test", path.join(repoRoot, "browser-mcp"));
   const fullSuiteDuration = parseFloat(((Date.now() - fullSuiteStartTime) / 1000).toFixed(2));
 
   const completedAt = new Date().toISOString();
@@ -139,12 +140,12 @@ async function runOvernightDogfood() {
       {
         name: "Tier 2: Full Regression Suite (Overnight / CI)",
         command: "npm test",
-        status: webUiAllOutcome.failed === 0 && mcpOutcome.failed === 0 ? "passed" : "failed",
+        status: webUiAllOutcome.failed === 0 && mcpOutcome.failed === 0 && browserMcpOutcome.failed === 0 ? "passed" : "failed",
         durationSeconds: fullSuiteDuration,
-        testsPassed: webUiAllOutcome.passed + mcpOutcome.passed,
-        testsFailed: webUiAllOutcome.failed + mcpOutcome.failed,
-        suitesCount: 32,
-        details: `All 23 web-ui suites (${webUiAllOutcome.passed} tests) and 9 mcp-server suites (${mcpOutcome.passed} tests) verified green`
+        testsPassed: webUiAllOutcome.passed + mcpOutcome.passed + browserMcpOutcome.passed,
+        testsFailed: webUiAllOutcome.failed + mcpOutcome.failed + browserMcpOutcome.failed,
+        suitesCount: 37,
+        details: `All 23 web-ui suites (${webUiAllOutcome.passed} tests), 9 mcp-server suites (${mcpOutcome.passed} tests), and 5 browser-mcp suites (${browserMcpOutcome.passed} tests) verified green`
       }
     ],
     milestones: [

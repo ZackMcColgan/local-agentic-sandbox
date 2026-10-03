@@ -104,7 +104,14 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
   });
 
   it("[4] Critic catches >= 1 real discrepancy, rejects with notes, then approves once resolved", async () => {
-    const critic = createCriticWorker();
+    const critic = createCriticWorker({
+      generate: async () => ({
+        text: JSON.stringify({ approved: true, feedback: [], analysis: "Acceptance criteria satisfied" }),
+        model: "mock-critic",
+        loadDurationMs: 0,
+        totalDurationMs: 1
+      })
+    });
 
     const sampleMilestone: Milestone = {
       id: "M1",

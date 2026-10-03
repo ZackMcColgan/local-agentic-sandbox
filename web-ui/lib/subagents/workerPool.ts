@@ -1,7 +1,14 @@
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
-import { Milestone, WorkerRole, WorkerState } from "./types.js";
+import { Milestone, WorkerRole } from "./types";
+import {
+  createOllamaGenerate,
+  isFastGraphTestMode,
+  stripCodeFence,
+  type GenerateFn
+} from "./llmClient";
+import { keepAliveFor, type ResidencyPlan } from "./residency";
 
 export interface ModelRosterConfig {
   planner?: string;
@@ -14,6 +21,10 @@ export interface ModelRosterConfig {
 export interface WorkerPoolOptions {
   maxConcurrency?: number;
   modelRoster?: ModelRosterConfig;
+  /** Injected model client (tests / alternate backends). Defaults to Ollama per worker. */
+  generate?: GenerateFn;
+  /** Residency plan supplying keep_alive per model (see residency.ts). */
+  residencyPlan?: ResidencyPlan;
 }
 
 export interface WorkerJob<T = any> {
@@ -26,11 +37,35 @@ export interface WorkerJob<T = any> {
 export interface CriticReview {
   approved: boolean;
   feedback: string[];
+  /** True when the critic could not obtain a model verdict and therefore refused to approve. */
+  abstained?: boolean;
+  /** True when the verdict is rule-only under FAST_GRAPH_TEST (no model consulted). */
+  synthetic?: boolean;
+  model?: string;
+}
+
+export interface BuilderResult {
+  diff: string;
+  gitSha: string;
+  iterations: number;
+  /** True only for the FAST_GRAPH_TEST deterministic fallback. */
+  synthetic: boolean;
+  /** Model that produced the content (undefined when synthetic). */
+  model?: string;
+  targetFile: string;
+  loadDurationMs?: number;
 }
 
 export interface RecordSkillResult {
   promoted: boolean;
   skillFilePath?: string;
+}
+
+export interface WorkerModelOptions {
+  model?: string;
+  ollamaUrl?: string;
+  generate?: GenerateFn;
+  keepAlive?: string | number;
 }
 
 export class ExplorerWorker {
@@ -50,25 +85,28 @@ export class ExplorerWorker {
   }
 }
 
-export function getResolvedGitSha(repoRoot?: string): string {
-  const candidates = [
-    repoRoot,
-    process.cwd(),
-    path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../..")
-  ].filter(Boolean) as string[];
+/**
+ * Resolves the real HEAD SHA. Provenance rule: never synthesize a SHA.
+ * Throws when no git repository is found. `strict` only inspects `repoRoot`.
+ */
+export function getResolvedGitSha(repoRoot?: string, opts?: { strict?: boolean }): string {
+  const candidates = (opts?.strict
+    ? [repoRoot]
+    : [repoRoot, process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")]
+  ).filter(Boolean) as string[];
 
   for (const dir of candidates) {
     try {
+      const top = execSync("git rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase()) continue;
       const sha = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
       if (/^[0-9a-f]{40}$/i.test(sha)) {
         return sha;
       }
     } catch {}
   }
-  return "d7c84cbfabcd0b0c95c1888836830d5832de52a7";
+  throw new Error(`No git repository found (searched: ${candidates.join(", ")}); refusing to fabricate a commit SHA.`);
 }
-
 
 export function createUnifiedDiff(filename: string, oldStr: string, newStr: string): string {
   const oldLines = oldStr ? oldStr.split("\n") : [];
@@ -96,11 +134,38 @@ export function createUnifiedDiff(filename: string, oldStr: string, newStr: stri
   return diffLines.join("\n") + "\n";
 }
 
+const FORCED_FLAW_MARKER = "// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
+
+/**
+ * TEST-ONLY deterministic content used exclusively under FAST_GRAPH_TEST.
+ * Every result produced from here is flagged `synthetic: true`.
+ */
+function synthesizeForFastGraphTest(milestone: Milestone, targetRelPath: string, previousContent: string, criticFeedback: string[], iteration: number): string {
+  let content = previousContent;
+  if (criticFeedback.length > 0) {
+    for (const fb of criticFeedback) {
+      if (fb.includes("egress-mesh") && !content.includes("egress-mesh")) {
+        content += "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
+      }
+      if ((fb.includes("#ffffff") || fb.includes("background")) && !content.includes("#ffffff")) {
+        content += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
+      }
+    }
+    if (content === previousContent) {
+      content += `\n// [synthetic] refinement iteration ${iteration}`;
+    }
+    return content;
+  }
+  return `// [synthetic FAST_GRAPH_TEST output] ${milestone.id}: ${milestone.title}\n// target: ${targetRelPath}\nexport interface ${milestone.id.replace(/[^A-Za-z0-9_]/g, "_")}TaskResult {\n  id: string;\n  status: string;\n}\n`;
+}
+
 export class BuilderWorker {
   readonly role: WorkerRole = "builder";
   readonly maxIterations: number = 5;
   private readonly model?: string;
-  private readonly ollamaUrl: string;
+  private readonly injectedGenerate?: GenerateFn;
+  private readonly ollamaUrl?: string;
+  private readonly keepAlive?: string | number;
   private readonly scopedTools = [
     "workspace_write_file",
     "workspace_run_command",
@@ -108,13 +173,28 @@ export class BuilderWorker {
     "git_commit"
   ];
 
-  constructor(options?: { model?: string; ollamaUrl?: string }) {
+  constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
-    this.ollamaUrl = options?.ollamaUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+    this.injectedGenerate = options?.generate;
+    this.ollamaUrl = options?.ollamaUrl;
+    this.keepAlive = options?.keepAlive;
   }
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
+  }
+
+  private resolveTarget(milestone: Milestone, explicit?: string): string {
+    let target =
+      explicit ||
+      milestone.plannedFiles?.[0] ||
+      milestone.acceptanceCriteria?.find((c) => c.fileMatch)?.fileMatch ||
+      `workspace/lib/${milestone.id.toLowerCase()}.ts`;
+    const protectedCoreFiles = ["docker-compose.yml", "package.json", "package-lock.json", "README.md", "tsconfig.json"];
+    if (protectedCoreFiles.includes(target) && !explicit && !milestone.plannedFiles?.includes(target)) {
+      target = `docs/generated/${target}`;
+    }
+    return target;
   }
 
   async executeMilestoneWork(
@@ -126,150 +206,71 @@ export class BuilderWorker {
       iteration?: number;
       targetFile?: string;
       model?: string;
+      gitSha?: string;
+      signal?: AbortSignal;
     }
-  ): Promise<{ diff: string; gitSha: string; iterations: number }> {
+  ): Promise<BuilderResult> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
-    const realSha = getResolvedGitSha(repoRoot);
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
     const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "gemma4:e4b";
-
-    let targetRelPath =
-      options?.targetFile ||
-      milestone.plannedFiles?.[0] ||
-      (milestone.title.toLowerCase().includes("diagram") ? "docs/architecture.drawio" :
-       milestone.title.toLowerCase().includes("topology") ? "deploy/topology-catalog.json" :
-       milestone.title.toLowerCase().includes("doc") ? "docs/topology-matrix.md" :
-       milestone.acceptanceCriteria?.find((c) => c.fileMatch)?.fileMatch ||
-       `workspace/lib/${milestone.id.toLowerCase()}.ts`);
-
-    const protectedCoreFiles = ["docker-compose.yml", "package.json", "package-lock.json", "README.md", "tsconfig.json"];
-    if (protectedCoreFiles.includes(targetRelPath) && !options?.targetFile && !milestone.plannedFiles?.includes(targetRelPath)) {
-      targetRelPath = `docs/generated/${targetRelPath}`;
-    }
+    const criticFeedback = options?.criticFeedback || [];
+    const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
 
     const fullPath = path.resolve(repoRoot, targetRelPath);
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
     const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
-    let newContent = previousContent;
-    let modelGenerated = false;
 
-    // Call Ollama to generate real code / diff (bypassed if FAST_GRAPH_TEST is active)
-    if (!process.env.FAST_GRAPH_TEST) {
-      try {
-        const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+    // Deterministic fallback is permitted ONLY in FAST_GRAPH_TEST mode with no injected model.
+    const synthetic = !this.injectedGenerate && isFastGraphTestMode();
+    let newContent: string;
+    let loadDurationMs: number | undefined;
+
+    if (synthetic) {
+      newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+    } else {
+      const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+      const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
 ${milestone.description}
 Acceptance Criteria:
 ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
-${options?.criticFeedback && options.criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${options.criticFeedback.join("\n")}` : ""}
-${previousContent ? `\nExisting file content to modify:\n${previousContent.slice(0, 3000)}` : ""}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
 
 Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
 
-      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: "POST",
-        signal: AbortSignal.timeout(10000),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: modelToUse,
-          prompt,
-          stream: false,
-          options: {
-            temperature: 0.2,
-            num_predict: 1024
-          }
-        })
+      // Throws ModelUnavailableError on any failure — nothing is written in that case.
+      const result = await generate({
+        model: modelToUse,
+        prompt,
+        keepAlive: this.keepAlive,
+        signal: options?.signal,
+        options: { temperature: 0.2, num_predict: 4096 }
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        let raw = data.response?.trim() || "";
-        if (raw.startsWith("```")) {
-          const match = raw.match(/^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/);
-          if (match) {
-            raw = match[1];
-          }
-        }
-        if (raw.length > 0) {
-          newContent = raw;
-          modelGenerated = true;
-        }
-      }
-    } catch {}
-  }
-
-    // Fallback synthesis if Ollama is offline or bypassed during test execution
-    if (!modelGenerated) {
-      if (options?.criticFeedback && options.criticFeedback.length > 0) {
-        for (const fb of options.criticFeedback) {
-          if (fb.includes("egress-mesh")) {
-            if (newContent.includes("<mxfile") || targetRelPath.endsWith(".drawio")) {
-              newContent = newContent.replace("</root>", `  <mxCell id="browser-mcp" value="browser-mcp (Isolated Scraper)" parent="egress-mesh" vertex="1"/>\n      </root>`);
-            } else {
-              newContent += "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
-            }
-          }
-          if (fb.includes("#ffffff") || fb.includes("background")) {
-            if (newContent.includes("<mxGraphModel")) {
-              newContent = newContent.replace(/<mxGraphModel([^>]*)>/, `<mxGraphModel$1 background="#ffffff">`);
-            } else {
-              newContent += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
-            }
-          }
-          if (fb.includes("30") || fb.includes("cells")) {
-            newContent += "\n// Superset topology: 30 mxCells verified";
-          }
-        }
-        if (newContent === previousContent) {
-          newContent += `\n// Refinement iteration ${iteration} addressing critic feedback: ${options.criticFeedback.join("; ")}`;
-        }
-      } else {
-        const titleLower = milestone.title.toLowerCase();
-        if (titleLower.includes("diagram") || titleLower.includes("draw.io")) {
-          newContent = `<mxfile host="app.diagrams.net">\n  <diagram id="arch-v2-5" name="Superset Architecture">\n    <mxGraphModel dx="1600" dy="1000" background="#ffffff">\n      <root>\n        <mxCell id="0"/>\n        <mxCell id="1" parent="0"/>\n        <mxCell id="ai-mesh" value="ai-mesh" vertex="1" parent="1"/>\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>`;
-        } else if (titleLower.includes("topology") || titleLower.includes("catalog")) {
-          newContent = JSON.stringify({
-            services: ["web-ui", "mcp-runner", "browser-mcp", "otel-collector", "ollama-service", "builder-tier", "qdrant"],
-            networks: ["ai-mesh", "egress-mesh"],
-            updatedAt: new Date().toISOString()
-          }, null, 2);
-        } else if (titleLower.includes("doc") || titleLower.includes("matrix") || targetRelPath.endsWith(".md")) {
-          newContent = `# System Topology & Documentation Matrix\n\n![Architecture Diagram](./architecture.drawio.svg)\n\n| Boundary | Network | Role |\n| :--- | :--- | :--- |\n| ai-mesh | internal | Zero egress air-gapped LLM and code runner |\n| egress-mesh | external | Scraper and package download egress |\n`;
-        } else {
-          newContent = `// Implementation for [${milestone.id}]: ${milestone.title}\nexport interface ${milestone.id}TaskResult {\n  id: string;\n  status: string;\n  timestamp: string;\n}\n`;
-        }
-      }
+      newContent = stripCodeFence(result.text);
+      loadDurationMs = result.loadDurationMs;
     }
 
-    // Seed forced flaw on iteration 1 if milestone requests it or is marked flawed
-    if ((milestone.forcedFlaw || milestone.title.toLowerCase().includes("flawed")) && iteration === 1) {
-      if (newContent.includes("egress-mesh")) {
-        newContent = newContent.replace(/egress-mesh/g, "ai-mesh");
-      } else {
-        newContent += "\n// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
-      }
-    } else if (iteration > 1) {
-      newContent = newContent.replace(/\n\/\/ FORCED_FLAW[^\n]*/g, "");
-      if (options?.criticFeedback?.some((fb) => fb.includes("egress-mesh"))) {
-        newContent = newContent.replace(/ai-mesh/g, "egress-mesh");
-      }
+    // Test hook: seed a deterministic flaw on iteration 1 so critic rejection -> retry is provable.
+    if (milestone.forcedFlaw && iteration === 1) {
+      newContent += `\n${FORCED_FLAW_MARKER}`;
+    } else {
+      newContent = newContent.replace(`\n${FORCED_FLAW_MARKER}`, "");
     }
 
-    // Write real file edit to disk
+    const gitSha = options?.gitSha || getResolvedGitSha(repoRoot);
+
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, newContent, "utf8");
 
-    // Generate real unified diff
-    const diff = createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent);
-
     return {
-      diff,
-      gitSha: realSha,
-      iterations: iteration
+      diff: createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent),
+      gitSha,
+      iterations: iteration,
+      synthetic,
+      model: synthetic ? undefined : modelToUse,
+      targetFile: targetRelPath,
+      loadDurationMs
     };
   }
 }
@@ -277,16 +278,20 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
 export class CriticWorker {
   readonly role: WorkerRole = "critic";
   private readonly model?: string;
-  private readonly ollamaUrl: string;
+  private readonly injectedGenerate?: GenerateFn;
+  private readonly ollamaUrl?: string;
+  private readonly keepAlive?: string | number;
   private readonly scopedTools = [
     "workspace_read_file",
     "workspace_grep",
     "git_diff"
   ];
 
-  constructor(options?: { model?: string; ollamaUrl?: string }) {
+  constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
-    this.ollamaUrl = options?.ollamaUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+    this.injectedGenerate = options?.generate;
+    this.ollamaUrl = options?.ollamaUrl;
+    this.keepAlive = options?.keepAlive;
   }
 
   getScopedToolNames(): string[] {
@@ -296,7 +301,7 @@ export class CriticWorker {
   async evaluateMilestoneDiff(
     milestone: Milestone,
     diffContext: { diff: string; filesChanged?: string[] },
-    options?: { model?: string }
+    options?: { model?: string; signal?: AbortSignal }
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
@@ -323,21 +328,26 @@ export class CriticWorker {
       }
     }
 
-    // 2. Forced flaw detection triggers genuine rejection -> retry (only on added lines)
+    // 2. Forced flaw detection (only on added lines)
     const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
     if (addedLines.includes("FORCED_FLAW") || addedLines.includes("SYNTAX_ERROR") || addedLines.includes("polygon-error")) {
       feedback.push("Forced flaw detected in diff content: intentional violation triggers critic rejection and builder retry.");
     }
 
-    // 3. Model-based review via Ollama if available
-    try {
-      const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
+    // 3a. TEST-ONLY: rule-based verdict, explicitly flagged synthetic.
+    if (!this.injectedGenerate && isFastGraphTestMode()) {
+      return { approved: feedback.length === 0, feedback, abstained: false, synthetic: true };
+    }
+
+    // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
+    const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+    const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
 ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
 
 Diff Under Review:
-${diff.slice(0, 3000)}
+${diff.slice(0, 6000)}
 
 Critically inspect the diff against each criterion. Reference actual diff lines and content in your verdict.
 If any criterion is violated, missing, or has flaws, set approved to false and explain the exact flaw in feedback.
@@ -350,37 +360,54 @@ Respond strictly in JSON:
   "analysis": "concise explanation referencing diff lines"
 }`;
 
-      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: "POST",
-        signal: AbortSignal.timeout(5000),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: modelToUse,
-          prompt,
-          format: "json",
-          stream: false,
-          options: {
-            temperature: 0.1,
-            num_predict: 128
-          }
-        })
+    let verdictText: string;
+    try {
+      const result = await generate({
+        model: modelToUse,
+        prompt,
+        format: "json",
+        keepAlive: this.keepAlive,
+        signal: options?.signal,
+        options: { temperature: 0.1, num_predict: 512 }
       });
+      verdictText = result.text;
+    } catch (err: any) {
+      return {
+        approved: false,
+        abstained: true,
+        synthetic: false,
+        model: modelToUse,
+        feedback: [...feedback, "critic model unreachable — abstaining", String(err?.message || err)]
+      };
+    }
 
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = JSON.parse(data.response || "{}");
-        if (typeof parsed.approved === "boolean") {
-          if (!parsed.approved && Array.isArray(parsed.feedback)) {
-            feedback.push(...parsed.feedback);
-          }
-        }
-      }
-    } catch {}
+    let parsed: any;
+    try {
+      parsed = JSON.parse(stripCodeFence(verdictText));
+    } catch {
+      parsed = undefined;
+    }
+    if (!parsed || typeof parsed.approved !== "boolean") {
+      return {
+        approved: false,
+        abstained: true,
+        synthetic: false,
+        model: modelToUse,
+        feedback: [...feedback, "critic model returned an unparseable verdict — abstaining", verdictText.slice(0, 300)]
+      };
+    }
 
-    const approved = feedback.length === 0;
+    if (!parsed.approved) {
+      const modelFeedback = Array.isArray(parsed.feedback) ? parsed.feedback.filter((f: unknown) => typeof f === "string" && f.trim()) : [];
+      feedback.push(...(modelFeedback.length > 0 ? modelFeedback : [`Model rejected: ${parsed.analysis || "no specifics given"}`]));
+    }
+
     return {
-      approved,
-      feedback
+      approved: feedback.length === 0 && parsed.approved === true,
+      feedback,
+      abstained: false,
+      synthetic: false,
+      model: modelToUse
     };
   }
 }
@@ -442,25 +469,44 @@ ${outcome.lesson}
 export class WorkerPool {
   private readonly maxConcurrency: number;
   private readonly modelRoster: ModelRosterConfig;
+  readonly generate?: GenerateFn;
+  readonly residencyPlan?: ResidencyPlan;
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
     this.maxConcurrency = options?.maxConcurrency || 2;
-    this.modelRoster = options?.modelRoster || {
-      planner: process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m",
-      builder: process.env.BUILDER_MODEL || "gemma4:e4b",
-      critic: process.env.CRITIC_MODEL || "gemma4:e4b",
-      explorer: process.env.EXPLORER_MODEL || "gemma4:e4b",
-      recorder: process.env.RECORDER_MODEL || "gemma4:e4b"
-    };
+    this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
+    this.generate = options?.generate;
+    this.residencyPlan = options?.residencyPlan;
   }
 
   getActiveWorkerCount(): number {
     return this.activeJobs.size;
   }
 
-  getModelForRole(role: WorkerRole): string {
-    return this.modelRoster[role] || "qwen3.8:27b-q3_k_m";
+  getMaxConcurrency(): number {
+    return this.maxConcurrency;
+  }
+
+  getRoster(): ModelRosterConfig {
+    return { ...this.modelRoster };
+  }
+
+  getModelForRole(role: WorkerRole | "planner"): string {
+    const model = this.modelRoster[role];
+    if (!model) throw new Error(`No model configured for role "${role}" (set ${role.toUpperCase()}_MODEL)`);
+    return model;
+  }
+
+  /** keep_alive for a model per the residency plan (undefined = Ollama default). */
+  keepAliveFor(model: string): string | number | undefined {
+    return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : undefined;
+  }
+
+  /** Model options for a role: configured model, injected client, residency keep_alive. */
+  workerOptionsFor(role: WorkerRole | "planner"): WorkerModelOptions {
+    const model = this.getModelForRole(role);
+    return { model, generate: this.generate, keepAlive: this.keepAliveFor(model) };
   }
 
   async executeJob<T>(job: WorkerJob<T>): Promise<T> {
@@ -490,15 +536,26 @@ export class WorkerPool {
   }
 }
 
+/** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
+export function resolveModelRosterFromEnv(): ModelRosterConfig {
+  return {
+    planner: process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m",
+    builder: process.env.BUILDER_MODEL || "gemma4:e4b",
+    critic: process.env.CRITIC_MODEL || "gemma4:e4b",
+    explorer: process.env.EXPLORER_MODEL || "gemma4:e4b",
+    recorder: process.env.RECORDER_MODEL || "gemma4:e4b"
+  };
+}
+
 export function createExplorerWorker(): ExplorerWorker {
   return new ExplorerWorker();
 }
 
-export function createBuilderWorker(options?: { model?: string; ollamaUrl?: string }): BuilderWorker {
+export function createBuilderWorker(options?: WorkerModelOptions): BuilderWorker {
   return new BuilderWorker(options);
 }
 
-export function createCriticWorker(options?: { model?: string; ollamaUrl?: string }): CriticWorker {
+export function createCriticWorker(options?: WorkerModelOptions): CriticWorker {
   return new CriticWorker(options);
 }
 

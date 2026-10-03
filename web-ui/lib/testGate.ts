@@ -2,6 +2,13 @@ import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
+/**
+ * Canonical workspaces that define "the suite" across the entire repository.
+ * Every workspace in root package.json is included: web-ui, mcp-server, browser-mcp.
+ */
+export const CANONICAL_WORKSPACES = ["web-ui", "mcp-server", "browser-mcp"] as const;
+export type CanonicalWorkspace = typeof CANONICAL_WORKSPACES[number];
+
 export interface AffectedTestsResult {
   tests: string[];
   uncoveredFiles: string[];
@@ -99,7 +106,15 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/llmClient"),
+    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/residency"),
+    tests: ["tests/workerHonesty.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
@@ -178,6 +193,11 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.startsWith("mcp-server/"),
     tests: ["mcp-server:tests"]
+  },
+  // Browser MCP files
+  {
+    match: (p) => p.startsWith("browser-mcp/"),
+    tests: ["browser-mcp:tests"]
   },
   // Test gate itself
   {
@@ -426,21 +446,29 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     ? process.cwd()
     : path.resolve(repoRoot, "web-ui");
   const mcpServerCwd = path.resolve(repoRoot, "mcp-server");
+  const browserMcpCwd = path.resolve(repoRoot, "browser-mcp");
 
   const mcpIncluded = resolved.tests.includes("mcp-server:tests");
-  const webUiTestsToRun = resolved.tests.filter((t) => t !== "mcp-server:tests");
+  const browserMcpIncluded = resolved.tests.includes("browser-mcp:tests");
+  const webUiTestsToRun = resolved.tests.filter(
+    (t) => t !== "mcp-server:tests" && t !== "browser-mcp:tests"
+  );
 
-  if (webUiTestsToRun.length === 0 && !mcpIncluded) {
+  if (webUiTestsToRun.length === 0 && !mcpIncluded && !browserMcpIncluded) {
     webUiTestsToRun.push("tests/toolParser.test.ts");
   }
 
   const allTestsRan = [...webUiTestsToRun];
   if (mcpIncluded) allTestsRan.push("mcp-server");
+  if (browserMcpIncluded) allTestsRan.push("browser-mcp");
 
   let testOutput = "";
   let passedCount = 0;
   let failedCount = 0;
   let runError: string | undefined;
+
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_TEST_CONTEXT;
 
   // 1. Run web-ui tests if any mapped
   if (webUiTestsToRun.length > 0) {
@@ -451,19 +479,29 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         cwd: webUiCwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv,
         timeout: remainingTime
       });
       testOutput += out;
       const counts = parseTapCounts(out);
-      passedCount += counts.passed > 0 ? counts.passed : webUiTestsToRun.length;
-      failedCount += counts.failed;
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+        runError = "web-ui test runner produced unparseable TAP output";
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed;
+      }
     } catch (err: any) {
       const stdout = err.stdout ? err.stdout.toString() : "";
       const stderr = err.stderr ? err.stderr.toString() : "";
       testOutput += `${stdout}\n${stderr}`;
       const counts = parseTapCounts(testOutput);
-      passedCount += counts.passed;
-      failedCount += counts.failed > 0 ? counts.failed : 1;
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed > 0 ? counts.failed : 1;
+      }
       runError = err.message;
     }
   }
@@ -476,19 +514,64 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         cwd: mcpServerCwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv,
         timeout: remainingTime
       });
       testOutput += `\n--- MCP Server Test Suite ---\n${mcpOut}`;
       const counts = parseTapCounts(mcpOut);
-      passedCount += counts.passed > 0 ? counts.passed : 1;
-      failedCount += counts.failed;
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+        runError = "mcp-server test runner produced unparseable TAP output";
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed;
+      }
     } catch (err: any) {
       const stdout = err.stdout ? err.stdout.toString() : "";
       const stderr = err.stderr ? err.stderr.toString() : "";
       testOutput += `\n--- MCP Server Failure ---\n${stdout}\n${stderr}`;
       const counts = parseTapCounts(stdout + "\n" + stderr);
-      passedCount += counts.passed;
-      failedCount += counts.failed > 0 ? counts.failed : 1;
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed > 0 ? counts.failed : 1;
+      }
+      runError = err.message;
+    }
+  }
+
+  // 3. Run browser-mcp tests if browser-mcp was touched
+  if (browserMcpIncluded && fs.existsSync(browserMcpCwd) && !runError) {
+    try {
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+      const browserOut = execSync("npm test", {
+        cwd: browserMcpCwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv,
+        timeout: remainingTime
+      });
+      testOutput += `\n--- Browser MCP Test Suite ---\n${browserOut}`;
+      const counts = parseTapCounts(browserOut);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+        runError = "browser-mcp test runner produced unparseable TAP output";
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed;
+      }
+    } catch (err: any) {
+      const stdout = err.stdout ? err.stdout.toString() : "";
+      const stderr = err.stderr ? err.stderr.toString() : "";
+      testOutput += `\n--- Browser MCP Failure ---\n${stdout}\n${stderr}`;
+      const counts = parseTapCounts(stdout + "\n" + stderr);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed > 0 ? counts.failed : 1;
+      }
       runError = err.message;
     }
   }
