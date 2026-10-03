@@ -51,6 +51,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => /tests\/[^/]+\.test\.ts$/.test(p),
     tests: [] // handled dynamically
   },
+  // Clipboard utility
+  {
+    match: (p) => p.includes("lib/clipboard"),
+    tests: ["tests/clipboard.test.ts"]
+  },
   // SVG utilities and SVG viewer component
   {
     match: (p) => p.includes("lib/svgUtils") || p.includes("components/SvgViewer"),
@@ -182,11 +187,14 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("components/Navbar") ||
       p.includes("components/WorkerTiles") ||
+      p.includes("components/DiffViewer") ||
+      p.includes("components/ExecutionTrace") ||
       p.includes("app/page.tsx") ||
       p.includes("app/layout.tsx"),
     tests: [
       "tests/frontendRefreshRehydration.test.ts",
-      "tests/chatHistory.test.ts"
+      "tests/chatHistory.test.ts",
+      "tests/chatStreaming.test.ts"
     ]
   },
   // MCP server files
@@ -253,7 +261,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
     normalizedPath.startsWith("scripts/capture-svg-render") ||
-    normalizedPath.startsWith("scripts/verify-fix3-behavioral") ||
+    normalizedPath.startsWith("scripts/verify-") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/")
   ) {

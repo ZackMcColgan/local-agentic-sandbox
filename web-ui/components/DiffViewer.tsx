@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye } from "lucide-react";
+import { copyText } from "@/lib/clipboard";
 
 interface DiffViewerProps {
   branch?: string;
@@ -22,11 +23,13 @@ export function DiffViewer({
   const [showDiagram, setShowDiagram] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!diff) return;
-    navigator.clipboard.writeText(diff);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyText(diff);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const lines = diff ? diff.split("\n") : [];

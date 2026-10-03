@@ -28,6 +28,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+import { copyText } from "@/lib/clipboard";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "@/lib/svgUtils";
@@ -105,11 +106,12 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
     );
   }
 
-  const handleCopy = () => {
-
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    const ok = await copyText(code);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
@@ -186,10 +188,12 @@ export function ChatStream({
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
   };
 
-  const copyToClipboard = (text: string, msgId: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedMessageId(msgId);
-    setTimeout(() => setCopiedMessageId(null), 2000);
+  const copyToClipboard = async (text: string, msgId: string) => {
+    const ok = await copyText(text);
+    if (ok) {
+      setCopiedMessageId(msgId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    }
   };
 
   const handleEditPrompt = (text: string) => {

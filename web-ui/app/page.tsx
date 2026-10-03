@@ -26,7 +26,9 @@ import {
   GitCommit,
   Terminal,
   AlertTriangle,
-  FileText
+  FileText,
+  Sparkles,
+  Activity
 } from "lucide-react";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
@@ -382,7 +384,7 @@ export default function Home() {
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
                   <Hammer className="h-5 w-5 text-indigo-500" />
-                  <span>Mode A: Overnight Autonomous Builder</span>
+                  <span>Autonomous Builder Engine</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
                   Plans, builds, tests, commits, and self-heals across checkpoints. Zero stalls on ambiguity.
@@ -406,23 +408,27 @@ export default function Home() {
             {/* Task Submission Card */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm transition-colors">
               <label className="block text-xs font-bold text-slate-800 dark:text-zinc-200 mb-2">
-                Overnight Task Prompt (One Sentence)
+                Overnight Task Prompt
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
+                <textarea
                   value={overnightGoal}
-                  onChange={(e) => setOvernightGoal(e.target.value)}
+                  onChange={(e) => {
+                    setOvernightGoal(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(Math.max(e.target.scrollHeight, 42), 160)}px`;
+                  }}
+                  rows={1}
                   placeholder="e.g. Build a draw.io architecture diagram of this repo's current state, README-ready"
                   disabled={isSubmittingTask || (activeTask !== null && activeTask.status === "active")}
-                  className="flex-1 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none min-h-[42px] max-h-[160px] leading-relaxed transition-all"
                 />
 
                 <select
                   value={selectedToolchain}
                   onChange={(e) => setSelectedToolchain(e.target.value as any)}
                   disabled={isSubmittingTask || (activeTask !== null && activeTask.status === "active")}
-                  className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-800 dark:text-zinc-200 focus:outline-none"
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-800 dark:text-zinc-200 focus:outline-none shrink-0 h-[42px]"
                 >
                   <option value="node:22">Toolchain: Node.js 22</option>
                   <option value="python:3.12">Toolchain: Python 3.12</option>
@@ -538,7 +544,48 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center shadow-sm">
+                <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                  <Hammer className="h-6 w-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Ready to Build Autonomously
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
+                  Launch multi-milestone engineering tasks backed by LangGraph checkpointing and real Ollama models. Select a starter prompt below or define your own goal.
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => setOvernightGoal("Build a draw.io architecture diagram of this repo's current state, README-ready")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-indigo-50 dark:bg-zinc-850 dark:hover:bg-indigo-950/40 border border-slate-200 dark:border-zinc-700 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs text-slate-700 dark:text-zinc-300 transition-colors text-left flex items-center gap-1.5"
+                  >
+                    <Sparkles className="h-3 w-3 text-indigo-500" />
+                    <span>Generate draw.io Architecture Diagram</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOvernightGoal("Verify network egress isolation and audit Docker Compose security parameters")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-indigo-50 dark:bg-zinc-850 dark:hover:bg-indigo-950/40 border border-slate-200 dark:border-zinc-700 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs text-slate-700 dark:text-zinc-300 transition-colors text-left flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                    <span>Audit Network Egress & Compose Security</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOvernightGoal("Run full regression test gate and produce morning report with ambiguity logs")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-indigo-50 dark:bg-zinc-850 dark:hover:bg-indigo-950/40 border border-slate-200 dark:border-zinc-700 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs text-slate-700 dark:text-zinc-300 transition-colors text-left flex items-center gap-1.5"
+                  >
+                    <Activity className="h-3 w-3 text-cyan-500" />
+                    <span>Execute Regression Gate & Report</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-6 p-3 sm:p-0 pb-12 animate-in fade-in duration-200">
