@@ -17,31 +17,18 @@ import {
   createExplorerWorker,
   createBuilderWorker,
   createCriticWorker,
-  createRecorderWorker
+  createRecorderWorker,
+  getResolvedGitSha
 } from "./workerPool";
 
 /**
- * Resolves genuine Git commit SHA via git rev-parse HEAD.
+ * Resolves genuine Git commit SHA via getResolvedGitSha.
  * Per the Provenance rule, never synthesizes fake SHAs.
  */
 export function getRealGitSha(repoRoot?: string): string {
-  const candidates = [
-    repoRoot,
-    process.cwd(),
-    path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../..")
-  ].filter(Boolean) as string[];
-
-  for (const dir of candidates) {
-    try {
-      const sha = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
-      if (/^[0-9a-f]{40}$/i.test(sha)) {
-        return sha;
-      }
-    } catch {}
-  }
-  return "d7c84cbfabcd0b0c95c1888836830d5832de52a7";
+  return getResolvedGitSha(repoRoot);
 }
+
 
 
 function packValue(obj: any): any {

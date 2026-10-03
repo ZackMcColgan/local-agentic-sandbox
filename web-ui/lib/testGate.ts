@@ -79,6 +79,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
+  // Memory profile & durable facts
+  {
+    match: (p) => p.includes("lib/memory"),
+    tests: ["tests/userProfile.test.ts"]
+  },
   // Chat API route
   {
     match: (p) => p.includes("app/api/chat/route"),
@@ -87,7 +92,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts",
-      "tests/ingestionPipeline.test.ts"
+      "tests/ingestionPipeline.test.ts",
+      "tests/userProfile.test.ts"
     ]
   },
   // Tasks API route

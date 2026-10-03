@@ -14,6 +14,12 @@ import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import { computeModelOptions, resolveEffectiveReasoningEffort } from "@/lib/chatUtils";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
+import {
+  loadUserProfile,
+  formatProfileForContext,
+  extractDurablePreferences,
+  recordProfileEntry
+} from "@/lib/memory/profile";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -331,6 +337,21 @@ CRITICAL INSTRUCTIONS:
     let oracleSnippet = "";
     let oracleCitations: string[] = [];
 
+    // Tier 1 User Profile Memory: Extract & record explicit durable preferences (gated)
+    if (userPrompt.trim()) {
+      try {
+        const durableFacts = extractDurablePreferences(userPrompt, clientSessionId);
+        for (const fact of durableFacts) {
+          recordProfileEntry(fact.key, fact.value, {
+            sessionId: clientSessionId,
+            origin: fact.origin
+          });
+        }
+      } catch (err: any) {
+        console.warn("[ChatRoute] Failed to record durable preferences:", err.message);
+      }
+    }
+
     if (userPrompt.trim()) {
       try {
         const oracleResult = await searchOracleCodebase(userPrompt);
@@ -360,11 +381,17 @@ CRITICAL INSTRUCTIONS:
       conversationMessages[lastIdx] = lastMsg;
     }
 
+    const userProfile = loadUserProfile();
+    const profileContext = formatProfileForContext(userProfile);
+
     if (!conversationMessages.some((m: any) => m.role === "system")) {
       conversationMessages.unshift({
         role: "system",
-        content: SYSTEM_PROMPT + effortDirective
+        content: SYSTEM_PROMPT + profileContext + effortDirective
       });
+    } else {
+      const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
+      conversationMessages[sysIdx].content += profileContext;
     }
 
     // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
