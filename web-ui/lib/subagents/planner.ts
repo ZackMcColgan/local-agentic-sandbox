@@ -1,9 +1,19 @@
-import { Milestone, ToolchainType, AcceptanceCriterion } from "./types.js";
+import { Milestone, ToolchainType, AcceptanceCriterion } from "./types";
+import {
+  createOllamaGenerate,
+  isFastGraphTestMode,
+  stripCodeFence,
+  type GenerateFn
+} from "./llmClient";
 
 export interface PlanSpecInput {
   taskId: string;
   goal: string;
   toolchain?: ToolchainType;
+  model?: string;
+  generate?: GenerateFn;
+  ollamaUrl?: string;
+  keepAlive?: string | number;
 }
 
 export interface PlanSpec {
@@ -23,10 +33,73 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   const goal = input.goal;
   const toolchain: ToolchainType = input.toolchain || "node:22";
 
-  // Decompose goal into coherent architectural milestones
-  const milestones: Milestone[] = [];
+  // Check if we should invoke a real model vs. test-only deterministic decomposition
+  const isSynthetic = !input.generate && isFastGraphTestMode();
 
-  if (goal.toLowerCase().includes("draw.io") || goal.toLowerCase().includes("diagram")) {
+  let milestones: Milestone[] = [];
+
+  if (!isSynthetic) {
+    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl });
+    const modelToUse = input.model || process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m";
+
+    const prompt = `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria.
+
+Goal: ${goal}
+Toolchain: ${toolchain}
+
+Respond strictly in valid JSON matching this schema:
+{
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Short title",
+      "description": "Clear description of deliverables",
+      "plannedFiles": ["path/to/file.ts"],
+      "acceptanceCriteria": [
+        {
+          "id": "AC-1-1",
+          "assertion": "Verifiable statement of truth",
+          "fileMatch": "path/to/file.ts"
+        }
+      ]
+    }
+  ]
+}`;
+
+    const res = await generate({
+      model: modelToUse,
+      prompt,
+      format: "json",
+      keepAlive: input.keepAlive ?? "30m",
+      options: { temperature: 0.2, num_predict: 2048 }
+    });
+
+    const parsed = JSON.parse(stripCodeFence(res.text));
+    if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
+      milestones = parsed.milestones.map((m: any, idx: number) => ({
+        id: m.id || `M${idx + 1}`,
+        title: m.title || `Milestone ${idx + 1}`,
+        description: m.description || "",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: false,
+        plannedFiles: Array.isArray(m.plannedFiles) ? m.plannedFiles : [],
+        acceptanceCriteria: Array.isArray(m.acceptanceCriteria)
+          ? m.acceptanceCriteria.map((ac: any, acIdx: number) => ({
+              id: ac.id || `AC-${idx + 1}-${acIdx + 1}`,
+              assertion: ac.assertion || "Criterion met",
+              fileMatch: ac.fileMatch,
+              command: ac.command
+            }))
+          : [{ id: `AC-${idx + 1}-1`, assertion: "Milestone completed successfully" }]
+      }));
+    }
+  }
+
+  if (milestones.length === 0) {
+    // Deterministic fallback for FAST_GRAPH_TEST mode
+    if (goal.toLowerCase().includes("draw.io") || goal.toLowerCase().includes("diagram")) {
     milestones.push({
       id: "M1",
       title: "Inventory Platform Topology & Container Boundaries",
@@ -34,6 +107,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       plannedFiles: ["deploy/topology-catalog.json"],
       acceptanceCriteria: [
         {
@@ -56,6 +130,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       plannedFiles: ["docs/architecture.drawio", "docs/architecture.drawio.svg"],
       acceptanceCriteria: [
         {
@@ -80,6 +155,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       plannedFiles: ["docs/topology-matrix.md"],
       acceptanceCriteria: [
         {
@@ -104,6 +180,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       acceptanceCriteria: [
         {
           id: "AC-1-1",
@@ -120,6 +197,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       acceptanceCriteria: [
         {
           id: "AC-2-1",
@@ -136,6 +214,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
+      synthetic: true,
       acceptanceCriteria: [
         {
           id: "AC-3-1",
@@ -145,6 +224,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       ]
     });
   }
+}
 
   const spec: PlanSpec = {
     taskId,
