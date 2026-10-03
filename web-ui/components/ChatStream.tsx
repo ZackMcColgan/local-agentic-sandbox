@@ -129,28 +129,29 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   };
 
   return (
-    <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-900 dark:bg-black overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-800/80 dark:bg-zinc-900 border-b border-slate-700/60 dark:border-zinc-800 text-[11px] font-mono text-slate-400">
-        <span className="text-emerald-400 font-medium">{language || "bash"}</span>
+    <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
+        <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{language || "bash"}</span>
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
+          title="Copy code"
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-400">Copied</span>
+              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3" />
+              <Copy className="h-3.5 w-3.5" />
               <span>Copy</span>
             </>
           )}
         </button>
       </div>
-      <pre className="p-3.5 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
+      <pre className="p-3.5 text-xs font-mono text-[#1d1b20] dark:text-[#e6e0e9] overflow-x-auto leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
@@ -585,8 +586,9 @@ export function ChatStream({
             <button
               type="button"
               onClick={onBackToList}
-              className="sm:hidden p-1.5 -ml-1 rounded-full text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Back to threads"
+              className="p-1.5 -ml-1 rounded-full text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Back to sessions"
+              aria-label="Back to sessions"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -622,7 +624,7 @@ export function ChatStream({
 
             {showOverflowMenu && (
               <div
-                className="absolute right-0 mt-1 w-48 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute right-0 mt-1 w-52 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
                 onClick={() => setShowOverflowMenu(false)}
               >
                 {onNewThread && (
@@ -643,6 +645,26 @@ export function ChatStream({
                     Security telemetry
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      const isDark = document.documentElement.classList.contains("dark");
+                      const next = isDark ? "light" : "dark";
+                      document.documentElement.classList.toggle("dark", next === "dark");
+                      document.documentElement.classList.toggle("light", next === "light");
+                      document.documentElement.setAttribute("data-theme", next);
+                      document.documentElement.style.colorScheme = next;
+                      document.body.classList.toggle("dark", next === "dark");
+                      document.body.classList.toggle("light", next === "light");
+                      localStorage.setItem("app-theme", next);
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl flex items-center justify-between"
+                >
+                  <span>Toggle theme</span>
+                  <span className="text-[10px] text-[#6750a4] dark:text-[#d0bcff] font-semibold">Light / Dark</span>
+                </button>
                 {onDeleteThread && (
                   <button
                     type="button"
@@ -777,7 +799,7 @@ export function ChatStream({
 
                   {/* Text Markdown Content */}
                   {m.content && (
-                    <div className="text-sm leading-relaxed text-slate-900 dark:text-zinc-100 prose dark:prose-invert max-w-none">
+                    <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -802,7 +824,7 @@ export function ChatStream({
                             }
                             return (
                               <code
-                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-850 text-[#5b32e6] dark:text-indigo-400 font-mono text-xs border border-slate-200 dark:border-zinc-750"
+                                className="px-1.5 py-0.5 rounded bg-[#f4eff4] dark:bg-[#2b2930] text-[#6750a4] dark:text-[#d0bcff] font-mono text-xs border border-slate-200 dark:border-zinc-700"
                                 {...props}
                               >
                                 {children}
@@ -810,9 +832,76 @@ export function ChatStream({
                             );
                           },
                           p: ({ children }: any) => (
-                            <p className="mb-2.5 last:mb-0 leading-relaxed text-slate-800 dark:text-zinc-200">
+                            <p className="mb-3 last:mb-0 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
                               {children}
                             </p>
+                          ),
+                          ul: ({ children }: any) => (
+                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }: any) => (
+                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }: any) => (
+                            <li className="leading-[1.6]">
+                              {children}
+                            </li>
+                          ),
+                          blockquote: ({ children }: any) => (
+                            <blockquote className="border-l-4 border-[#6750a4] bg-[#fdf8fd]/80 dark:bg-[#1d1b20]/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
+                              {children}
+                            </blockquote>
+                          ),
+                          table: ({ children }: any) => (
+                            <div className="overflow-x-auto my-3 rounded-xl border border-slate-200 dark:border-zinc-800">
+                              <table className="min-w-full text-left text-xs divide-y divide-slate-200 dark:divide-zinc-800">
+                                {children}
+                              </table>
+                            </div>
+                          ),
+                          thead: ({ children }: any) => (
+                            <thead className="bg-[#f4eff4] dark:bg-[#2b2930] text-slate-900 dark:text-zinc-100 font-semibold">
+                              {children}
+                            </thead>
+                          ),
+                          tbody: ({ children }: any) => (
+                            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                              {children}
+                            </tbody>
+                          ),
+                          tr: ({ children }: any) => (
+                            <tr className="hover:bg-slate-50/50 dark:hover:bg-zinc-850/50 transition-colors">
+                              {children}
+                            </tr>
+                          ),
+                          th: ({ children }: any) => (
+                            <th className="px-3.5 py-2 font-semibold text-xs tracking-wider">
+                              {children}
+                            </th>
+                          ),
+                          td: ({ children }: any) => (
+                            <td className="px-3.5 py-2 text-xs leading-relaxed text-slate-800 dark:text-zinc-200">
+                              {children}
+                            </td>
+                          ),
+                          h1: ({ children }: any) => (
+                            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-4 mb-2 first:mt-0">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }: any) => (
+                            <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-3.5 mb-1.5">
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }: any) => (
+                            <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100 mt-3 mb-1">
+                              {children}
+                            </h3>
                           )
                         }}
                       >

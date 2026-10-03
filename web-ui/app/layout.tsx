@@ -34,7 +34,7 @@ export default function RootLayout({
                   var urlParams = new URLSearchParams(window.location.search);
                   var queryTheme = urlParams.get('theme');
                   var saved = queryTheme || localStorage.getItem('app-theme');
-                  var isDark = saved === 'dark';
+                  var isDark = saved ? saved === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.classList.remove('light');
