@@ -1,4 +1,4 @@
-import { isReasoningEffortSupported, getModelProfile } from "@/config/models";
+import { isReasoningEffortSupported, getModelProfile } from "../config/models";
 
 export interface ModelOptions {
   num_ctx: number;

@@ -39,6 +39,7 @@ export interface Thread {
   taskId?: string;
   workerInfo?: string;
   timeLabel?: string;
+  isTest?: boolean;
 }
 
 function resolveThreadsDir(): string {
@@ -91,6 +92,9 @@ export class ThreadStore {
    * Seeds the approved Mockup 1 & 3 initial threads if no threads exist yet.
    */
   async ensureSeeded(): Promise<void> {
+    if (process.env.SEED_MOCKUP_THREADS !== "true") {
+      return;
+    }
     if (!fs.existsSync(this.threadsDir)) {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true });
@@ -266,6 +270,62 @@ export class ThreadStore {
    * Loads all threads from disk and reconciles status honestly against the
    * running process state.
    */
+  /**
+   * Reconciles a thread's status against live activeExecutionSet (S2)
+   * and derives title from content if "New thread" (S4).
+   */
+  reconcileThread(thread: Thread): boolean {
+    let changed = false;
+
+    // S2: Reconcile active status against live activeExecutionSet
+    if (thread.status === "active") {
+      const isLive =
+        activeExecutionSet.has(thread.id) ||
+        (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
+
+      if (!isLive) {
+        thread.status = "stopped";
+        changed = true;
+        if (thread.messages && thread.messages.length > 0) {
+          const lastMsg = thread.messages[thread.messages.length - 1];
+          if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped")) {
+            lastMsg.isStopped = true;
+          }
+        }
+      }
+    }
+
+    // S4: Titles from content: retroactively title if "New thread", "New Thread", or "Untitled Thread"
+    if (
+      !thread.title ||
+      thread.title.toLowerCase() === "new thread" ||
+      thread.title.toLowerCase() === "untitled thread" ||
+      thread.title.toLowerCase() === "new task"
+    ) {
+      const firstUserMsg = thread.messages?.find((m) => m.role === "user");
+      if (firstUserMsg && firstUserMsg.content && firstUserMsg.content.trim()) {
+        const derived = firstUserMsg.content.trim().slice(0, 40);
+        if (derived && derived !== thread.title) {
+          thread.title = derived;
+          changed = true;
+        }
+      } else if (!thread.title) {
+        thread.title = "New thread";
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.saveThread(thread);
+    }
+
+    return changed;
+  }
+
+  /**
+   * Loads all threads from disk and reconciles status honestly against the
+   * running process state.
+   */
   async listThreads(): Promise<Thread[]> {
     await this.ensureSeeded();
 
@@ -278,16 +338,7 @@ export class ThreadStore {
             const raw = fs.readFileSync(path.join(this.threadsDir, file), "utf8");
             const thread = JSON.parse(raw) as Thread;
             if (thread && thread.id) {
-              if (thread.status === "active" && !activeExecutionSet.has(thread.id) && (!thread.taskId || !activeExecutionSet.has(thread.taskId))) {
-                thread.status = "stopped";
-                if (thread.messages && thread.messages.length > 0) {
-                  const lastMsg = thread.messages[thread.messages.length - 1];
-                  if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped")) {
-                    lastMsg.isStopped = true;
-                  }
-                }
-                this.saveThread(thread);
-              }
+              this.reconcileThread(thread);
               threads.push(thread);
             }
           } catch {}
@@ -308,7 +359,7 @@ export class ThreadStore {
 
           const newThread: Thread = {
             id: `thread-${task.taskId}`,
-            title: task.goal.slice(0, 48),
+            title: task.goal.trim().slice(0, 40) || "New thread",
             status: honestStatus,
             createdAt: task.startedAt || new Date().toISOString(),
             updatedAt: task.updatedAt || task.startedAt || new Date().toISOString(),
@@ -357,10 +408,7 @@ export class ThreadStore {
     try {
       const raw = fs.readFileSync(filePath, "utf8");
       const thread = JSON.parse(raw) as Thread;
-      if (thread.status === "active" && !activeExecutionSet.has(thread.id) && (!thread.taskId || !activeExecutionSet.has(thread.taskId))) {
-        thread.status = "stopped";
-        this.saveThread(thread);
-      }
+      this.reconcileThread(thread);
       return thread;
     } catch {
       return null;
@@ -384,9 +432,10 @@ export class ThreadStore {
     initialPrompt?: string;
     attachments?: ThreadAttachment[];
     taskId?: string;
+    isTest?: boolean;
   }): Thread {
     const threadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const title = params.title || (params.initialPrompt ? params.initialPrompt.slice(0, 40) : "New Thread");
+    const title = params.title || (params.initialPrompt && params.initialPrompt.trim() ? params.initialPrompt.trim().slice(0, 40) : "New thread");
     const thread: Thread = {
       id: threadId,
       title,
@@ -396,6 +445,7 @@ export class ThreadStore {
       model: params.model || "qwen3.8:27b-q3_k_m",
       reasoningEffort: params.reasoningEffort || "medium",
       taskId: params.taskId,
+      isTest: params.isTest ?? false,
       messages: params.initialPrompt
         ? [
             {
@@ -413,8 +463,36 @@ export class ThreadStore {
     return thread;
   }
 
-  deleteThread(threadId: string): boolean {
+  async deleteThread(threadId: string): Promise<boolean> {
     const filePath = this.getFilePath(threadId);
+    let thread: Thread | null = null;
+    if (fs.existsSync(filePath)) {
+      try {
+        thread = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+      } catch {}
+    }
+
+    if (thread) {
+      // S1: Live run stops first, then deletes
+      activeExecutionSet.delete(thread.id);
+      if (thread.taskId) {
+        activeExecutionSet.delete(thread.taskId);
+        try {
+          const task = await this.supervisor.resumeTaskFromCheckpoint(thread.taskId);
+          if (task) {
+            task.status = "cancelled";
+            task.updatedAt = new Date().toISOString();
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "supervisor",
+              message: "Run cancelled upon thread deletion."
+            });
+            this.supervisor.saveCheckpoint(task);
+          }
+        } catch {}
+      }
+    }
+
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
@@ -422,5 +500,31 @@ export class ThreadStore {
       } catch {}
     }
     return false;
+  }
+
+  async cleanupTestSessions(): Promise<number> {
+    let count = 0;
+    try {
+      if (!fs.existsSync(this.threadsDir)) return 0;
+      const files = fs.readdirSync(this.threadsDir);
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          try {
+            const raw = fs.readFileSync(path.join(this.threadsDir, file), "utf8");
+            const thread = JSON.parse(raw) as Thread;
+            if (
+              thread.isTest ||
+              thread.id.startsWith("test-") ||
+              thread.id.includes("-test-") ||
+              thread.id.includes("tmp-")
+            ) {
+              await this.deleteThread(thread.id);
+              count++;
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+    return count;
   }
 }
