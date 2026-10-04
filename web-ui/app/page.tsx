@@ -61,24 +61,29 @@ export default function Home() {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
       const saved = queryTheme || localStorage.getItem("app-theme");
-      const isDark = saved === "dark";
+      const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-      if (isDark) {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-        document.documentElement.setAttribute("data-theme", "dark");
-        document.documentElement.style.colorScheme = "dark";
-        document.body.classList.add("dark");
-        document.body.classList.remove("light");
-        document.body.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-        document.documentElement.classList.add("light");
-        document.documentElement.setAttribute("data-theme", "light");
-        document.documentElement.style.colorScheme = "light";
-        document.body.classList.remove("dark");
-        document.body.classList.add("light");
-        document.body.setAttribute("data-theme", "light");
+      const applyTheme = (dark: boolean) => {
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.classList.toggle("light", !dark);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        document.body.classList.toggle("dark", dark);
+        document.body.classList.toggle("light", !dark);
+        document.body.setAttribute("data-theme", dark ? "dark" : "light");
+      };
+
+      applyTheme(isDark);
+
+      if (window.matchMedia) {
+        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        const handleMediaChange = (e: MediaQueryListEvent) => {
+          if (!localStorage.getItem("app-theme")) {
+            applyTheme(e.matches);
+          }
+        };
+        mediaQuery.addEventListener("change", handleMediaChange);
+        return () => mediaQuery.removeEventListener("change", handleMediaChange);
       }
     } catch {}
   }, []);
@@ -223,10 +228,40 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [activeTask?.taskId, activeTask?.status]);
 
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const threadId = event.state?.threadId;
+      if (threadId) {
+        setSelectedThreadId(threadId);
+      } else {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const qThread = urlParams.get("thread");
+          setSelectedThreadId(qThread || null);
+        } catch {
+          setSelectedThreadId(null);
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   // Actions
   const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId);
     setViewMode("unified");
+    try {
+      window.history.pushState({ threadId }, "", `?thread=${encodeURIComponent(threadId)}`);
+    } catch {}
+  };
+
+  const handleBackToList = () => {
+    setSelectedThreadId(null);
+    try {
+      window.history.pushState({ threadId: null }, "", window.location.pathname);
+    } catch {}
   };
 
   const handleNewThread = async () => {
@@ -235,7 +270,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: "New task",
+          title: "New thread",
           model: selectedModel,
           reasoningEffort
         })
@@ -248,6 +283,9 @@ export default function Home() {
           setMessages([]);
           setActiveTask(null);
           setViewMode("unified");
+          try {
+            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+          } catch {}
         }
       }
     } catch (err) {
@@ -264,6 +302,9 @@ export default function Home() {
         const remaining = threads.filter((t) => t.id !== threadId);
         setSelectedThreadId(remaining.length > 0 ? remaining[0].id : null);
         if (remaining.length === 0) setMessages([]);
+        try {
+          window.history.pushState({ threadId: null }, "", window.location.pathname);
+        } catch {}
       }
     } catch (err) {
       console.error("Failed to delete thread:", err);
@@ -424,7 +465,7 @@ export default function Home() {
               threadStatus={currentThread?.status}
               activeTask={activeTask}
               onStopTask={handleStopRun}
-              onBackToList={() => setSelectedThreadId(null)}
+              onBackToList={handleBackToList}
               onOpenModelSheet={() => setIsModelSheetOpen(true)}
               onLaunchTask={handleLaunchTask}
               onNewThread={handleNewThread}

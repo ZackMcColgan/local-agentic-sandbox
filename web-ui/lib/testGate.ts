@@ -73,7 +73,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/svgComponent.test.ts",
       "tests/chatHistory.test.ts",
       "tests/frontendRefreshRehydration.test.ts",
-      "tests/unifiedUi.test.ts"
+      "tests/unifiedUi.test.ts",
+      "tests/chatPolish.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API
@@ -86,7 +87,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts"]
+    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
