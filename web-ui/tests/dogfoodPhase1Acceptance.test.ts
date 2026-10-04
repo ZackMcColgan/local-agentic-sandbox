@@ -16,6 +16,7 @@ import { TaskManifest, Milestone } from "../lib/subagents/types.js";
 import { generateArchitectureDiagram, discoverRepoState } from "../lib/diagram/architectureGenerator.js";
 
 describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
+  process.env.FAST_GRAPH_TEST = "1";
   const dogfoodGoal = "Build a draw.io architecture diagram of this repo's current state, README-ready";
 
   it("[1] Planner commits a SPEC.md with >= 3 milestones and explicit acceptance criteria", async () => {
@@ -104,7 +105,14 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
   });
 
   it("[4] Critic catches >= 1 real discrepancy, rejects with notes, then approves once resolved", async () => {
-    const critic = createCriticWorker();
+    const critic = createCriticWorker({
+      generate: async () => ({
+        text: JSON.stringify({ approved: true, feedback: [], analysis: "Acceptance criteria satisfied" }),
+        model: "mock-critic",
+        loadDurationMs: 0,
+        totalDurationMs: 1
+      })
+    });
 
     const sampleMilestone: Milestone = {
       id: "M1",

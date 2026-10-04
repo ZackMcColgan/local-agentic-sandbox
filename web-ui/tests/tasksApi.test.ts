@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { POST, GET, DELETE } from "../app/api/tasks/route.js";
 
 describe("Phase 1 — Tasks API Route Suite", () => {
+  process.env.FAST_GRAPH_TEST = "1";
   let createdTaskId: string;
 
   it("POST /api/tasks creates task manifest with SPEC.md milestones", async () => {

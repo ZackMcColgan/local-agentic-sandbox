@@ -30,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-ui
-          image: local-agentic-sandbox-web-ui:v2.5
+          image: local-agentic-sandbox-web-ui:v2.7-unified
           imagePullPolicy: Never
           ports:
             - containerPort: 3000

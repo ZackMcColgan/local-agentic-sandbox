@@ -19,6 +19,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { sanitizeSvg, isDrawioXml } from "@/lib/svgUtils";
+import { copyText } from "@/lib/clipboard";
 
 export interface SvgViewerProps {
   code?: string;
@@ -126,11 +127,13 @@ export function SvgViewer({
     return null;
   }, [sanitized, rawSvg]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!rawSvg) return;
-    navigator.clipboard.writeText(rawSvg);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyText(rawSvg);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleDownload = () => {

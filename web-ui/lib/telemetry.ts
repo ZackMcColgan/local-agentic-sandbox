@@ -31,6 +31,21 @@ function generateHex(bytes: number): string {
   return crypto.randomBytes(bytes).toString("hex");
 }
 
+export function formatTraceparent(traceId: string, spanId: string): string {
+  const normTrace = traceId.padStart(32, "0").slice(-32);
+  const normSpan = spanId.padStart(16, "0").slice(-16);
+  return `00-${normTrace}-${normSpan}-01`;
+}
+
+export function parseTraceparent(traceparent: string): { traceId: string; spanId: string } | null {
+  if (!traceparent) return null;
+  const parts = traceparent.trim().split("-");
+  if (parts.length >= 4 && parts[0] === "00" && parts[1].length === 32 && parts[2].length === 16) {
+    return { traceId: parts[1], spanId: parts[2] };
+  }
+  return null;
+}
+
 export class TelemetryTracer {
   private sessionId: string;
   private traceId: string;
@@ -61,6 +76,20 @@ export class TelemetryTracer {
 
   public getRootSpanId(): string {
     return this.rootSpanId;
+  }
+
+  public getTraceparent(spanId?: string): string {
+    return formatTraceparent(this.traceId, spanId || this.rootSpanId);
+  }
+
+  public getSpanHierarchy(): Array<{ spanId: string; parentSpanId?: string; name: string }> {
+    const session = traceStore.get(this.sessionId);
+    if (!session) return [];
+    return session.spans.map(s => ({
+      spanId: s.spanId,
+      parentSpanId: s.parentSpanId,
+      name: s.name
+    }));
   }
 
   /**

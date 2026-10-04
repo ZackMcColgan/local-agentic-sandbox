@@ -14,7 +14,7 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
 
   beforeEach(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    win = new GlobalWindow({ url: "http://localhost:3000/?tab=overnight" });
+    win = new GlobalWindow({ url: "http://localhost:3000" });
     globalThis.window = win as any;
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
@@ -37,9 +37,15 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
     globalThis.fetch = originalFetch;
   });
 
-  it("renders empty state prompt card and launch button when no run is active", async () => {
+  it("renders empty state threads list and unified input field when no run is active", async () => {
     globalThis.fetch = async (url: any) => {
       const urlStr = String(url);
+      if (urlStr.includes("/api/threads")) {
+        return {
+          ok: true,
+          json: async () => ({ threads: [] })
+        } as any;
+      }
       if (urlStr.includes("/api/tasks?active=true")) {
         return {
           ok: true,
@@ -64,14 +70,13 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
 
     // Allow mount effects to settle
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 60));
     });
 
     const html = container.innerHTML;
-    assert.ok(html.includes("Overnight Task Prompt"), "Must render Overnight Task Prompt in empty state");
-    assert.ok(html.includes("Launch Builder"), "Must render Launch Builder button");
-    assert.ok(!html.includes("Run Journal Tail"), "Empty state must not show active run journal tail");
-    assert.ok(!html.includes("SPEC.md Milestones"), "Empty state must not show active run milestones");
+    assert.ok(html.includes("Describe the engineering task…"), "Must render M3 unified input field in empty state");
+    assert.ok(html.includes("Threads"), "Must render Threads header in empty state");
+    assert.ok(!html.includes("Milestone checklist"), "Empty state must not show active run checklist");
   });
 
   it("renders active run, unmounts (refresh), and verifies worker tiles, milestones, and journal tail restore", async () => {
@@ -125,6 +130,62 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
 
     globalThis.fetch = async (url: any) => {
       const urlStr = String(url);
+      if (urlStr.includes("/api/threads")) {
+        return {
+          ok: true,
+          json: async () => ({
+            threads: [
+              {
+                id: "thread-live-rehydration-101",
+                title: "Build a draw.io architecture diagram",
+                status: "active",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                model: "qwen3.8",
+                reasoningEffort: "medium",
+                taskId: mockActiveTask.taskId,
+                messages: [
+                  {
+                    id: "msg-user-1",
+                    role: "user",
+                    content: "Build a draw.io architecture diagram"
+                  },
+                  {
+                    id: "msg-assistant-1",
+                    role: "assistant",
+                    content: "Running task",
+                    taskId: mockActiveTask.taskId
+                  }
+                ]
+              }
+            ],
+            thread: {
+              id: "thread-live-rehydration-101",
+              title: "Build a draw.io architecture diagram",
+              status: "active",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              model: "qwen3.8",
+              reasoningEffort: "medium",
+              taskId: mockActiveTask.taskId,
+              messages: [
+                {
+                  id: "msg-user-1",
+                  role: "user",
+                  content: "Build a draw.io architecture diagram"
+                },
+                {
+                  id: "msg-assistant-1",
+                  role: "assistant",
+                  content: "Running task",
+                  taskId: mockActiveTask.taskId
+                }
+              ]
+            },
+            task: mockActiveTask
+          })
+        } as any;
+      }
       if (urlStr.includes("/api/tasks?active=true") || urlStr.includes("/api/tasks?taskId=")) {
         return {
           ok: true,
@@ -152,15 +213,15 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
       root!.render(React.createElement(Home));
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 60));
     });
 
     const initialHtml = container.innerHTML;
-    assert.ok(initialHtml.includes("task-live-rehydration-101"), "Active task ID displayed on initial load");
+    assert.ok(initialHtml.includes("Live run"), "Live run block header rendered on initial load");
     assert.ok(initialHtml.includes("Superset Architecture Diagram"), "Current milestone rendered on initial load");
-    assert.ok(initialHtml.includes("Run Journal Tail"), "Run journal tail rendered on initial load");
+    assert.ok(initialHtml.includes("Topology Catalog"), "Completed milestone rendered on initial load");
     assert.ok(initialHtml.includes("Builder synthesized milestone M2 diff"), "Journal message present on initial load");
-    assert.ok(initialHtml.includes("Building Superset Architecture Diagram"), "Worker tile detail rendered");
+    assert.ok(initialHtml.includes("Stop run"), "Stop run button rendered on initial load");
 
     // 2. Simulate Browser Refresh (Unmount & Fresh Mount)
     await act(async () => {
@@ -175,43 +236,29 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
       root!.render(React.createElement(Home));
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 60));
     });
 
     const refreshedHtml = container.innerHTML;
 
-    // Assert Worker Tiles restored
-    assert.ok(
-      refreshedHtml.includes("Building Superset Architecture Diagram"),
-      "Worker tiles restored on refresh"
-    );
+    // Assert Live run block and Stop run restored
+    assert.ok(refreshedHtml.includes("Live run"), "Live run block restored on refresh");
+    assert.ok(refreshedHtml.includes("Stop run"), "Stop run button restored on refresh");
 
-    // Assert Milestone Progress restored
+    // Assert Milestones restored
     assert.ok(
-      refreshedHtml.includes("SPEC.md Milestones (2)"),
-      "Milestone progress count restored on refresh"
-    );
-    assert.ok(
-      refreshedHtml.includes("[M1]") && refreshedHtml.includes("Topology Catalog"),
+      refreshedHtml.includes("Topology Catalog"),
       "Completed milestone M1 restored on refresh"
     );
     assert.ok(
-      refreshedHtml.includes("[M2]") && refreshedHtml.includes("Superset Architecture Diagram"),
+      refreshedHtml.includes("Superset Architecture Diagram"),
       "In-progress milestone M2 restored on refresh"
     );
 
-    // Assert Run Journal Tail restored
+    // Assert Journal Message restored
     assert.ok(
-      refreshedHtml.includes("Run Journal Tail"),
-      "Run journal tail header restored on refresh"
-    );
-    assert.ok(
-      refreshedHtml.includes("[planner]") && refreshedHtml.includes("Decomposed goal into 2 milestones"),
-      "Planner journal entry restored on refresh"
-    );
-    assert.ok(
-      refreshedHtml.includes("[builder]") && refreshedHtml.includes("Builder synthesized milestone M2 diff"),
-      "Builder journal entry restored on refresh"
+      refreshedHtml.includes("Builder synthesized milestone M2 diff"),
+      "Journal message restored on refresh"
     );
   });
 });

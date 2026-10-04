@@ -31,6 +31,13 @@ export interface Milestone {
   testFile?: string;
   plannedFiles?: string[];
   completedAt?: string;
+  /**
+   * Provenance: true when any output for this milestone came from the deterministic
+   * FAST_GRAPH_TEST fallback instead of a real model. Never true in production.
+   */
+  synthetic?: boolean;
+  /** Model that generated the builder output (absent when synthetic). */
+  builderModel?: string;
 }
 
 export interface AmbiguityFlag {

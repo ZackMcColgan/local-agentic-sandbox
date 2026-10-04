@@ -87,11 +87,11 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
       diffSummary: "+ background=\"#ffffff\""
     };
 
+    const conformingDiff = `--- a/docs/architecture.drawio\n+++ b/docs/architecture.drawio\n@@ -1,3 +1,3 @@\n-<mxGraphModel background="#000000">\n+<mxGraphModel background="#ffffff">`;
     const review = await critic.evaluateMilestoneDiff(milestone, {
-      diff: "+ background=\"#ffffff\"",
+      diff: conformingDiff,
       filesChanged: ["docs/architecture.drawio"]
     });
-
     assert.equal(review.approved, true, "Critic must approve conforming diff");
   });
 

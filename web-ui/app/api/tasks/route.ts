@@ -3,6 +3,7 @@ import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { generateMorningReport, MorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
+import { activeExecutionSet } from "@/lib/threads/threadStore";
 
 // In-memory task store & active cancellation tokens
 const tasksRegistry = new Map<string, TaskManifest>();
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
     // 1. Action: Cancellation via POST
     if (body.action === "cancel") {
       const taskId = body.taskId;
+      activeExecutionSet.delete(taskId);
       const controller = activeAbortControllers.get(taskId);
       if (controller) {
         controller.abort();
@@ -108,6 +110,7 @@ export async function POST(req: Request) {
     tasksRegistry.set(taskId, manifest);
     const abortController = new AbortController();
     activeAbortControllers.set(taskId, abortController);
+    activeExecutionSet.add(taskId);
 
     supervisor.saveCheckpoint(manifest);
 
@@ -200,6 +203,7 @@ export async function DELETE(req: Request) {
   }
 
   const controller = activeAbortControllers.get(taskId);
+  activeExecutionSet.delete(taskId);
   if (controller) {
     controller.abort();
     activeAbortControllers.delete(taskId);

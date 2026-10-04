@@ -82,4 +82,10 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     assert.equal(gateOutcome.exitCode, 1);
     assert.ok(gateOutcome.error?.includes("exceeded budget"), "Must error on budget overrun");
   });
+
+  it("maps browser-mcp changes to browser-mcp:tests and exports CANONICAL_WORKSPACES", () => {
+    const browserResult = resolveAffectedTests(["browser-mcp/src/index.ts", "browser-mcp/tests/tools.test.ts"]);
+    assert.ok(browserResult.tests.includes("browser-mcp:tests"), "Must map browser-mcp files to browser-mcp:tests");
+    assert.equal(browserResult.uncoveredFiles.length, 0, "No uncovered files for browser-mcp changes");
+  });
 });

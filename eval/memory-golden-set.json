@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "name": "Local Agentic Sandbox Semantic Memory Golden Set",
+  "questions": [
+    {
+      "id": "q1-supervisor-crash",
+      "question": "How does the supervisor handle a crashed worker or supervisor restart?",
+      "expectedFile": "docs/ADR-002-langgraph-supervisor-checkpoints.md",
+      "expectedKeywords": ["checkpoint", "supervisor", "resume", "state"]
+    },
+    {
+      "id": "q2-model-residency",
+      "question": "What is the VRAM model residency policy for local Ollama models on 16GB VRAM?",
+      "expectedFile": "docs/MODEL_RESIDENCY.md",
+      "expectedKeywords": ["residency", "vram", "keep_alive", "16gb"]
+    },
+    {
+      "id": "q3-sandbox-security",
+      "question": "What security boundaries and kernel isolation are applied to the sandboxed MCP container?",
+      "expectedFile": "docs/ADR-001-sandboxed-mcp.md",
+      "expectedKeywords": ["sandbox", "isolation", "cap_drop", "read-only"]
+    },
+    {
+      "id": "q4-resource-budgets",
+      "question": "What are the memory allocations and CPU resource limits across the cluster pods?",
+      "expectedFile": "docs/resource-budgets.md",
+      "expectedKeywords": ["resource", "memory", "budget", "limit"]
+    },
+    {
+      "id": "q5-docker-sandbox-dev",
+      "question": "How do you run Antigravity inside an isolated Docker Sandbox using sbx?",
+      "expectedFile": "docs/DEVELOPMENT_SANDBOX.md",
+      "expectedKeywords": ["antigravity", "sandbox", "docker", "sbx"]
+    }
+  ]
+}
