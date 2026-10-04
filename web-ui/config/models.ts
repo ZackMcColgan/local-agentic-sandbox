@@ -82,3 +82,16 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     description: "Nous Research Hermes 3 70B. Enterprise unconstrained agentic synthesis."
   }
 ];
+
+export function isReasoningEffortSupported(modelId?: string): boolean {
+  if (!modelId) return false;
+  const profile = PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  if (profile) return profile.supportsReasoningEffort;
+  return modelId.includes("qwen") || modelId.includes("gemma");
+}
+
+export function getModelProfile(modelId?: string): ModelProfile | undefined {
+  if (!modelId) return undefined;
+  return PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+}
+

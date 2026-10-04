@@ -1,0 +1,222 @@
+import fs from "fs";
+import path from "path";
+
+export interface RepoSnapshot {
+  k8sManifests: string[];
+  dockerfiles: string[];
+  hasDockerCompose: boolean;
+  discoveredServices: string[];
+  discoveredVolumes: string[];
+  discoveredNetworks: string[];
+}
+
+/**
+ * Parses repo state from deploy/k8s, Dockerfiles, and config files to discover
+ * all microservices, boundaries, networks, and storage components.
+ */
+export function discoverRepoState(repoRoot: string): RepoSnapshot {
+  const k8sDir = path.join(repoRoot, "deploy/k8s");
+  const k8sManifests: string[] = [];
+  const discoveredServices: string[] = [];
+  const discoveredVolumes: string[] = [];
+  const discoveredNetworks: string[] = ["ai-mesh", "egress-mesh"];
+
+  if (fs.existsSync(k8sDir)) {
+    const files = fs.readdirSync(k8sDir);
+    for (const f of files) {
+      if (f.endsWith(".yaml") || f.endsWith(".yml")) {
+        k8sManifests.push(f);
+        const content = fs.readFileSync(path.join(k8sDir, f), "utf8");
+        if (content.includes("name: web-ui")) discoveredServices.push("web-ui");
+        if (content.includes("name: mcp-runner")) discoveredServices.push("mcp-runner");
+        if (content.includes("name: browser-mcp")) discoveredServices.push("browser-mcp");
+        if (content.includes("name: otel-collector")) discoveredServices.push("otel-collector");
+        if (content.includes("name: ollama-service")) discoveredServices.push("ollama-service");
+        if (content.includes("name: qdrant")) discoveredServices.push("qdrant");
+        if (content.includes("name: builder-tier") || f.includes("builder")) discoveredServices.push("builder-tier");
+
+        if (content.includes("pvc-workspace") || content.includes("workspace-volume")) discoveredVolumes.push("workspace-pvc");
+        if (content.includes("build-cache-pvc")) discoveredVolumes.push("build-cache-pvc");
+        if (content.includes("qdrant-storage")) discoveredVolumes.push("qdrant-storage");
+      }
+    }
+  }
+
+  const dockerfiles: string[] = [];
+  const deployDir = path.join(repoRoot, "deploy");
+  if (fs.existsSync(deployDir)) {
+    const subdirs = fs.readdirSync(deployDir);
+    for (const sub of subdirs) {
+      const df = path.join(deployDir, sub, "Dockerfile");
+      if (fs.existsSync(df)) {
+        dockerfiles.push(`deploy/${sub}/Dockerfile`);
+      }
+    }
+  }
+  if (fs.existsSync(path.join(repoRoot, "web-ui/Dockerfile"))) {
+    dockerfiles.push("web-ui/Dockerfile");
+  }
+
+  const hasDockerCompose = fs.existsSync(path.join(repoRoot, "docker-compose.yml"));
+
+  return {
+    k8sManifests,
+    dockerfiles,
+    hasDockerCompose,
+    discoveredServices: Array.from(new Set(discoveredServices)),
+    discoveredVolumes: Array.from(new Set(discoveredVolumes)),
+    discoveredNetworks: Array.from(new Set(discoveredNetworks))
+  };
+}
+
+/**
+ * Builder-driven draw.io XML Architecture Diagram Generator
+ * Produces a full superset diagram incorporating all v2 baseline components
+ * plus all v2.5 builder tier, execution tier, and Qdrant oracle additions.
+ */
+export function generateArchitectureDiagram(repoRoot: string): {
+  xml: string;
+  cellCount: number;
+  components: string[];
+} {
+  const snapshot = discoverRepoState(repoRoot);
+
+  const xml = `<mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="Antigravity-Builder" version="24.0.0" type="device">
+  <diagram id="arch-v2-5" name="local-agentic-sandbox Architecture v2.5 Superset">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Header / Title Block -->
+        <mxCell id="2" value="&lt;b style='font-size: 20px; color: #0369a1;'&gt;local-agentic-sandbox: Autonomous Platform v2 Architecture (v2.5 Superset: Overnight Builder + Local Oracle)&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #475569; font-size: 13px;'&gt;Zero-Trust Kubernetes Topology | Air-Gapped Code Execution | Tri-Mode Dispatcher | Two-Tier Build Sandbox | Qdrant Oracle Memory&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Ingress & Client Layer -->
+        <mxCell id="10" value="&lt;b&gt;CLIENT &amp;amp; INGRESS LAYER&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#f8fafc;strokeColor=#cbd5e1;fontColor=#475569;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="1520" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="&lt;b style='color: #0f172a;'&gt;Mobile Phone / Workstation Browser&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #0284c7; font-weight: 600;'&gt;LAN / Localhost (Direct HTTP)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontColor=#0f172a;" vertex="1" parent="10">
+          <mxGeometry x="30" y="35" width="280" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="&lt;b style='color: #0369a1;'&gt;LAN Reverse Proxy Bridge&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;scripts/lan-bridge.js (0.0.0.0:80 / :3000)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f9ff;strokeColor=#0284c7;fontColor=#0f172a;" vertex="1" parent="10">
+          <mxGeometry x="390" y="35" width="360" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="&lt;b style='color: #b45309;'&gt;Public Internet &amp;amp; External Docs&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;DuckDuckGo &amp;amp; Documentation Scrapes&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;" vertex="1" parent="10">
+          <mxGeometry x="880" y="35" width="600" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- Kubernetes Cluster Boundary -->
+        <mxCell id="20" value="&lt;b&gt;KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#ffffff;strokeColor=#94a3b8;fontColor=#0284c7;rounded=1;strokeWidth=1.5;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="1520" height="540" as="geometry" />
+        </mxCell>
+
+        <!-- Web UI Pod & Supervisor -->
+        <mxCell id="21" value="&lt;b style='font-size: 14px; color: #0369a1;'&gt;web-ui Orchestrator Pod&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #64748b; font-size: 11px;'&gt;Port 3000 (NodePort 30300) | Next.js 15 LTS&lt;/span&gt;&lt;hr/&gt;• &lt;b style='color: #4338ca;'&gt;LangGraph StateGraph Supervisor:&lt;/b&gt; Planner -&gt; Explorer -&gt; Builder -&gt; Critic -&gt; Recorder&lt;br/&gt;• &lt;b style='color: #047857;'&gt;Durable Checkpointing:&lt;/b&gt; FileCheckpointSaver (resume on crash)&lt;br/&gt;• &lt;b style='color: #6d28d9;'&gt;Tri-Mode Dispatcher:&lt;/b&gt; Auto | Flash | Pro (keep_alive: 24h)&lt;br/&gt;• &lt;b style='color: #e11d48;'&gt;OTEL Tracer SDK:&lt;/b&gt; Turn -&gt; Tool -&gt; Exec waterfall spans&lt;br/&gt;• &lt;b style='color: #0284c7;'&gt;Network Mesh:&lt;/b&gt; ai-mesh &amp;amp; egress-mesh routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="380" y="45" width="460" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- MCP Runner Pod -->
+        <mxCell id="22" value="&lt;b style='font-size: 14px; color: #047857;'&gt;mcp-runner Tool Boundary&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #065f46; font-size: 10px;'&gt;ClusterIP: 8080 | UID: 10001 (cap_drop: ALL) | read_only rootfs&lt;/span&gt;&lt;hr/&gt;&lt;b style='color: #0f172a;'&gt;8 Autonomous Tools:&lt;/b&gt;&lt;br/&gt;• workspace_get_tree, read_file, write_file&lt;br/&gt;• workspace_grep (ReDoS complexity guard)&lt;br/&gt;• workspace_run_command (Isolated Bash)&lt;br/&gt;• git_status, git_checkout, git_commit (Argv-safe)&lt;br/&gt;• execute_sandboxed_python &amp;amp; Attestation&lt;br/&gt;&lt;br/&gt;&lt;span style='color: #047857; font-weight: bold;'&gt;NetworkPolicy: Zero Egress Deny-All (ai-mesh)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#059669;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="30" y="45" width="310" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- Browser MCP Pod -->
+        <mxCell id="23" value="&lt;b style='font-size: 14px; color: #b45309;'&gt;browser-mcp Scraper Pod&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #92400e; font-size: 10px;'&gt;ClusterIP: 8081 | uid: 10002&lt;/span&gt;&lt;hr/&gt;• search_web (DuckDuckGo Search)&lt;br/&gt;• fetch_webpage_markdown (Scraper)&lt;br/&gt;• SSRF Guard (Private IP Filter)&lt;br/&gt;• NetworkPolicy: Egress Allowed (80/443 on egress-mesh)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="900" y="45" width="330" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- OTEL Collector Pod -->
+        <mxCell id="24" value="&lt;b style='font-size: 14px; color: #be123c;'&gt;otel-collector Jaeger Tracing&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #9f1239; font-size: 10px;'&gt;Ports: 4318 (HTTP), 4317 (gRPC), 16686 (UI)&lt;/span&gt;&lt;hr/&gt;• Distributed Trace Spans: Turn -&gt; Tool -&gt; Exec&lt;br/&gt;• Real-time Waterfall Telemetry Feed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="900" y="195" width="330" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Builder Tier Toolchain Sandbox (v2.5 Addition) -->
+        <mxCell id="26" value="&lt;b style='font-size: 13px; color: #4338ca;'&gt;builder-tier Toolchain Sandbox (Tier 2)&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 10px; color: #3730a3;'&gt;Pre-baked Images: builder-node:22, builder-python:3.12, builder-go:1.22, builder-rust:1.80&lt;/span&gt;&lt;hr/&gt;• Isolated Build Pods with Registry Egress Only (npm, PyPI, crates.io)&lt;br/&gt;• Fast Tier 1 In-Process Runner for Unit Tests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#6366f1;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="1260" y="45" width="230" height="245" as="geometry" />
+        </mxCell>
+
+        <!-- Qdrant Vector Memory StatefulSet (v2.5 Stretch Addition) -->
+        <mxCell id="27" value="&lt;b style='font-size: 13px; color: #0284c7;'&gt;qdrant-service: Qdrant Vector Memory (StatefulSet)&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 10px; color: #0369a1;'&gt;Ports: 6333 (REST), 6334 (gRPC) | PodSecurity Restricted&lt;/span&gt;&lt;hr/&gt;• Mode B Oracle Embeddings &amp;amp; Multi-Hop Memory Retrieval&lt;br/&gt;• Zero-Trust NetworkPolicy: Ingress strictly limited to web-ui" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f9ff;strokeColor=#0284c7;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="900" y="310" width="590" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Workspace PVC -->
+        <mxCell id="25" value="&lt;b style='font-size: 13px; color: #0f172a;'&gt;workspace-pvc Persistent Volume Claim (/workspace mount)&lt;/b&gt; — Host Mount: ./workspace:rw (RWO 10Gi)&lt;br/&gt;&lt;span style='color: #475569;'&gt;• Shared Git Repo &amp;amp; Feature Branches | .agent/skills/*.md (Hermes Loop) | Isolated Test Caches&lt;br/&gt;&lt;b style='color: #b45309;'&gt;Host Trust Boundary:&lt;/b&gt; Writes allowed in /workspace; path traversal outside strictly rejected.&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;strokeWidth=1.5;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="30" y="310" width="810" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Build Cache PVC & Qdrant Storage PVC -->
+        <mxCell id="28" value="&lt;b style='font-size: 12px; color: #334155;'&gt;build-cache-pvc (Builder Cache PVC: 20Gi)&lt;/b&gt; &amp;amp; &lt;b style='font-size: 12px; color: #0369a1;'&gt;qdrant-storage (Vector Storage PVC: 10Gi)&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #64748b; font-size: 10px;'&gt;7-day LRU Cache Pruning | Dedicated compiler artifact retention | Vector index snapshot persistence&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;strokeWidth=1.4;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
+          <mxGeometry x="30" y="425" width="1460" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Inference Boundary -->
+        <mxCell id="30" value="&lt;b&gt;HOST INFERENCE BOUNDARY (AMD Ryzen 7 5700X3D + Radeon RX 9070 XT 16GB VRAM ROCm)&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#faf5ff;strokeColor=#7c3aed;fontColor=#6d28d9;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="780" width="1520" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="31" value="&lt;b style='color: #6d28d9;'&gt;ollama-service (K8s Service)&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;Type: ExternalName (host.docker.internal:11434)&lt;br/&gt;Air-Gapped PCIe ROCm Inference&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#a855f7;strokeWidth=1.4;fontColor=#0f172a;" vertex="1" parent="30">
+          <mxGeometry x="30" y="45" width="310" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="32" value="&lt;b style='color: #581c87; font-size: 13px;'&gt;Primary Orchestrator qwen3.8:27b-q3_k_m&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #6d28d9;'&gt;Dedicated VRAM: ~13.3 GB (100% GPU Offloaded, 29 Layers)&lt;/span&gt;&lt;hr/&gt;• Flash Attention Enabled | Native Function Calling (tools)&lt;br/&gt;• Deep Architectural Planning, Code Synthesis, &amp;amp; Debugging&lt;br/&gt;&lt;b style='color: #047857;'&gt;Active Lease: 24h keep_alive (Zero Cold Start / Sub-second latency)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=10;" vertex="1" parent="30">
+          <mxGeometry x="380" y="45" width="540" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="33" value="&lt;b style='color: #581c87; font-size: 13px;'&gt;Vision &amp;amp; Sub-Agent gemma4:e4b&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #6d28d9;'&gt;Parameter Size: 7.5B | Speed: ~80 tok/s&lt;/span&gt;&lt;hr/&gt;• Multimodal Vision: Whiteboards, draw.io XML, diagrams&lt;br/&gt;• Triage Router: Fast complexity classification (&amp;lt;250ms)&lt;br/&gt;• Extracted spec feeds structured markdown into Qwen loop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=10;" vertex="1" parent="30">
+          <mxGeometry x="960" y="45" width="520" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Connectors & Edges -->
+        <mxCell id="40" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="1" source="11" target="12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="41" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="1" source="12" target="21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="42" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;fontColor=#059669;" edge="1" parent="1" source="21" target="22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="43" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=2;fontColor=#d97706;" edge="1" parent="1" source="21" target="23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="44" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=2;" edge="1" parent="1" source="23" target="13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e11d48;strokeWidth=2;" edge="1" parent="1" source="21" target="24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;" edge="1" parent="1" source="22" target="25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="47" value="Inference /api/chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;fontColor=#7c3aed;" edge="1" parent="1" source="21" target="31">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="630" y="760" />
+              <mxPoint x="225" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="48" value="REST/gRPC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;fontColor=#0284c7;" edge="1" parent="1" source="21" target="27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="49" value="Delegated Build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6366f1;strokeWidth=2;fontColor=#6366f1;" edge="1" parent="1" source="21" target="26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>`;
+
+  const matches = xml.match(/<mxCell\s+id="/g);
+  const cellCount = matches ? matches.length : 0;
+
+  return {
+    xml,
+    cellCount,
+    components: [
+      ...snapshot.discoveredServices,
+      ...snapshot.discoveredVolumes,
+      ...snapshot.discoveredNetworks
+    ]
+  };
+}

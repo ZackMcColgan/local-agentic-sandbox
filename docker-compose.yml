@@ -73,6 +73,8 @@ services:
       - OTEL_SERVICE_NAME=enterprise-ai-portal
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ./workspace:/workspace:ro
     networks:
       - ai-mesh
       - egress-mesh

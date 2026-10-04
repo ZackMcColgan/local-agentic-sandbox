@@ -30,8 +30,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-ui
-          image: local-agentic-sandbox-web-ui:latest
-          imagePullPolicy: IfNotPresent
+          image: local-agentic-sandbox-web-ui:v2.5
+          imagePullPolicy: Never
           ports:
             - containerPort: 3000
               name: http
@@ -64,6 +64,10 @@ spec:
             requests:
               cpu: "250m"
               memory: "256Mi"
+          volumeMounts:
+            - name: workspace-volume
+              mountPath: /workspace
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /
@@ -76,6 +80,10 @@ spec:
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 20
+      volumes:
+        - name: workspace-volume
+          persistentVolumeClaim:
+            claimName: pvc-workspace
 ---
 apiVersion: v1
 kind: Service

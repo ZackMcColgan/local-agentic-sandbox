@@ -4,7 +4,10 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { registerCodeRunner } from "./tools/codeRunner.js";
 import { registerAttestation } from "./tools/attestation.js";
-import { registerWorkspaceTools } from "./tools/workspaceTools.js";
+import { registerWorkspaceTools, resolveSafePath } from "./tools/workspaceTools.js";
+import fs from "fs/promises";
+import fsSync from "fs";
+import path from "path";
 
 const app = express();
 app.use(cors());
@@ -21,6 +24,48 @@ registerWorkspaceTools(mcp);
 
 // Active SSE transports keyed by sessionId
 const transports = new Map<string, SSEServerTransport>();
+
+app.get("/files", async (req: Request, res: Response) => {
+  const filePath = req.query.path as string;
+  if (!filePath) {
+    return res.status(400).json({ error: "Missing required 'path' query parameter" });
+  }
+
+  // Strict SVG/XML content-type validation
+  const ext = path.extname(filePath).toLowerCase();
+  const isAllowedExt =
+    ext === ".svg" ||
+    ext === ".drawio" ||
+    filePath.endsWith(".drawio.xml") ||
+    ext === ".xml";
+
+  if (!isAllowedExt) {
+    return res.status(415).json({
+      error: "Unsupported media type: only SVG and Draw.io XML diagrams are permitted"
+    });
+  }
+
+  try {
+    const safePath = resolveSafePath(filePath);
+    if (!fsSync.existsSync(safePath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+    const stat = await fs.stat(safePath);
+    if (stat.isDirectory()) {
+      return res.status(403).json({ error: "Access forbidden: directory listing not permitted" });
+    }
+    if (!stat.isFile()) {
+      return res.status(400).json({ error: "Target is not a file" });
+    }
+    const content = await fs.readFile(safePath);
+    const mime = ext === ".svg" ? "image/svg+xml; charset=utf-8" : "application/xml; charset=utf-8";
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Length", stat.size.toString());
+    res.send(content);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({

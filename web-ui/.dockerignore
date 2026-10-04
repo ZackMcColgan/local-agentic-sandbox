@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+*.log
+.DS_Store
+screenshots
+test_*.png

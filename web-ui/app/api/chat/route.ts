@@ -5,12 +5,15 @@ import {
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
-  AGENT_MODES
+  AGENT_MODES,
+  isReasoningEffortSupported
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
+import { computeModelOptions, resolveEffectiveReasoningEffort } from "@/lib/chatUtils";
+import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -26,7 +29,6 @@ interface TraceItem {
   model: string;
   tier?: "sandbox" | "browser" | "workspace";
 }
-
 
 async function connectMcpClient(url: string, name: string) {
   const sseUrl = normalizeMcpUrl(url);
@@ -101,6 +103,58 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
   }
 }
 
+/**
+ * Async generator for streaming NDJSON chunks from Ollama /api/chat
+ */
+async function* streamOllamaChat(ollamaUrl: string, payload: any) {
+  const res = await fetch(`${ollamaUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, stream: true })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Ollama engine returned ${res.status}: ${errText}`);
+  }
+
+  if (!res.body) {
+    throw new Error("Ollama returned empty response body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const json = JSON.parse(trimmed);
+          yield json;
+        } catch (err) {
+          console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      try {
+        yield JSON.parse(buffer.trim());
+      } catch {}
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
   const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" }>();
@@ -155,7 +209,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const reasoningEffort = requestedReasoning || (activeModel.includes("qwen3.8") ? "medium" : "low");
+    // Resolve honest effective reasoning effort
+    let effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
 
     // 2. Connect to Sandboxed Code-Runner / Workspace MCP
     const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
@@ -201,7 +256,7 @@ You have access to two distinct tool tiers:
    - 'workspace_get_tree': Retrieve repository directory tree skipping node_modules and .git.
    - 'workspace_grep': Fast regex/substring search across codebase.
    - 'workspace_read_file': Read files with line numbers.
-   - 'workspace_write_file': Atomically write code, Markdown documentation, and .drawio.svg diagrams.
+   - 'workspace_write_file': Atomically write code, Markdown documentation, and SVG vector diagrams (.svg).
    - 'workspace_run_command': Execute commands (pytest, npm test, cargo, bash) and inspect exit codes & stderr.
    - 'git_status' & 'git_diff': Inspect branch status, unstaged changes, and unified diffs.
    - 'git_checkout_branch': Create or switch to an autonomous branch (e.g. agent/feat-xyz).
@@ -216,15 +271,27 @@ CRITICAL INSTRUCTIONS:
   - DO NOT output extensive conversational filler before calling a tool.
   - Trigger the tool directly so execution starts in the sandbox without delay.
   - Synthesize and reason over the facts AFTER tool results are returned.
+- VECTOR DIAGRAMS & ARCHITECTURE DRAWINGS:
+  - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, prefer pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes and crisp high-contrast styling. Standard Draw.io XML (<mxfile> / <mxGraphModel>) is also fully supported and rendered interactively by the frontend viewer.
+  - When saving diagrams via 'workspace_write_file', use '.svg' or '.drawio' as appropriate.
+  - Both raw SVG code and Draw.io XML code blocks render as interactive vector graphics directly within the chat UI.
+- ZERO-DEFLECTION POLICY FOR IN-CHAT RENDERING:
+  - In-chat vector graphic and diagram rendering is a core product promise.
+  - You MUST NEVER tell the user "rendering fails on your side", "the SVG viewer has not caught it", "paste into an external viewer", or tell them to use diagrams.net externally.
+  - If a diagram does not render as expected, debug it, fix the markup, format the code block properly (\`\`\`svg or \`\`\`xml), or adjust the SVG/XML structure directly. Never deflect to external tools or blame the user's browser.
+- LOCAL CODEBASE ORACLE & GROUNDING:
+  - The system automatically consults local repository source files and documentation.
+  - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
+  - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
 
     let effortDirective = "";
-    if (reasoningEffort === "low") {
+    if (effectiveReasoningEffort === "low") {
       effortDirective = "\n\nREASONING EFFORT: FAST / DIRECT. Provide direct, concise answers without <think> tags or verbose preamble. Call tools immediately.";
-    } else if (reasoningEffort === "xhigh") {
+    } else if (effectiveReasoningEffort === "xhigh") {
       effortDirective = "\n\nREASONING EFFORT: DEEP. Think deeply step-by-step before answering.";
-    } else {
+    } else if (effectiveReasoningEffort === "medium") {
       effortDirective = "\n\nREASONING EFFORT: BALANCED. Keep reasoning concise before executing tools.";
     }
 
@@ -258,6 +325,24 @@ CRITICAL INSTRUCTIONS:
       }
     }
 
+    // 4. Grounding via Local Repository Oracle (consults local repos/docs)
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const userPrompt = lastUserMsg?.content || "";
+    let oracleSnippet = "";
+    let oracleCitations: string[] = [];
+
+    if (userPrompt.trim()) {
+      try {
+        const oracleResult = await searchOracleCodebase(userPrompt);
+        if (oracleResult.contextSnippet) {
+          oracleSnippet = oracleResult.contextSnippet;
+          oracleCitations = oracleResult.citations;
+        }
+      } catch (err: any) {
+        console.warn("[ChatRoute] Oracle retrieval warning:", err.message);
+      }
+    }
+
     const conversationMessages = [...messages];
     if (conversationMessages.length > 0) {
       const lastIdx = conversationMessages.length - 1;
@@ -269,6 +354,9 @@ CRITICAL INSTRUCTIONS:
       if (imagePayloads.length > 0) {
         lastMsg.images = imagePayloads;
       }
+      if (oracleSnippet) {
+        lastMsg.content = `${lastMsg.content || ""}\n${oracleSnippet}`;
+      }
       conversationMessages[lastIdx] = lastMsg;
     }
 
@@ -279,60 +367,6 @@ CRITICAL INSTRUCTIONS:
       });
     }
 
-    const computeOptions = (modelToUse: string) => {
-      const opts: any = {};
-      opts.num_ctx = modelToUse.includes("gemma4") ? 16384 : 8192;
-      if (reasoningEffort === "low") {
-        opts.temperature = 0.2;
-        opts.num_predict = 4096;
-      } else if (reasoningEffort === "xhigh") {
-        opts.temperature = 0.7;
-        opts.num_predict = 8192;
-      } else {
-        opts.temperature = 0.5;
-        opts.num_predict = 4096;
-      }
-      if (modelToUse.includes("qwen3.8")) {
-        opts.reasoning_effort = reasoningEffort;
-      }
-      return opts;
-    };
-
-    // Step 1: Initial query to Ollama with OpenTelemetry reasoning span
-    const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
-      model: activeModel,
-      round: 0
-    });
-
-    const ollamaPayload: any = {
-      model: activeModel,
-      messages: conversationMessages,
-      stream: false,
-      keep_alive: "24h",
-      options: computeOptions(activeModel)
-    };
-
-    if (ollamaTools.length > 0) {
-      ollamaPayload.tools = ollamaTools;
-    }
-
-    const aiRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ollamaPayload)
-    });
-
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      reasoningSpan.end("error", { error: errText });
-      throw new Error(`Ollama engine returned ${aiRes.status}: ${errText}`);
-    }
-
-    const aiData = await aiRes.json();
-    reasoningSpan.end("ok");
-    const assistantMessage = aiData.message;
-    const traces: TraceItem[] = [];
-
     // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
     const getEffectiveToolCalls = (msg: any) => {
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
@@ -341,203 +375,289 @@ CRITICAL INSTRUCTIONS:
       return parseToolCallsFromText(msg.content, toolClientMap);
     };
 
-    // Step 2: Handle Autonomous Multi-Round Tool Execution Loop
-    let currentAssistantMessage = assistantMessage;
-    let round = 0;
-    const MAX_TOOL_ROUNDS = 8;
-    let consecutiveFailures = 0;
+    // Create TransformStream for Real-Time SSE Token & Trace Streaming
+    const encoder = new TextEncoder();
+    const stream = new TransformStream();
+    const writer = stream.writable.getWriter();
 
-    while (round < MAX_TOOL_ROUNDS) {
-      const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
-      if (!toolCalls || toolCalls.length === 0) {
-        break;
+    const sendEvent = async (data: any) => {
+      try {
+        await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      } catch (err) {
+        console.warn("[SSE sendEvent error]:", err);
       }
+    };
 
-      round++;
-      const assistantMsgToPush = {
-        ...currentAssistantMessage,
-        tool_calls: toolCalls
-      };
-      conversationMessages.push(assistantMsgToPush);
-
-      for (const toolCall of toolCalls) {
-        const toolName = toolCall.function.name;
-        const toolArgs =
-          typeof toolCall.function.arguments === "string"
-            ? JSON.parse(toolCall.function.arguments)
-            : toolCall.function.arguments;
-
-        const target = toolClientMap.get(toolName);
-        if (!target) {
-          throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
-        }
-
-        const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
-          tool: toolName,
-          tier: target.tier
+    // Run async orchestrator pipeline in background feeding SSE stream
+    (async () => {
+      const traces: TraceItem[] = [];
+      try {
+        // Send initial metadata
+        await sendEvent({
+          type: "meta",
+          model: activeModel,
+          mode,
+          reasoning_effort: effectiveReasoningEffort,
+          triage: triageComplexityResult,
+          citations: oracleCitations
         });
 
-        let bashSpan: any = null;
-        if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
-          bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
-            command: toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python")
+        let currentAssistantMessage: any = { role: "assistant", content: "" };
+        let round = 0;
+        const MAX_TOOL_ROUNDS = 8;
+        let consecutiveFailures = 0;
+
+        while (round < MAX_TOOL_ROUNDS) {
+          const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
+            model: activeModel,
+            round
           });
-        }
 
-        const startTime = performance.now();
-        const result = await target.client.callTool({
-          name: toolName,
-          arguments: toolArgs
-        });
-        const durationMs = Math.round(performance.now() - startTime);
+          const ollamaPayload: any = {
+            model: activeModel,
+            messages: conversationMessages,
+            keep_alive: "24h",
+            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+          };
 
-        // Track test / command failure for auto-escalation
-        let isExecutionError = false;
-        try {
-          const resultStr = JSON.stringify(result);
-          if (
-            resultStr.includes('"status":"EXECUTION_ERROR"') ||
-            resultStr.includes('"exit_code":1') ||
-            (result as any).isError
-          ) {
-            isExecutionError = true;
+          if (ollamaTools.length > 0) {
+            ollamaPayload.tools = ollamaTools;
           }
-        } catch {}
 
-        if (bashSpan) {
-          bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
+          let fullRoundContent = "";
+          let toolCallsFromMessage: any[] = [];
+
+          for await (const chunk of streamOllamaChat(OLLAMA_URL, ollamaPayload)) {
+            if (chunk.message?.content) {
+              const textChunk = chunk.message.content;
+              fullRoundContent += textChunk;
+              await sendEvent({ type: "token", content: textChunk });
+            }
+            if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+              toolCallsFromMessage.push(...chunk.message.tool_calls);
+            }
+          }
+
+          reasoningSpan.end("ok");
+          currentAssistantMessage = {
+            role: "assistant",
+            content: fullRoundContent,
+            tool_calls: toolCallsFromMessage.length > 0 ? toolCallsFromMessage : undefined
+          };
+
+          const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          if (!toolCalls || toolCalls.length === 0) {
+            break;
+          }
+
+          round++;
+          const assistantMsgToPush = {
+            ...currentAssistantMessage,
+            tool_calls: toolCalls
+          };
+          conversationMessages.push(assistantMsgToPush);
+
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function.name;
+            const toolArgs =
+              typeof toolCall.function.arguments === "string"
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments;
+
+            await sendEvent({
+              type: "status",
+              status: `Executing tool ${toolName}...`
+            });
+
+            const target = toolClientMap.get(toolName);
+            if (!target) {
+              throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
+            }
+
+            const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
+              tool: toolName,
+              tier: target.tier
+            });
+
+            let bashSpan: any = null;
+            if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
+              bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
+                command: toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python")
+              });
+            }
+
+            const startTime = performance.now();
+            const result = await target.client.callTool({
+              name: toolName,
+              arguments: toolArgs
+            });
+            const durationMs = Math.round(performance.now() - startTime);
+
+            // Track test / command failure for auto-escalation
+            let isExecutionError = false;
+            try {
+              const resultStr = JSON.stringify(result);
+              if (
+                resultStr.includes('"status":"EXECUTION_ERROR"') ||
+                resultStr.includes('"exit_code":1') ||
+                (result as any).isError
+              ) {
+                isExecutionError = true;
+              }
+            } catch {}
+
+            if (bashSpan) {
+              bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
+            }
+            toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
+
+            if (isExecutionError) {
+              consecutiveFailures++;
+            } else {
+              consecutiveFailures = 0;
+            }
+
+            const traceItem: TraceItem = {
+              tool: toolName,
+              args: toolArgs,
+              result,
+              durationMs,
+              timestamp: new Date().toISOString(),
+              model: activeModel,
+              tier: target.tier
+            };
+            traces.push(traceItem);
+
+            await sendEvent({
+              type: "trace",
+              trace: traceItem
+            });
+
+            conversationMessages.push({
+              role: "tool",
+              name: toolName,
+              content: JSON.stringify(result)
+            });
+
+            // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
+            if (
+              mode === "auto" &&
+              activeModel.includes("gemma4") &&
+              consecutiveFailures >= 2
+            ) {
+              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
+              activeModel = DEFAULT_PRIMARY_MODEL;
+              effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
+              await sendEvent({
+                type: "status",
+                status: "Auto-escalating to Pro Reasoning Model (Qwen 27B)..."
+              });
+              await sendEvent({
+                type: "meta",
+                model: activeModel,
+                reasoning_effort: effectiveReasoningEffort
+              });
+              conversationMessages.push({
+                role: "system",
+                content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+              });
+            }
+          }
         }
-        toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
 
-        if (isExecutionError) {
-          consecutiveFailures++;
-        } else {
-          consecutiveFailures = 0;
-        }
-
-        traces.push({
-          tool: toolName,
-          args: toolArgs,
-          result,
-          durationMs,
-          timestamp: new Date().toISOString(),
-          model: activeModel,
-          tier: target.tier
-        });
-
-        conversationMessages.push({
-          role: "tool",
-          name: toolName,
-          content: JSON.stringify(result)
-        });
-
-        // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
-        if (
-          mode === "auto" &&
-          activeModel.includes("gemma4") &&
-          consecutiveFailures >= 2
-        ) {
-          console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
-          activeModel = DEFAULT_PRIMARY_MODEL;
+        // Post-tool synthesis safety pass if lingering tool calls or empty text:
+        const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
+        if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+          const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
+          conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({
-            role: "system",
-            content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+            role: "user",
+            content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
           });
+
+          await sendEvent({
+            type: "status",
+            status: "Synthesizing final answer..."
+          });
+
+          let synthContent = "";
+          for await (const chunk of streamOllamaChat(OLLAMA_URL, {
+            model: activeModel,
+            messages: conversationMessages,
+            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+          })) {
+            if (chunk.message?.content) {
+              synthContent += chunk.message.content;
+              await sendEvent({ type: "token", content: chunk.message.content });
+            }
+          }
+
+          if (synthContent.trim()) {
+            currentAssistantMessage = { role: "assistant", content: synthContent };
+          }
+          synthSpan.end("ok");
         }
-      }
 
-      // Query model with updated tool results
-      const nextPayload: any = {
-        model: activeModel,
-        messages: conversationMessages,
-        stream: false
-      };
+        // Clean residual tool tags
+        let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
 
-      if (round < MAX_TOOL_ROUNDS && ollamaTools.length > 0) {
-        nextPayload.tools = ollamaTools;
-      }
+        if (!cleanedContent) {
+          if (traces.length > 0) {
+            cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+          } else if (currentAssistantMessage.content?.trim()) {
+            cleanedContent = currentAssistantMessage.content.trim();
+          } else {
+            cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+          }
+        }
 
-      nextPayload.options = computeOptions(activeModel);
+        rootSpan.end("ok", {
+          tracesCount: traces.length,
+          modelUsed: activeModel
+        });
 
-      const nextReasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
-        model: activeModel,
-        round
-      });
-
-      const nextRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextPayload)
-      });
-
-      if (!nextRes.ok) {
-        nextReasoningSpan.end("error");
-        throw new Error(`Ollama synthesis failed: ${await nextRes.text()}`);
-      }
-
-      const nextData = await nextRes.json();
-      nextReasoningSpan.end("ok");
-      currentAssistantMessage = nextData.message;
-    }
-
-    // Post-tool synthesis safety pass:
-    const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-    if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
-      const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
-      conversationMessages.push(currentAssistantMessage);
-      conversationMessages.push({
-        role: "user",
-        content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
-      });
-
-      const finalRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        await sendEvent({
+          type: "done",
+          content: cleanedContent,
+          traces,
           model: activeModel,
-          messages: conversationMessages,
-          stream: false,
-          options: computeOptions(activeModel)
-        })
-      });
+          mode,
+          reasoning_effort: effectiveReasoningEffort,
+          triage: triageComplexityResult,
+          trace_session: {
+            sessionId: tracer.getSessionId(),
+            traceId: tracer.getTraceId()
+          }
+        });
 
-      if (finalRes.ok) {
-        const finalData = await finalRes.json();
-        if (finalData.message?.content?.trim()) {
-          currentAssistantMessage = finalData.message;
+      } catch (err: any) {
+        if (rootSpan) {
+          try {
+            rootSpan.end("error", { error: err.message });
+          } catch {}
         }
+        console.error("[Agent Orchestrator Streaming Error]:", err);
+        await sendEvent({
+          type: "error",
+          error: err.message || "Internal orchestrator error"
+        });
+      } finally {
+        for (const session of activeSessions) {
+          try {
+            await session.client.close();
+          } catch {}
+        }
+        try {
+          await writer.close();
+        } catch {}
       }
-      synthSpan.end("ok");
-    }
+    })();
 
-    // Clean residual tool tags
-    let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
-
-    if (!cleanedContent) {
-      if (traces.length > 0) {
-        cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
-      } else if (currentAssistantMessage.content?.trim()) {
-        cleanedContent = currentAssistantMessage.content.trim();
-      } else {
-        cleanedContent = "I am ready to assist you. What would you like to build or explore?";
-      }
-    }
-
-    rootSpan.end("ok", {
-      tracesCount: traces.length,
-      modelUsed: activeModel
-    });
-
-    return NextResponse.json({
-      content: cleanedContent,
-      traces,
-      model: activeModel,
-      mode,
-      reasoning_effort: reasoningEffort,
-      triage: triageComplexityResult,
-      trace_session: {
-        sessionId: tracer.getSessionId(),
-        traceId: tracer.getTraceId()
+    return new Response(stream.readable, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive"
       }
     });
 
@@ -547,7 +667,7 @@ CRITICAL INSTRUCTIONS:
         rootSpan.end("error", { error: err.message });
       } catch {}
     }
-    console.error("[Agent Orchestrator Error]:", err);
+    console.error("[Agent Orchestrator Setup Error]:", err);
     return NextResponse.json(
       {
         error: err.message || "Internal orchestrator error",
@@ -555,13 +675,5 @@ CRITICAL INSTRUCTIONS:
       },
       { status: 500 }
     );
-  } finally {
-    for (const session of activeSessions) {
-      try {
-        await session.client.close();
-      } catch {
-        // Ignored on teardown
-      }
-    }
   }
 }

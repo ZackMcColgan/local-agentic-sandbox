@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: build-cache-pvc
+  namespace: local-agentic-sandbox
+  labels:
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi # 20 GB Disk Budget Cap
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: builder-tier-registry-egress
+  namespace: local-agentic-sandbox
+  labels:
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: security-policy
+spec:
+  podSelector:
+    matchLabels:
+      tier: build
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow incoming commands from web-ui orchestrator
+    - from:
+        - podSelector:
+            matchLabels:
+              app: web-ui
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Rule 1: DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Rule 2: Package Registries Egress (npm, pypi, crates, go proxy) & GitHub
+    # Port 443 strictly allowed to external package registries
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.169.254/32 # Block cloud metadata services
