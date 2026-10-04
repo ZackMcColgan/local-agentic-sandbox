@@ -52,6 +52,8 @@ spec:
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
+            - name: WORKER_MODEL_TIMEOUT_MS
+              value: "300000"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

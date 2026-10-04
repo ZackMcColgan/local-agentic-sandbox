@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
       const toolchain: ToolchainType = body.toolchain || "node:22";
       const taskId = `task-${Date.now()}`;
-      const planSpec = await generatePlanSpec({ taskId, goal, toolchain });
+      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, model: body.model });
 
       const manifest: TaskManifest = {
         taskId,

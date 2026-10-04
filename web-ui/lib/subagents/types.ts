@@ -38,6 +38,10 @@ export interface Milestone {
   synthetic?: boolean;
   /** Model that generated the builder output (absent when synthetic). */
   builderModel?: string;
+  criticScore?: number;
+  criticVerdict?: "PASS" | "FAIL";
+  criticCritique?: string;
+  tokenThroughput?: { promptTokens?: number; completionTokens?: number; tokensPerSecond?: number };
 }
 
 export interface AmbiguityFlag {
@@ -65,7 +69,7 @@ export interface CheckpointState {
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "queued" | "active" | "completed" | "parked" | "cancelled";
+export type TaskStatus = "queued" | "active" | "completed" | "parked" | "cancelled" | "stopped";
 
 export interface TaskJournalEntry {
   timestamp: string;

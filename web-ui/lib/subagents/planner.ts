@@ -39,10 +39,10 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   let milestones: Milestone[] = [];
 
   if (!isSynthetic) {
-    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl });
+    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000 });
     const modelToUse = input.model || process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m";
 
-    const prompt = `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria.
+    const prompt = `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria. Be concise.
 
 Goal: ${goal}
 Toolchain: ${toolchain}
