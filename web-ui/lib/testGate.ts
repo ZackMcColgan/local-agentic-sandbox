@@ -197,12 +197,17 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/oracle/ingestion") || p.includes("lib/ingestion"),
     tests: ["tests/ingestionPipeline.test.ts"]
   },
-  // Architecture diagram generator
+  // Architecture diagram generator & dogfood toolchain
   {
-    match: (p) => p.includes("lib/diagram/architectureGenerator"),
+    match: (p) =>
+      p.includes("lib/diagram/architectureGenerator") ||
+      p.includes("scripts/drawio-to-svg") ||
+      p.includes("architecture.drawio") ||
+      p.includes("architecture.svg"),
     tests: [
       "tests/architectureSvgPair.test.ts",
-      "tests/dogfoodPhase1Acceptance.test.ts"
+      "tests/dogfoodPhase1Acceptance.test.ts",
+      "tests/dogfoodToolchain.test.ts"
     ]
   },
   // UI views and components
