@@ -76,7 +76,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./workspace:/workspace:ro
+      - ./workspace:/workspace:rw
     networks:
       - ai-mesh
       - egress-mesh
