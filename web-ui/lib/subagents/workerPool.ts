@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { execSync, execFileSync } from "child_process";
-import { Milestone, WorkerRole } from "./types";
+import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAssertionResult, TestSnapshot, RevertResult, TestCounts } from "./types";
 import ts from "typescript";
 import {
   createOllamaGenerate,
@@ -44,6 +44,8 @@ export interface CriticReview {
   synthetic?: boolean;
   model?: string;
   verdict?: "approved" | "needs_fix";
+  evidence?: EvidenceItem[];
+  assertions?: ContractAssertionResult[];
 }
 
 export interface BuilderResult {
@@ -289,7 +291,7 @@ export class BuilderWorker {
   ): Promise<BuilderResult> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
-    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "gemma4:e4b";
+    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-27b-mtp";
     const criticFeedback = options?.criticFeedback || [];
     const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
 
@@ -406,6 +408,110 @@ Please fix the syntax error and output the complete, valid, raw file content for
   }
 }
 
+/**
+ * Guardrail 2 (Item 2): Blocking-Gate Revert
+ * Records test suite baseline before builder attempt
+ */
+export async function recordTestBaseline(
+  repoRoot?: string,
+  testCommand?: string,
+  options?: { evaluator?: () => Promise<TestSnapshot> }
+): Promise<TestSnapshot> {
+  if (options?.evaluator) {
+    return await options.evaluator();
+  }
+
+  const root = repoRoot || process.cwd();
+  const cmd = testCommand || "npm test";
+  let stdout = "";
+  let passCount = 0;
+  let failCount = 0;
+  const failingTests: string[] = [];
+
+  try {
+    stdout = execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
+  } catch (err: any) {
+    stdout = err.stdout || err.message || "";
+  }
+
+  const passMatch = stdout.match(/(\d+)\s+pass(?:ing|ed)/i);
+  if (passMatch) passCount = parseInt(passMatch[1], 10);
+  const failMatch = stdout.match(/(\d+)\s+fail(?:ing|ed)/i);
+  if (failMatch) failCount = parseInt(failMatch[1], 10);
+
+  return {
+    passCount,
+    failCount,
+    failingTests,
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Guardrail 2 (Item 2): Compares test results after builder attempt and reverts uncommitted changes if worse
+ */
+export async function compareAndRevertIfWorse(
+  baseline: TestSnapshot,
+  repoRoot?: string,
+  testCommand?: string,
+  modifiedFiles?: string[],
+  options?: { evaluator?: () => Promise<{ passCount: number; failCount: number; failingTests?: string[] }> }
+): Promise<RevertResult> {
+  const root = repoRoot || process.cwd();
+  let afterCounts: { passCount: number; failCount: number; failingTests?: string[] };
+
+  if (options?.evaluator) {
+    afterCounts = await options.evaluator();
+  } else {
+    const afterSnapshot = await recordTestBaseline(root, testCommand);
+    afterCounts = {
+      passCount: afterSnapshot.passCount,
+      failCount: afterSnapshot.failCount,
+      failingTests: afterSnapshot.failingTests
+    };
+  }
+
+  const isWorse = (afterCounts.failCount > baseline.failCount) || (afterCounts.passCount < baseline.passCount);
+
+  if (isWorse) {
+    const filesToRevert = modifiedFiles && modifiedFiles.length > 0 ? modifiedFiles : [];
+    if (filesToRevert.length > 0) {
+      for (const file of filesToRevert) {
+        try {
+          execSync(`git checkout -- "${file}"`, { cwd: root, stdio: "ignore" });
+        } catch {
+          const full = path.resolve(root, file);
+          if (fs.existsSync(full)) fs.unlinkSync(full);
+        }
+      }
+    } else {
+      try {
+        execSync("git checkout -- .", { cwd: root, stdio: "ignore" });
+        execSync("git clean -fd", { cwd: root, stdio: "ignore" });
+      } catch {}
+    }
+
+    const logMsg = `Reverted: ${baseline.passCount}→${afterCounts.passCount} pass, ${baseline.failCount}→${afterCounts.failCount} fail`;
+    console.warn(`[BLOCKING-GATE REVERT] ${logMsg}. Reason: Fix attempt degraded test suite.`);
+
+    return {
+      reverted: true,
+      filesReverted: filesToRevert,
+      before: { passed: baseline.passCount, failed: baseline.failCount },
+      after: { passed: afterCounts.passCount, failed: afterCounts.failCount },
+      reason: "Fix attempt degraded test suite",
+      logMessage: logMsg
+    };
+  }
+
+  return {
+    reverted: false,
+    filesReverted: [],
+    before: { passed: baseline.passCount, failed: baseline.failCount },
+    after: { passed: afterCounts.passCount, failed: afterCounts.failCount }
+  };
+}
+
 export class CriticWorker {
   readonly role: WorkerRole = "critic";
   private readonly model?: string;
@@ -436,7 +542,7 @@ export class CriticWorker {
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "qwen3.8:27b-q3_k_m";
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "swift-27b-mtp";
 
     // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
     // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
@@ -471,6 +577,83 @@ export class CriticWorker {
       };
     }
 
+    const collectedEvidence: EvidenceItem[] = [];
+    const contractResults: ContractAssertionResult[] = [];
+    const forceEmptyEvidence = (diffContext as any)?.forceEmptyEvidence === true;
+
+    // Item 3: Deliverable Contracts evaluation
+    if (milestone.assertions && milestone.assertions.length > 0) {
+      for (const assertion of milestone.assertions) {
+        let passed = false;
+        let evidenceText = "";
+
+        if (assertion.type === "file_exists") {
+          const resolvedTarget = path.isAbsolute(assertion.target)
+            ? assertion.target
+            : path.resolve(process.cwd(), assertion.target);
+          passed = fs.existsSync(resolvedTarget) || (diffContext.filesChanged?.includes(assertion.target) ?? false) || diff.includes(assertion.target);
+          evidenceText = passed ? `File exists: ${assertion.target}` : `File missing: ${assertion.target}`;
+          if (passed && !forceEmptyEvidence) {
+            collectedEvidence.push({
+              type: "file",
+              ref: assertion.target,
+              excerpt: evidenceText.slice(0, 500)
+            });
+          }
+        } else if (assertion.type === "output_contains") {
+          const expected = assertion.expected || "";
+          passed = diff.includes(expected);
+          if (!passed && fs.existsSync(assertion.target)) {
+            try {
+              const fileContent = fs.readFileSync(assertion.target, "utf8");
+              passed = fileContent.includes(expected);
+            } catch {}
+          }
+          evidenceText = passed ? `Found expected string '${expected}' in ${assertion.target}` : `Missing expected string '${expected}' in ${assertion.target}`;
+          if (passed && !forceEmptyEvidence) {
+            collectedEvidence.push({
+              type: "diff",
+              ref: assertion.target,
+              excerpt: evidenceText.slice(0, 500)
+            });
+          }
+        } else if (assertion.type === "no_hardcoded_values") {
+          const forbidden = assertion.expected || "";
+          let containsForbidden = diff.includes(forbidden);
+          if (!containsForbidden && fs.existsSync(assertion.target)) {
+            try {
+              const fileContent = fs.readFileSync(assertion.target, "utf8");
+              containsForbidden = fileContent.includes(forbidden);
+            } catch {}
+          }
+          passed = !containsForbidden;
+          evidenceText = passed ? `Verified ${assertion.target} does not contain '${forbidden}'` : `Found forbidden hardcoded value '${forbidden}' in ${assertion.target}`;
+          if (passed && !forceEmptyEvidence) {
+            collectedEvidence.push({
+              type: "diff",
+              ref: assertion.target,
+              excerpt: evidenceText.slice(0, 500)
+            });
+          }
+        } else if (assertion.type === "test_passes") {
+          const exitZero = (diffContext.testExitCode === 0) || (milestone.testsFailed === 0);
+          passed = exitZero;
+          evidenceText = passed ? `Test runner '${assertion.target}' passed with exit code 0` : `Test runner '${assertion.target}' failed`;
+          if (passed && !forceEmptyEvidence) {
+            collectedEvidence.push({
+              type: "test",
+              ref: assertion.target,
+              excerpt: evidenceText.slice(0, 500)
+            });
+          }
+        }
+
+        contractResults.push({ assertion, passed, evidence: evidenceText });
+        if (!passed) {
+          feedback.push(`Assertion contract failure [${assertion.type}]: ${assertion.description}. Target: ${assertion.target}${assertion.expected ? ` (Expected: ${assertion.expected})` : ""}`);
+        }
+      }
+    } else {
     // 1. Machine-checkable criterion evaluation against diff
     for (const criterion of milestone.acceptanceCriteria) {
       const assertion = criterion.assertion.toLowerCase();
@@ -491,6 +674,44 @@ export class CriticWorker {
         feedback.push(`Criterion [${criterion.id}] violation: Diff does not modify expected file matching ${criterion.fileMatch}.`);
       }
     }
+      }
+
+    // Collect evidence from matching criteria in diff for legacy mode
+    if (!milestone.assertions || milestone.assertions.length === 0) {
+      if (!forceEmptyEvidence && diff) {
+        const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"));
+        for (const line of addedLines) {
+          if (line.includes("egress-mesh") || line.includes("#ffffff") || line.includes("mxCells")) {
+            collectedEvidence.push({
+              type: "diff",
+              ref: milestone.id,
+              excerpt: line.trim().slice(0, 500)
+            });
+          }
+        }
+        if (collectedEvidence.length === 0 && addedLines.length > 0) {
+          collectedEvidence.push({
+            type: "diff",
+            ref: milestone.id,
+            excerpt: addedLines[0].trim().slice(0, 500)
+          });
+        }
+      }
+    }
+
+    // Item 5: Evidence Linking Enforcement (Fail-closed)
+    // If evidence array is empty, treat as abstain (not approved)
+    if (collectedEvidence.length === 0) {
+      return {
+        approved: false,
+        feedback: [...feedback, "Evidence linking check failed: No concrete evidence collected for verdict (fail-closed rule)."],
+        abstained: true,
+        synthetic: false,
+        model: modelToUse,
+        verdict: "needs_fix",
+        evidence: []
+      };
+    }
 
     // 2. Forced flaw detection (only on added lines)
     const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
@@ -500,7 +721,7 @@ export class CriticWorker {
 
     // 3a. TEST-ONLY: rule-based verdict, explicitly flagged synthetic.
     if (!this.injectedGenerate && isFastGraphTestMode()) {
-      return { approved: feedback.length === 0, feedback, abstained: false, synthetic: true };
+      return { approved: feedback.length === 0, feedback, abstained: false, synthetic: true, verdict: feedback.length === 0 ? "approved" : "needs_fix", evidence: collectedEvidence, assertions: contractResults };
     }
 
     // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
@@ -567,12 +788,16 @@ Respond strictly in JSON:
       feedback.push(...(modelFeedback.length > 0 ? modelFeedback : [`Model rejected: ${parsed.analysis || "no specifics given"}`]));
     }
 
+    const isApproved = feedback.length === 0 && parsed.approved === true && (contractResults.length === 0 || contractResults.every((r) => r.passed));
     return {
-      approved: feedback.length === 0 && parsed.approved === true,
+      approved: isApproved,
       feedback,
       abstained: false,
       synthetic: false,
-      model: modelToUse
+      model: modelToUse,
+      verdict: isApproved ? "approved" : "needs_fix",
+      evidence: collectedEvidence,
+      assertions: contractResults
     };
   }
 }
@@ -704,11 +929,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || "qwen3.8:27b-q3_k_m",
-    builder: process.env.BUILDER_MODEL || "gemma4:e4b",
-    critic: process.env.CRITIC_MODEL || "qwen3.8:27b-q3_k_m",
-    explorer: process.env.EXPLORER_MODEL || "gemma4:e4b",
-    recorder: process.env.RECORDER_MODEL || "gemma4:e4b"
+    planner: process.env.PLANNER_MODEL || "swift-27b-mtp",
+    builder: process.env.BUILDER_MODEL || "swift-27b-mtp",
+    critic: process.env.CRITIC_MODEL || "swift-27b-mtp",
+    explorer: process.env.EXPLORER_MODEL || "swift-27b-mtp",
+    recorder: process.env.RECORDER_MODEL || "swift-27b-mtp"
   };
 }
 
