@@ -21,6 +21,7 @@ describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", 
         taskId,
         goal: "Build feature with stop semantics",
         toolchain: "node:22",
+        branchName: "main",
         status: "active",
         milestones: [
           {
@@ -78,6 +79,7 @@ describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", 
         taskId: "task-stopped",
         goal: "Stopped test task",
         toolchain: "node:22",
+        branchName: "main",
         status: "stopped",
         milestones: [
           {
@@ -120,6 +122,7 @@ describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", 
         taskId,
         goal: "Long running builder task",
         toolchain: "node:22",
+        branchName: "main",
         status: "active",
         milestones: [
           {
@@ -170,6 +173,7 @@ describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", 
         taskId: "task-fidelity",
         goal: "Demonstrate high fidelity progress",
         toolchain: "node:22",
+        branchName: "main",
         status: "active",
         milestones: [
           {
