@@ -14,8 +14,6 @@ import {
 import { TaskManifest } from "../lib/subagents/types.js";
 
 describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
-  const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}`);
-
   it("Cron parser correctly calculates next run for '0 2 * * *' (2am daily)", () => {
     const baseDate = new Date("2026-10-05T01:00:00Z");
     const nextRun = calculateNextRun("0 2 * * *", baseDate);
@@ -32,6 +30,9 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Schedule persists to disk and reloads after simulated restart", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
@@ -56,11 +57,19 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(list2[0].cronExpression, "0 2 * * *");
     } finally {
       resetGlobalScheduler();
+      if (savedWorkspace !== undefined) {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Crash during run triggers backoff restart (mocked crash)", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
@@ -86,11 +95,19 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.ok(backoffDiff > 50000 && backoffDiff <= 61000);
     } finally {
       resetGlobalScheduler();
+      if (savedWorkspace !== undefined) {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Completed run generates morning report with correct sections", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
 
@@ -152,11 +169,19 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.ok(fs.existsSync(expectedReportPath));
     } finally {
       resetGlobalScheduler();
+      if (savedWorkspace !== undefined) {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Disabled schedule does not trigger", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
@@ -173,6 +198,11 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(res, null, "Disabled schedule must not execute");
     } finally {
       resetGlobalScheduler();
+      if (savedWorkspace !== undefined) {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
