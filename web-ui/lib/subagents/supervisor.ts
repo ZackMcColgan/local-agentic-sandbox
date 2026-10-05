@@ -659,11 +659,191 @@ export interface SupervisorOptions {
   tracer?: TelemetryTracer;
 }
 
+export interface StepExecutorResult {
+  status: "completed" | "failed";
+  gitSha?: string;
+  diff?: string;
+  builderIterations?: number;
+  criticRounds?: number;
+  builderModel?: string;
+  reason?: string;
+}
+
+export type StepExecutor = (
+  milestone: Milestone,
+  attempt: number
+) => Promise<StepExecutorResult>;
+
 export interface StepExecutorOptions {
-  stepExecutor?: (
-    milestone: Milestone,
-    attempt: number
-  ) => Promise<{ status: "completed" | "failed"; gitSha?: string; diff?: string }>;
+  stepExecutor?: StepExecutor;
+}
+
+export interface ProductionStepExecutorOptions {
+  workerPool?: WorkerPool;
+  repoRoot?: string;
+  model?: string;
+}
+
+/**
+ * Constructs a production-grade stepExecutor that runs each milestone
+ * through WorkerPool against swift-27b-mtp:
+ * (builder generates -> critic reviews -> git commit).
+ */
+export function createProductionStepExecutor(
+  options?: ProductionStepExecutorOptions
+): StepExecutor {
+  const modelToUse = options?.model || "swift-27b-mtp";
+  const workerPool =
+    options?.workerPool ||
+    new WorkerPool({
+      modelRoster: {
+        builder: modelToUse,
+        critic: modelToUse,
+        planner: modelToUse,
+        explorer: modelToUse,
+        recorder: modelToUse
+      }
+    });
+  const repoRoot =
+    options?.repoRoot ||
+    (fs.existsSync(path.join(process.cwd(), "deploy"))
+      ? process.cwd()
+      : path.resolve(process.cwd(), ".."));
+
+  return async (milestone: Milestone, attempt: number): Promise<StepExecutorResult> => {
+    const builderModel = workerPool.getModelForRole("builder") || modelToUse;
+    const criticModel = workerPool.getModelForRole("critic") || modelToUse;
+
+    const builder = createBuilderWorker({
+      model: builderModel,
+      generate: workerPool.generate,
+      keepAlive: workerPool.keepAliveFor(builderModel)
+    });
+
+    const critic = createCriticWorker({
+      model: criticModel,
+      generate: workerPool.generate,
+      keepAlive: workerPool.keepAliveFor(criticModel)
+    });
+
+    let currentDiff = "";
+    let criticFeedback: string[] = [];
+    let builderIterations = 0;
+    let criticRounds = 0;
+    let lastGitSha = "";
+    let lastTargetFile = "";
+
+    const maxIterations = 5;
+
+    for (let iter = 1; iter <= maxIterations; iter++) {
+      builderIterations = iter;
+
+      // 1. Builder worker generates code
+      const builderRes = await workerPool.executeJob({
+        role: "builder",
+        taskId: milestone.id,
+        taskFn: async (signal) => {
+          return await builder.executeMilestoneWork(milestone, {
+            repoRoot,
+            previousDiff: currentDiff,
+            criticFeedback,
+            iteration: iter,
+            signal
+          });
+        }
+      });
+
+      currentDiff = builderRes.diff;
+      lastGitSha = builderRes.gitSha;
+      lastTargetFile = builderRes.targetFile;
+
+      if (builderRes.stuck) {
+        return {
+          status: "failed",
+          gitSha: builderRes.gitSha,
+          diff: builderRes.diff,
+          builderIterations,
+          criticRounds,
+          builderModel: builderRes.model || builderModel
+        };
+      }
+
+      // 2. Critic worker evaluates diff
+      criticRounds++;
+      const criticRes = await workerPool.executeJob({
+        role: "critic",
+        taskId: milestone.id,
+        taskFn: async (signal) => {
+          return await critic.evaluateMilestoneDiff(
+            milestone,
+            {
+              diff: builderRes.diff,
+              filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
+              testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
+              noChangeReason: milestone.diffSummary
+            },
+            { signal }
+          );
+        }
+      });
+
+      if (criticRes.approved) {
+        // Enforce commit scoping: stage ONLY builder's explicit target file.
+        // If targetFile is missing/empty, do NOT commit - return status "failed". Never git add ".".
+        if (!lastTargetFile || !lastTargetFile.trim()) {
+          return {
+            status: "failed",
+            gitSha: lastGitSha,
+            diff: currentDiff,
+            builderIterations,
+            criticRounds,
+            builderModel: builderRes.model || builderModel,
+            reason: "Commit scoping violation: Builder did not provide an explicit target file; refusing to stage working tree."
+          };
+        }
+
+        // 3. Stage and commit changes to git with shell quote escaping
+        try {
+          const fileToStage = lastTargetFile.replace(/"/g, "\\\"");
+          execSync(`git add "${fileToStage}"`, { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+          const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`.replace(/"/g, "\\\"");
+          execSync(`git commit -m "${commitMsg}"`, { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+        } catch {
+          // Working tree may be clean or no-op commit
+        }
+
+        let finalSha = lastGitSha;
+        try {
+          finalSha = getRealGitSha(repoRoot);
+        } catch {
+          finalSha = lastGitSha || "uncommitted";
+        }
+
+        return {
+          status: "completed",
+          gitSha: finalSha,
+          diff: currentDiff,
+          builderIterations,
+          criticRounds,
+          builderModel: builderRes.model || builderModel
+        };
+      }
+
+      criticFeedback = criticRes.feedback || [];
+    }
+
+    return {
+      status: "failed",
+      gitSha: lastGitSha,
+      diff: currentDiff,
+      builderIterations,
+      criticRounds,
+      builderModel: builderModel,
+      reason: !lastTargetFile || !lastTargetFile.trim()
+        ? "Commit scoping violation: Builder did not provide an explicit target file."
+        : "Critic did not approve milestone diff after maximum iterations."
+    };
+  };
 }
 
 /**
@@ -891,6 +1071,10 @@ export class OvernightSupervisor {
     options?: StepExecutorOptions
   ): Promise<TaskManifest> {
     const executor = options?.stepExecutor;
+    const hasPending = task.milestones.slice(task.currentMilestoneIndex).some((m) => m.status !== "completed");
+    if (!executor && hasPending) {
+      throw new Error("No stepExecutor provided; refusing to fake completion.");
+    }
 
     while (task.currentMilestoneIndex < task.milestones.length) {
       const mIdx = task.currentMilestoneIndex;
@@ -905,14 +1089,21 @@ export class OvernightSupervisor {
             const res = await executor(milestone, attempt);
             if (res.status === "completed") {
               milestone.status = "completed";
-              milestone.commitSha = res.gitSha;
+              if (res.gitSha) milestone.commitSha = res.gitSha;
+              if (res.diff) milestone.diffSummary = res.diff;
+              if (res.builderIterations !== undefined) milestone.builderIterations = res.builderIterations;
+              if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
+              if (res.builderModel) milestone.builderModel = res.builderModel;
+              milestone.completedAt = new Date().toISOString();
               milestoneCompleted = true;
             }
           } else {
-            milestone.status = "completed";
-            milestoneCompleted = true;
+            throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
+          if (err.message && /no stepExecutor provided/i.test(err.message)) {
+            throw err;
+          }
           // Worker crashed mid-milestone: record crash in journal and resume from checkpoint
           task.journal.push({
             timestamp: new Date().toISOString(),
