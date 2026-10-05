@@ -4,7 +4,7 @@ import {
   cancelSchedule,
   listSchedules,
   calculateNextRun
-} from "../../../lib/subagents/scheduler.js";
+} from "../../../lib/subagents/scheduler";
 
 export async function GET(req?: Request | NextRequest) {
   try {

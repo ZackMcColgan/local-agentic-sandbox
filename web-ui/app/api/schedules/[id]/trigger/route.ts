@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { triggerScheduleRun, listSchedules } from "../../../../../lib/subagents/scheduler.js";
+import { triggerScheduleRun, listSchedules } from "../../../../../lib/subagents/scheduler";
 
 export async function POST(
   req: Request | NextRequest,
