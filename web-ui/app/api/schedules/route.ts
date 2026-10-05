@@ -4,9 +4,9 @@ import {
   cancelSchedule,
   listSchedules,
   calculateNextRun
-} from "../../../lib/subagents/scheduler.js";
+} from "../../../lib/subagents/scheduler";
 
-export async function GET(req?: Request | NextRequest) {
+export async function GET() {
   try {
     const workspaceDir = process.env.WORKSPACE_DIR;
     const schedules = await listSchedules(workspaceDir ? { workspaceDir } : undefined);
