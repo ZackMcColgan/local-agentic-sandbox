@@ -122,9 +122,9 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
     try {
       const scriptKind =
         ext === ".tsx" ? ts.ScriptKind.TSX :
-        ext === ".jsx" ? ts.ScriptKind.JSX :
-        ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
-        ts.ScriptKind.TS;
+          ext === ".jsx" ? ts.ScriptKind.JSX :
+            ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
+              ts.ScriptKind.TS;
 
       const sourceFile = ts.createSourceFile(
         filePath,
@@ -152,21 +152,34 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 
   // 2. Python AST parsing via Python standard library ast module
   if (ext === ".py") {
-    try {
-      execFileSync("python3", ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
-        input: content,
-        encoding: "utf8",
-        timeout: 3000,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-      return { valid: true };
-    } catch (err: any) {
-      const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
-      return {
-        valid: false,
-        error: `Python SyntaxError in ${filePath}: ${stderr}`
-      };
+    // Try python3 (Unix) then python (Windows) - python3 often missing on Windows
+    const pythonCmds = ["python3", "python"];
+    let lastErr: any = null;
+    for (const cmd of pythonCmds) {
+      try {
+        execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+          input: content,
+          encoding: "utf8",
+          timeout: 3000,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+        return { valid: true };
+      } catch (err: any) {
+        // ENOENT = command not found, try next; syntax errors should fail fast
+        if (err.code === "ENOENT") {
+          lastErr = err;
+          continue;
+        }
+        const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
+        return {
+          valid: false,
+          error: `Python SyntaxError in ${filePath}: ${stderr}`
+        };
+      }
     }
+    // Neither python3 nor python found - fail open for validation (not for execution)
+    console.warn("[AST] Python not found for syntax validation, skipping Python AST check");
+    return { valid: true };
   }
 
   // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
@@ -175,7 +188,7 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 
 export function registerWorkspaceTools(mcp: McpServer) {
   // Initialize workspace at startup
-  ensureWorkspaceInitialized().catch(() => {});
+  ensureWorkspaceInitialized().catch(() => { });
 
   // 1. workspace_get_tree
   mcp.tool(
