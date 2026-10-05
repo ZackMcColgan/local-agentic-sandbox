@@ -21,7 +21,7 @@ describe("Phase 2 — Item 2: Blocking-Gate Revert Suite", () => {
     execSync("git config user.email 'tester@revert.test'", { cwd: testRepo, stdio: "ignore" });
 
     fs.writeFileSync(path.join(testRepo, "app.ts"), "export const value = 1;", "utf8");
-    execSync("git add -A && git commit -m "initial commit"", { cwd: testRepo, stdio: "ignore" });
+    execSync("git add -A && git commit -m \"initial commit\"", { cwd: testRepo, stdio: "ignore" });
     return testRepo;
   }
 
@@ -83,7 +83,7 @@ describe("Phase 2 — Item 2: Blocking-Gate Revert Suite", () => {
     setupRepo();
     try {
       fs.writeFileSync(path.join(testRepo, "stable.ts"), "export const STABLE = true;", "utf8");
-      execSync("git add -A && git commit -m "committed feature"", { cwd: testRepo, stdio: "ignore" });
+      execSync("git add -A && git commit -m \"committed feature\"", { cwd: testRepo, stdio: "ignore" });
 
       const baseline: TestSnapshot = {
         passCount: 20,
