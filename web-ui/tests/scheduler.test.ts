@@ -210,6 +210,9 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("executeScheduledRun with injected stepExecutor invokes executor per milestone and captures results", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
@@ -250,11 +253,19 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(m1.builderModel, "swift-27b-mtp");
     } finally {
       resetGlobalScheduler();
+      if (typeof savedWorkspace !== "undefined") {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("scheduled run against unreachable model fails loudly, parks task, and morning report surfaces failure", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
@@ -304,6 +315,11 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
     } finally {
       if (savedFastGraph !== undefined) process.env.FAST_GRAPH_TEST = savedFastGraph;
       resetGlobalScheduler();
+      if (typeof savedWorkspace !== "undefined") {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
