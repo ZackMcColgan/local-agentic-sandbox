@@ -32,8 +32,9 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
 
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    const div = win.document.createElement("div");
+    win.document.body.appendChild(div);
+    container = div as unknown as HTMLDivElement;
   });
 
   afterEach(() => {
@@ -115,18 +116,30 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
           {
             id: "m1",
             title: "Migrate config schema to M3 tokens",
+            description: "Migrate config schema to M3 tokens",
+            acceptanceCriteria: [{ id: "ac1", assertion: "schema migrated" }],
             status: "completed",
+            builderIterations: 1,
+            criticRounds: 1,
             commitSha: "sha-1"
           },
           {
             id: "m2",
             title: "Update UI components to M3",
-            status: "in_progress"
+            description: "Update UI components to M3",
+            acceptanceCriteria: [{ id: "ac2", assertion: "components updated" }],
+            status: "in_progress",
+            builderIterations: 2,
+            criticRounds: 1
           },
           {
             id: "m3",
             title: "Validate component theming & accessibility",
-            status: "pending"
+            description: "Validate component theming & accessibility",
+            acceptanceCriteria: [{ id: "ac3", assertion: "theming validated" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
           }
         ],
         checkpoints: [],
