@@ -35,7 +35,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "healthy");
@@ -61,7 +61,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "degraded");
@@ -85,7 +85,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "degraded");
@@ -100,7 +100,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
   it("reports 'not-running' when heartbeat file is missing", async () => {
     setup();
     try {
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "not-running");
@@ -116,7 +116,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
       const daemonHbPath = path.join(testWorkspace, ".scheduler-daemon-heartbeat");
       fs.writeFileSync(daemonHbPath, "{corrupt json - not valid", "utf8");
 
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "not-running");
@@ -168,7 +168,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
         "utf8"
       );
 
-      const res = await getHealth();
+      const res = await getHealth(new Request("http://localhost:3000/api/scheduler/health"));
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, "healthy");
