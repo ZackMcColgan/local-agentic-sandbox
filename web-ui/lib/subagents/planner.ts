@@ -98,6 +98,10 @@ Respond strictly in valid JSON matching this schema:
   }
 
   if (milestones.length === 0) {
+    if (!isFastGraphTestMode()) {
+      throw new Error(`Planner model failed to generate plan and FAST_GRAPH_TEST is not enabled for goal: "${goal}"`);
+    }
+    console.warn(`[Planner] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback plan for goal: "${goal}"`);
     // Deterministic fallback for FAST_GRAPH_TEST mode
     if (goal.toLowerCase().includes("draw.io") || goal.toLowerCase().includes("diagram")) {
     milestones.push({
