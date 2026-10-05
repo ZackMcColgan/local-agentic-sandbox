@@ -408,7 +408,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         console.warn("[Scheduler] Could not save schedules during crash handler:", saveErr.message);
       }
 
-      manifest.status = "failed";
+      manifest.status = "parked";
       manifest.parkedReason = err.message;
       await this.triggerMorningReport(runId, manifest).catch(() => {});
       this.clearHeartbeat();
