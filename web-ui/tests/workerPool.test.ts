@@ -151,9 +151,9 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
     const pool = new WorkerPool({
       maxConcurrency: 2,
       modelRoster: {
-        planner: "qwen3.8:27b-q3_k_m",
-        builder: "qwen3.8:27b-q3_k_m",
-        critic: "gemma4:e4b"
+        planner: "swift-27b-mtp",
+        builder: "swift-27b-mtp",
+        critic: "swift-27b-mtp"
       }
     });
 
