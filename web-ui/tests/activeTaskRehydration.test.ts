@@ -41,16 +41,18 @@ test('Fix 4 — Active Task Rehydration & Refresh Durability Suite', async (t) =
           description: 'Define models',
           status: 'completed',
           builderIterations: 1,
-          acceptanceCriteria: [{ id: 'ac1', description: 'types exist', assertion: 'types' }],
+          criticRounds: 1,
+          acceptanceCriteria: [{ id: 'ac1', assertion: 'types exist' }],
           commitSha: 'sha-m1'
         },
         {
           id: 'm2',
           title: 'Implement worker logic',
           description: 'Build logic',
-          status: 'active',
+          status: 'in_progress',
           builderIterations: 2,
-          acceptanceCriteria: [{ id: 'ac2', description: 'tests pass', assertion: 'pass' }]
+          criticRounds: 0,
+          acceptanceCriteria: [{ id: 'ac2', assertion: 'tests pass' }]
         },
         {
           id: 'm3',
@@ -58,7 +60,8 @@ test('Fix 4 — Active Task Rehydration & Refresh Durability Suite', async (t) =
           description: 'UI layout',
           status: 'pending',
           builderIterations: 0,
-          acceptanceCriteria: [{ id: 'ac3', description: 'ui renders', assertion: 'render' }]
+          criticRounds: 0,
+          acceptanceCriteria: [{ id: 'ac3', assertion: 'ui renders' }]
         }
       ],
       currentMilestoneIndex: 1,
@@ -93,7 +96,7 @@ test('Fix 4 — Active Task Rehydration & Refresh Durability Suite', async (t) =
     assert.strictEqual(activeTask.taskId, taskId);
     assert.strictEqual(activeTask.currentMilestoneIndex, 1);
     assert.strictEqual(activeTask.milestones[0].status, 'completed');
-    assert.strictEqual(activeTask.milestones[1].status, 'active');
+    assert.strictEqual(activeTask.milestones[1].status, 'in_progress');
     assert.strictEqual(activeTask.milestones[2].status, 'pending');
     assert.strictEqual(activeTask.journal.length, 2);
     assert(activeTask.journal[1].message.includes('Working on milestone m2'));

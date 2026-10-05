@@ -18,8 +18,9 @@ describe("SVG Viewer Component Suite", () => {
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
 
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    const div = win.document.createElement("div");
+    win.document.body.appendChild(div);
+    container = div as unknown as HTMLDivElement;
     originalFetch = globalThis.fetch;
   });
 
@@ -242,7 +243,10 @@ describe("SVG Viewer Component Suite", () => {
 
     // Must render SVG DOM element containing converted shapes (not an empty canvas!)
     const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
-    assert.ok(svgElem !== null, "Must contain rendered SVG DOM element");
+    assert.ok(svgElem, "Must contain rendered SVG DOM element");
+    if (!svgElem) {
+      assert.fail("Must contain rendered SVG DOM element");
+    }
     assert.ok(svgElem.innerHTML.includes("ALB Load Balancer"), "Must contain rendered node text");
 
     // Assert Diagrams.net action button exists
@@ -296,7 +300,10 @@ describe("SVG Viewer Component Suite", () => {
     );
 
     const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
-    assert.ok(svgElem !== null, "Must render SVG DOM element for Draw.io file");
+    assert.ok(svgElem, "Must render SVG DOM element for Draw.io file");
+    if (!svgElem) {
+      assert.fail("Must render SVG DOM element for Draw.io file");
+    }
     assert.ok(svgElem.innerHTML.includes("App Server"), "Must render App Server inside SVG");
   });
 });

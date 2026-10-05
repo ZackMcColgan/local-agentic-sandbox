@@ -3,6 +3,7 @@ import path from "path";
 import { execSync, execFileSync } from "child_process";
 import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAssertionResult, TestSnapshot, RevertResult, TestCounts } from "./types";
 import ts from "typescript";
+export type { TestSnapshot, RevertResult } from "./types";
 import {
   createOllamaGenerate,
   isFastGraphTestMode,

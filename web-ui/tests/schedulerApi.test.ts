@@ -9,9 +9,11 @@ import { resetGlobalScheduler } from "../lib/subagents/scheduler.js";
 
 describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
   let testWorkspace: string;
+  let savedWorkspace: string | undefined;
 
   function setup() {
     testWorkspace = path.resolve(process.cwd(), `temp-test-sched-api-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
@@ -19,7 +21,11 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
 
   function teardown() {
     resetGlobalScheduler();
-    delete process.env.WORKSPACE_DIR;
+    if (savedWorkspace !== undefined) {
+      process.env.WORKSPACE_DIR = savedWorkspace;
+    } else {
+      delete process.env.WORKSPACE_DIR;
+    }
     if (testWorkspace && fs.existsSync(testWorkspace)) {
       fs.rmSync(testWorkspace, { recursive: true, force: true });
     }

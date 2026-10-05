@@ -19,8 +19,9 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
 
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    const div = win.document.createElement("div");
+    win.document.body.appendChild(div);
+    container = div as unknown as HTMLDivElement;
     originalFetch = globalThis.fetch;
   });
 
