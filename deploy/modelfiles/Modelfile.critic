@@ -1,6 +1,6 @@
 # Antigravity Critic Worker Modelfile
 # Specialized for independent grading, adversarial inspection, and structured JSON verdicts.
-FROM qwen3.8:27b-q3_k_m
+FROM swift-27b-mtp
 
 PARAMETER temperature 0.1
 PARAMETER top_p 0.90
