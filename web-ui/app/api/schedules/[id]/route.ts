@@ -3,12 +3,10 @@ import { cancelSchedule } from "../../../../lib/subagents/scheduler";
 
 export async function DELETE(
   req: Request | NextRequest,
-  context: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const rawParams = context?.params;
-    const resolvedParams = rawParams instanceof Promise ? await rawParams : rawParams;
-    const id = resolvedParams?.id;
+    const { id } = await context.params;
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Missing required 'id' parameter" }, { status: 400 });
     }

@@ -3,12 +3,10 @@ import { triggerScheduleRun, listSchedules } from "../../../../../lib/subagents/
 
 export async function POST(
   req: Request | NextRequest,
-  context: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const rawParams = context?.params;
-    const resolvedParams = rawParams instanceof Promise ? await rawParams : rawParams;
-    const scheduleId = resolvedParams?.id;
+    const { id: scheduleId } = await context.params;
 
     if (!scheduleId || typeof scheduleId !== "string") {
       return NextResponse.json({ error: "Missing required schedule ID parameter" }, { status: 400 });

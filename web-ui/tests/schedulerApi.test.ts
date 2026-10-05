@@ -161,7 +161,7 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const { id } = await postRes.json();
 
       const deleteReq = new Request(`http://localhost:3000/api/schedules/${id}`, { method: "DELETE" });
-      const delRes = await deleteScheduleById(deleteReq, { params: { id } });
+      const delRes = await deleteScheduleById(deleteReq, { params: Promise.resolve({ id }) });
       assert.equal(delRes.status, 200);
       const delData = await delRes.json();
       assert.equal(delData.success, true);
@@ -180,7 +180,7 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
     try {
       // 1. Non-existent schedule returns 404
       const notFoundReq = new Request("http://localhost:3000/api/schedules/sched-nonexistent/trigger", { method: "POST" });
-      const notFoundRes = await triggerSchedule(notFoundReq, { params: { id: "sched-nonexistent" } });
+      const notFoundRes = await triggerSchedule(notFoundReq, { params: Promise.resolve({ id: "sched-nonexistent" }) });
       assert.equal(notFoundRes.status, 404);
 
       // 2. Create a schedule and trigger it
@@ -196,7 +196,7 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const { id } = await postRes.json();
 
       const trigReq = new Request(`http://localhost:3000/api/schedules/${id}/trigger`, { method: "POST" });
-      const trigRes = await triggerSchedule(trigReq, { params: { id } });
+      const trigRes = await triggerSchedule(trigReq, { params: Promise.resolve({ id }) });
       assert.equal(trigRes.status, 200);
       const trigData = await trigRes.json();
       assert.ok(trigData.runId);
