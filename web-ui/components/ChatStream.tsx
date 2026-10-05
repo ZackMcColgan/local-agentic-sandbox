@@ -22,7 +22,8 @@ import {
   X,
   Square,
   ChevronLeft,
-  MoreHorizontal
+  MoreHorizontal,
+  Menu
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -87,6 +88,8 @@ interface ChatStreamProps {
   onNewThread?: () => void;
   onDeleteThread?: () => void;
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
+  onOpenDrawer?: () => void;
+  placeholder?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -177,7 +180,9 @@ export function ChatStream({
   onLaunchTask,
   onNewThread,
   onDeleteThread,
-  onSendMessage
+  onSendMessage,
+  onOpenDrawer,
+  placeholder
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -579,10 +584,20 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup 1 & 3 */}
+      {/* Top Bar matching Mockup media_1791044464247.webp */}
       <header className="px-4 py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          {onBackToList && (
+          {onOpenDrawer ? (
+            <button
+              type="button"
+              onClick={onOpenDrawer}
+              className="p-1.5 -ml-1 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Open navigation menu"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          ) : onBackToList ? (
             <button
               type="button"
               onClick={onBackToList}
@@ -592,10 +607,10 @@ export function ChatStream({
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-          )}
+          ) : null}
 
           <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate">
-            {threadTitle || "New task"}
+            {threadTitle || "New session"}
           </h1>
         </div>
 
@@ -604,10 +619,10 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white dark:bg-zinc-900 border border-[#c4b5fd] dark:border-indigo-800 text-xs font-semibold text-[#5b32e6] dark:text-indigo-400 shadow-xs hover:bg-[#fbfbfe] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-[#6750a4] dark:text-[#d0bcff] shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title="Configure model and thinking effort"
           >
-            <Sparkles className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+            <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
             <span>{shortModelLabel}</span>
           </button>
 
@@ -731,10 +746,10 @@ export function ChatStream({
                 </div>
               )}
 
-              {/* User Bubble: vibrant rounded purple pill matching Mockup 1 & 3 */}
+              {/* User Bubble: vibrant rounded purple pill matching Mockup media_1791044464247.webp */}
               {isUser ? (
                 <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
-                  <div className="bg-[#3b0799] text-white rounded-2xl rounded-tr-sm p-4 shadow-sm text-sm font-normal leading-relaxed">
+                  <div className="bg-[#6750a4] text-white rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
                     <div className="prose prose-invert max-w-none text-sm text-white">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -753,7 +768,12 @@ export function ChatStream({
                   </div>
                   {m.timestamp && (
                     <div className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 mr-1">
-                      {m.timestamp}
+                      {(() => {
+                        const d = new Date(m.timestamp);
+                        return isNaN(d.getTime())
+                          ? m.timestamp
+                          : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1131,7 +1151,7 @@ export function ChatStream({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={3}
-            placeholder="Describe the engineering task…"
+            placeholder={placeholder || "Describe the engineering task…"}
             className="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none py-1.5 leading-relaxed min-h-[72px] max-h-[160px]"
           />
 
@@ -1142,18 +1162,18 @@ export function ChatStream({
               <button
                 type="button"
                 onClick={handleStop}
-                className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
+                className="h-10 w-10 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
                 title="Stop generation / halt workers"
               >
-                <Square className="h-3.5 w-3.5 fill-current stroke-none" />
+                <Square className="h-4 w-4 fill-current stroke-none" />
               </button>
             ) : (
               /* Normal purple circle send button with paper airplane */
               <button
                 type="submit"
                 disabled={!input.trim() && attachedFiles.length === 0}
-                className="h-9 w-9 rounded-full bg-[#3b0799] hover:bg-[#2d0577] text-white flex items-center justify-center shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
-                title="Send task or message"
+                className="h-10 w-10 rounded-full bg-[#6750a4] hover:bg-[#584391] text-white flex items-center justify-center shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                title="Send message"
               >
                 <Send className="h-4 w-4 text-white fill-white ml-0.5" />
               </button>
