@@ -8,12 +8,13 @@ import {
   scheduleTask,
   cancelSchedule,
   listSchedules,
-  triggerMorningReport
+  triggerMorningReport,
+  resetGlobalScheduler
 } from "../lib/subagents/scheduler.js";
 import { TaskManifest } from "../lib/subagents/types.js";
 
 describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
-  const testWorkspace = path.resolve(process.cwd(), "temp-test-scheduler-workspace");
+  const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}`);
 
   it("Cron parser correctly calculates next run for '0 2 * * *' (2am daily)", () => {
     const baseDate = new Date("2026-10-05T01:00:00Z");
@@ -31,6 +32,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Schedule persists to disk and reloads after simulated restart", async () => {
+    resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
 
@@ -53,11 +55,13 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(list2[0].taskDescription, "Run nightly test and build suite");
       assert.equal(list2[0].cronExpression, "0 2 * * *");
     } finally {
+      resetGlobalScheduler();
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Crash during run triggers backoff restart (mocked crash)", async () => {
+    resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
 
@@ -81,11 +85,13 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const backoffDiff = new Date(updated!.backoffUntil!).getTime() - Date.now();
       assert.ok(backoffDiff > 50000 && backoffDiff <= 61000);
     } finally {
+      resetGlobalScheduler();
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Completed run generates morning report with correct sections", async () => {
+    resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
 
     try {
@@ -145,11 +151,13 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const expectedReportPath = path.join(testWorkspace, "reports", `morning-${dateStr}.md`);
       assert.ok(fs.existsSync(expectedReportPath));
     } finally {
+      resetGlobalScheduler();
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });
 
   it("Disabled schedule does not trigger", async () => {
+    resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
     const storageFile = path.join(testWorkspace, "schedules.json");
 
@@ -164,6 +172,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const res = await scheduler.executeScheduledRun(schedId);
       assert.equal(res, null, "Disabled schedule must not execute");
     } finally {
+      resetGlobalScheduler();
       if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   });

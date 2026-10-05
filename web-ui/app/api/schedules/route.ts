@@ -4,11 +4,12 @@ import {
   cancelSchedule,
   listSchedules,
   calculateNextRun
-} from "../../../lib/subagents/scheduler";
+} from "../../../lib/subagents/scheduler.js";
 
-export async function GET(req: Request | NextRequest) {
+export async function GET(req?: Request | NextRequest) {
   try {
-    const schedules = await listSchedules();
+    const workspaceDir = process.env.WORKSPACE_DIR;
+    const schedules = await listSchedules(workspaceDir ? { workspaceDir } : undefined);
     return NextResponse.json({ schedules }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -40,7 +41,12 @@ export async function POST(req: Request | NextRequest) {
       return NextResponse.json({ error: `Invalid cron expression: ${err.message}` }, { status: 400 });
     }
 
-    const id = await scheduleTask(cronExpression, taskDescription.trim());
+    const workspaceDir = process.env.WORKSPACE_DIR;
+    const id = await scheduleTask(
+      cronExpression,
+      taskDescription.trim(),
+      workspaceDir ? { workspaceDir } : undefined
+    );
     return NextResponse.json({ id, nextRun }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -55,7 +61,8 @@ export async function DELETE(req: Request | NextRequest) {
       return NextResponse.json({ error: "Missing required 'id' query parameter" }, { status: 400 });
     }
 
-    await cancelSchedule(id);
+    const workspaceDir = process.env.WORKSPACE_DIR;
+    await cancelSchedule(id, workspaceDir ? { workspaceDir } : undefined);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -69,6 +69,7 @@ services:
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
       - MODEL_NAME=swift-27b-mtp
+      - PLANNER_MODEL=swift-27b-mtp
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
       - OTEL_SERVICE_NAME=enterprise-ai-portal
     extra_hosts:
@@ -82,7 +83,40 @@ services:
       - mcp-server
       - browser-mcp
 
-  # 5. OpenTelemetry & Jaeger Distributed Tracing Collector
+  # 5. Autonomous Scheduler Daemon (Overnight Unattended Execution)
+  scheduler-daemon:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    container_name: scheduler-daemon
+    restart: unless-stopped
+    command: ["node", "dist/lib/subagents/schedulerDaemon.js"]
+    environment:
+      - NODE_ENV=production
+      - WORKSPACE_DIR=/workspace
+      - SCHEDULER_TICK_INTERVAL_MS=60000
+      # Model + Ollama wiring must mirror web-ui: the daemon executes real
+      # supervisor runs, and llmClient defaults to 127.0.0.1:11434 (the
+      # container itself) when OLLAMA_BASE_URL is unset.
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - MODEL_NAME=swift-27b-mtp
+      - PLANNER_MODEL=swift-27b-mtp
+      - MCP_SERVER_URL=http://mcp-server:8080/sse
+      - BROWSER_MCP_URL=http://browser-mcp:8081/sse
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=scheduler-daemon
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./workspace:/workspace:rw
+    networks:
+      - ai-mesh
+      - egress-mesh
+    depends_on:
+      - mcp-server
+      - web-ui
+
+  # 6. OpenTelemetry & Jaeger Distributed Tracing Collector
   jaeger:
     image: jaegertracing/all-in-one:1.53
     container_name: local-agentic-jaeger

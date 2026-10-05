@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { triggerScheduleRun, listSchedules } from "../../../../../lib/subagents/scheduler";
+import { triggerScheduleRun, listSchedules } from "../../../../../lib/subagents/scheduler.js";
 
 export async function POST(
   req: Request | NextRequest,
@@ -14,13 +14,15 @@ export async function POST(
       return NextResponse.json({ error: "Missing required schedule ID parameter" }, { status: 400 });
     }
 
-    const schedules = await listSchedules();
+    const workspaceDir = process.env.WORKSPACE_DIR;
+    const options = workspaceDir ? { workspaceDir } : undefined;
+    const schedules = await listSchedules(options);
     const sched = schedules.find((s) => s.id === scheduleId);
     if (!sched || !sched.enabled) {
       return NextResponse.json({ error: "Schedule not found or disabled" }, { status: 404 });
     }
 
-    const result = await triggerScheduleRun(scheduleId);
+    const result = await triggerScheduleRun(scheduleId, options);
     if (!result) {
       return NextResponse.json({ error: "Schedule execution failed or not found" }, { status: 404 });
     }
