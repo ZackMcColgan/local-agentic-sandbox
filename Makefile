@@ -5,8 +5,8 @@ all: help
 help:
 	@echo "local-agentic-sandbox - Management Commands"
 	@echo "============================================"
-	@echo "make pull-primary  Pull primary orchestrator model (qwen3.8:27b-q3_k_m)"
-	@echo "make pull-subagent Pull fast execution sub-agent model (qwen2.5-coder:7b)"
+	@echo "make pull-primary  Pull primary orchestrator model (swift-27b-mtp)"
+	@echo "make pull-subagent Pull fast execution sub-agent model (swift-27b-mtp)"
 	@echo "make pull-all      Pull both primary and sub-agent models"
 	@echo "make list-models   List locally installed Ollama models & VRAM usage"
 	@echo "make up            Build and launch all services in detached mode"
@@ -19,10 +19,10 @@ help:
 	@echo "make clean         Stop containers and remove volumes"
 
 pull-primary:
-	docker compose run --rm --network egress-mesh ollama ollama pull qwen3.8:27b-q3_k_m
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
 
 pull-subagent:
-	docker compose run --rm --network egress-mesh ollama ollama pull qwen2.5-coder:7b
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
 
 pull-all: pull-primary pull-subagent
 

@@ -278,7 +278,10 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     }
   }
 
-  async executeScheduledRun(scheduleId: string): Promise<TaskManifest | null> {
+  async executeScheduledRun(
+    scheduleId: string,
+    options?: { runner?: (manifest: TaskManifest) => Promise<TaskManifest> }
+  ): Promise<TaskManifest | null> {
     const schedules = this.loadSchedules();
     const sched = schedules.find((s) => s.id === scheduleId);
     if (!sched || !sched.enabled) {
@@ -329,11 +332,15 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     };
 
     try {
-      const supervisor = this.supervisor || new OvernightSupervisor({
-        checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints")
-      });
-
-      const result = await supervisor.executeTaskWithRecovery(manifest);
+      let result: TaskManifest;
+      if (options?.runner) {
+        result = await options.runner(manifest);
+      } else {
+        const supervisor = this.supervisor || new OvernightSupervisor({
+          checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints")
+        });
+        result = await supervisor.executeTaskWithRecovery(manifest);
+      }
       sched.lastRun = new Date().toISOString();
       sched.nextRun = calculateNextRun(sched.cronExpression).toISOString();
       sched.failureCount = 0;
@@ -374,4 +381,21 @@ export async function listSchedules(options?: SchedulerOptions): Promise<Schedul
 
 export async function triggerMorningReport(runId: string, manifest?: TaskManifest, options?: SchedulerOptions): Promise<string> {
   return await getGlobalScheduler(options).triggerMorningReport(runId, manifest);
+}
+
+export async function triggerScheduleRun(
+  id: ScheduleId,
+  options?: SchedulerOptions & { runner?: (manifest: TaskManifest) => Promise<TaskManifest> }
+): Promise<{ runId: string; status: string } | null> {
+  const scheduler = getGlobalScheduler(options);
+  const sched = (await scheduler.listSchedules()).find((s) => s.id === id);
+  if (!sched || !sched.enabled) {
+    return null;
+  }
+  const manifest = await scheduler.executeScheduledRun(id, options);
+  if (!manifest) return null;
+  return {
+    runId: manifest.taskId,
+    status: manifest.status
+  };
 }
