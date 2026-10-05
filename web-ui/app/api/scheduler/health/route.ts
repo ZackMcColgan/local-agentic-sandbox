@@ -22,7 +22,7 @@ export interface DaemonHealthReport {
   };
 }
 
-export async function GET(req?: Request | NextRequest) {
+export async function GET() {
   try {
     const workspaceDir = process.env.WORKSPACE_DIR || path.resolve(process.cwd(), "workspace");
     const daemonHbPath = path.join(workspaceDir, ".scheduler-daemon-heartbeat");
