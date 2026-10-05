@@ -30,8 +30,9 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
 
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    const div = win.document.createElement("div");
+    win.document.body.appendChild(div);
+    container = div as unknown as HTMLDivElement;
   });
 
   afterEach(() => {
@@ -78,10 +79,13 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         branch: "feat/test",
         branchName: "feat/test",
         status: "active",
+        currentMilestoneIndex: 0,
         milestones: [],
         journal: [],
         checkpoints: [],
-        ambiguityFlags: []
+        ambiguityFlags: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
       supervisor.saveCheckpoint(task);
 
@@ -169,7 +173,10 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
             threadTitle: "Critic approval logic",
             onDeleteThread: () => {
               deleteCalled = true;
-            }
+            },
+            onTracesUpdate: () => {},
+            activeModel: "swift-27b-mtp",
+            reasoningEffort: "medium"
           })
         );
       });
