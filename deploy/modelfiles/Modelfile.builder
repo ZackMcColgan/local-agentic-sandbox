@@ -1,6 +1,6 @@
 # Antigravity Builder Worker Modelfile
 # Specialized for autonomous sandboxed execution, code generation, and diff emission.
-FROM gemma4:e4b
+FROM swift-27b-mtp
 
 PARAMETER temperature 0.2
 PARAMETER top_p 0.95

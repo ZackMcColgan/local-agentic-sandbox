@@ -39,7 +39,7 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
 
   it("critic with Ollama down does NOT approve a rule-clean diff — it abstains", async () => {
     delete process.env.FAST_GRAPH_TEST;
-    const critic = createCriticWorker({ ollamaUrl: DEAD_OLLAMA, model: "gemma4:e4b" });
+    const critic = createCriticWorker({ ollamaUrl: DEAD_OLLAMA, model: "swift-27b-mtp" });
     const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
     assert.equal(review.approved, false, "unreachable critic model must never approve");
     assert.equal(review.abstained, true);
@@ -49,7 +49,7 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
   it("critic abstains when the model returns an unparseable verdict", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const garbage: GenerateFn = async (req) => ({ text: "sure looks fine to me", model: req.model, loadDurationMs: 0, totalDurationMs: 1 });
-    const critic = createCriticWorker({ generate: garbage, model: "gemma4:e4b" });
+    const critic = createCriticWorker({ generate: garbage, model: "swift-27b-mtp" });
     const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
     assert.equal(review.approved, false);
     assert.equal(review.abstained, true);
@@ -57,7 +57,7 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
 
   it("critic approves only when rules pass AND the model approves", async () => {
     delete process.env.FAST_GRAPH_TEST;
-    const critic = createCriticWorker({ generate: approvingModel, model: "gemma4:e4b" });
+    const critic = createCriticWorker({ generate: approvingModel, model: "swift-27b-mtp" });
     const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
     assert.equal(review.approved, true);
     assert.equal(review.abstained, false);
@@ -72,7 +72,7 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
       loadDurationMs: 0,
       totalDurationMs: 1
     });
-    const critic = createCriticWorker({ generate: rejecting, model: "gemma4:e4b" });
+    const critic = createCriticWorker({ generate: rejecting, model: "swift-27b-mtp" });
     const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
     assert.equal(review.approved, false);
     assert.ok(review.feedback.includes("line 3 sets background twice"));
@@ -104,7 +104,7 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
   it("production + Ollama down → throws ModelUnavailableError and writes nothing", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const repo = tempRepo();
-    const builder = createBuilderWorker({ ollamaUrl: DEAD_OLLAMA, model: "gemma4:e4b" });
+    const builder = createBuilderWorker({ ollamaUrl: DEAD_OLLAMA, model: "swift-27b-mtp" });
     const m = milestone({ title: "Generate architecture diagram", plannedFiles: ["docs/architecture.drawio"] });
     await assert.rejects(builder.executeMilestoneWork(m, { repoRoot: repo, gitSha: "a".repeat(40) }), ModelUnavailableError);
     assert.equal(fs.existsSync(path.join(repo, "docs/architecture.drawio")), false, "no file may be written on model failure");
@@ -123,10 +123,10 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
     delete process.env.FAST_GRAPH_TEST;
     const repo = tempRepo();
     const gen: GenerateFn = async (req) => ({ text: "```ts\nexport const BG = '#ffffff';\n```", model: req.model, loadDurationMs: 0, totalDurationMs: 1 });
-    const builder = createBuilderWorker({ generate: gen, model: "gemma4:e4b" });
+    const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
     const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["out.ts"] }), { repoRoot: repo, gitSha: "c".repeat(40) });
     assert.equal(res.synthetic, false);
-    assert.equal(res.model, "gemma4:e4b");
+    assert.equal(res.model, "swift-27b-mtp");
     assert.equal(fs.readFileSync(path.join(repo, "out.ts"), "utf8"), "export const BG = '#ffffff';");
     assert.ok(res.diff.includes("+export const BG = '#ffffff';"));
   });

@@ -4,6 +4,46 @@
 
 export type ToolchainType = "node:22" | "python:3.12" | "go" | "rust";
 
+export interface AssertionContract {
+  type: "file_exists" | "test_passes" | "output_contains" | "no_hardcoded_values";
+  target: string;
+  expected?: string;
+  description: string;
+}
+
+export interface EvidenceItem {
+  type: "diff" | "test" | "file";
+  ref: string;
+  excerpt: string;
+}
+
+export interface ContractAssertionResult {
+  assertion: AssertionContract;
+  passed: boolean;
+  evidence: string;
+}
+
+export interface TestCounts {
+  passed: number;
+  failed: number;
+}
+
+export interface TestSnapshot {
+  passCount: number;
+  failCount: number;
+  failingTests: string[];
+  timestamp: string;
+}
+
+export interface RevertResult {
+  reverted: boolean;
+  filesReverted: string[];
+  before: TestCounts;
+  after: TestCounts;
+  reason?: string;
+  logMessage?: string;
+}
+
 export type MilestoneStatus = "pending" | "in_progress" | "completed" | "failed" | "rejected";
 
 export interface AcceptanceCriterion {
@@ -19,6 +59,7 @@ export interface Milestone {
   title: string;
   description: string;
   acceptanceCriteria: AcceptanceCriterion[];
+  assertions?: AssertionContract[];
   status: MilestoneStatus;
   builderIterations: number;
   criticRounds: number;
