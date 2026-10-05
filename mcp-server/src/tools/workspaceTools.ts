@@ -1,10 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { exec, execFile } from "child_process";
+import { exec, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import { z } from "zod";
+import ts from "typescript";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -110,6 +111,66 @@ export function validateRegexPattern(pattern: string): { safe: boolean; reason?:
   }
 
   return { safe: true };
+}
+
+// Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
+export function validateCodeAst(filePath: string, content: string): { valid: boolean; error?: string } {
+  const ext = path.extname(filePath).toLowerCase();
+
+  // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
+  if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
+    try {
+      const scriptKind =
+        ext === ".tsx" ? ts.ScriptKind.TSX :
+        ext === ".jsx" ? ts.ScriptKind.JSX :
+        ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
+        ts.ScriptKind.TS;
+
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind
+      );
+
+      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      if (diagnostics.length > 0) {
+        const first = diagnostics[0];
+        const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
+        const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
+        return {
+          valid: false,
+          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`
+        };
+      }
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, error: `AST parser failure: ${err.message}` };
+    }
+  }
+
+  // 2. Python AST parsing via Python standard library ast module
+  if (ext === ".py") {
+    try {
+      execFileSync("python3", ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+        input: content,
+        encoding: "utf8",
+        timeout: 3000,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      return { valid: true };
+    } catch (err: any) {
+      const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
+      return {
+        valid: false,
+        error: `Python SyntaxError in ${filePath}: ${stderr}`
+      };
+    }
+  }
+
+  // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
+  return { valid: true };
 }
 
 export function registerWorkspaceTools(mcp: McpServer) {
@@ -339,6 +400,21 @@ export function registerWorkspaceTools(mcp: McpServer) {
 
       try {
         const safePath = resolveSafePath(filePath);
+
+        // Pre-write AST syntax validation (nexus-agent pattern)
+        const astCheck = validateCodeAst(filePath, content);
+        if (!astCheck.valid) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                status: "EXECUTION_ERROR",
+                error: `AST validation failed before write: ${astCheck.error}`
+              }, null, 2)
+            }]
+          };
+        }
+
         if (create_dirs) {
           const parent = path.dirname(safePath);
           await fs.mkdir(parent, { recursive: true });
