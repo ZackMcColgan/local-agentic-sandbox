@@ -31,7 +31,9 @@ export interface SchedulerOptions {
   supervisor?: OvernightSupervisor;
 }
 
-const DEFAULT_WORKSPACE = process.env.WORKSPACE_DIR || path.resolve(process.cwd(), "workspace");
+function getDefaultWorkspace(): string {
+  return process.env.WORKSPACE_DIR || path.resolve(process.cwd(), "workspace");
+}
 const BACKOFF_INTERVALS_MS = [60000, 120000, 240000, 480000, 1800000]; // 1m, 2m, 4m, 8m, max 30m
 
 /**
@@ -46,8 +48,8 @@ export function calculateNextRun(cronExpr: string, fromDate?: Date): Date {
 
   const [minPart, hrPart, domPart, monPart, dowPart] = parts;
   const start = new Date(fromDate || Date.now());
-  start.setSeconds(0);
-  start.setMilliseconds(0);
+  start.setUTCSeconds(0);
+  start.setUTCMilliseconds(0);
 
   function matchesField(val: number, expr: string, minRange: number, maxRange: number): boolean {
     if (expr === "*") return true;
@@ -71,11 +73,11 @@ export function calculateNextRun(cronExpr: string, fromDate?: Date): Date {
   const maxSearch = 366 * 24 * 60;
 
   for (let i = 0; i < maxSearch; i++) {
-    const min = candidate.getMinutes();
-    const hr = candidate.getHours();
-    const dom = candidate.getDate();
-    const mon = candidate.getMonth() + 1;
-    const dow = candidate.getDay();
+    const min = candidate.getUTCMinutes();
+    const hr = candidate.getUTCHours();
+    const dom = candidate.getUTCDate();
+    const mon = candidate.getUTCMonth() + 1;
+    const dow = candidate.getUTCDay();
 
     if (
       matchesField(min, minPart, 0, 59) &&
@@ -98,7 +100,7 @@ export class UnattendedScheduler {
   private supervisor?: OvernightSupervisor;
 
   constructor(options?: SchedulerOptions) {
-    this.workspaceDir = options?.workspaceDir || DEFAULT_WORKSPACE;
+    this.workspaceDir = options?.workspaceDir || getDefaultWorkspace();
     this.storageFile = options?.storageFile || path.join(this.workspaceDir, "schedules.json");
     this.supervisor = options?.supervisor;
 
@@ -360,9 +362,17 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
 let globalScheduler: UnattendedScheduler | null = null;
 
-function getGlobalScheduler(options?: SchedulerOptions): UnattendedScheduler {
-  if (!globalScheduler || options) {
-    globalScheduler = new UnattendedScheduler(options);
+export function resetGlobalScheduler(): void {
+  globalScheduler = null;
+}
+
+export function getGlobalScheduler(options?: SchedulerOptions): UnattendedScheduler {
+  const currentWorkspace = options?.workspaceDir || getDefaultWorkspace();
+  if (!globalScheduler || options || globalScheduler.workspaceDir !== currentWorkspace) {
+    globalScheduler = new UnattendedScheduler({
+      workspaceDir: currentWorkspace,
+      ...options
+    });
   }
   return globalScheduler;
 }

@@ -3,19 +3,24 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { GET as getSchedules, POST as postSchedule, DELETE as deleteSchedule } from "../app/api/schedules/route.js";
+import { DELETE as deleteScheduleById } from "../app/api/schedules/[id]/route.js";
 import { POST as triggerSchedule } from "../app/api/schedules/[id]/trigger/route.js";
+import { resetGlobalScheduler } from "../lib/subagents/scheduler.js";
 
 describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
-  const testWorkspace = path.resolve(process.cwd(), `temp-test-sched-api-${Date.now()}`);
+  let testWorkspace: string;
 
   function setup() {
+    testWorkspace = path.resolve(process.cwd(), `temp-test-sched-api-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
     process.env.WORKSPACE_DIR = testWorkspace;
+    resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
   }
 
   function teardown() {
+    resetGlobalScheduler();
     delete process.env.WORKSPACE_DIR;
-    if (fs.existsSync(testWorkspace)) {
+    if (testWorkspace && fs.existsSync(testWorkspace)) {
       fs.rmSync(testWorkspace, { recursive: true, force: true });
     }
   }
@@ -128,6 +133,35 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
 
       const deleteReq = new Request(`http://localhost:3000/api/schedules?id=${id}`, { method: "DELETE" });
       const delRes = await deleteSchedule(deleteReq);
+      assert.equal(delRes.status, 200);
+      const delData = await delRes.json();
+      assert.equal(delData.success, true);
+
+      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
+      const getRes = await getSchedules(getReq);
+      const getData = await getRes.json();
+      assert.equal(getData.schedules.some((s: any) => s.id === id), false);
+    } finally {
+      teardown();
+    }
+  });
+
+  it("DELETE /api/schedules/[id] removes schedule by path parameter", async () => {
+    setup();
+    try {
+      const postReq = new Request("http://localhost:3000/api/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cronExpression: "0 3 * * *",
+          taskDescription: "Path delete schedule"
+        })
+      });
+      const postRes = await postSchedule(postReq);
+      const { id } = await postRes.json();
+
+      const deleteReq = new Request(`http://localhost:3000/api/schedules/${id}`, { method: "DELETE" });
+      const delRes = await deleteScheduleById(deleteReq, { params: { id } });
       assert.equal(delRes.status, 200);
       const delData = await delRes.json();
       assert.equal(delData.success, true);

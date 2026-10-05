@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "fs";
+import path from "path";
 import { generatePlanSpec, parsePlanSpec, type PlanSpec } from "../lib/subagents/planner.js";
 
 describe("Phase 1 — Planner Worker Suite", () => {
@@ -119,5 +121,80 @@ describe("Phase 1 — Planner Worker Suite", () => {
       else delete process.env.FAST_GRAPH_TEST;
     }
   });
-});
 
+  it("defaults to swift-27b-mtp when model and PLANNER_MODEL are unset", async () => {
+    const savedPlannerModel = process.env.PLANNER_MODEL;
+    delete process.env.PLANNER_MODEL;
+    let capturedModel: string | undefined;
+
+    const mockGenerate = async (req: any) => {
+      capturedModel = req.model;
+      return {
+        text: JSON.stringify({
+          milestones: [
+            {
+              id: "M1",
+              title: "Test M1",
+              description: "Test M1 desc",
+              plannedFiles: ["lib/test.ts"],
+              acceptanceCriteria: [{ id: "AC1", assertion: "Criterion 1" }]
+            },
+            {
+              id: "M2",
+              title: "Test M2",
+              description: "Test M2 desc",
+              plannedFiles: ["lib/test2.ts"],
+              acceptanceCriteria: [{ id: "AC2", assertion: "Criterion 2" }]
+            },
+            {
+              id: "M3",
+              title: "Test M3",
+              description: "Test M3 desc",
+              plannedFiles: ["lib/test3.ts"],
+              acceptanceCriteria: [{ id: "AC3", assertion: "Criterion 3" }]
+            }
+          ]
+        }),
+        model: req.model,
+        loadDurationMs: 0,
+        totalDurationMs: 1
+      };
+    };
+
+    try {
+      await generatePlanSpec({
+        taskId: "task-model-lock",
+        goal: "Verify planner model lock",
+        generate: mockGenerate
+      });
+
+      assert.equal(capturedModel, "swift-27b-mtp", "Planner must default to swift-27b-mtp");
+
+      // Verify no occurrences of qwen3.8 remain in lib/subagents/
+      const candidateDirs = [
+        path.resolve(process.cwd(), "lib/subagents"),
+        path.resolve(process.cwd(), "web-ui/lib/subagents"),
+        path.resolve(process.cwd(), "../lib/subagents")
+      ];
+      const foundDir = candidateDirs.find((d) => fs.existsSync(d));
+      assert.ok(foundDir, "Could not locate lib/subagents directory");
+      const subagentsDir: string = foundDir;
+
+      const files = fs.readdirSync(subagentsDir);
+      for (const file of files) {
+        if (file.endsWith(".ts") || file.endsWith(".js")) {
+          const content: string = fs.readFileSync(path.join(subagentsDir, file), "utf8");
+          assert.equal(
+            content.includes("qwen3.8"),
+            false,
+            `Found stale model reference 'qwen3.8' in ${file}`
+          );
+        }
+      }
+    } finally {
+      if (savedPlannerModel !== undefined) {
+        process.env.PLANNER_MODEL = savedPlannerModel;
+      }
+    }
+  });
+});
