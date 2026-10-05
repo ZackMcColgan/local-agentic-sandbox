@@ -164,6 +164,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
     let taskCancelled = false;
     const workerPromise = pool.executeJob({
       role: "builder",
+      taskId: "task-cancel-test",
       abortSignal: controller.signal,
       taskFn: async (signal) => {
         return new Promise((resolve) => {
