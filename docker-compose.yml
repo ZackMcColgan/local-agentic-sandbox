@@ -70,6 +70,7 @@ services:
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
       - MODEL_NAME=swift-27b-mtp
       - PLANNER_MODEL=swift-27b-mtp
+      - WORKSPACE_DIR=/workspace
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
       - OTEL_SERVICE_NAME=enterprise-ai-portal
     extra_hosts:
