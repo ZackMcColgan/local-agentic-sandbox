@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { Milestone, WorkerRole } from "./types";
+import ts from "typescript";
 import {
   createOllamaGenerate,
   isFastGraphTestMode,
@@ -42,6 +43,7 @@ export interface CriticReview {
   /** True when the verdict is rule-only under FAST_GRAPH_TEST (no model consulted). */
   synthetic?: boolean;
   model?: string;
+  verdict?: "approved" | "needs_fix";
 }
 
 export interface BuilderResult {
@@ -54,6 +56,10 @@ export interface BuilderResult {
   model?: string;
   targetFile: string;
   loadDurationMs?: number;
+  stuck?: boolean;
+  errorSignature?: string;
+  feedback?: string[];
+  noChangeReason?: string;
 }
 
 export interface RecordSkillResult {
@@ -159,6 +165,77 @@ function synthesizeForFastGraphTest(milestone: Milestone, targetRelPath: string,
   return `// [synthetic FAST_GRAPH_TEST output] ${milestone.id}: ${milestone.title}\n// target: ${targetRelPath}\nexport interface ${milestone.id.replace(/[^A-Za-z0-9_]/g, "_")}TaskResult {\n  id: string;\n  status: string;\n}\n`;
 }
 
+// Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
+export function validateCodeAst(filePath: string, content: string): { valid: boolean; error?: string } {
+  const ext = path.extname(filePath).toLowerCase();
+
+  // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
+  if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
+    try {
+      const scriptKind =
+        ext === ".tsx" ? ts.ScriptKind.TSX :
+        ext === ".jsx" ? ts.ScriptKind.JSX :
+        ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
+        ts.ScriptKind.TS;
+
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind
+      );
+
+      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      if (diagnostics.length > 0) {
+        const first = diagnostics[0];
+        const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
+        const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
+        return {
+          valid: false,
+          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`
+        };
+      }
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, error: `AST parser failure: ${err.message}` };
+    }
+  }
+
+  // 2. Python AST parsing via Python standard library ast module
+  if (ext === ".py") {
+    try {
+      execFileSync("python3", ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+        input: content,
+        encoding: "utf8",
+        timeout: 3000,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      return { valid: true };
+    } catch (err: any) {
+      const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
+      return {
+        valid: false,
+        error: `Python SyntaxError in ${filePath}: ${stderr}`
+      };
+    }
+  }
+
+  // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
+  return { valid: true };
+}
+
+// Guardrail 5 Helper: Normalize error signature by file + line + error type (build-loop pattern)
+export function normalizeErrorSignature(filePath: string, errorText: string): string {
+  const normFile = path.basename(filePath).toLowerCase();
+  const lineMatch = errorText.match(/line\s*(\d+)|\((\d+):|:(\d+):/i);
+  const line = lineMatch ? (lineMatch[1] || lineMatch[2] || lineMatch[3]) : "unknown";
+  const typeMatch = errorText.match(/\b([A-Z][a-zA-Z]*Error)\b/) || 
+                    errorText.match(/(syntax error|parse error|unexpected token|identifier expected)/i);
+  const errType = typeMatch ? typeMatch[1].toLowerCase().replace(/\s+/g, "_") : "syntax_error";
+  return `${normFile}:${line}:${errType}`;
+}
+
 export class BuilderWorker {
   readonly role: WorkerRole = "builder";
   readonly maxIterations: number = 5;
@@ -251,11 +328,65 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
       loadDurationMs = result.loadDurationMs;
     }
 
+    // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
+    if (!synthetic) {
+      let astCheck = validateCodeAst(targetRelPath, newContent);
+      let astAttempts = 1;
+      const maxAstRetries = 5;
+      const errorSignatures: string[] = [];
+
+      while (!astCheck.valid && astAttempts < maxAstRetries) {
+        const signature = normalizeErrorSignature(targetRelPath, astCheck.error || "");
+        errorSignatures.push(signature);
+
+        // Guardrail 5: If the SAME signature appears 3 times consecutively, break loop and return "stuck"
+        const len = errorSignatures.length;
+        if (len >= 3 && errorSignatures[len - 1] === signature && errorSignatures[len - 2] === signature && errorSignatures[len - 3] === signature) {
+          return {
+            diff: "",
+            gitSha: options?.gitSha || getResolvedGitSha(repoRoot),
+            iterations: iteration,
+            synthetic: false,
+            model: modelToUse,
+            targetFile: targetRelPath,
+            loadDurationMs,
+            stuck: true,
+            errorSignature: signature,
+            feedback: [`Builder stuck: identical error signature (${signature}) repeated 3 consecutive times.`]
+          };
+        }
+
+        astAttempts++;
+        const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+        const correctionPrompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Your previous code generation for "${targetRelPath}" failed syntax validation:
+${astCheck.error}
+
+Please fix the syntax error and output the complete, valid, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+
+        const retryResult = await generate({
+          model: modelToUse,
+          prompt: correctionPrompt,
+          keepAlive: this.keepAlive,
+          signal: options?.signal,
+          options: { temperature: 0.2, num_predict: 4096 }
+        });
+        newContent = stripCodeFence(retryResult.text);
+        astCheck = validateCodeAst(targetRelPath, newContent);
+      }
+    }
+
     // Test hook: seed a deterministic flaw on iteration 1 so critic rejection -> retry is provable.
     if (milestone.forcedFlaw && iteration === 1) {
       newContent += `\n${FORCED_FLAW_MARKER}`;
     } else {
       newContent = newContent.replace(`\n${FORCED_FLAW_MARKER}`, "");
+    }
+
+    // Final AST check: reject write if AST is still invalid
+    const finalAstCheck = validateCodeAst(targetRelPath, newContent);
+    if (!finalAstCheck.valid) {
+      throw new Error(`AST validation rejected write to ${targetRelPath}: ${finalAstCheck.error}`);
     }
 
     const gitSha = options?.gitSha || getResolvedGitSha(repoRoot);
@@ -300,12 +431,45 @@ export class CriticWorker {
 
   async evaluateMilestoneDiff(
     milestone: Milestone,
-    diffContext: { diff: string; filesChanged?: string[] },
-    options?: { model?: string; signal?: AbortSignal }
+    diffContext: { diff: string; filesChanged?: string[]; testExitCode?: number; testOutput?: string; noChangeReason?: string },
+    options?: { model?: string; signal?: AbortSignal; testExitCode?: number }
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
     const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "qwen3.8:27b-q3_k_m";
+
+    // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
+    // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
+    const testExitCode = diffContext.testExitCode ?? options?.testExitCode ?? (milestone.testsFailed && milestone.testsFailed > 0 ? 1 : undefined);
+    if (testExitCode !== undefined && testExitCode !== 0) {
+      return {
+        approved: false,
+        feedback: [
+          `Ground-truth override (captain-claw R1 pattern): Test suite exited non-zero (exit code ${testExitCode}). Tests are ground truth; model cannot override failing tests. Returning needs_fix immediately.`
+        ],
+        abstained: false,
+        synthetic: false,
+        model: modelToUse,
+        verdict: "needs_fix"
+      };
+    }
+
+    // Guardrail 2: No-change gate (captain-claw pattern)
+    // If zero files changed but builder claimed changes, reject as no-op unless explicit reason given
+    const addedOrRemoved = diff && diff.split("\n").some((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---")));
+    const hasExplicitNoChange = Boolean(diffContext.noChangeReason && /no changes needed because/i.test(diffContext.noChangeReason));
+    if (!addedOrRemoved && !hasExplicitNoChange) {
+      return {
+        approved: false,
+        feedback: [
+          "No-change gate rejection (captain-claw pattern): Zero files changed and no diff was produced. The builder must produce a diff or explicitly state 'no changes needed because [reason]'."
+        ],
+        abstained: false,
+        synthetic: false,
+        model: modelToUse,
+        verdict: "needs_fix"
+      };
+    }
 
     // 1. Machine-checkable criterion evaluation against diff
     for (const criterion of milestone.acceptanceCriteria) {
