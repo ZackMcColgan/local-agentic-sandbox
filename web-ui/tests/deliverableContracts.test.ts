@@ -1,11 +1,29 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
 import { Milestone, AssertionContract } from "../lib/subagents/types.js";
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
+
+  let useRealOllama = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+  });
   const tmpDir = path.resolve(process.cwd(), "temp-test-contracts");
 
   it("Milestone with 3 assertions, builder satisfies all 3 → approved", async () => {
