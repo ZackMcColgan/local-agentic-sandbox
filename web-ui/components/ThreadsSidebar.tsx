@@ -199,6 +199,10 @@ export function ThreadsSidebar({
                   touchStartXRef.current = e.touches[0].clientX;
                 }}
                 onTouchEnd={(e) => {
+                  // Don't reset confirm state when the touch ends on a button
+                  // (e.g. tapping "Confirm?" to delete) — the button's onClick
+                  // needs isConfirming to still be true when it fires.
+                  if ((e.target as HTMLElement).closest("button")) return;
                   const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
                   if (deltaX < -40) {
                     setSwipedThreadId(thread.id);
