@@ -1,4 +1,4 @@
-.PHONY: all up down restart logs pull-model verify-sec clean help
+.PHONY: all up down restart logs pull-model verify-sec clean help k8s-deploy k8s-build
 
 all: help
 
@@ -17,6 +17,8 @@ help:
 	@echo "make test          Run full test suite (mcp-server & web-ui)"
 	@echo "make test-coverage Run full test suite with code coverage reports"
 	@echo "make clean         Stop containers and remove volumes"
+	@echo "make k8s-build    Build web-ui image for Kubernetes"
+	@echo "make k8s-deploy   Build image and rollout restart K8s web-ui"
 
 pull-primary:
 	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
@@ -65,3 +67,13 @@ test-coverage:
 
 clean:
 	docker compose down -v --remove-orphans
+
+# Kubernetes deployment (Docker Desktop)
+# Builds the web-ui image locally and restarts the K8s deployment.
+# Image uses imagePullPolicy: Never, so the local build is picked up directly.
+k8s-build:
+	docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile web-ui
+
+k8s-deploy: k8s-build
+	kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
+	kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
