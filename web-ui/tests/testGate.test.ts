@@ -1,9 +1,27 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import path from "path";
 import { resolveAffectedTests, runTestGate, TestGateOptions } from "../lib/testGate.js";
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("Phase C — Test Gate & Tiering Suite", () => {
+
+  let useRealOllama = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+  });
   it("maps modified source files to their corresponding test suites", () => {
     // 1. SvgViewer and svgUtils map to SVG test suites
     const svgResult = resolveAffectedTests(["web-ui/lib/svgUtils.ts", "web-ui/components/SvgViewer.tsx"]);
