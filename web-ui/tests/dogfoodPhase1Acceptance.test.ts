@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -14,8 +14,26 @@ import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
 import { generateMorningReport, formatMorningReportMarkdown } from "../lib/subagents/morningReport.js";
 import { TaskManifest, Milestone } from "../lib/subagents/types.js";
 import { generateArchitectureDiagram, discoverRepoState } from "../lib/diagram/architectureGenerator.js";
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
+
+  let useRealOllama = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+  });
   process.env.FAST_GRAPH_TEST = "1";
   const dogfoodGoal = "Build a draw.io architecture diagram of this repo's current state, README-ready";
 
