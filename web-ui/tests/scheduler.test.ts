@@ -12,6 +12,8 @@ import {
   resetGlobalScheduler
 } from "../lib/subagents/scheduler.js";
 import { TaskManifest } from "../lib/subagents/types.js";
+import { type StepExecutor } from "../lib/subagents/supervisor.js";
+import { WorkerPool } from "../lib/subagents/workerPool.js";
 
 describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   it("Cron parser correctly calculates next run for '0 2 * * *' (2am daily)", () => {
@@ -199,6 +201,121 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
     } finally {
       resetGlobalScheduler();
       if (savedWorkspace !== undefined) {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
+      if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
+    }
+  });
+
+  it("executeScheduledRun with injected stepExecutor invokes executor per milestone and captures results", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
+    resetGlobalScheduler();
+    if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
+    const storageFile = path.join(testWorkspace, "schedules.json");
+
+    try {
+      const scheduler = new UnattendedScheduler({ storageFile, workspaceDir: testWorkspace });
+      const schedId = await scheduler.scheduleTask("0 2 * * *", "Fake executor scheduled task");
+
+      const invocations: Array<{ milestoneId: string; attempt: number }> = [];
+      const fakeStepExecutor: StepExecutor = async (milestone, attempt) => {
+        invocations.push({ milestoneId: milestone.id, attempt });
+        return {
+          status: "completed",
+          gitSha: "sha-test-fake-999",
+          diff: "+fake line in file.ts",
+          builderIterations: 2,
+          criticRounds: 1,
+          builderModel: "swift-27b-mtp"
+        };
+      };
+
+      const result = await scheduler.executeScheduledRun(schedId, {
+        stepExecutor: fakeStepExecutor
+      });
+
+      assert.ok(result, "Scheduled run must return a manifest");
+      assert.equal(result.status, "completed");
+      assert.equal(invocations.length, 1);
+      assert.equal(invocations[0].milestoneId, "M1");
+      assert.equal(invocations[0].attempt, 1);
+
+      const m1 = result.milestones[0];
+      assert.equal(m1.status, "completed");
+      assert.equal(m1.commitSha, "sha-test-fake-999");
+      assert.equal(m1.builderIterations, 2);
+      assert.equal(m1.criticRounds, 1);
+      assert.equal(m1.diffSummary, "+fake line in file.ts");
+      assert.equal(m1.builderModel, "swift-27b-mtp");
+    } finally {
+      resetGlobalScheduler();
+      if (typeof savedWorkspace !== "undefined") {
+        process.env.WORKSPACE_DIR = savedWorkspace;
+      } else {
+        delete process.env.WORKSPACE_DIR;
+      }
+      if (fs.existsSync(testWorkspace)) fs.rmSync(testWorkspace, { recursive: true, force: true });
+    }
+  });
+
+  it("scheduled run against unreachable model fails loudly, parks task, and morning report surfaces failure", async () => {
+    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const savedWorkspace = process.env.WORKSPACE_DIR;
+    process.env.WORKSPACE_DIR = testWorkspace;
+    resetGlobalScheduler();
+    if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
+    const storageFile = path.join(testWorkspace, "schedules.json");
+
+    const savedFastGraph = process.env.FAST_GRAPH_TEST;
+    delete process.env.FAST_GRAPH_TEST;
+
+    try {
+      const scheduler = new UnattendedScheduler({ storageFile, workspaceDir: testWorkspace });
+      const schedId = await scheduler.scheduleTask("0 2 * * *", "Unreachable model task");
+
+      // Inject a workerPool simulating an unreachable Ollama host
+      const failingPool = new WorkerPool({
+        modelRoster: {
+          builder: "swift-27b-mtp",
+          critic: "swift-27b-mtp"
+        },
+        generate: async () => {
+          throw new Error("connect ECONNREFUSED 127.0.0.1:11434");
+        }
+      });
+
+      const result = await scheduler.executeScheduledRun(schedId, {
+        workerPool: failingPool
+      });
+
+      assert.ok(result, "Scheduled run must return a manifest");
+      assert.notEqual(result.status, "completed", "Status must NOT be completed when model is unreachable");
+      assert.equal(result.status, "parked", "Status must be parked after recovery retries fail");
+      assert.ok(result.parkedReason?.includes("recovery attempts"), "Must record parkedReason indicating failure");
+      assert.equal(result.milestones[0].status, "pending", "Milestone must remain pending, not completed");
+
+      // Check morning report
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const reportPath = path.join(testWorkspace, "reports", `morning-${dateStr}.md`);
+      assert.ok(fs.existsSync(reportPath), "Morning report must exist");
+      const reportContent = fs.readFileSync(reportPath, "utf8");
+      assert.ok(reportContent.includes("- **Status**: parked"), "Morning report must record parked status");
+      assert.ok(reportContent.includes("0 / 1 completed"), "Morning report must record 0 completed milestones");
+      assert.ok(reportContent.includes("No new commits recorded"), "Morning report must record no commits");
+
+      // Check schedule state
+      const schedules = await scheduler.listSchedules();
+      const updated = schedules.find((s) => s.id === schedId);
+      assert.equal(updated?.failureCount, 1, "Failure count must be incremented");
+      assert.ok(updated?.backoffUntil, "Backoff until must be set");
+    } finally {
+      if (savedFastGraph !== undefined) process.env.FAST_GRAPH_TEST = savedFastGraph;
+      resetGlobalScheduler();
+      if (typeof savedWorkspace !== "undefined") {
         process.env.WORKSPACE_DIR = savedWorkspace;
       } else {
         delete process.env.WORKSPACE_DIR;

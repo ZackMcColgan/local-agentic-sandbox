@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
@@ -11,6 +11,15 @@ import {
   DEFAULT_QDRANT_COLLECTION
 } from "../lib/memory/semanticMemory.js";
 import {
+  checkOllama,
+  checkQdrant,
+  enableOllamaMock,
+  enableQdrantMock,
+  disableOllamaMock,
+  disableQdrantMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
+import {
   recordObservedPattern,
   approveSkillCandidate,
   rejectSkillCandidate,
@@ -19,6 +28,23 @@ import {
 } from "../lib/subagents/skillGate.js";
 
 describe("Phase D — Tier 2 Semantic Memory & Skill Gate Suite", () => {
+  let useRealOllama = false;
+  let useRealQdrant = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+
+    useRealQdrant = await checkQdrant();
+    logServiceMode("qdrant", useRealQdrant);
+    if (!useRealQdrant) enableQdrantMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+    if (!useRealQdrant) disableQdrantMock();
+  });
   it("Ollama embeddings: generates dense vectors with real dimension", async () => {
     const vec = await generateOllamaEmbedding("Supervisor worker crash recovery");
     assert.ok(Array.isArray(vec));

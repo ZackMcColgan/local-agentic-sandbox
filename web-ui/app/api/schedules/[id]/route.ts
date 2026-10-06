@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cancelSchedule } from "../../../../lib/subagents/scheduler.js";
+import { cancelSchedule } from "../../../../lib/subagents/scheduler";
 
 export async function DELETE(
   req: Request | NextRequest,
-  context: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const rawParams = context?.params;

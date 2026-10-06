@@ -2,11 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import {
   OvernightSupervisor,
-  createOvernightGraph
+  createOvernightGraph,
+  createProductionStepExecutor
 } from "../lib/subagents/supervisor.js";
-import { TaskManifest } from "../lib/subagents/types.js";
+import { TaskManifest, Milestone } from "../lib/subagents/types.js";
+import { WorkerPool } from "../lib/subagents/workerPool.js";
 
 describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
   const testCheckpointDir = path.resolve(process.cwd(), "temp-test-checkpoints");
@@ -225,6 +228,131 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     } finally {
       if (fs.existsSync(testCheckpointDir)) {
         fs.rmSync(testCheckpointDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("executeTaskWithRecovery with no stepExecutor and pending milestones refuses to fake completion and throws", async () => {
+    if (!fs.existsSync(testCheckpointDir)) fs.mkdirSync(testCheckpointDir, { recursive: true });
+
+    try {
+      const supervisor = new OvernightSupervisor({
+        checkpointDirectory: testCheckpointDir,
+        stallTimeoutMs: 10000
+      });
+
+      const task: TaskManifest = {
+        taskId: "task-refuse-fake-completion",
+        goal: "Pending milestones without executor must not silently complete",
+        toolchain: "node:22",
+        branchName: "task/refuse-fake-completion",
+        status: "active",
+        milestones: [
+          {
+            id: "M1",
+            title: "Pending Milestone 1",
+            description: "Work that requires an actual executor",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "Work verified" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await assert.rejects(
+        async () => {
+          await supervisor.executeTaskWithRecovery(task);
+        },
+        /no stepExecutor provided; refusing to fake completion/i
+      );
+
+      // Verify that milestones were NOT marked completed
+      assert.equal(task.milestones[0].status, "pending", "Pending milestones must remain pending");
+      assert.notEqual(task.status, "completed", "Task must not report success without an executor");
+    } finally {
+      if (fs.existsSync(testCheckpointDir)) {
+        fs.rmSync(testCheckpointDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("createProductionStepExecutor with empty builder targetFile refuses to commit and fails milestone", async () => {
+    const testRepo = path.resolve(process.cwd(), `temp-test-no-target-${Date.now()}`);
+    fs.mkdirSync(testRepo, { recursive: true });
+
+    try {
+      // Initialize a temporary git repository
+      execSync("git init", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      execSync("git config user.email \"test@example.com\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      execSync("git config user.name \"Test\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      fs.writeFileSync(path.join(testRepo, "initial.txt"), "initial", "utf8");
+      execSync("git add initial.txt", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      execSync("git commit -m \"initial commit\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      const initialHead = execSync("git rev-parse HEAD", { cwd: testRepo, encoding: "utf8" }).trim();
+
+      // Create an unrelated local edit that must NOT be swept into a commit
+      fs.writeFileSync(path.join(testRepo, "unrelated.txt"), "unrelated change", "utf8");
+
+      const mockPool = new WorkerPool();
+      mockPool.executeJob = async (job: any) => {
+        if (job.role === "builder") {
+          return {
+            diff: "+dummy modification",
+            gitSha: initialHead,
+            iterations: 1,
+            synthetic: false,
+            targetFile: "", // Explicitly empty targetFile
+            stuck: false
+          };
+        }
+        if (job.role === "critic") {
+          return {
+            approved: true,
+            feedback: [],
+            abstained: false,
+            synthetic: false,
+            verdict: "approved"
+          };
+        }
+        return job.taskFn(new AbortController().signal);
+      };
+
+      const stepExecutor = createProductionStepExecutor({
+        workerPool: mockPool,
+        repoRoot: testRepo
+      });
+
+      const milestone: Milestone = {
+        id: "M1",
+        title: "Milestone with no target file",
+        description: "Builder forgot target file",
+        acceptanceCriteria: [{ id: "AC-1", assertion: "Criterion" }],
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0
+      };
+
+      const res = await stepExecutor(milestone, 1);
+
+      // Assert milestone does NOT report success
+      assert.equal(res.status, "failed", "Milestone must fail when builder targetFile is missing");
+
+      // Assert no git add / git commit occurred
+      const currentHead = execSync("git rev-parse HEAD", { cwd: testRepo, encoding: "utf8" }).trim();
+      assert.equal(currentHead, initialHead, "Git HEAD must not change when targetFile is missing");
+
+      const gitStatus = execSync("git status --porcelain", { cwd: testRepo, encoding: "utf8" });
+      assert.ok(gitStatus.includes("?? unrelated.txt"), "Unrelated files must not be staged or committed");
+    } finally {
+      if (fs.existsSync(testRepo)) {
+        fs.rmSync(testRepo, { recursive: true, force: true });
       }
     }
   });

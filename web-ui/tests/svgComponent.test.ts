@@ -1,11 +1,20 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, before, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { SvgViewer } from "../components/SvgViewer.js";
+import {
+  checkDrawio,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("SVG Viewer Component Suite", () => {
+  before(() => {
+    const isReal = checkDrawio();
+    logServiceMode("drawio", isReal);
+  });
+
   let win: GlobalWindow;
   let container: HTMLDivElement;
   let root: Root | null = null;

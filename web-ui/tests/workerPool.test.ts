@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
@@ -10,8 +10,26 @@ import {
   WorkerPool
 } from "../lib/subagents/workerPool.js";
 import { Milestone } from "../lib/subagents/types.js";
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
+
+  let useRealOllama = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+  });
   it("enforces scoped tool access for Explorer (read-only inventory only)", () => {
     const explorer = createExplorerWorker();
     assert.equal(explorer.role, "explorer");

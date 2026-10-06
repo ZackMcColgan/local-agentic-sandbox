@@ -431,8 +431,9 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
  * Parses authoritative TAP summary test counts (# pass <N>, # fail <N>).
  */
 export function parseTapCounts(output: string): { passed: number; failed: number } {
-  const passMatches = Array.from(output.matchAll(/# pass (\d+)/g));
-  const failMatches = Array.from(output.matchAll(/# fail (\d+)/g));
+  // TAP format: "# pass 12", tsx/node:test format: "ℹ pass 12"
+  const passMatches = Array.from(output.matchAll(/(?:#|ℹ) pass (\d+)/g));
+  const failMatches = Array.from(output.matchAll(/(?:#|ℹ) fail (\d+)/g));
 
   let passed = 0;
   let failed = 0;

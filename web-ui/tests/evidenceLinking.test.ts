@@ -1,9 +1,27 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
 import { Milestone, EvidenceItem } from "../lib/subagents/types.js";
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 
 describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
+
+  let useRealOllama = false;
+
+  before(async () => {
+    useRealOllama = await checkOllama();
+    logServiceMode("ollama", useRealOllama);
+    if (!useRealOllama) enableOllamaMock();
+  });
+
+  after(() => {
+    if (!useRealOllama) disableOllamaMock();
+  });
   it("Critic verdict with 3 evidence items → accepted", async () => {
     const milestone: Milestone = {
       id: "M-EV-1",

@@ -269,8 +269,11 @@ export function convertDrawioToSvg(xml: string): string {
     return areaB - areaA;
   });
 
+  const bgMatch = /<mxGraphModel\b[^>]*?\bbackground\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(cleanXml);
+  const bgColor = bgMatch ? (bgMatch[1] || bgMatch[2] || "transparent") : "transparent";
+
   const svgParts: string[] = [];
-  svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" class="drawio-svg" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}" width="100%" height="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: transparent;">`);
+  svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" class="drawio-svg" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}" width="100%" height="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: ${bgColor};">`);
 
   // Definitions
   svgParts.push(`  <defs>`);
@@ -316,7 +319,13 @@ export function convertDrawioToSvg(xml: string): string {
     // Text Label
     if (v.value) {
       const rawVal = unescapeEntities(v.value);
-      const cleanVal = rawVal.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").trim();
+      const cleanVal = rawVal
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<hr\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<[^>]+>/g, " ")
+        .trim();
       const lines = cleanVal.split(/\\n|\n|\s{3,}/).filter(Boolean);
 
       const labelY = isContainer
@@ -331,7 +340,9 @@ export function convertDrawioToSvg(xml: string): string {
 
       lines.forEach((line: string, idx: number) => {
         const dy = idx === 0 ? "0" : "15";
-        svgParts.push(`      <tspan x="${v.absX + v.width / 2}" dy="${dy}">${escapeXml(line.trim())}</tspan>`);
+        const trimmed = line.trim();
+        const normalized = trimmed.replace(/^([a-zA-Z0-9_-]+):\s+([A-Z])/, "$1 $2");
+        svgParts.push(`      <tspan x="${v.absX + v.width / 2}" dy="${dy}">${escapeXml(normalized)}</tspan>`);
       });
       svgParts.push(`    </text>`);
     }

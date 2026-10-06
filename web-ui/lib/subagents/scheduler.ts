@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { TaskManifest, TaskStatus } from "./types";
-import { OvernightSupervisor } from "./supervisor";
+import { TaskManifest, TaskStatus, Milestone } from "./types";
+import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } from "./supervisor";
+import { WorkerPool } from "./workerPool";
 
 export type ScheduleId = string;
 
@@ -25,10 +26,18 @@ export interface SchedulerHeartbeat {
   active: boolean;
 }
 
+export interface SchedulerExecutionOptions {
+  runner?: (manifest: TaskManifest) => Promise<TaskManifest>;
+  stepExecutor?: StepExecutor;
+  workerPool?: WorkerPool;
+}
+
 export interface SchedulerOptions {
   storageFile?: string;
   workspaceDir?: string;
   supervisor?: OvernightSupervisor;
+  stepExecutor?: StepExecutor;
+  workerPool?: WorkerPool;
 }
 
 function getDefaultWorkspace(): string {
@@ -98,11 +107,15 @@ export class UnattendedScheduler {
   readonly storageFile: string;
   readonly workspaceDir: string;
   private supervisor?: OvernightSupervisor;
+  private stepExecutor?: StepExecutor;
+  private workerPool?: WorkerPool;
 
   constructor(options?: SchedulerOptions) {
     this.workspaceDir = options?.workspaceDir || getDefaultWorkspace();
     this.storageFile = options?.storageFile || path.join(this.workspaceDir, "schedules.json");
     this.supervisor = options?.supervisor;
+    this.stepExecutor = options?.stepExecutor;
+    this.workerPool = options?.workerPool;
 
     this.ensureDirectories();
   }
@@ -136,6 +149,7 @@ export class UnattendedScheduler {
       fs.writeFileSync(this.storageFile, JSON.stringify(schedules, null, 2), "utf8");
     } catch (err: any) {
       console.warn("[Scheduler] Could not save schedules:", err.message);
+      throw err;
     }
   }
 
@@ -282,7 +296,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
   async executeScheduledRun(
     scheduleId: string,
-    options?: { runner?: (manifest: TaskManifest) => Promise<TaskManifest> }
+    options?: SchedulerExecutionOptions
   ): Promise<TaskManifest | null> {
     const schedules = this.loadSchedules();
     const sched = schedules.find((s) => s.id === scheduleId);
@@ -341,19 +355,63 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         const supervisor = this.supervisor || new OvernightSupervisor({
           checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints")
         });
-        result = await supervisor.executeTaskWithRecovery(manifest);
-      }
-      sched.lastRun = new Date().toISOString();
-      sched.nextRun = calculateNextRun(sched.cronExpression).toISOString();
-      sched.failureCount = 0;
-      delete sched.backoffUntil;
-      this.saveSchedules(schedules);
+        const executor =
+          options?.stepExecutor ||
+          this.stepExecutor ||
+          createProductionStepExecutor({
+            workerPool: options?.workerPool || this.workerPool,
+            repoRoot: this.workspaceDir,
+            model: "swift-27b-mtp"
+          });
 
-      await this.triggerMorningReport(runId, result);
-      this.clearHeartbeat();
-      logStream(`Completed scheduled run successfully.`);
-      return result;
+        result = await supervisor.executeTaskWithRecovery(manifest, {
+          stepExecutor: executor
+        });
+      }
+      if (result.status === "completed") {
+        sched.lastRun = new Date().toISOString();
+        sched.nextRun = calculateNextRun(sched.cronExpression).toISOString();
+        sched.failureCount = 0;
+        delete sched.backoffUntil;
+        this.saveSchedules(schedules);
+
+        // Trigger morning report
+        await this.triggerMorningReport(runId, result);
+        this.clearHeartbeat();
+        logStream(`Completed scheduled run successfully.`);
+        return result;
+      } else {
+        // Run failed or parked (refusing to fake completion; surface failure loudly)
+        sched.failureCount = (sched.failureCount || 0) + 1;
+        const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
+        sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
+        if (sched.failureCount >= 5) {
+          sched.enabled = false;
+        }
+        this.saveSchedules(schedules);
+
+        await this.triggerMorningReport(runId, result);
+        this.clearHeartbeat();
+        logStream(`Scheduled run finished with status '${result.status}': ${result.parkedReason || "Milestone execution failed"}`);
+        return result;
+      }
     } catch (err: any) {
+      sched.failureCount = (sched.failureCount || 0) + 1;
+      const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
+      sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
+      if (sched.failureCount >= 5) {
+        sched.enabled = false;
+      }
+      try {
+        this.saveSchedules(schedules);
+      } catch (saveErr: any) {
+        console.warn("[Scheduler] Could not save schedules during crash handler:", saveErr.message);
+      }
+
+      manifest.status = "parked";
+      manifest.parkedReason = err.message;
+      await this.triggerMorningReport(runId, manifest).catch(() => {});
+      this.clearHeartbeat();
       logStream(`Scheduled run crashed: ${err.message}`);
       throw err;
     }
@@ -395,7 +453,7 @@ export async function triggerMorningReport(runId: string, manifest?: TaskManifes
 
 export async function triggerScheduleRun(
   id: ScheduleId,
-  options?: SchedulerOptions & { runner?: (manifest: TaskManifest) => Promise<TaskManifest> }
+  options?: SchedulerOptions & SchedulerExecutionOptions
 ): Promise<{ runId: string; status: string } | null> {
   const scheduler = getGlobalScheduler(options);
   const sched = (await scheduler.listSchedules()).find((s) => s.id === id);

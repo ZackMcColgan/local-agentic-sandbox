@@ -305,6 +305,7 @@ export class BuilderWorker {
     let loadDurationMs: number | undefined;
 
     if (synthetic) {
+      console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
       const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
@@ -722,6 +723,7 @@ export class CriticWorker {
 
     // 3a. TEST-ONLY: rule-based verdict, explicitly flagged synthetic.
     if (!this.injectedGenerate && isFastGraphTestMode()) {
+      console.warn(`[CriticWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic rule-based review for milestone ${milestone.id}`);
       return { approved: feedback.length === 0, feedback, abstained: false, synthetic: true, verdict: feedback.length === 0 ? "approved" : "needs_fix", evidence: collectedEvidence, assertions: contractResults };
     }
 
