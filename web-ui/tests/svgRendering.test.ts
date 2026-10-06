@@ -1,7 +1,11 @@
-import { describe, it } from "node:test";
+import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
+import {
+  checkDrawio,
+  logServiceMode
+} from "./helpers/serviceMocks.js";
 import {
   isSvgCode,
   isDrawioXml,
@@ -13,6 +17,10 @@ import {
 } from "../lib/svgUtils.js";
 
 describe("SVG Rendering & Sanitization Suite", () => {
+  before(() => {
+    const isReal = checkDrawio();
+    logServiceMode("drawio", isReal);
+  });
   it("detects SVG code and Draw.io XML by language flag or structure", () => {
     assert.equal(isSvgCode("<svg></svg>", "svg"), true);
     assert.equal(isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>", "xml"), true);
