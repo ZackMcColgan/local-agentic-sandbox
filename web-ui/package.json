@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test": "tsx --test tests/**/*.test.ts",
     "test:gate": "tsx scripts/test-gate.ts",
-    "test:coverage": "tsx --test --experimental-test-coverage tests/**/*.test.ts"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@langchain/core": "^1.2.14",
