@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { ThreadStore, activeExecutionSet, Thread } from "@/lib/threads/threadStore";
 import { generatePlanSpec } from "@/lib/subagents/planner";
-import { OvernightSupervisor } from "@/lib/subagents/supervisor";
+import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
+import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 
 const threadStore = new ThreadStore();
@@ -55,6 +56,17 @@ export async function POST(req: Request) {
 
       supervisor.saveCheckpoint(manifest);
       activeExecutionSet.add(taskId);
+
+      // Kick off actual execution — fire-and-forget so the API returns immediately.
+      // Without this, tasks are planned but no workers ever spawn (bug found 2026-10-06).
+      const executor = createProductionStepExecutor({
+        workerPool: new WorkerPool(),
+        repoRoot: process.cwd(),
+        model: "swift-27b-mtp"
+      });
+      supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor }).catch((err) => {
+        console.error(`[threads] Task ${taskId} execution failed:`, err);
+      });
 
       // Create new durable thread or attach to existing
       let thread: Thread;
