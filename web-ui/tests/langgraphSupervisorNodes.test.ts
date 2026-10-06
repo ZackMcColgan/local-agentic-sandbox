@@ -10,16 +10,27 @@ import {
 } from '../lib/subagents/supervisor';
 import { WorkerPool } from '../lib/subagents/workerPool';
 import { Milestone } from '../lib/subagents/types';
+import {
+  checkOllama,
+  enableOllamaMock,
+  disableOllamaMock,
+  logServiceMode
+} from './helpers/serviceMocks.js';
 
 process.env.FAST_GRAPH_TEST = "1";
 
 test('Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite', async (t) => {
+  const useRealOllama = await checkOllama();
+  logServiceMode('ollama', useRealOllama);
+  if (!useRealOllama) enableOllamaMock();
+
   const testCheckpointDir = path.resolve(process.cwd(), '.tmp-lg-nodes-test');
   if (!fs.existsSync(testCheckpointDir)) {
     fs.mkdirSync(testCheckpointDir, { recursive: true });
   }
 
   t.after(() => {
+    if (!useRealOllama) disableOllamaMock();
     try {
       fs.rmSync(testCheckpointDir, { recursive: true, force: true });
     } catch {}
