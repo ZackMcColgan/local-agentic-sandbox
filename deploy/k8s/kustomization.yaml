@@ -14,6 +14,7 @@ resources:
   - observability.yaml
   - builder-tier.yaml
   - qdrant.yaml
+  - ingress.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: local-agentic-sandbox
