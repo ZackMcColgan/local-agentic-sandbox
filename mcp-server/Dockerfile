@@ -46,7 +46,7 @@ RUN addgroup -g 10001 -S sandbox && \
 
 # Copy build artifacts, production modules, and source/tests
 COPY --from=builder /build/mcp-server/package.json ./package.json
-COPY --from=builder /build/mcp-server/node_modules ./node_modules
+COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/mcp-server/dist ./dist
 COPY --from=builder /build/mcp-server/src ./src
 COPY --from=builder /build/mcp-server/tests ./tests
