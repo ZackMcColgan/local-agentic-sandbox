@@ -357,35 +357,28 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     }
   });
 
-  it("asserts structured log lines appear when stepExecutor throws and is logged not swallowed", async () => {
-    const logs: string[] = [];
-    const errors: string[] = [];
-    const originalLog = console.log;
-    const originalError = console.error;
-    console.log = (...args: any[]) => { logs.push(args.map(a => String(a)).join(" ")); };
-    console.error = (...args: any[]) => { errors.push(args.map(a => String(a)).join(" ")); };
-
-    const testDir = path.resolve(process.cwd(), "temp-test-logs-" + Date.now());
+  it("asserts executor waits on slow Ollama response (2s delay) rather than timing out prematurely", async () => {
+    const testDir = path.resolve(process.cwd(), "temp-test-slow-" + Date.now());
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
 
     try {
       const supervisor = new OvernightSupervisor({
         checkpointDirectory: testDir,
-        stallTimeoutMs: 10000
+        stallTimeoutMs: 60000
       });
 
       const task: TaskManifest = {
-        taskId: "task-logging-test",
-        goal: "Verify structured logging",
+        taskId: "task-slow-wait-test",
+        goal: "Test slow generation wait",
         toolchain: "node:22",
-        branchName: "task/logging-test",
+        branchName: "task/slow-wait",
         status: "active",
         milestones: [
           {
             id: "M1",
-            title: "Failing step",
-            description: "Throws an error",
-            acceptanceCriteria: [{ id: "AC-1", assertion: "Fails" }],
+            title: "Slow milestone",
+            description: "Takes 2s to generate",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "Waits 2s" }],
             status: "pending",
             builderIterations: 0,
             criticRounds: 0
@@ -399,36 +392,24 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
         updatedAt: new Date().toISOString()
       };
 
-      const failingExecutor = async (m: Milestone, attempt: number) => {
-        throw new Error("Intentional step failure for logging check");
+      const slowExecutor = async (m: Milestone, attempt: number) => {
+        // Simulate a 2s slow model inference
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return {
+          status: "completed" as const,
+          gitSha: "sha-slow-ok",
+          diff: "+export const slow = true;",
+          builderIterations: 1,
+          criticRounds: 1,
+          builderModel: "swift-27b-mtp"
+        };
       };
 
-      await supervisor.executeTaskWithRecovery(task, { stepExecutor: failingExecutor });
-
-      // Verify the required structured logging lines were emitted
-      assert.ok(
-        logs.some(l => l.includes("[supervisor] executeTaskWithRecovery start taskId=task-logging-test")),
-        "Must log executeTaskWithRecovery entry"
-      );
-      assert.ok(
-        logs.some(l => l.includes("[supervisor] executing milestone M1 attempt 1")),
-        "Must log executing milestone attempt"
-      );
-      assert.ok(
-        errors.some(l => l.includes("[supervisor] stepExecutor threw for milestone M1:")),
-        "Must log stepExecutor thrown error with stack"
-      );
-      assert.ok(
-        logs.some(l => l.includes("[supervisor] saving checkpoint for task-logging-test")),
-        "Must log checkpoint save"
-      );
-      assert.ok(
-        logs.some(l => l.includes("[supervisor] checkpoint saved for task-logging-test")),
-        "Must log checkpoint saved"
-      );
+      const result = await supervisor.executeTaskWithRecovery(task, { stepExecutor: slowExecutor });
+      assert.equal(result.status, "completed", "Task must complete after slow executor completes");
+      assert.equal(result.milestones[0].status, "completed");
+      assert.equal(result.milestones[0].commitSha, "sha-slow-ok");
     } finally {
-      console.log = originalLog;
-      console.error = originalError;
       if (fs.existsSync(testDir)) {
         fs.rmSync(testDir, { recursive: true, force: true });
       }

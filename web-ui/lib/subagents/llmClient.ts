@@ -48,7 +48,7 @@ export function resolveOllamaBaseUrl(explicit?: string): string {
 export function resolveWorkerTimeoutMs(explicit?: number): number {
   if (explicit && explicit > 0) return explicit;
   const fromEnv = Number(process.env.WORKER_MODEL_TIMEOUT_MS);
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 120_000;
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 900_000;
 }
 
 /**
@@ -65,6 +65,7 @@ export function createOllamaGenerate(options?: {
   const fetchImpl = options?.fetchImpl || fetch;
 
   return async (req: GenerateRequest): Promise<GenerateResult> => {
+    const startTime = Date.now();
     const endpoint = `${baseUrl}/api/generate`;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
@@ -131,6 +132,9 @@ export function createOllamaGenerate(options?: {
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[llm] generate completed in ${elapsed}ms for model ${req.model}`);
 
     return {
       text,

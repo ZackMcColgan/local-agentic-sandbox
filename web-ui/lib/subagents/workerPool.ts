@@ -334,7 +334,7 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
         prompt,
         keepAlive: this.keepAlive,
         signal: options?.signal,
-        options: { temperature: 0.2, num_predict: 4096 }
+        options: { temperature: 0.2, num_predict: 2048 }
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
@@ -381,7 +381,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
           prompt: correctionPrompt,
           keepAlive: this.keepAlive,
           signal: options?.signal,
-          options: { temperature: 0.2, num_predict: 4096 }
+          options: { temperature: 0.2, num_predict: 2048 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);

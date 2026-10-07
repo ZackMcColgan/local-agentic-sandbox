@@ -756,19 +756,30 @@ export function createProductionStepExecutor(
 
         // 1. Builder worker generates code
         console.log(`[executor] calling builder.executeMilestoneWork`);
-        const builderRes = await workerPool.executeJob({
-          role: "builder",
-          taskId: milestone.id,
-          taskFn: async (signal) => {
-            return await builder.executeMilestoneWork(milestone, {
-              repoRoot,
-              previousDiff: currentDiff,
-              criticFeedback,
-              iteration: iter,
-              signal
-            });
-          }
-        });
+        const builderStartTime = Date.now();
+        const heartbeatInterval = setInterval(() => {
+          const elapsedSec = Math.round((Date.now() - builderStartTime) / 1000);
+          console.log(`[executor] still waiting on builder for milestone ${milestone.id}, ${elapsedSec}s elapsed`);
+        }, 60000);
+
+        let builderRes;
+        try {
+          builderRes = await workerPool.executeJob({
+            role: "builder",
+            taskId: milestone.id,
+            taskFn: async (signal) => {
+              return await builder.executeMilestoneWork(milestone, {
+                repoRoot,
+                previousDiff: currentDiff,
+                criticFeedback,
+                iteration: iter,
+                signal
+              });
+            }
+          });
+        } finally {
+          clearInterval(heartbeatInterval);
+        }
         console.log(`[executor] builder returned, diff length=${builderRes.diff?.length}`);
 
         currentDiff = builderRes.diff;
