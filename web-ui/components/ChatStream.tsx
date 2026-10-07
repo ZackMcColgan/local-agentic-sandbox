@@ -23,7 +23,8 @@ import {
   Square,
   ChevronLeft,
   MoreHorizontal,
-  Menu
+  Menu,
+  Plus
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
