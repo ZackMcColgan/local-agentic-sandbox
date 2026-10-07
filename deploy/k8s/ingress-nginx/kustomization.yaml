@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# One-time ingress controller install for Docker Desktop.
+# The controller binds host ports 80/443 so http://<PC-IP>/ routes to web-ui
+# with no port-forward and survives restarts.
+#
+# Install once with:
+#   kubectl apply -k deploy/k8s/ingress-nginx
+# Then deploy the app (includes web-ui Ingress):
+#   kubectl apply -k deploy/k8s
+#
+# NOTE: Kept as a separate kustomization (not merged into ../kustomization.yaml)
+# because the controller must live in its own `ingress-nginx` namespace, while
+# the app kustomization forces `namespace: local-agentic-sandbox` on everything.
+
+resources:
+  - https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/cloud/deploy.yaml
