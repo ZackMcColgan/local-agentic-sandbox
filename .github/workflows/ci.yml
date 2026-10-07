@@ -49,11 +49,11 @@ jobs:
         with:
           node-version: 22
           cache: "npm"
-          cache-dependency-path: "web-ui/package-lock.json"
+          cache-dependency-path: "**/package-lock.json"
 
-      - name: Install Web UI Dependencies
-        working-directory: web-ui
-        run: npm install
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
 
       - name: Run Coverage
         working-directory: web-ui
@@ -137,6 +137,13 @@ jobs:
           tags: local-agentic-sandbox/web-ui:test
 
       - name: Docker Scout Quickview
+        uses: docker/scout-action@v1
+        with:
+          command: quickview
+          image: local-agentic-sandbox/mcp-server:test
+        continue-on-error: true
+
+      - name: Docker Scout Policy Compare & CVE Evaluation
         uses: docker/scout-action@v1
         with:
           command: quickview
