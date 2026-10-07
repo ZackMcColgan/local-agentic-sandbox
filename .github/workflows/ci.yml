@@ -33,6 +33,67 @@ jobs:
         run: |
           npm test
 
+  coverage-report:
+    name: Code Coverage Report
+    runs-on: ubuntu-24.04
+    needs: test-and-typecheck
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "web-ui/package-lock.json"
+
+      - name: Install Web UI Dependencies
+        working-directory: web-ui
+        run: npm ci
+
+      - name: Run Coverage
+        working-directory: web-ui
+        run: npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary 2>&1 | tee coverage-output.txt
+
+      - name: Build Coverage Summary
+        working-directory: web-ui
+        run: |
+          python3 -c "
+          import json
+          with open('coverage/coverage-summary.json') as f:
+              data = json.load(f)
+          total = data['total']
+          for key in ['lines', 'statements', 'functions', 'branches']:
+              pct = total[key]['pct']
+              print(f'{key}: {pct}%')
+          " > coverage-summary.txt
+          cat coverage-summary.txt
+
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: web-ui/coverage/
+          retention-days: 30
+
+      - name: Comment Coverage on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUMMARY=$(cat web-ui/coverage-summary.txt)
+          BODY="## Coverage Report
+          \`\`\`
+          $SUMMARY
+          \`\`\`
+          Full HTML report available in the \`coverage-report\` artifact.
+          _Visibility only — not a merge gate._"
+          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+
   docker-build-and-scout:
     name: Container Build & Docker Scout Scan
     runs-on: ubuntu-24.04
