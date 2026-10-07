@@ -356,4 +356,82 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       }
     }
   });
+
+  it("asserts structured log lines appear when stepExecutor throws and is logged not swallowed", async () => {
+    const logs: string[] = [];
+    const errors: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = (...args: any[]) => { logs.push(args.map(a => String(a)).join(" ")); };
+    console.error = (...args: any[]) => { errors.push(args.map(a => String(a)).join(" ")); };
+
+    const testDir = path.resolve(process.cwd(), "temp-test-logs-" + Date.now());
+    if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
+
+    try {
+      const supervisor = new OvernightSupervisor({
+        checkpointDirectory: testDir,
+        stallTimeoutMs: 10000
+      });
+
+      const task: TaskManifest = {
+        taskId: "task-logging-test",
+        goal: "Verify structured logging",
+        toolchain: "node:22",
+        branchName: "task/logging-test",
+        status: "active",
+        milestones: [
+          {
+            id: "M1",
+            title: "Failing step",
+            description: "Throws an error",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "Fails" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const failingExecutor = async (m: Milestone, attempt: number) => {
+        throw new Error("Intentional step failure for logging check");
+      };
+
+      await supervisor.executeTaskWithRecovery(task, { stepExecutor: failingExecutor });
+
+      // Verify the required structured logging lines were emitted
+      assert.ok(
+        logs.some(l => l.includes("[supervisor] executeTaskWithRecovery start taskId=task-logging-test")),
+        "Must log executeTaskWithRecovery entry"
+      );
+      assert.ok(
+        logs.some(l => l.includes("[supervisor] executing milestone M1 attempt 1")),
+        "Must log executing milestone attempt"
+      );
+      assert.ok(
+        errors.some(l => l.includes("[supervisor] stepExecutor threw for milestone M1:")),
+        "Must log stepExecutor thrown error with stack"
+      );
+      assert.ok(
+        logs.some(l => l.includes("[supervisor] saving checkpoint for task-logging-test")),
+        "Must log checkpoint save"
+      );
+      assert.ok(
+        logs.some(l => l.includes("[supervisor] checkpoint saved for task-logging-test")),
+        "Must log checkpoint saved"
+      );
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    }
+  });
 });

@@ -63,7 +63,16 @@ export async function POST(req: Request) {
         workerPool: new WorkerPool(),
         model: "swift-27b-mtp"
       });
-      supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor }).catch((err) => {
+      (async () => {
+        console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
+        try {
+          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+          console.log(`[threads] task ${taskId} finished with status: ${result.status}`);
+        } catch (err: any) {
+          console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
+          throw err;
+        }
+      })().catch((err) => {
         console.error(`[threads] Task ${taskId} execution failed:`, err);
       });
 
