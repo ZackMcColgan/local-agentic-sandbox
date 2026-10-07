@@ -348,6 +348,7 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
       const errorSignatures: string[] = [];
 
       while (!astCheck.valid && astAttempts < maxAstRetries) {
+        console.warn(`[builder] AST validation failed for ${targetRelPath} (attempt ${astAttempts}): ${astCheck.error}`);
         const signature = normalizeErrorSignature(targetRelPath, astCheck.error || "");
         errorSignatures.push(signature);
 

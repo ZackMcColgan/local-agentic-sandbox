@@ -130,6 +130,21 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
     assert.equal(fs.readFileSync(path.join(repo, "out.ts"), "utf8"), "export const BG = '#ffffff';");
     assert.ok(res.diff.includes("+export const BG = '#ffffff';"));
   });
+
+  it("model output wrapped in conversational prose and code fences extracts clean code without markdown wrappers", async () => {
+    delete process.env.FAST_GRAPH_TEST;
+    const repo = tempRepo();
+    const gen: GenerateFn = async (req) => ({
+      text: "Here is the implementation:\n\n```typescript\nexport const WEATHER_API = 'https://api.open-meteo.com';\n```\nHope this helps!",
+      model: req.model,
+      loadDurationMs: 0,
+      totalDurationMs: 1
+    });
+    const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["weather.ts"] }), { repoRoot: repo, gitSha: "d".repeat(40) });
+    assert.equal(res.synthetic, false);
+    assert.equal(fs.readFileSync(path.join(repo, "weather.ts"), "utf8"), "export const WEATHER_API = 'https://api.open-meteo.com';");
+  });
 });
 
 describe("Phase A — No fabricated SHAs (A2c)", () => {

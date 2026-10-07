@@ -150,9 +150,18 @@ export function isFastGraphTestMode(): boolean {
   return process.env.FAST_GRAPH_TEST === "1" || process.env.FAST_GRAPH_TEST === "true";
 }
 
-/** Strips a single surrounding markdown code fence, if present. */
+/** Strips markdown code fence, extracting inner code block if present. */
 export function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
-  const match = trimmed.match(/^```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```$/);
-  return match ? match[1] : trimmed;
+  // 1. If surrounded or containing a code block, extract the content of the block
+  const match = trimmed.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```/);
+  if (match) {
+    return match[1].trim();
+  }
+  // 2. Fallback for unclosed code fence at start
+  const openMatch = trimmed.match(/^```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*)$/);
+  if (openMatch) {
+    return openMatch[1].trim();
+  }
+  return trimmed;
 }
