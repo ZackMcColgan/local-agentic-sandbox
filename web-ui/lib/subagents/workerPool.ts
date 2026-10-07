@@ -326,7 +326,7 @@ ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("
 ${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
 ${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
 
-Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
 
       // Throws ModelUnavailableError on any failure — nothing is written in that case.
       const result = await generate({
