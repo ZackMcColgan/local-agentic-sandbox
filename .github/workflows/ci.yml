@@ -53,7 +53,7 @@ jobs:
 
       - name: Install Web UI Dependencies
         working-directory: web-ui
-        run: npm ci || npm install
+        run: npm install
 
       - name: Run Coverage
         working-directory: web-ui
