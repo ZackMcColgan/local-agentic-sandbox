@@ -50,8 +50,10 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy standalone build output
 COPY --from=builder /build/web-ui/public ./public
+COPY --from=builder /build/web-ui/public ./web-ui/public
 COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/static ./web-ui/.next/static
 
 USER nextjs
 
