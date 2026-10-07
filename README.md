@@ -1,117 +1,155 @@
 # local-agentic-sandbox
 
-A full-stack, zero-trust autonomous AI coding platform. Orchestrates local LLMs via Ollama, Model Context Protocol (MCP), and hardened container sandboxes for safe autonomous code execution and web documentation retrieval.
+Overnight autonomous AI coding system for local hardware. Hand it an engineering task or goal, go to sleep, and wake up to a verifiable git trail, completed deliverables, and a comprehensive morning report. Designed to run entirely on local, air-gapped consumer hardware with zero cloud API limits, zero per-token inference charges, and complete data privacy.
 
 ---
 
-## Architecture Overview
+## What It Is
 
-[![local-agentic-sandbox Architecture](./docs/architecture.drawio.svg)](./docs/architecture.drawio.svg)
-*Figure 1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, air-gapped MCP execution boundary, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio).*
+`local-agentic-sandbox` is an autonomous software engineering appliance. It orchestrates local LLM inference via Ollama, Model Context Protocol (MCP) tool servers, and hardened execution sandboxes to plan, implement, review, and verify multi-milestone code tasks autonomously.
 
-### Core Platform Capabilities
-* **Tri-Mode Model Dispatcher (`[ ✨ Auto | ⚡ Flash | 🧠 Pro ]`)**: Clean segmented header control (zero prompt pills). Automatically classifies query complexity: fast triage & navigation on `gemma4:e4b` (~80 tok/s), deep architectural synthesis on `qwen3.8:27b-q3_k_m`.
-* **Multimodal Architecture Ingestion Pipeline**: Ingests visual architecture diagrams, draw.io exports, whiteboard photos, and UI wireframes via `gemma4:e4b`, translating them into structured markdown system specifications for downstream code generation.
-* **Autonomous Git & Workspace Developer Engine**: 8 native MCP tools (`workspace_get_tree`, `workspace_grep`, `workspace_read_file`, `workspace_write_file`, `workspace_run_command`, `git_status`, `git_checkout_branch`, `git_commit`) operating in `/workspace:rw` with automated test-and-repair loops until `exit_code == 0`.
-* **Zero-Cold-Start VRAM Leases**: All inference queries automatically refresh a 24-hour model lease (`keep_alive: "24h"`), preventing Ollama from evicting models from the 16 GB GPU VRAM during idle periods.
-* **Hardened Execution Boundary (`mcp-server`)**: Air-gapped on `ai-mesh` with unprivileged UID (`10001`), `read_only: true` rootfs, `cap_drop: ALL`, argv-safe git execution immune to shell injection, and ReDoS-guarded regex searching.
-* **Isolated Browser Boundary (`browser-mcp`)**: Separate egress-enabled scraper on port 8081 (`uid: 10002`) with built-in SSRF protection (blocking RFC 1918 private subnets) to securely search DuckDuckGo and fetch documentation.
-* **OpenTelemetry Distributed Tracing**: Full distributed span propagation from user turns down to tool invocations and shell execution, synchronized with a real-time Jaeger trace waterfall dashboard.
-* **Session Chat Persistence**: Conversation history survives tab switches and page reloads via sanitized local storage (`local_agent_chat_history_v1`).
+- **Overnight Autonomy**: Dispatches tasks to a multi-subagent supervisor loop that works through milestones independently.
+- **Verifiable Git Trail**: Every completed milestone produces real git commits with scoped diffs, explicit target files, and commit hashes.
+- **Fail-Closed Resilience**: Strict contract assertions, automated test gates, and durable checkpointing ensure flawed code is rejected rather than committed.
+- **Zero Cloud Dependencies**: Powered locally by `swift-27b-mtp` via Ollama with active VRAM lease management (`keep_alive: "24h"`).
 
 ---
 
-## Security Boundary Matrix
+## The Autonomy Loop
 
-| Container / Pod | Placement | Filesystem | Linux Capabilities | User ID | Role & Network Isolation |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`mcp-runner`** | `local-agentic-sandbox` | `read_only: true` | `cap_drop: ALL` | `10001:10001` | Air-Gapped Code Execution (NetworkPolicy: Deny-All Egress except DNS + GitHub) |
-| **`browser-mcp`** | `local-agentic-sandbox` | Read-Only App | Default (No Privs) | `10002:10002` | Isolated Web Documentation Scraper (NetworkPolicy: HTTP/HTTPS Egress Only) |
-| **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal & Multi-MCP Dispatcher (Port 3000 / NodePort 30300) |
-| **`otel-collector`**| `local-agentic-sandbox` | Ephemeral | Default (No Privs) | Non-Root | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686) |
-| **`ollama`** | Host Passthrough / PCIe | Local Drive | Host Native | Host User | Air-Gapped GPU Inference (AMD Radeon RX 9070 XT 16GB VRAM, ROCm, Port 11434) |
+The core architecture follows an iterative, fail-closed supervisor pipeline:
 
----
-
-## Quickstart
-
-You can manage the sandbox using either `make` or `npm`:
-
-### 1. Ingest Model Weights
-```bash
-# Pull primary orchestrator model (qwen3.8:27b-q3_k_m)
-make pull-primary
-# OR: npm run pull:primary
+```
+                  ┌───────────────────────────────┐
+                  │            PLANNER            │
+                  │  (Decomposes goal into SPEC)  │
+                  └──────────────┬────────────────┘
+                                 │
+                                 ▼
+                    ┌───────────────────────────┐
+       ┌───────────►│          BUILDER          │
+       │            │  (Implements code diffs)  │
+       │            └────────────┬──────────────┘
+       │                         │
+  needs_fix                      ▼
+(max 5 retries)     ┌───────────────────────────┐
+       │            │          CRITIC           │
+       └────────────┤ (Adversarial verification)│
+                    └────────────┬──────────────┘
+                                 │ approved
+                                 ▼
+                    ┌───────────────────────────┐
+                    │         RECORDER          │
+                    │ (Promotes reusable skills)│
+                    └────────────┬──────────────┘
+                                 │
+                                 ▼
+                    ┌───────────────────────────┐
+                    │      GIT COMMIT &         │
+                    │   DURABLE CHECKPOINT      │
+                    └───────────────────────────┘
 ```
 
-### 2. Launch the Platform
+1. **Planner**: Analyzes the user's task prompt or goal and decomposes it into an ordered list of concrete, verifiable milestones (`M1`, `M2`, ...) with machine-checkable acceptance criteria and target deliverable contracts.
+2. **Builder ⇄ Critic Loop**:
+   - **Builder**: Writes targeted code diffs for the active milestone, adhering strictly to scoped file boundaries and compiler AST validation.
+   - **Critic**: An adversarial review agent that evaluates builder diffs against ground-truth test suite exit codes and acceptance criteria. It operates on a **fail-closed design**: if tests fail, if no diff is produced, or if evidence is missing, the critic rejects the iteration with actionable feedback or abstains. Never self-grades or approves broken code.
+3. **Recorder**: Identifies patterns in complex, multi-iteration fixes and promotes them into modular skills for future tasks.
+4. **Checkpointing & Crash Recovery**: At every milestone transition, the supervisor persists durable checkpoints to disk (`chk-*`). If a worker container crashes or the host process receives `SIGKILL`, the supervisor restarts from the last valid checkpoint and resumes forward progress without corrupting git state.
 
-#### Option A: Docker Compose
+---
+
+## Architecture & Security Boundary
+
+| Pod / Container | Namespace | Security Context | Network Policy | Role |
+| :--- | :--- | :--- | :--- | :--- |
+| **`mcp-runner`** | `local-agentic-sandbox` | `read_only: true`, `cap_drop: ALL`, UID `10001` | Deny-All Egress (Air-Gapped) | Sandboxed filesystem operations, command execution, and test runs in `/workspace`. |
+| **`browser-mcp`** | `local-agentic-sandbox` | Read-only rootfs, unprivileged UID `10002` | Egress-Mesh Only | Isolated web scraper for documentation retrieval and DuckDuckGo searches (`search_web`). Blocks RFC 1918 private subnets. |
+| **`web-ui`** | `local-agentic-sandbox` | Non-root, Next.js 15 | Cluster Internal | Interactive portal, chat streaming, thread management, and LiveRunBlock supervisor dashboard. |
+| **`ollama`** | Host Passthrough | Native GPU / ROCm | Host Only (Port 11434) | GPU inference engine hosting `swift-27b-mtp`. |
+
+> **LAN Appliance Security Notice**: API routes have no auth — this is a LAN appliance design decision, not an oversight. The sandbox is built as a single-tenant appliance within an isolated local network, deliberately eliminating authentication overhead. Do not expose these ports directly to the public internet without a secure reverse proxy.
+
+---
+
+## Running the Platform
+
+### Primary Deployment: Kubernetes (Docker Desktop / Production)
+
+Kubernetes is the primary, production-grade deployment mode:
+
 ```bash
+# Deploy all services to local-agentic-sandbox namespace
+make k8s-deploy
+
+# Verify pod status and health
+kubectl get pods -n local-agentic-sandbox
+```
+
+Once deployed, access the Web UI at http://localhost:3000 (or NodePort `30300`).
+
+### Legacy Deployment: Docker Compose
+
+Docker Compose is maintained for legacy local testing:
+
+```bash
+# Launch via Docker Compose
 make up
-# OR: npm run up
+# Or directly:
+docker compose up -d
 ```
 
-#### Option B: Kubernetes (Docker Desktop / Production)
-All workloads reside in the `local-agentic-sandbox` namespace:
+### Running Test Verification
+
+The repository enforces a change-aware test gate (<90s budget) ensuring zero regression:
+
 ```bash
-# Apply with Kustomize
-kubectl apply -k deploy/k8s
+# Run the test suite via npm
+npm test
 
-# OR deploy with Helm
-helm install local-agentic-sandbox deploy/helm/local-agentic-sandbox -n local-agentic-sandbox --create-namespace
-
-# Verify all pods are running
-kubectl get all -n local-agentic-sandbox
+# Run the strict change-aware test gate
+npm run test:gate
 ```
-
-### 3. Run Automated Tests & Code Coverage
-```bash
-make test
-# OR: npm test
-```
-
-### 4. Verify Security Hardening
-```bash
-make verify-sec
-```
-
-Once running, access the web interface at **`http://localhost:3000`**.
 
 ---
 
-## Related Documentation
+## Sample Morning Report
 
-* [ARCHITECTURE.md](./ARCHITECTURE.md) - In-depth zero-trust topology and threat modeling.
-* [DEVELOPMENT_SANDBOX.md](./docs/DEVELOPMENT_SANDBOX.md) - Guide for running inside isolated microVMs and development sandboxes.
-* [ADR-001: Sandboxed MCP Architecture](./docs/ADR-001-sandboxed-mcp.md) - Architectural Decision Record for containerized MCP.
+When an overnight task completes, a structured morning report is generated summarizing milestones, git commits, test verification tiers, and any ambiguity flags flagged for human review:
 
----
+```markdown
+# Autonomous Morning Report: task-1728284400-w3ath
 
-## LAN Bridge Security
+✅ **Status: COMPLETED** | Branch: `feat/v2.5-overnight` | Duration: 42m 15s
+Git HEAD: `7a9b1c2` | Started: 2026-10-06T23:00:00.000Z | Finished: 2026-10-06T23:42:15.000Z
 
-The LAN reverse proxy bridge (`scripts/lan-bridge.js`) binds to `0.0.0.0` on ports `80` and `3000` without authentication. This is an **intentional design decision** by the system owner to allow seamless, frictionless access from mobile devices, tablets, and laptops across the private home local area network (e.g. `http://192.168.50.254/`) via simple browser bookmarks without token prompts.
-
-### Blast Radius & Threat Model
-* **Scope**: The bridge is not exposed to the public internet; exposure is strictly bounded to the local home network (e.g., family devices, guest Wi-Fi devices, or compromised IoT hardware on the same subnet).
-* **Execution Capabilities**: Any unauthenticated client on the home LAN that connects to the Web UI can prompt the autonomous agent to invoke `workspace_run_command`, which executes arbitrary shell commands inside the sandboxed container workspace (`/workspace`).
-* **Container Defenses**: Even with unauthenticated LAN access, execution is contained within an unprivileged UID (`10001`), root filesystem is mounted `read_only`, Linux capabilities are dropped (`cap_drop: ALL`), and egress network access from the code runner is blocked via network policies.
-
-### Optional Hardening Path (Opt-In)
-If authenticated access is ever desired in the future, the bridge can be hardened without breaking mobile usability:
-1. **Environment-Driven Bearer Token**: Introduce an optional `BRIDGE_AUTH_TOKEN` environment variable.
-2. **Bookmark Query Token**: Allow mobile bookmarks to authenticate seamlessly via URL query parameter (`http://192.168.50.254/?token=<SECRET_TOKEN>`), which the bridge extracts and converts into an HTTP-only session cookie.
-3. **LAN Header Validation**: Reject any inbound LAN requests lacking the valid bearer token or session cookie with HTTP `401 Unauthorized`.
+### Goal
+> Create a standalone SVG weather visualization component with dynamic sun and cloud glyphs
 
 ---
 
-## Host-Filesystem Write Trust Boundary (`./workspace:rw`)
+## 1. Milestones & Test Verification
 
-The `mcp-server` execution boundary mounts `./workspace` from the host directly into `/workspace:rw`:
-* **Intentional Pair Programming Design**: Code written by the autonomous agent, git branches, test suites, diagrams, and learned skills are saved directly to `./workspace` on the host machine.
-* **Blast Radius**: While the container root filesystem is `read_only` and path traversal outside `/workspace` is strictly rejected, any file placed inside `./workspace` can be read, written, or modified by the agent via `workspace_write_file` and `workspace_run_command`.
-* **Security Guidance**:
-  * Never create symlinks inside `./workspace` that point to sensitive host directories (such as `~/.ssh`, cloud credentials, or parent repositories).
-  * Treat `./workspace` as an untrusted code sandbox that is monitored via version control. Git initializes an automatic repository with commit history inside `/workspace` to allow tracking and reverting agent-generated changes.
+| Milestone | Status | Commit SHA | Tests Passed | Tests Failed | Diff Summary |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **M1: Scaffold SVG canvas** | completed | `3d4e5f6` | 8 passed | 0 failed | + web-ui/components/WeatherSvg.tsx |
+| **M2: Implement weather glyphs** | completed | `5a6b7c8` | 14 passed | 0 failed | + web-ui/lib/weatherGlyphs.ts |
+| **M3: Add forecast metadata styling** | completed | `7a9b1c2` | 22 passed | 0 failed | + web-ui/tests/weatherSvg.test.ts |
 
+**Total Test Suite Result**: **44 passed**, **0 failed**.
 
+---
+
+## 2. Test Verification Tiers (Phase C)
+
+| Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tier 1: Change Gate** | `npm run test:gate` | ✅ Passed | 14.2s | <90s | 44 | 0 | All affected unit & contract suites clean |
+| **Tier 2: Full Suite** | `npm test` | ✅ Passed | 38.6s | — | 182 | 0 | Full regression suite clean |
+
+---
+
+## 3. Ambiguity Flags & Judgment Calls (0)
+
+No ambiguities encountered. Execution adhered strictly to the specification and deliverable contracts.
+```
