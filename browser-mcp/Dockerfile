@@ -3,12 +3,18 @@
 # ==========================================
 FROM node:22-alpine AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-COPY package*.json tsconfig.json ./
-RUN npm ci
+# Copy entire monorepo structure
+COPY package*.json ./
+COPY browser-mcp/package*.json ./browser-mcp/
+COPY browser-mcp/tsconfig.json ./browser-mcp/
+COPY browser-mcp/src ./browser-mcp/src
 
-COPY src ./src
+# Install from root (honors workspace config)
+RUN npm ci --workspaces
+
+WORKDIR /build/browser-mcp
 RUN npm run build
 
 # Prune dev dependencies for production
@@ -26,9 +32,9 @@ RUN addgroup -g 10002 -S browseragent && \
     adduser -u 10002 -S browseragent -G browseragent
 
 # Copy build artifacts and production modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /build/browser-mcp/package.json ./package.json
+COPY --from=builder /build/browser-mcp/node_modules ./node_modules
+COPY --from=builder /build/browser-mcp/dist ./dist
 
 # Read-only application binary protection
 RUN chown -R 10002:10002 /app && \
