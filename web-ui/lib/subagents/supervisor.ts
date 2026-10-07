@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { StateGraph, START, END, Annotation, MemorySaver } from "@langchain/langgraph";
 import {
   TaskManifest,

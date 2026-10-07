@@ -38,7 +38,11 @@ export class ModelUnavailableError extends Error {
 }
 
 export function resolveOllamaBaseUrl(explicit?: string): string {
-  return explicit || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
+  let url = explicit || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `http://${url}`;
+  }
+  return url;
 }
 
 export function resolveWorkerTimeoutMs(explicit?: number): number {
