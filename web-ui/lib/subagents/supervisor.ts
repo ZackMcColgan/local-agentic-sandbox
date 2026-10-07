@@ -146,7 +146,9 @@ export class FileCheckpointSaver extends MemorySaver {
           }
         }
       }
-    } catch {}
+    } catch (err: any) {
+      console.error(`[FileCheckpointSaver] Failed to load checkpoints from disk at ${this.checkpointDir}:`, err?.message || err);
+    }
   }
 
   private persistThreadToDisk(threadId: string) {
@@ -685,6 +687,15 @@ export interface ProductionStepExecutorOptions {
 }
 
 /**
+ * ARCHITECTURAL NOTE — Dual Execution Paths (Item 4 review, Oct 6 2026):
+ * 1. createOvernightGraph(): The LangGraph StateGraph pipeline compiled with memory/file
+ *    checkpointers, state transitions, and node reducers. Tested and verified in
+ *    tests/langgraphSupervisorNodes.test.ts to preserve LangGraph engine conformance.
+ * 2. createProductionStepExecutor(): The standalone step executor function used in production
+ *    by POST /api/threads (and overnight scheduled runs) via executeTaskWithRecovery.
+ * Both paths are intentionally preserved: unifying them in-place introduces regression risk
+ * to either the LangGraph test contract or the live Next.js API thread dispatch loop.
+ *
  * Constructs a production-grade stepExecutor that runs each milestone
  * through WorkerPool against swift-27b-mtp:
  * (builder generates -> critic reviews -> git commit).
@@ -802,20 +813,20 @@ export function createProductionStepExecutor(
           };
         }
 
-        // 3. Stage and commit changes to git with shell quote escaping
+        // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
         try {
-          const fileToStage = lastTargetFile.replace(/"/g, "\\\"");
-          execSync(`git add "${fileToStage}"`, { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
-          const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`.replace(/"/g, "\\\"");
-          execSync(`git commit -m "${commitMsg}"`, { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
-        } catch {
-          // Working tree may be clean or no-op commit
+          execFileSync("git", ["add", lastTargetFile], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+          const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+          execFileSync("git", ["commit", "-m", commitMsg], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+        } catch (err: any) {
+          console.error(`[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`, err?.message || err);
         }
 
         let finalSha = lastGitSha;
         try {
           finalSha = getRealGitSha(repoRoot);
-        } catch {
+        } catch (err: any) {
+          console.error(`[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`, err?.message || err);
           finalSha = lastGitSha || "uncommitted";
         }
 
@@ -876,7 +887,9 @@ export class OvernightSupervisor {
           fs.accessSync(dir, fs.constants.W_OK);
           resolvedDir = dir;
           break;
-        } catch {}
+        } catch (err: any) {
+          console.warn(`[supervisor] Candidate checkpoint dir ${dir} is not writable or failed to initialize:`, err?.message || err);
+        }
       }
     }
     this.checkpointDirectory = resolvedDir || path.resolve("/tmp/.agent/checkpoints");
@@ -983,11 +996,18 @@ export class OvernightSupervisor {
     task.checkpoints.push(checkpoint);
     task.updatedAt = new Date().toISOString();
 
-    fs.writeFileSync(
-      this.getCheckpointFilePath(task.taskId),
-      JSON.stringify(task, null, 2),
-      "utf8"
-    );
+    try {
+      fs.writeFileSync(
+        this.getCheckpointFilePath(task.taskId),
+        JSON.stringify(task, null, 2),
+        "utf8"
+      );
+    } catch (err: any) {
+      console.error(`[supervisor] Failed to persist checkpoint ${checkpoint.checkpointId} for task ${task.taskId} (milestone: ${checkpoint.milestoneId}):`, err?.message || err);
+      (checkpoint as any).failed = true;
+      (checkpoint as any).error = err?.message || String(err);
+      throw err;
+    }
 
     return checkpoint;
   }
@@ -999,7 +1019,8 @@ export class OvernightSupervisor {
     try {
       const data = JSON.parse(fs.readFileSync(file, "utf8")) as TaskManifest;
       return data;
-    } catch {
+    } catch (err: any) {
+      console.error(`[supervisor] Failed to read or parse checkpoint file for task ${taskId} at ${file}:`, err?.message || err);
       return null;
     }
   }
@@ -1020,7 +1041,9 @@ export class OvernightSupervisor {
             if (parsed && parsed.taskId) {
               tasks.push(parsed);
             }
-          } catch {}
+          } catch (err: any) {
+            console.warn(`[supervisor] Skipping corrupt checkpoint file ${file}:`, err?.message || err);
+          }
         }
       }
       return tasks.sort(
@@ -1028,7 +1051,8 @@ export class OvernightSupervisor {
           new Date(b.updatedAt || b.startedAt).getTime() -
           new Date(a.updatedAt || a.startedAt).getTime()
       );
-    } catch {
+    } catch (err: any) {
+      console.error(`[supervisor] Failed to list tasks from checkpoint directory ${this.checkpointDirectory}:`, err?.message || err);
       return [];
     }
   }

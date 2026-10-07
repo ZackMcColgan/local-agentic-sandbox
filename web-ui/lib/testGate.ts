@@ -69,6 +69,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("components/ChatStream") || p.includes("lib/chatUtils"),
     tests: [
+      "tests/chatDispatch.test.ts",
       "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
       "tests/chatHistory.test.ts",
@@ -91,7 +92,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
+    tests: ["tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
@@ -135,6 +136,8 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/subagents/supervisor"),
     tests: [
       "tests/supervisor.test.ts",
+      "tests/taskCompletion.test.ts",
+      "tests/browserMcpConnectivity.test.ts",
       "tests/langgraphSupervisorNodes.test.ts",
       "tests/activeTaskRehydration.test.ts",
       "tests/taskControls.test.ts"
@@ -142,7 +145,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/llmClient"),

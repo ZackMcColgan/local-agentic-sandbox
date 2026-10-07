@@ -480,7 +480,7 @@ export async function compareAndRevertIfWorse(
     if (filesToRevert.length > 0) {
       for (const file of filesToRevert) {
         try {
-          execSync(`git checkout -- "${file}"`, { cwd: root, stdio: "ignore" });
+          execFileSync("git", ["checkout", "--", file], { cwd: root, stdio: "ignore" });
         } catch {
           const full = path.resolve(root, file);
           if (fs.existsSync(full)) fs.unlinkSync(full);
@@ -761,6 +761,7 @@ Respond strictly in JSON:
       });
       verdictText = result.text;
     } catch (err: any) {
+      console.error(`[CriticWorker] Model evaluation failed for milestone ${milestone.id}:`, err);
       return {
         approved: false,
         abstained: true,
