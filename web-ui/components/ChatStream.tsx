@@ -38,6 +38,14 @@ import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent } from "../lib/chatUtils";
 import { TaskManifest } from "../lib/subagents/types";
 
+export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
+
+export function isBuilderPrompt(prompt: string): boolean {
+  if (!prompt || typeof prompt !== "string") return false;
+  return BUILDER_PROMPT_REGEX.test(prompt.trim());
+}
+
+
 export interface AttachedFileItem {
   id: string;
   name: string;
@@ -362,9 +370,9 @@ export function ChatStream({
     setMessages(updatedMessages);
 
     // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
-    const isBuilderPrompt = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i.test(prompt);
+    const isBuilder = isBuilderPrompt(prompt);
 
-    if (isBuilderPrompt && onLaunchTask) {
+    if (isBuilder && onLaunchTask) {
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
