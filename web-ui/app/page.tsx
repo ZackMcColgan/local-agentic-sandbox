@@ -215,6 +215,8 @@ export default function Home() {
           }
           if (data.task) {
             setActiveTask(data.task);
+          } else {
+            setActiveTask(null);
           }
         }
       } catch (err) {
@@ -309,6 +311,7 @@ export default function Home() {
           setMessages([]);
           setActiveTask(null);
           setViewMode("unified");
+          setActiveNavView("sessions");
           try {
             window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
           } catch {}
