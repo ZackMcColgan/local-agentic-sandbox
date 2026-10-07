@@ -19,7 +19,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 COPY --from=deps /build/node_modules ./node_modules
-COPY --from=deps /build/web-ui/node_modules ./web-ui/node_modules
+COPY --from=deps /build/node_modules ./web-ui/node_modules
 COPY package*.json ./
 COPY web-ui ./web-ui
 
