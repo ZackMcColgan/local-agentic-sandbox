@@ -1,4 +1,4 @@
-.PHONY: all up down restart logs pull-model verify-sec clean help k8s-deploy k8s-build
+.PHONY: all up down restart logs pull-model verify-sec clean help k8s-deploy k8s-build k8s-ingress
 
 all: help
 
@@ -19,6 +19,7 @@ help:
 	@echo "make clean         Stop containers and remove volumes"
 	@echo "make k8s-build    Build web-ui image for Kubernetes"
 	@echo "make k8s-deploy   Build image and rollout restart K8s web-ui"
+	@echo "make k8s-ingress   One-time ingress-nginx install for port 80 access"
 
 pull-primary:
 	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
@@ -77,3 +78,9 @@ k8s-build:
 k8s-deploy: k8s-build
 	kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
 	kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
+
+# One-time ingress controller install (Docker Desktop).
+# Binds host ports 80/443 so http://<PC-IP>/ reaches web-ui with no port-forward.
+k8s-ingress:
+	kubectl apply -k deploy/k8s/ingress-nginx
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
