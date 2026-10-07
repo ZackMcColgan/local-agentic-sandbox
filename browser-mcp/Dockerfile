@@ -33,7 +33,7 @@ RUN addgroup -g 10002 -S browseragent && \
 
 # Copy build artifacts and production modules
 COPY --from=builder /build/browser-mcp/package.json ./package.json
-COPY --from=builder /build/browser-mcp/node_modules ./node_modules
+COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/browser-mcp/dist ./dist
 
 # Read-only application binary protection
