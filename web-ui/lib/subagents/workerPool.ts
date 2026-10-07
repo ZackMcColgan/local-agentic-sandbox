@@ -99,16 +99,24 @@ export class ExplorerWorker {
  * Throws when no git repository is found. `strict` only inspects `repoRoot`.
  */
 export function getResolvedGitSha(repoRoot?: string, opts?: { strict?: boolean }): string {
+  const envWorkspace = process.env.WORKSPACE_DIR;
   const candidates = (opts?.strict
     ? [repoRoot]
-    : [repoRoot, process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")]
+    : [
+        repoRoot,
+        envWorkspace,
+        fs.existsSync("/workspace") ? "/workspace" : undefined,
+        process.cwd(),
+        path.resolve(process.cwd(), ".."),
+        path.resolve(process.cwd(), "../..")
+      ]
   ).filter(Boolean) as string[];
 
   for (const dir of candidates) {
     try {
-      const top = execSync("git rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      const top = execSync("git -c safe.directory=* rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
       if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase()) continue;
-      const sha = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      const sha = execSync("git -c safe.directory=* rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
       if (/^[0-9a-f]{40}$/i.test(sha)) {
         return sha;
       }

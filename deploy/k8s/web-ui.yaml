@@ -69,7 +69,6 @@ spec:
           volumeMounts:
             - name: workspace-volume
               mountPath: /workspace
-              readOnly: true
           readinessProbe:
             httpGet:
               path: /

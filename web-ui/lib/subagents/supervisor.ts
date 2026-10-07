@@ -717,7 +717,10 @@ export function createProductionStepExecutor(
     });
   const repoRoot =
     options?.repoRoot ||
-    (fs.existsSync(path.join(process.cwd(), "deploy"))
+    process.env.WORKSPACE_DIR ||
+    (fs.existsSync("/workspace") && fs.existsSync(path.join("/workspace", ".git"))
+      ? "/workspace"
+      : fs.existsSync(path.join(process.cwd(), "deploy"))
       ? process.cwd()
       : path.resolve(process.cwd(), ".."));
 

@@ -35,13 +35,15 @@ RUN npm run build
 # Stage 3: Production Runner (Lean Standalone)
 # ==========================================
 FROM node:22-alpine AS runner
-RUN apk add --no-cache git
+RUN apk add --no-cache git && \
+    git config --system --add safe.directory '*'
 WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME="0.0.0.0" \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    WORKSPACE_DIR=/workspace
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs

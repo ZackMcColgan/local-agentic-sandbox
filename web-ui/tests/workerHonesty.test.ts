@@ -141,4 +141,28 @@ describe("Phase A — No fabricated SHAs (A2c)", () => {
       fs.rmSync(notRepo, { recursive: true, force: true });
     }
   });
+
+  it("getResolvedGitSha resolves repository via WORKSPACE_DIR environment variable when repoRoot is not a git repo", () => {
+    const originalEnv = process.env.WORKSPACE_DIR;
+    const tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), "workspaceroot-"));
+    const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "nogit-"));
+    try {
+      const { execSync } = require("child_process");
+      execSync("git init", { cwd: tempRepo, stdio: "ignore" });
+      execSync("git config user.email 'test@test.com'", { cwd: tempRepo, stdio: "ignore" });
+      execSync("git config user.name 'Test'", { cwd: tempRepo, stdio: "ignore" });
+      fs.writeFileSync(path.join(tempRepo, "test.txt"), "hello");
+      execSync("git add test.txt && git commit -m 'initial'", { cwd: tempRepo, stdio: "ignore" });
+      const expectedSha = execSync("git rev-parse HEAD", { cwd: tempRepo, encoding: "utf8" }).trim();
+
+      process.env.WORKSPACE_DIR = tempRepo;
+      // In container environment, repoRoot might be /app (not a git repo), but WORKSPACE_DIR is /workspace
+      const resolved = getResolvedGitSha(notRepo);
+      assert.equal(resolved, expectedSha, "Should resolve SHA from WORKSPACE_DIR candidate");
+    } finally {
+      process.env.WORKSPACE_DIR = originalEnv;
+      fs.rmSync(tempRepo, { recursive: true, force: true });
+      fs.rmSync(notRepo, { recursive: true, force: true });
+    }
+  });
 });

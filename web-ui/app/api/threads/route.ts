@@ -61,7 +61,6 @@ export async function POST(req: Request) {
       // Without this, tasks are planned but no workers ever spawn (bug found 2026-10-06).
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool(),
-        repoRoot: process.cwd(),
         model: "swift-27b-mtp"
       });
       supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor }).catch((err) => {
