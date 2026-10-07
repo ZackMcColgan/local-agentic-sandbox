@@ -57,12 +57,15 @@ jobs:
 
       - name: Run Coverage
         working-directory: web-ui
-        run: npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary 2>&1 | tee coverage-output.txt
+        run: |
+          set -o pipefail
+          npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary 2>&1 | tee coverage-output.txt
 
       - name: Build Coverage Summary
         working-directory: web-ui
         run: |
-          python3 -c "
+          if [ -f coverage/coverage-summary.json ]; then
+            python3 -c "
           import json
           with open('coverage/coverage-summary.json') as f:
               data = json.load(f)
@@ -70,7 +73,14 @@ jobs:
           for key in ['lines', 'statements', 'functions', 'branches']:
               pct = total[key]['pct']
               print(f'{key}: {pct}%')
-          " > coverage-summary.txt
+            " > coverage-summary.txt
+          else
+            echo "Coverage not generated - see coverage-output.txt for vitest errors" > coverage-summary.txt
+            echo "lines: n/a" >> coverage-summary.txt
+            echo "statements: n/a" >> coverage-summary.txt
+            echo "functions: n/a" >> coverage-summary.txt
+            echo "branches: n/a" >> coverage-summary.txt
+          fi
           cat coverage-summary.txt
 
       - name: Upload HTML Report
