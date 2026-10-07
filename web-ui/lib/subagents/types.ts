@@ -4,6 +4,8 @@
 
 export type ToolchainType = "node:22" | "python:3.12" | "go" | "rust";
 
+export type TaskComplexity = "SINGLE_ARTIFACT" | "SIMPLE_SCRIPT" | "PROJECT";
+
 export interface AssertionContract {
   type: "file_exists" | "test_passes" | "output_contains" | "no_hardcoded_values";
   target: string;
@@ -71,6 +73,8 @@ export interface Milestone {
   testsFailed?: number;
   testFile?: string;
   plannedFiles?: string[];
+  skipCriticOnValidSyntax?: boolean;
+  taskComplexity?: TaskComplexity;
   completedAt?: string;
   /**
    * Provenance: true when any output for this milestone came from the deterministic
@@ -123,6 +127,7 @@ export interface TaskManifest {
   taskId: string;
   goal: string;
   toolchain: ToolchainType;
+  complexity?: TaskComplexity;
   branchName: string;
   branch?: string;
   status: TaskStatus;

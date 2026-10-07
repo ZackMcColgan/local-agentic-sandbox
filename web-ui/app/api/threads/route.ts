@@ -38,6 +38,7 @@ export async function POST(req: Request) {
         branchName: "feat/v2.5-overnight",
         branch: "feat/v2.5-overnight",
         toolchain,
+        complexity: planSpec.complexity,
         status: "active",
         milestones: planSpec.milestones,
         currentMilestoneIndex: 0,

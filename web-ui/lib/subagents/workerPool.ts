@@ -232,7 +232,29 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
     }
   }
 
-  // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
+  // 3. JSON validation
+  if (ext === ".json") {
+    try {
+      JSON.parse(content);
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, error: `Invalid JSON syntax in ${filePath}: ${err.message}` };
+    }
+  }
+
+  // 4. SVG and XML validation (check basic well-formedness: starts with <svg or <?xml or <, has closing tag)
+  if (ext === ".svg" || ext === ".xml" || ext === ".drawio") {
+    const trimmed = content.trim();
+    if (ext === ".svg" && (!trimmed.includes("<svg") || !trimmed.includes("</svg>"))) {
+      return { valid: false, error: `Invalid SVG format in ${filePath}: missing <svg> root element or closing tag.` };
+    }
+    if ((ext === ".xml" || ext === ".drawio") && (!trimmed.startsWith("<") || !trimmed.endsWith(">"))) {
+      return { valid: false, error: `Invalid XML format in ${filePath}: not enclosed in XML tags.` };
+    }
+    return { valid: true };
+  }
+
+  // 5. Other non-code files (Markdown, TXT, CSV) pass through
   return { valid: true };
 }
 
@@ -317,7 +339,18 @@ export class BuilderWorker {
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
       const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
-      const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+      const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
+      const prompt = isSingleArtifact
+        ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Generate ONLY the requested file "${targetRelPath}". Do NOT create supporting code, TypeScript modules, API clients, or project scaffolding. Output the file content directly.
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+
+Provide the complete file content enclosed in a markdown code fence (e.g. \`\`\`xml or \`\`\`svg or language appropriate for "${targetRelPath}"). Do not include introductory or concluding conversation.`
+        : `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
 ${milestone.description}

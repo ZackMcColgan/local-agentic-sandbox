@@ -797,28 +797,38 @@ export function createProductionStepExecutor(
           };
         }
 
-        // 2. Critic worker evaluates diff
-        criticRounds++;
-        console.log(`[executor] calling critic.evaluate`);
-        const criticRes = await workerPool.executeJob({
-          role: "critic",
-          taskId: milestone.id,
-          taskFn: async (signal) => {
-            return await critic.evaluateMilestoneDiff(
-              milestone,
-              {
-                diff: builderRes.diff,
-                filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
-                testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
-                noChangeReason: milestone.diffSummary
-              },
-              { signal }
-            );
+        // 2. Critic worker evaluates diff (Skip critic loop if milestone has skipCriticOnValidSyntax enabled)
+        let isApproved = false;
+        if (milestone.skipCriticOnValidSyntax && builderRes.targetFile && !builderRes.stuck) {
+          console.log(`[executor] SINGLE_ARTIFACT valid deliverable produced (${builderRes.targetFile}) — skipping critic loop.`);
+          isApproved = true;
+        } else {
+          criticRounds++;
+          console.log(`[executor] calling critic.evaluate`);
+          const criticRes = await workerPool.executeJob({
+            role: "critic",
+            taskId: milestone.id,
+            taskFn: async (signal) => {
+              return await critic.evaluateMilestoneDiff(
+                milestone,
+                {
+                  diff: builderRes.diff,
+                  filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
+                  testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
+                  noChangeReason: milestone.diffSummary
+                },
+                { signal }
+              );
+            }
+          });
+          console.log(`[executor] critic verdict=${criticRes.verdict || (criticRes.approved ? "approved" : "needs_fix")}`);
+          isApproved = criticRes.approved;
+          if (!isApproved) {
+            criticFeedback = criticRes.feedback || [];
           }
-        });
-        console.log(`[executor] critic verdict=${criticRes.verdict || (criticRes.approved ? "approved" : "needs_fix")}`);
+        }
 
-        if (criticRes.approved) {
+        if (isApproved) {
           // Enforce commit scoping: stage ONLY builder's explicit target file.
           // If targetFile is missing/empty, do NOT commit - return status "failed". Never git add ".".
           if (!lastTargetFile || !lastTargetFile.trim()) {
@@ -859,8 +869,6 @@ export function createProductionStepExecutor(
             builderModel: builderRes.model || builderModel
           };
         }
-
-        criticFeedback = criticRes.feedback || [];
       }
 
       return {
