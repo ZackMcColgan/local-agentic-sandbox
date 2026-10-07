@@ -3,27 +3,33 @@
 # ==========================================
 FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat
-WORKDIR /app
+WORKDIR /build
 
+# Copy entire monorepo structure
 COPY package*.json ./
-RUN npm install
+COPY web-ui/package*.json ./web-ui/
 
+# Install from root (honors workspace config)
+RUN npm ci --workspaces
 
 # ==========================================
 # Stage 2: Build Next.js application
 # ==========================================
 FROM node:22-alpine AS builder
-WORKDIR /app
+WORKDIR /build
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=deps /build/node_modules ./node_modules
+COPY --from=deps /build/node_modules ./web-ui/node_modules
+COPY package*.json ./
+COPY web-ui ./web-ui
+
+WORKDIR /build/web-ui
 
 # Set production environment variable for build
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 
-RUN npm run build && \
-    npx tsc lib/subagents/schedulerDaemon.ts --outDir dist --rootDir . --target ES2022 --module CommonJS --moduleResolution node --esModuleInterop --skipLibCheck
+RUN npm run build
 
 # ==========================================
 # Stage 3: Production Runner (Lean Standalone)
@@ -40,15 +46,9 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy standalone build output
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# Compiled scheduler daemon (plain-node entrypoint, not part of the Next bundle)
-COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
-# Full node_modules: the daemon's compiled output requires() runtime packages
-# (@langchain/langgraph, typescript, @opentelemetry/api) that the standalone
-# trace does not include. Local image; correctness over leanness.
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder /build/web-ui/public ./public
+COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/static ./.next/static
 
 USER nextjs
 
