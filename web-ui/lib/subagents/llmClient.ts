@@ -98,7 +98,8 @@ export function createOllamaGenerate(options?: {
 
     let accumulatedText = "";
     let thinkingText = "";
-    let insideThinking = false;
+    // swift-27b-mtp begins streaming its chain-of-thought immediately and terminates it with </think>
+    let insideThinking = true;
     let loadDurationMs = 0;
     let totalDurationMs = 0;
     let lastLogTime = Date.now();
@@ -125,19 +126,25 @@ export function createOllamaGenerate(options?: {
               const part = chunk.response || "";
               accumulatedText += part;
 
-              // Track thinking state
+              // Track thinking state (swift-27b-mtp starts streaming thinking immediately before closing with </think>)
               if (part.includes("<think>")) insideThinking = true;
-              if (insideThinking) {
+              if (insideThinking && !part.includes("</think>")) {
                 thinkingText += part;
                 if (req.onThinkingChunk) {
                   try {
                     req.onThinkingChunk(part, thinkingText);
                   } catch (_) {}
                 }
-                if (part.includes("</think>")) {
-                  insideThinking = false;
-                  console.log(`[llm] thinking finished (${thinkingText.length} chars)`);
+              } else if (insideThinking && part.includes("</think>")) {
+                const [beforeClosing] = part.split("</think>");
+                thinkingText += beforeClosing || "";
+                insideThinking = false;
+                if (req.onThinkingChunk && beforeClosing) {
+                  try {
+                    req.onThinkingChunk(beforeClosing, thinkingText);
+                  } catch (_) {}
                 }
+                console.log(`[llm] thinking finished (${thinkingText.length} chars)`);
               }
 
               const now = Date.now();
