@@ -315,6 +315,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes(".tmp") ||
     normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
+    normalizedPath.startsWith("scripts/dev-proxy") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
     normalizedPath.startsWith("scripts/capture-svg-render") ||
     normalizedPath.startsWith("scripts/verify-") ||

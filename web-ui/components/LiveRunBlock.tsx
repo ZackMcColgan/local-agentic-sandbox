@@ -206,6 +206,21 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
         );
       })()}
 
+      {/* Deliverable Badge when Completed */}
+      {isCompleted && (
+        <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+              Deliverable Generated: {task.milestones?.[0]?.plannedFiles?.[0] || "weather.svg"}
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+            Committed
+          </span>
+        </div>
+      )}
+
       {/* Stop Run Button (Prominent Filled-Tonal M3 Button) */}
       {isRunning && onStopRun && (
         <button

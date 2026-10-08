@@ -45,7 +45,7 @@ export interface ResidencyPlan {
   unknownSize: string[];
 }
 
-export const PINNED_KEEP_ALIVE = "30m";
+export const PINNED_KEEP_ALIVE = "24h";
 export const TRANSIENT_KEEP_ALIVE = 0;
 
 export function planResidency(input: ResidencyPlanInput): ResidencyPlan {

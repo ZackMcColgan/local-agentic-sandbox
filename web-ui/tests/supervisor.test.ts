@@ -356,4 +356,63 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       }
     }
   });
+
+  it("asserts executor waits on slow Ollama response (2s delay) rather than timing out prematurely", async () => {
+    const testDir = path.resolve(process.cwd(), "temp-test-slow-" + Date.now());
+    if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
+
+    try {
+      const supervisor = new OvernightSupervisor({
+        checkpointDirectory: testDir,
+        stallTimeoutMs: 60000
+      });
+
+      const task: TaskManifest = {
+        taskId: "task-slow-wait-test",
+        goal: "Test slow generation wait",
+        toolchain: "node:22",
+        branchName: "task/slow-wait",
+        status: "active",
+        milestones: [
+          {
+            id: "M1",
+            title: "Slow milestone",
+            description: "Takes 2s to generate",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "Waits 2s" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const slowExecutor = async (m: Milestone, attempt: number) => {
+        // Simulate a 2s slow model inference
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return {
+          status: "completed" as const,
+          gitSha: "sha-slow-ok",
+          diff: "+export const slow = true;",
+          builderIterations: 1,
+          criticRounds: 1,
+          builderModel: "swift-27b-mtp"
+        };
+      };
+
+      const result = await supervisor.executeTaskWithRecovery(task, { stepExecutor: slowExecutor });
+      assert.equal(result.status, "completed", "Task must complete after slow executor completes");
+      assert.equal(result.milestones[0].status, "completed");
+      assert.equal(result.milestones[0].commitSha, "sha-slow-ok");
+    } finally {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+    }
+  });
 });

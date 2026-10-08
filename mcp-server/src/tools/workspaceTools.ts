@@ -165,15 +165,15 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
         });
         return { valid: true };
       } catch (err: any) {
-        // ENOENT = command not found, try next; syntax errors should fail fast
-        if (err.code === "ENOENT") {
+        // ENOENT = command not found; 9009 / app execution alias stub on Windows = not installed
+        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
+        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
           lastErr = err;
           continue;
         }
-        const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
         return {
           valid: false,
-          error: `Python SyntaxError in ${filePath}: ${stderr}`
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
         };
       }
     }

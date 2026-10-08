@@ -3,7 +3,11 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "..");
-const tsxCli = path.resolve(repoRoot, "web-ui/node_modules/tsx/dist/cli.mjs");
+const fs = require("fs");
+let tsxCli = path.resolve(repoRoot, "web-ui/node_modules/tsx/dist/cli.mjs");
+if (!fs.existsSync(tsxCli)) {
+  tsxCli = path.resolve(repoRoot, "node_modules/tsx/dist/cli.mjs");
+}
 const script = path.resolve(repoRoot, "web-ui/scripts/test-gate.ts");
 const args = [...process.argv.slice(2)];
 

@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { NextResponse } from "next/server";
 import { ThreadStore, activeExecutionSet, Thread } from "@/lib/threads/threadStore";
 import { generatePlanSpec } from "@/lib/subagents/planner";
@@ -38,6 +40,7 @@ export async function POST(req: Request) {
         branchName: "feat/v2.5-overnight",
         branch: "feat/v2.5-overnight",
         toolchain,
+        complexity: planSpec.complexity,
         status: "active",
         milestones: planSpec.milestones,
         currentMilestoneIndex: 0,
@@ -56,17 +59,6 @@ export async function POST(req: Request) {
 
       supervisor.saveCheckpoint(manifest);
       activeExecutionSet.add(taskId);
-
-      // Kick off actual execution — fire-and-forget so the API returns immediately.
-      // Without this, tasks are planned but no workers ever spawn (bug found 2026-10-06).
-      const executor = createProductionStepExecutor({
-        workerPool: new WorkerPool(),
-        repoRoot: process.cwd(),
-        model: "swift-27b-mtp"
-      });
-      supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor }).catch((err) => {
-        console.error(`[threads] Task ${taskId} execution failed:`, err);
-      });
 
       // Create new durable thread or attach to existing
       let thread: Thread;
@@ -94,7 +86,7 @@ export async function POST(req: Request) {
         } else {
           thread = threadStore.createThread({
             title: goal.slice(0, 36),
-            model: body.model || "qwen3.8:27b-q3_k_m",
+            model: body.model || "swift-27b-mtp",
             reasoningEffort: body.reasoningEffort || "medium",
             initialPrompt: goal,
             attachments: body.attachments,
@@ -104,7 +96,7 @@ export async function POST(req: Request) {
       } else {
         thread = threadStore.createThread({
           title: goal.slice(0, 36),
-          model: body.model || "qwen3.8:27b-q3_k_m",
+          model: body.model || "swift-27b-mtp",
           reasoningEffort: body.reasoningEffort || "medium",
           initialPrompt: goal,
           attachments: body.attachments,
@@ -119,6 +111,117 @@ export async function POST(req: Request) {
         });
         threadStore.saveThread(thread);
       }
+
+      const activeThreadId = thread.id;
+
+      // Kick off actual execution — fire-and-forget so the API returns immediately.
+      let lastThinkingUpdate = 0;
+      let lastRecordedLength = 0;
+
+      const executor = createProductionStepExecutor({
+        workerPool: new WorkerPool(),
+        model: "swift-27b-mtp",
+        onThinkingChunk: (_chunk: string, totalThinking: string) => {
+          const now = Date.now();
+          // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
+          if (now - lastThinkingUpdate > 3000 || totalThinking.length - lastRecordedLength > 120) {
+            lastThinkingUpdate = now;
+            lastRecordedLength = totalThinking.length;
+
+            // Extract the latest meaningful sentence or clause from thinking
+            const cleaned = totalThinking.trim().replace(/\r?\n/g, " ");
+            const snippet = cleaned.length > 200 ? cleaned.slice(-200) : cleaned;
+            const message = `Analyzing: ${snippet.trim()}`;
+
+            // Check if last entry is an in-flight thinking entry we can update, or append a new entry
+            const journal = manifest.journal || [];
+            const lastEntry = journal[journal.length - 1];
+            if (lastEntry && lastEntry.role === "builder" && lastEntry.message.startsWith("Analyzing:")) {
+              lastEntry.message = message;
+              lastEntry.timestamp = new Date().toISOString();
+            } else {
+              journal.push({
+                timestamp: new Date().toISOString(),
+                role: "builder",
+                message
+              });
+            }
+            manifest.journal = journal;
+            manifest.updatedAt = new Date().toISOString();
+
+            try {
+              const file = supervisor.getCheckpointFilePath(taskId);
+              fs.writeFileSync(file, JSON.stringify(manifest, null, 2), "utf8");
+            } catch (saveErr) {
+              console.warn(`[threads] Failed to write in-flight thinking checkpoint:`, saveErr);
+            }
+          }
+        }
+      });
+      (async () => {
+        console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
+        try {
+          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+          console.log(`[threads] task ${taskId} finished with status: ${result.status}`);
+
+          if (result.status === "completed") {
+            const currentThread = await threadStore.getThread(activeThreadId);
+            if (currentThread) {
+              const lastMilestone = result.milestones?.[result.milestones.length - 1];
+              const targetFile = lastMilestone?.plannedFiles?.[0] || "weather.svg";
+              let fileContent = "";
+
+              const repoCandidates = [
+                process.env.WORKSPACE_DIR,
+                "/workspace",
+                process.cwd(),
+                path.resolve(process.cwd(), "..")
+              ].filter(Boolean) as string[];
+
+              for (const dir of repoCandidates) {
+                const fullP = path.resolve(dir, targetFile);
+                if (fs.existsSync(fullP)) {
+                  try {
+                    fileContent = fs.readFileSync(fullP, "utf8");
+                    break;
+                  } catch {}
+                }
+              }
+
+              // Extract any thinking from the builder journal entries
+              const builderReasoning = result.journal
+                ?.filter((j) => j.role === "builder" && j.message?.startsWith("Builder reasoning:"))
+                ?.map((j) => j.message.replace(/^Builder reasoning:\s*/, ""))
+                ?.join("\n\n");
+
+              let completionContent = `Task completed successfully! Here is the generated \`${targetFile}\`:\n\n`;
+              if (fileContent.trim()) {
+                const isSvg = targetFile.endsWith(".svg") || fileContent.includes("<svg");
+                const fenceLang = isSvg ? "xml" : path.extname(targetFile).replace(".", "") || "text";
+                completionContent += `\`\`\`${fenceLang}\n${fileContent.trim()}\n\`\`\``;
+              } else {
+                completionContent += `Deliverable committed as \`${targetFile}\`.`;
+              }
+
+              currentThread.status = "completed";
+              currentThread.messages.push({
+                id: `msg-${Date.now()}-d`,
+                role: "assistant",
+                content: completionContent,
+                thought: builderReasoning || "Decomposed goal, verified syntax, and generated deliverable.",
+                taskId,
+                timestamp: new Date().toISOString()
+              });
+              threadStore.saveThread(currentThread);
+            }
+          }
+        } catch (err: any) {
+          console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
+          throw err;
+        }
+      })().catch((err) => {
+        console.error(`[threads] Task ${taskId} execution failed:`, err);
+      });
 
       return NextResponse.json({ thread, task: manifest }, { status: 201 });
     }

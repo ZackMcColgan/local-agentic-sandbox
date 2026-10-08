@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { StateGraph, START, END, Annotation, MemorySaver } from "@langchain/langgraph";
 import {
   TaskManifest,
@@ -668,6 +668,9 @@ export interface StepExecutorResult {
   builderIterations?: number;
   criticRounds?: number;
   builderModel?: string;
+  targetFile?: string;
+  deliverableContent?: string;
+  thinking?: string;
   reason?: string;
 }
 
@@ -684,6 +687,7 @@ export interface ProductionStepExecutorOptions {
   workerPool?: WorkerPool;
   repoRoot?: string;
   model?: string;
+  onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
 /**
@@ -717,143 +721,179 @@ export function createProductionStepExecutor(
     });
   const repoRoot =
     options?.repoRoot ||
-    (fs.existsSync(path.join(process.cwd(), "deploy"))
+    process.env.WORKSPACE_DIR ||
+    (fs.existsSync("/workspace") && fs.existsSync(path.join("/workspace", ".git"))
+      ? "/workspace"
+      : fs.existsSync(path.join(process.cwd(), "deploy"))
       ? process.cwd()
       : path.resolve(process.cwd(), ".."));
 
   return async (milestone: Milestone, attempt: number): Promise<StepExecutorResult> => {
-    const builderModel = workerPool.getModelForRole("builder") || modelToUse;
-    const criticModel = workerPool.getModelForRole("critic") || modelToUse;
+    console.log(`[executor] step start milestone=${milestone.id} attempt=${attempt}`);
+    try {
+      const builderModel = workerPool.getModelForRole("builder") || modelToUse;
+      const criticModel = workerPool.getModelForRole("critic") || modelToUse;
 
-    const builder = createBuilderWorker({
-      model: builderModel,
-      generate: workerPool.generate,
-      keepAlive: workerPool.keepAliveFor(builderModel)
-    });
+      const builder = createBuilderWorker({
+        model: builderModel,
+        generate: workerPool.generate,
+        keepAlive: workerPool.keepAliveFor(builderModel)
+      });
 
-    const critic = createCriticWorker({
-      model: criticModel,
-      generate: workerPool.generate,
-      keepAlive: workerPool.keepAliveFor(criticModel)
-    });
+      const critic = createCriticWorker({
+        model: criticModel,
+        generate: workerPool.generate,
+        keepAlive: workerPool.keepAliveFor(criticModel)
+      });
 
-    let currentDiff = "";
-    let criticFeedback: string[] = [];
-    let builderIterations = 0;
-    let criticRounds = 0;
-    let lastGitSha = "";
-    let lastTargetFile = "";
+      let currentDiff = "";
+      let criticFeedback: string[] = [];
+      let builderIterations = 0;
+      let criticRounds = 0;
+      let lastGitSha = "";
+      let lastTargetFile = "";
 
-    const maxIterations = 5;
+      const maxIterations = 5;
 
-    for (let iter = 1; iter <= maxIterations; iter++) {
-      builderIterations = iter;
+      for (let iter = 1; iter <= maxIterations; iter++) {
+        builderIterations = iter;
 
-      // 1. Builder worker generates code
-      const builderRes = await workerPool.executeJob({
-        role: "builder",
-        taskId: milestone.id,
-        taskFn: async (signal) => {
-          return await builder.executeMilestoneWork(milestone, {
-            repoRoot,
-            previousDiff: currentDiff,
-            criticFeedback,
-            iteration: iter,
-            signal
+        // 1. Builder worker generates code
+        console.log(`[executor] calling builder.executeMilestoneWork`);
+        const builderStartTime = Date.now();
+        const heartbeatInterval = setInterval(() => {
+          const elapsedSec = Math.round((Date.now() - builderStartTime) / 1000);
+          console.log(`[executor] still waiting on builder for milestone ${milestone.id}, ${elapsedSec}s elapsed`);
+        }, 60000);
+
+        let builderRes;
+        try {
+          builderRes = await workerPool.executeJob({
+            role: "builder",
+            taskId: milestone.id,
+            taskFn: async (signal) => {
+              return await builder.executeMilestoneWork(milestone, {
+                repoRoot,
+                previousDiff: currentDiff,
+                criticFeedback,
+                iteration: iter,
+                signal,
+                onThinkingChunk: options?.onThinkingChunk
+              });
+            }
           });
+        } finally {
+          clearInterval(heartbeatInterval);
         }
-      });
+        console.log(`[executor] builder returned, diff length=${builderRes.diff?.length}`);
 
-      currentDiff = builderRes.diff;
-      lastGitSha = builderRes.gitSha;
-      lastTargetFile = builderRes.targetFile;
+        currentDiff = builderRes.diff;
+        lastGitSha = builderRes.gitSha;
+        lastTargetFile = builderRes.targetFile;
 
-      if (builderRes.stuck) {
-        return {
-          status: "failed",
-          gitSha: builderRes.gitSha,
-          diff: builderRes.diff,
-          builderIterations,
-          criticRounds,
-          builderModel: builderRes.model || builderModel
-        };
-      }
-
-      // 2. Critic worker evaluates diff
-      criticRounds++;
-      const criticRes = await workerPool.executeJob({
-        role: "critic",
-        taskId: milestone.id,
-        taskFn: async (signal) => {
-          return await critic.evaluateMilestoneDiff(
-            milestone,
-            {
-              diff: builderRes.diff,
-              filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
-              testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
-              noChangeReason: milestone.diffSummary
-            },
-            { signal }
-          );
-        }
-      });
-
-      if (criticRes.approved) {
-        // Enforce commit scoping: stage ONLY builder's explicit target file.
-        // If targetFile is missing/empty, do NOT commit - return status "failed". Never git add ".".
-        if (!lastTargetFile || !lastTargetFile.trim()) {
+        if (builderRes.stuck) {
           return {
             status: "failed",
-            gitSha: lastGitSha,
+            gitSha: builderRes.gitSha,
+            diff: builderRes.diff,
+            builderIterations,
+            criticRounds,
+            builderModel: builderRes.model || builderModel
+          };
+        }
+
+        // 2. Critic worker evaluates diff (Skip critic loop if milestone has skipCriticOnValidSyntax enabled)
+        let isApproved = false;
+        if (milestone.skipCriticOnValidSyntax && builderRes.targetFile && !builderRes.stuck) {
+          console.log(`[executor] SINGLE_ARTIFACT valid deliverable produced (${builderRes.targetFile}) — skipping critic loop.`);
+          isApproved = true;
+        } else {
+          criticRounds++;
+          console.log(`[executor] calling critic.evaluate`);
+          const criticRes = await workerPool.executeJob({
+            role: "critic",
+            taskId: milestone.id,
+            taskFn: async (signal) => {
+              return await critic.evaluateMilestoneDiff(
+                milestone,
+                {
+                  diff: builderRes.diff,
+                  filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
+                  testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
+                  noChangeReason: milestone.diffSummary
+                },
+                { signal }
+              );
+            }
+          });
+          console.log(`[executor] critic verdict=${criticRes.verdict || (criticRes.approved ? "approved" : "needs_fix")}`);
+          isApproved = criticRes.approved;
+          if (!isApproved) {
+            criticFeedback = criticRes.feedback || [];
+          }
+        }
+
+        if (isApproved) {
+          // Enforce commit scoping: stage ONLY builder's explicit target file.
+          // If targetFile is missing/empty, do NOT commit - return status "failed". Never git add ".".
+          if (!lastTargetFile || !lastTargetFile.trim()) {
+            return {
+              status: "failed",
+              gitSha: lastGitSha,
+              diff: currentDiff,
+              builderIterations,
+              criticRounds,
+              builderModel: builderRes.model || builderModel,
+              reason: "Commit scoping violation: Builder did not provide an explicit target file; refusing to stage working tree."
+            };
+          }
+
+          // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
+          try {
+            execFileSync("git", ["add", lastTargetFile], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+            const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+            execFileSync("git", ["commit", "-m", commitMsg], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+          } catch (err: any) {
+            console.error(`[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`, err?.message || err);
+          }
+
+          let finalSha = lastGitSha;
+          try {
+            finalSha = getRealGitSha(repoRoot);
+          } catch (err: any) {
+            console.error(`[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`, err?.message || err);
+            finalSha = lastGitSha || "uncommitted";
+          }
+
+          return {
+            status: "completed",
+            gitSha: finalSha,
             diff: currentDiff,
             builderIterations,
             criticRounds,
             builderModel: builderRes.model || builderModel,
-            reason: "Commit scoping violation: Builder did not provide an explicit target file; refusing to stage working tree."
+            targetFile: lastTargetFile,
+            deliverableContent: builderRes.rawContent,
+            thinking: builderRes.thinking
           };
         }
-
-        // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
-        try {
-          execFileSync("git", ["add", lastTargetFile], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
-          const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
-          execFileSync("git", ["commit", "-m", commitMsg], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
-        } catch (err: any) {
-          console.error(`[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`, err?.message || err);
-        }
-
-        let finalSha = lastGitSha;
-        try {
-          finalSha = getRealGitSha(repoRoot);
-        } catch (err: any) {
-          console.error(`[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`, err?.message || err);
-          finalSha = lastGitSha || "uncommitted";
-        }
-
-        return {
-          status: "completed",
-          gitSha: finalSha,
-          diff: currentDiff,
-          builderIterations,
-          criticRounds,
-          builderModel: builderRes.model || builderModel
-        };
       }
 
-      criticFeedback = criticRes.feedback || [];
+      return {
+        status: "failed",
+        gitSha: lastGitSha,
+        diff: currentDiff,
+        builderIterations,
+        criticRounds,
+        builderModel: builderModel,
+        reason: !lastTargetFile || !lastTargetFile.trim()
+          ? "Commit scoping violation: Builder did not provide an explicit target file."
+          : "Critic did not approve milestone diff after maximum iterations."
+      };
+    } catch (err: any) {
+      console.error(`[executor] FATAL for milestone ${milestone.id}:`, err?.stack || err);
+      throw err;
     }
-
-    return {
-      status: "failed",
-      gitSha: lastGitSha,
-      diff: currentDiff,
-      builderIterations,
-      criticRounds,
-      builderModel: builderModel,
-      reason: !lastTargetFile || !lastTargetFile.trim()
-        ? "Commit scoping violation: Builder did not provide an explicit target file."
-        : "Critic did not approve milestone diff after maximum iterations."
-    };
   };
 }
 
@@ -996,12 +1036,14 @@ export class OvernightSupervisor {
     task.checkpoints.push(checkpoint);
     task.updatedAt = new Date().toISOString();
 
+    console.log(`[supervisor] saving checkpoint for ${task.taskId}`);
     try {
       fs.writeFileSync(
         this.getCheckpointFilePath(task.taskId),
         JSON.stringify(task, null, 2),
         "utf8"
       );
+      console.log(`[supervisor] checkpoint saved for ${task.taskId}`);
     } catch (err: any) {
       console.error(`[supervisor] Failed to persist checkpoint ${checkpoint.checkpointId} for task ${task.taskId} (milestone: ${checkpoint.milestoneId}):`, err?.message || err);
       (checkpoint as any).failed = true;
@@ -1094,6 +1136,7 @@ export class OvernightSupervisor {
     task: TaskManifest,
     options?: StepExecutorOptions
   ): Promise<TaskManifest> {
+    console.log(`[supervisor] executeTaskWithRecovery start taskId=${task.taskId} milestones=${task.milestones.length}`);
     const executor = options?.stepExecutor;
     const hasPending = task.milestones.slice(task.currentMilestoneIndex).some((m) => m.status !== "completed");
     if (!executor && hasPending) {
@@ -1110,7 +1153,9 @@ export class OvernightSupervisor {
         attempt++;
         try {
           if (executor) {
+            console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
             const res = await executor(milestone, attempt);
+            console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
             if (res.status === "completed") {
               milestone.status = "completed";
               if (res.gitSha) milestone.commitSha = res.gitSha;
@@ -1120,11 +1165,27 @@ export class OvernightSupervisor {
               if (res.builderModel) milestone.builderModel = res.builderModel;
               milestone.completedAt = new Date().toISOString();
               milestoneCompleted = true;
+
+              if (res.thinking) {
+                const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "builder",
+                  message: `Builder reasoning: ${sample}${res.thinking.length > 180 ? "..." : ""}`
+                });
+              }
+
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "builder",
+                message: `Generated deliverable ${res.targetFile || milestone.title} (${res.deliverableContent?.length || 0} bytes).`
+              });
             }
           } else {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
+          console.error(`[supervisor] stepExecutor threw for milestone ${milestone.id}:`, err?.stack || err);
           if (err.message && /no stepExecutor provided/i.test(err.message)) {
             throw err;
           }
@@ -1141,7 +1202,9 @@ export class OvernightSupervisor {
             // Self-healing retry with fresh checkpoint reload
             const reloaded = await this.resumeTaskFromCheckpoint(task.taskId);
             if (reloaded) {
+              const currentJournal = task.journal;
               task = reloaded;
+              task.journal = currentJournal;
             }
           }
         }
@@ -1152,6 +1215,10 @@ export class OvernightSupervisor {
         this.saveCheckpoint(task, milestone.commitSha);
       } else {
         // Failed after retries: park task and flag ambiguity
+        milestone.status = "failed";
+        if (task.milestones[mIdx]) {
+          task.milestones[mIdx].status = "failed";
+        }
         task.status = "parked";
         task.parkedReason = `Milestone ${milestone.id} failed after 3 recovery attempts`;
         task.ambiguityFlags.push({
@@ -1163,6 +1230,7 @@ export class OvernightSupervisor {
           revertAction: { type: "re_plan", target: milestone.id },
           reviewed: false
         });
+        this.saveCheckpoint(task);
         return task;
       }
     }

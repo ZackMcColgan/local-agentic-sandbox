@@ -1,4 +1,4 @@
-import { Milestone, ToolchainType, AcceptanceCriterion } from "./types";
+import { Milestone, ToolchainType, AcceptanceCriterion, TaskComplexity } from "./types";
 import {
   createOllamaGenerate,
   isFastGraphTestMode,
@@ -20,8 +20,77 @@ export interface PlanSpec {
   taskId: string;
   goal: string;
   toolchain: ToolchainType;
+  complexity: TaskComplexity;
   milestones: Milestone[];
   toMarkdown: () => string;
+}
+
+/**
+ * Classifies the task complexity before milestone decomposition.
+ * - SINGLE_ARTIFACT: The request asks for one file (svg, html, json, md, txt, csv, etc.)
+ * - SIMPLE_SCRIPT: A single script or small utility (< 100 lines)
+ * - PROJECT: Multi-file application, feature, or system
+ */
+export function classifyTaskComplexity(goal: string): TaskComplexity {
+  const normalized = goal.trim().toLowerCase();
+
+  // 1. Single artifact patterns: "create a [filetype]", "generate a [filetype]", "make me a [filetype]"
+  const artifactPattern = /\b(create|generate|make|build|write)\s+(me\s+)?(a|an)\s+(svg|html|json|csv|md|markdown|txt|png|yaml|yml)\b/i;
+  if (artifactPattern.test(normalized)) {
+    return "SINGLE_ARTIFACT";
+  }
+
+  // 2. Explicit single output file in prompt (e.g. "output/weather.svg", "weather.svg", "index.html", "SPEC.md")
+  const singleFilePattern = /\b([a-zA-Z0-9_\-\.\/]+\.(svg|html|json|csv|md|txt|yaml|yml))\b/i;
+  const fileMatches = normalized.match(new RegExp(singleFilePattern, "g")) || [];
+  // If request mentions a specific artifact file and does NOT ask for full-stack/system/app
+  if (
+    fileMatches.length === 1 &&
+    !normalized.includes("app") &&
+    !normalized.includes("application") &&
+    !normalized.includes("stack") &&
+    !normalized.includes("microservice") &&
+    !normalized.includes("system") &&
+    !normalized.includes("refactor")
+  ) {
+    return "SINGLE_ARTIFACT";
+  }
+
+  // 3. Simple script patterns: "write a python script", "create a small utility", "make a bash script"
+  const scriptPattern = /\b(single script|small utility|utility script|python script|node script|bash script|shell script|script to)\b/i;
+  if (scriptPattern.test(normalized)) {
+    return "SIMPLE_SCRIPT";
+  }
+
+  return "PROJECT";
+}
+
+/**
+ * Extracts the single artifact file name or default from a SINGLE_ARTIFACT goal.
+ */
+function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } {
+  const matchFile = goal.match(/\b([a-zA-Z0-9_\-\.\/]+\.(svg|html|json|csv|md|txt|yaml|yml))\b/i);
+  if (matchFile) {
+    const fn = matchFile[1];
+    const ext = fn.split(".").pop()?.toLowerCase() || "txt";
+    return { filename: fn, filetype: ext };
+  }
+
+  const matchType = goal.match(/\b(svg|html|json|csv|md|markdown|txt|yaml|yml)\b/i);
+  const ext = matchType ? matchType[1].toLowerCase() : "txt";
+  const mappedExt = ext === "markdown" ? "md" : ext;
+
+  // Derive sensible default name
+  if (mappedExt === "svg") {
+    if (/weather/i.test(goal)) return { filename: "weather.svg", filetype: "svg" };
+    return { filename: "artifact.svg", filetype: "svg" };
+  }
+  if (mappedExt === "html") return { filename: "index.html", filetype: "html" };
+  if (mappedExt === "json") return { filename: "data.json", filetype: "json" };
+  if (mappedExt === "csv") return { filename: "output.csv", filetype: "csv" };
+  if (mappedExt === "md") return { filename: "output.md", filetype: "md" };
+
+  return { filename: `output.${mappedExt}`, filetype: mappedExt };
 }
 
 /**
@@ -32,17 +101,68 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   const taskId = input.taskId || `task-${Date.now()}`;
   const goal = input.goal;
   const toolchain: ToolchainType = input.toolchain || "node:22";
+  const complexity = classifyTaskComplexity(goal);
 
   // Check if we should invoke a real model vs. test-only deterministic decomposition
   const isSynthetic = !input.generate && isFastGraphTestMode();
 
   let milestones: Milestone[] = [];
 
-  if (!isSynthetic) {
+  // =========================================================================
+  // SINGLE_ARTIFACT Path: Generate exactly 1 milestone, producing ONLY that file
+  // =========================================================================
+  if (complexity === "SINGLE_ARTIFACT") {
+    const { filename, filetype } = resolveSingleArtifactFile(goal);
+    milestones = [
+      {
+        id: "M1",
+        title: `Create ${filename}`,
+        description: `Generate ONLY the requested file "${filename}". Do NOT create supporting code, TypeScript modules, API clients, or project scaffolding. Output the file content directly matching: "${goal}".`,
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: false,
+        plannedFiles: [filename],
+        skipCriticOnValidSyntax: true,
+        taskComplexity: "SINGLE_ARTIFACT",
+        acceptanceCriteria: [
+          {
+            id: "AC-1-1",
+            assertion: `File "${filename}" exists, is valid (well-formed ${filetype.toUpperCase()}), and matches the request.`,
+            fileMatch: filename
+          }
+        ]
+      }
+    ];
+  } else if (!isSynthetic) {
     const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000 });
     const modelToUse = input.model || process.env.PLANNER_MODEL || "swift-27b-mtp";
 
-    const prompt = `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria. Be concise.
+    const prompt = complexity === "SIMPLE_SCRIPT"
+      ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise.
+
+Goal: ${goal}
+Toolchain: ${toolchain}
+
+Respond strictly in valid JSON matching this schema:
+{
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Short title",
+      "description": "Clear description of deliverables",
+      "plannedFiles": ["path/to/script.ts"],
+      "acceptanceCriteria": [
+        {
+          "id": "AC-1-1",
+          "assertion": "Verifiable statement of truth",
+          "fileMatch": "path/to/script.ts"
+        }
+      ]
+    }
+  ]
+}`
+      : `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria. Be concise.
 
 Goal: ${goal}
 Toolchain: ${toolchain}
@@ -234,6 +354,7 @@ Respond strictly in valid JSON matching this schema:
     taskId,
     goal,
     toolchain,
+    complexity,
     milestones,
     toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)
   };
@@ -343,6 +464,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
     taskId,
     goal,
     toolchain,
+    complexity: classifyTaskComplexity(goal),
     milestones,
     toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)
   };

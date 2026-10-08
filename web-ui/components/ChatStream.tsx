@@ -23,7 +23,8 @@ import {
   Square,
   ChevronLeft,
   MoreHorizontal,
-  Menu
+  Menu,
+  Plus
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -633,6 +634,19 @@ export function ChatStream({
             <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
             <span>{shortModelLabel}</span>
           </button>
+
+          {/* New Session Button */}
+          {onNewThread && (
+            <button
+              type="button"
+              onClick={onNewThread}
+              className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              title="New session"
+              aria-label="New session"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+          )}
 
           {/* Overflow Menu Button */}
           <div className="relative">

@@ -35,23 +35,28 @@ RUN npm run build
 # Stage 3: Production Runner (Lean Standalone)
 # ==========================================
 FROM node:22-alpine AS runner
+RUN apk add --no-cache git && \
+    git config --system --add safe.directory '*'
 WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME="0.0.0.0" \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    WORKSPACE_DIR=/workspace
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy standalone build output
 COPY --from=builder /build/web-ui/public ./public
+COPY --from=builder /build/web-ui/public ./web-ui/public
 COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /build/web-ui/.next/static ./web-ui/.next/static
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "web-ui/server.js"]

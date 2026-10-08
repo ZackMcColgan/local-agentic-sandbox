@@ -59,7 +59,7 @@ jobs:
         working-directory: web-ui
         run: |
           set -o pipefail
-          npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary 2>&1 | tee coverage-output.txt
+          npx c8 --reporter=text --reporter=json-summary --reports-dir=coverage npx tsx --test 'tests/**/*.test.ts' 2>&1 | tee coverage-output.txt
 
       - name: Build Coverage Summary
         working-directory: web-ui

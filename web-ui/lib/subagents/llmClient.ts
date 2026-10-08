@@ -14,10 +14,12 @@ export interface GenerateRequest {
   /** Ollama keep_alive value (e.g. "30m", 0, -1). Supplied by the residency policy. */
   keepAlive?: string | number;
   signal?: AbortSignal;
+  onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
 export interface GenerateResult {
   text: string;
+  thinking?: string;
   model: string;
   /** Time Ollama spent loading weights for this call (ms). >~1000ms means a cold load. */
   loadDurationMs: number;
@@ -38,13 +40,17 @@ export class ModelUnavailableError extends Error {
 }
 
 export function resolveOllamaBaseUrl(explicit?: string): string {
-  return explicit || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
+  let url = explicit || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `http://${url}`;
+  }
+  return url;
 }
 
 export function resolveWorkerTimeoutMs(explicit?: number): number {
   if (explicit && explicit > 0) return explicit;
   const fromEnv = Number(process.env.WORKER_MODEL_TIMEOUT_MS);
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 120_000;
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 900_000;
 }
 
 /**
@@ -61,6 +67,7 @@ export function createOllamaGenerate(options?: {
   const fetchImpl = options?.fetchImpl || fetch;
 
   return async (req: GenerateRequest): Promise<GenerateResult> => {
+    const startTime = Date.now();
     const endpoint = `${baseUrl}/api/generate`;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
@@ -74,7 +81,7 @@ export function createOllamaGenerate(options?: {
         body: JSON.stringify({
           model: req.model,
           prompt: req.prompt,
-          stream: false,
+          stream: true,
           ...(req.format ? { format: req.format } : {}),
           ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
           options: req.options || {}
@@ -89,50 +96,122 @@ export function createOllamaGenerate(options?: {
       throw new ModelUnavailableError(req.model, endpoint, `HTTP ${res.status} ${body.slice(0, 200)}`);
     }
 
-    let data: any;
-    try {
-      data = await res.json();
-    } catch (err: any) {
-      throw new ModelUnavailableError(req.model, endpoint, `invalid JSON response: ${err?.message}`);
-    }
+    let accumulatedText = "";
+    let thinkingText = "";
+    // swift-27b-mtp begins streaming its chain-of-thought immediately and terminates it with </think>
+    let insideThinking = true;
+    let loadDurationMs = 0;
+    let totalDurationMs = 0;
+    let lastLogTime = Date.now();
 
-    let text = typeof data?.response === "string" ? data.response.trim() : "";
-    if (!text && !req.signal?.aborted) {
-      // Transient model warm-up/context switch glitch in Ollama: wait 300ms and retry once
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      try {
-        const retryRes = await fetchImpl(endpoint, {
-          method: "POST",
-          signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: req.model,
-            prompt: req.prompt,
-            stream: false,
-            ...(req.format ? { format: req.format } : {}),
-            ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
-            options: req.options || {}
-          })
-        });
-        if (retryRes.ok) {
-          const retryData = await retryRes.json();
-          text = typeof retryData?.response === "string" ? retryData.response.trim() : "";
-          if (text) {
-            data = retryData;
+    try {
+      if (res.body && typeof (res.body as any).getReader === "function") {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+              if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+              if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+              const part = chunk.response || "";
+              accumulatedText += part;
+
+              // Track thinking state (swift-27b-mtp starts streaming thinking immediately before closing with </think>)
+              if (part.includes("<think>")) insideThinking = true;
+              if (insideThinking && !part.includes("</think>")) {
+                thinkingText += part;
+                if (req.onThinkingChunk) {
+                  try {
+                    req.onThinkingChunk(part, thinkingText);
+                  } catch (_) {}
+                }
+              } else if (insideThinking && part.includes("</think>")) {
+                const [beforeClosing] = part.split("</think>");
+                thinkingText += beforeClosing || "";
+                insideThinking = false;
+                if (req.onThinkingChunk && beforeClosing) {
+                  try {
+                    req.onThinkingChunk(beforeClosing, thinkingText);
+                  } catch (_) {}
+                }
+                console.log(`[llm] thinking finished (${thinkingText.length} chars)`);
+              }
+
+              const now = Date.now();
+              if (now - lastLogTime >= 15000) {
+                lastLogTime = now;
+                const elapsedSec = Math.round((now - startTime) / 1000);
+                if (insideThinking || (!accumulatedText.includes("</think>") && accumulatedText.length > 0 && !accumulatedText.includes("```"))) {
+                  const sample = (thinkingText || accumulatedText).replace(/\r?\n/g, " ").trim().slice(-120);
+                  console.log(`[llm] stream thinking [${elapsedSec}s elapsed]: ...${sample}`);
+                } else {
+                  console.log(`[llm] stream generating [${elapsedSec}s elapsed, ${accumulatedText.length} chars accumulated]`);
+                }
+              }
+            } catch (_) {}
           }
         }
-      } catch (_) {}
+        if (buffer.trim()) {
+          try {
+            const chunk = JSON.parse(buffer);
+            if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+            if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+            const part = chunk.response || "";
+            accumulatedText += part;
+            if (insideThinking && !part.includes("</think>")) {
+              thinkingText += part;
+            } else if (insideThinking && part.includes("</think>")) {
+              const [beforeClosing] = part.split("</think>");
+              thinkingText += beforeClosing || "";
+              insideThinking = false;
+            }
+          } catch (_) {
+            accumulatedText += buffer;
+          }
+        }
+      } else {
+        // Fallback for non-stream or custom mock fetchImpl
+        const rawText = await res.text();
+        const lines = rawText.split("\n").filter((l) => l.trim().length > 0);
+        for (const line of lines) {
+          try {
+            const chunk = JSON.parse(line);
+            accumulatedText += chunk.response || "";
+            if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+            if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+          } catch {
+            accumulatedText += line;
+          }
+        }
+      }
+    } catch (err: any) {
+      throw new ModelUnavailableError(req.model, endpoint, `stream read error: ${err?.message || String(err)}`);
     }
 
+    let text = accumulatedText.trim();
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }
 
+    const elapsed = Date.now() - startTime;
+    console.log(`[llm] generate completed in ${elapsed}ms for model ${req.model} (${text.length} chars)`);
+
     return {
       text,
+      thinking: thinkingText.trim() || undefined,
       model: req.model,
-      loadDurationMs: Math.round((data.load_duration || 0) / 1e6),
-      totalDurationMs: Math.round((data.total_duration || 0) / 1e6)
+      loadDurationMs,
+      totalDurationMs: totalDurationMs || elapsed
     };
   };
 }
@@ -142,9 +221,29 @@ export function isFastGraphTestMode(): boolean {
   return process.env.FAST_GRAPH_TEST === "1" || process.env.FAST_GRAPH_TEST === "true";
 }
 
-/** Strips a single surrounding markdown code fence, if present. */
+/** Strips markdown code fence and thinking blocks, extracting inner code block if present. */
 export function stripCodeFence(raw: string): string {
-  const trimmed = raw.trim();
-  const match = trimmed.match(/^```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```$/);
-  return match ? match[1] : trimmed;
+  let cleaned = raw.trim();
+
+  // 1. Strip completed <think>...</think> blocks
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+  // 2. Strip orphan leading reasoning up to </think>
+  if (cleaned.includes("</think>")) {
+    cleaned = cleaned.substring(cleaned.indexOf("</think>") + 8).trim();
+  }
+
+  // 3. If surrounded or containing a code block, extract the content of the block
+  const match = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```/);
+  if (match) {
+    return match[1].trim();
+  }
+
+  // 4. Fallback for unclosed code fence
+  const openMatch = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*)$/);
+  if (openMatch) {
+    return openMatch[1].trim();
+  }
+
+  return cleaned;
 }

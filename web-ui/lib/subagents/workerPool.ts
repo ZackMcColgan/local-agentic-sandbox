@@ -59,6 +59,8 @@ export interface BuilderResult {
   model?: string;
   targetFile: string;
   loadDurationMs?: number;
+  thinking?: string;
+  rawContent?: string;
   stuck?: boolean;
   errorSignature?: string;
   feedback?: string[];
@@ -99,16 +101,24 @@ export class ExplorerWorker {
  * Throws when no git repository is found. `strict` only inspects `repoRoot`.
  */
 export function getResolvedGitSha(repoRoot?: string, opts?: { strict?: boolean }): string {
+  const envWorkspace = process.env.WORKSPACE_DIR;
   const candidates = (opts?.strict
     ? [repoRoot]
-    : [repoRoot, process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")]
+    : [
+        repoRoot,
+        envWorkspace,
+        fs.existsSync("/workspace") ? "/workspace" : undefined,
+        process.cwd(),
+        path.resolve(process.cwd(), ".."),
+        path.resolve(process.cwd(), "../..")
+      ]
   ).filter(Boolean) as string[];
 
   for (const dir of candidates) {
     try {
-      const top = execSync("git rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      const top = execSync("git -c safe.directory=* rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
       if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase()) continue;
-      const sha = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      const sha = execSync("git -c safe.directory=* rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
       if (/^[0-9a-f]{40}$/i.test(sha)) {
         return sha;
       }
@@ -207,24 +217,54 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 
   // 2. Python AST parsing via Python standard library ast module
   if (ext === ".py") {
+    const pythonCmds = ["python3", "python"];
+    for (const cmd of pythonCmds) {
+      try {
+        execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+          input: content,
+          encoding: "utf8",
+          timeout: 3000,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+        return { valid: true };
+      } catch (err: any) {
+        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
+        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
+          continue;
+        }
+        return {
+          valid: false,
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
+        };
+      }
+    }
+    // Neither python3 nor python found - fail open for validation
+    return { valid: true };
+  }
+
+  // 3. JSON validation
+  if (ext === ".json") {
     try {
-      execFileSync("python3", ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
-        input: content,
-        encoding: "utf8",
-        timeout: 3000,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
+      JSON.parse(content);
       return { valid: true };
     } catch (err: any) {
-      const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
-      return {
-        valid: false,
-        error: `Python SyntaxError in ${filePath}: ${stderr}`
-      };
+      return { valid: false, error: `Invalid JSON syntax in ${filePath}: ${err.message}` };
     }
   }
 
-  // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
+  // 4. SVG and XML validation (check basic well-formedness: starts with <svg or <?xml or <, has closing tag)
+  if (ext === ".svg" || ext === ".xml" || ext === ".drawio") {
+    const trimmed = content.trim();
+    if (ext === ".svg" && (!trimmed.includes("<svg") || !trimmed.includes("</svg>"))) {
+      return { valid: false, error: `Invalid SVG format in ${filePath}: missing <svg> root element or closing tag.` };
+    }
+    if ((ext === ".xml" || ext === ".drawio") && (!trimmed.startsWith("<") || !trimmed.endsWith(">"))) {
+      return { valid: false, error: `Invalid XML format in ${filePath}: not enclosed in XML tags.` };
+    }
+    return { valid: true };
+  }
+
+  // 5. Other non-code files (Markdown, TXT, CSV) pass through
   return { valid: true };
 }
 
@@ -288,6 +328,7 @@ export class BuilderWorker {
       model?: string;
       gitSha?: string;
       signal?: AbortSignal;
+      onThinkingChunk?: (chunk: string, totalThinking: string) => void;
     }
   ): Promise<BuilderResult> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
@@ -303,13 +344,25 @@ export class BuilderWorker {
     const synthetic = !this.injectedGenerate && isFastGraphTestMode();
     let newContent: string;
     let loadDurationMs: number | undefined;
+    let builderThinking: string | undefined;
 
     if (synthetic) {
       console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
       const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
-      const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+      const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
+      const prompt = isSingleArtifact
+        ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Generate ONLY the requested file "${targetRelPath}". Do NOT create supporting code, TypeScript modules, API clients, or project scaffolding. Output the file content directly.
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+
+Provide the complete file content enclosed in a markdown code fence (e.g. \`\`\`xml or \`\`\`svg or language appropriate for "${targetRelPath}"). Do not include introductory or concluding conversation.`
+        : `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
 ${milestone.description}
@@ -318,7 +371,7 @@ ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("
 ${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
 ${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
 
-Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
 
       // Throws ModelUnavailableError on any failure — nothing is written in that case.
       const result = await generate({
@@ -326,10 +379,12 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
         prompt,
         keepAlive: this.keepAlive,
         signal: options?.signal,
-        options: { temperature: 0.2, num_predict: 4096 }
+        onThinkingChunk: options?.onThinkingChunk,
+        options: { temperature: 0.2, num_predict: 2048 }
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
+      builderThinking = result.thinking;
     }
 
     // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
@@ -340,6 +395,7 @@ Respond ONLY with the complete, raw file content for "${targetRelPath}". Do not 
       const errorSignatures: string[] = [];
 
       while (!astCheck.valid && astAttempts < maxAstRetries) {
+        console.warn(`[builder] AST validation failed for ${targetRelPath} (attempt ${astAttempts}): ${astCheck.error}`);
         const signature = normalizeErrorSignature(targetRelPath, astCheck.error || "");
         errorSignatures.push(signature);
 
@@ -373,7 +429,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
           prompt: correctionPrompt,
           keepAlive: this.keepAlive,
           signal: options?.signal,
-          options: { temperature: 0.2, num_predict: 4096 }
+          options: { temperature: 0.2, num_predict: 2048 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -405,7 +461,9 @@ Please fix the syntax error and output the complete, valid, raw file content for
       synthetic,
       model: synthetic ? undefined : modelToUse,
       targetFile: targetRelPath,
-      loadDurationMs
+      loadDurationMs,
+      thinking: builderThinking,
+      rawContent: newContent
     };
   }
 }
@@ -892,9 +950,9 @@ export class WorkerPool {
     return model;
   }
 
-  /** keep_alive for a model per the residency plan (undefined = Ollama default). */
-  keepAliveFor(model: string): string | number | undefined {
-    return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : undefined;
+  /** keep_alive for a model per the residency plan (defaults to 24h so models remain in VRAM between prompts). */
+  keepAliveFor(model: string): string | number {
+    return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : "24h";
   }
 
   /** Model options for a role: configured model, injected client, residency keep_alive. */

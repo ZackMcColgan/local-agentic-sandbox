@@ -130,6 +130,36 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
     assert.equal(fs.readFileSync(path.join(repo, "out.ts"), "utf8"), "export const BG = '#ffffff';");
     assert.ok(res.diff.includes("+export const BG = '#ffffff';"));
   });
+
+  it("model output wrapped in conversational prose and code fences extracts clean code without markdown wrappers", async () => {
+    delete process.env.FAST_GRAPH_TEST;
+    const repo = tempRepo();
+    const gen: GenerateFn = async (req) => ({
+      text: "Here is the implementation:\n\n```typescript\nexport const WEATHER_API = 'https://api.open-meteo.com';\n```\nHope this helps!",
+      model: req.model,
+      loadDurationMs: 0,
+      totalDurationMs: 1
+    });
+    const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["weather.ts"] }), { repoRoot: repo, gitSha: "d".repeat(40) });
+    assert.equal(res.synthetic, false);
+    assert.equal(fs.readFileSync(path.join(repo, "weather.ts"), "utf8"), "export const WEATHER_API = 'https://api.open-meteo.com';");
+  });
+
+  it("model output containing thinking tags and reasoning extracts clean code", async () => {
+    delete process.env.FAST_GRAPH_TEST;
+    const repo = tempRepo();
+    const gen: GenerateFn = async (req) => ({
+      text: "We need respond to user: write fetch script. Simple.\n</think>\n\n```typescript\nexport const fetchWeather = async () => ({ temp: 72 });\n```",
+      model: req.model,
+      loadDurationMs: 0,
+      totalDurationMs: 1
+    });
+    const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["fetchWeather.ts"] }), { repoRoot: repo, gitSha: "e".repeat(40) });
+    assert.equal(res.synthetic, false);
+    assert.equal(fs.readFileSync(path.join(repo, "fetchWeather.ts"), "utf8"), "export const fetchWeather = async () => ({ temp: 72 });");
+  });
 });
 
 describe("Phase A — No fabricated SHAs (A2c)", () => {
@@ -138,6 +168,30 @@ describe("Phase A — No fabricated SHAs (A2c)", () => {
     try {
       assert.throws(() => getResolvedGitSha(notRepo, { strict: true }), /no git repository/i);
     } finally {
+      fs.rmSync(notRepo, { recursive: true, force: true });
+    }
+  });
+
+  it("getResolvedGitSha resolves repository via WORKSPACE_DIR environment variable when repoRoot is not a git repo", () => {
+    const originalEnv = process.env.WORKSPACE_DIR;
+    const tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), "workspaceroot-"));
+    const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "nogit-"));
+    try {
+      const { execSync } = require("child_process");
+      execSync("git init", { cwd: tempRepo, stdio: "ignore" });
+      execSync("git config user.email 'test@test.com'", { cwd: tempRepo, stdio: "ignore" });
+      execSync("git config user.name 'Test'", { cwd: tempRepo, stdio: "ignore" });
+      fs.writeFileSync(path.join(tempRepo, "test.txt"), "hello");
+      execSync("git add test.txt && git commit -m 'initial'", { cwd: tempRepo, stdio: "ignore" });
+      const expectedSha = execSync("git rev-parse HEAD", { cwd: tempRepo, encoding: "utf8" }).trim();
+
+      process.env.WORKSPACE_DIR = tempRepo;
+      // In container environment, repoRoot might be /app (not a git repo), but WORKSPACE_DIR is /workspace
+      const resolved = getResolvedGitSha(notRepo);
+      assert.equal(resolved, expectedSha, "Should resolve SHA from WORKSPACE_DIR candidate");
+    } finally {
+      process.env.WORKSPACE_DIR = originalEnv;
+      fs.rmSync(tempRepo, { recursive: true, force: true });
       fs.rmSync(notRepo, { recursive: true, force: true });
     }
   });
