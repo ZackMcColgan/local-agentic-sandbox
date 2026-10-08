@@ -18,6 +18,7 @@ export interface GenerateRequest {
 
 export interface GenerateResult {
   text: string;
+  thinking?: string;
   model: string;
   /** Time Ollama spent loading weights for this call (ms). >~1000ms means a cold load. */
   loadDurationMs: number;
@@ -176,6 +177,7 @@ export function createOllamaGenerate(options?: {
 
     return {
       text,
+      thinking: thinkingText.trim() || undefined,
       model: req.model,
       loadDurationMs,
       totalDurationMs: totalDurationMs || elapsed

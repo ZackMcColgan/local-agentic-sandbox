@@ -668,6 +668,9 @@ export interface StepExecutorResult {
   builderIterations?: number;
   criticRounds?: number;
   builderModel?: string;
+  targetFile?: string;
+  deliverableContent?: string;
+  thinking?: string;
   reason?: string;
 }
 
@@ -866,7 +869,10 @@ export function createProductionStepExecutor(
             diff: currentDiff,
             builderIterations,
             criticRounds,
-            builderModel: builderRes.model || builderModel
+            builderModel: builderRes.model || builderModel,
+            targetFile: lastTargetFile,
+            deliverableContent: builderRes.rawContent,
+            thinking: builderRes.thinking
           };
         }
       }
@@ -1157,6 +1163,21 @@ export class OvernightSupervisor {
               if (res.builderModel) milestone.builderModel = res.builderModel;
               milestone.completedAt = new Date().toISOString();
               milestoneCompleted = true;
+
+              if (res.thinking) {
+                const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "builder",
+                  message: `Builder reasoning: ${sample}${res.thinking.length > 180 ? "..." : ""}`
+                });
+              }
+
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "builder",
+                message: `Generated deliverable ${res.targetFile || milestone.title} (${res.deliverableContent?.length || 0} bytes).`
+              });
             }
           } else {
             throw new Error("No stepExecutor provided; refusing to fake completion.");

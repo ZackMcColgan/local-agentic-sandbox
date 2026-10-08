@@ -59,6 +59,8 @@ export interface BuilderResult {
   model?: string;
   targetFile: string;
   loadDurationMs?: number;
+  thinking?: string;
+  rawContent?: string;
   stuck?: boolean;
   errorSignature?: string;
   feedback?: string[];
@@ -333,6 +335,7 @@ export class BuilderWorker {
     const synthetic = !this.injectedGenerate && isFastGraphTestMode();
     let newContent: string;
     let loadDurationMs: number | undefined;
+    let builderThinking: string | undefined;
 
     if (synthetic) {
       console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
@@ -371,6 +374,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
+      builderThinking = result.thinking;
     }
 
     // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
@@ -447,7 +451,9 @@ Please fix the syntax error and output the complete, valid, raw file content for
       synthetic,
       model: synthetic ? undefined : modelToUse,
       targetFile: targetRelPath,
-      loadDurationMs
+      loadDurationMs,
+      thinking: builderThinking,
+      rawContent: newContent
     };
   }
 }
