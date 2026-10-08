@@ -942,9 +942,9 @@ export class WorkerPool {
     return model;
   }
 
-  /** keep_alive for a model per the residency plan (undefined = Ollama default). */
-  keepAliveFor(model: string): string | number | undefined {
-    return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : undefined;
+  /** keep_alive for a model per the residency plan (defaults to 24h so models remain in VRAM between prompts). */
+  keepAliveFor(model: string): string | number {
+    return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : "24h";
   }
 
   /** Model options for a role: configured model, injected client, residency keep_alive. */
