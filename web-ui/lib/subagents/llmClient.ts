@@ -161,6 +161,24 @@ export function createOllamaGenerate(options?: {
             } catch (_) {}
           }
         }
+        if (buffer.trim()) {
+          try {
+            const chunk = JSON.parse(buffer);
+            if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+            if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+            const part = chunk.response || "";
+            accumulatedText += part;
+            if (insideThinking && !part.includes("</think>")) {
+              thinkingText += part;
+            } else if (insideThinking && part.includes("</think>")) {
+              const [beforeClosing] = part.split("</think>");
+              thinkingText += beforeClosing || "";
+              insideThinking = false;
+            }
+          } catch (_) {
+            accumulatedText += buffer;
+          }
+        }
       } else {
         // Fallback for non-stream or custom mock fetchImpl
         const rawText = await res.text();

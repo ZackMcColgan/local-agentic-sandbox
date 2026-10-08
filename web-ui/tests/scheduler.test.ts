@@ -296,7 +296,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.notEqual(result.status, "completed", "Status must NOT be completed when model is unreachable");
       assert.equal(result.status, "parked", "Status must be parked after recovery retries fail");
       assert.ok(result.parkedReason?.includes("recovery attempts"), "Must record parkedReason indicating failure");
-      assert.equal(result.milestones[0].status, "pending", "Milestone must remain pending, not completed");
+      assert.equal(result.milestones[0].status, "failed", "Milestone must be failed, not completed");
 
       // Check morning report
       const dateStr = new Date().toISOString().slice(0, 10);
