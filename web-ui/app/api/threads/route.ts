@@ -115,9 +115,48 @@ export async function POST(req: Request) {
       const activeThreadId = thread.id;
 
       // Kick off actual execution — fire-and-forget so the API returns immediately.
+      let lastThinkingUpdate = 0;
+      let lastRecordedLength = 0;
+
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool(),
-        model: "swift-27b-mtp"
+        model: "swift-27b-mtp",
+        onThinkingChunk: (_chunk: string, totalThinking: string) => {
+          const now = Date.now();
+          // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
+          if (now - lastThinkingUpdate > 3000 || totalThinking.length - lastRecordedLength > 120) {
+            lastThinkingUpdate = now;
+            lastRecordedLength = totalThinking.length;
+
+            // Extract the latest meaningful sentence or clause from thinking
+            const cleaned = totalThinking.trim().replace(/\r?\n/g, " ");
+            const snippet = cleaned.length > 200 ? cleaned.slice(-200) : cleaned;
+            const message = `Analyzing: ${snippet.trim()}`;
+
+            // Check if last entry is an in-flight thinking entry we can update, or append a new entry
+            const journal = manifest.journal || [];
+            const lastEntry = journal[journal.length - 1];
+            if (lastEntry && lastEntry.role === "builder" && lastEntry.message.startsWith("Analyzing:")) {
+              lastEntry.message = message;
+              lastEntry.timestamp = new Date().toISOString();
+            } else {
+              journal.push({
+                timestamp: new Date().toISOString(),
+                role: "builder",
+                message
+              });
+            }
+            manifest.journal = journal;
+            manifest.updatedAt = new Date().toISOString();
+
+            try {
+              const file = supervisor.getCheckpointFilePath(taskId);
+              fs.writeFileSync(file, JSON.stringify(manifest, null, 2), "utf8");
+            } catch (saveErr) {
+              console.warn(`[threads] Failed to write in-flight thinking checkpoint:`, saveErr);
+            }
+          }
+        }
       });
       (async () => {
         console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);

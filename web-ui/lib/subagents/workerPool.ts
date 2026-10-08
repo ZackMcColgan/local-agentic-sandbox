@@ -320,6 +320,7 @@ export class BuilderWorker {
       model?: string;
       gitSha?: string;
       signal?: AbortSignal;
+      onThinkingChunk?: (chunk: string, totalThinking: string) => void;
     }
   ): Promise<BuilderResult> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
@@ -370,6 +371,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         prompt,
         keepAlive: this.keepAlive,
         signal: options?.signal,
+        onThinkingChunk: options?.onThinkingChunk,
         options: { temperature: 0.2, num_predict: 2048 }
       });
       newContent = stripCodeFence(result.text);

@@ -687,6 +687,7 @@ export interface ProductionStepExecutorOptions {
   workerPool?: WorkerPool;
   repoRoot?: string;
   model?: string;
+  onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
 /**
@@ -776,7 +777,8 @@ export function createProductionStepExecutor(
                 previousDiff: currentDiff,
                 criticFeedback,
                 iteration: iter,
-                signal
+                signal,
+                onThinkingChunk: options?.onThinkingChunk
               });
             }
           });
@@ -1200,7 +1202,9 @@ export class OvernightSupervisor {
             // Self-healing retry with fresh checkpoint reload
             const reloaded = await this.resumeTaskFromCheckpoint(task.taskId);
             if (reloaded) {
+              const currentJournal = task.journal;
               task = reloaded;
+              task.journal = currentJournal;
             }
           }
         }
@@ -1211,6 +1215,10 @@ export class OvernightSupervisor {
         this.saveCheckpoint(task, milestone.commitSha);
       } else {
         // Failed after retries: park task and flag ambiguity
+        milestone.status = "failed";
+        if (task.milestones[mIdx]) {
+          task.milestones[mIdx].status = "failed";
+        }
         task.status = "parked";
         task.parkedReason = `Milestone ${milestone.id} failed after 3 recovery attempts`;
         task.ambiguityFlags.push({

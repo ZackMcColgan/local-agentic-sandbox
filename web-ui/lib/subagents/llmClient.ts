@@ -14,6 +14,7 @@ export interface GenerateRequest {
   /** Ollama keep_alive value (e.g. "30m", 0, -1). Supplied by the residency policy. */
   keepAlive?: string | number;
   signal?: AbortSignal;
+  onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
 export interface GenerateResult {
@@ -128,6 +129,11 @@ export function createOllamaGenerate(options?: {
               if (part.includes("<think>")) insideThinking = true;
               if (insideThinking) {
                 thinkingText += part;
+                if (req.onThinkingChunk) {
+                  try {
+                    req.onThinkingChunk(part, thinkingText);
+                  } catch (_) {}
+                }
                 if (part.includes("</think>")) {
                   insideThinking = false;
                   console.log(`[llm] thinking finished (${thinkingText.length} chars)`);
