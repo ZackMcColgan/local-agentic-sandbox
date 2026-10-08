@@ -217,21 +217,29 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 
   // 2. Python AST parsing via Python standard library ast module
   if (ext === ".py") {
-    try {
-      execFileSync("python3", ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
-        input: content,
-        encoding: "utf8",
-        timeout: 3000,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-      return { valid: true };
-    } catch (err: any) {
-      const stderr = err.stderr ? err.stderr.trim() : (err.message || "Invalid Python syntax");
-      return {
-        valid: false,
-        error: `Python SyntaxError in ${filePath}: ${stderr}`
-      };
+    const pythonCmds = ["python3", "python"];
+    for (const cmd of pythonCmds) {
+      try {
+        execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+          input: content,
+          encoding: "utf8",
+          timeout: 3000,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+        return { valid: true };
+      } catch (err: any) {
+        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
+        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
+          continue;
+        }
+        return {
+          valid: false,
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
+        };
+      }
     }
+    // Neither python3 nor python found - fail open for validation
+    return { valid: true };
   }
 
   // 3. JSON validation
