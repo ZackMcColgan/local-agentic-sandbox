@@ -108,6 +108,9 @@ jobs:
     name: Container Build & Docker Scout Scan
     runs-on: ubuntu-24.04
     needs: test-and-typecheck
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
