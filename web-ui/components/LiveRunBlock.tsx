@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
+import { SvgViewer } from "./SvgViewer";
 
 interface LiveRunBlockProps {
   task: TaskManifest;
@@ -248,13 +249,15 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
             )}
           </div>
 
-          <div className="space-y-1.5 pl-6 text-xs text-slate-600 dark:text-zinc-300">
-            {displayedThinking.map((msg, i) => (
-              <div key={i} className="flex items-start gap-1.5 leading-relaxed">
-                <span className="text-[#5b32e6] shrink-0">•</span>
-                <span>{msg}</span>
-              </div>
-            ))}
+          <div className="space-y-2 pl-6 text-xs text-slate-700 dark:text-zinc-200">
+            <div className={`space-y-1.5 ${showAllThinking ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+              {displayedThinking.map((msg, i) => (
+                <div key={i} className="flex items-start gap-2 leading-relaxed">
+                  <span className="text-[#5b32e6] shrink-0 font-bold">•</span>
+                  <span className="break-words whitespace-pre-wrap">{msg}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -288,20 +291,36 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
         );
       })()}
 
-      {/* Deliverable Badge when Completed */}
-      {isCompleted && (
-        <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
-              Deliverable Generated: {task.milestones?.[0]?.plannedFiles?.[0] || "weather.svg"}
-            </span>
+      {/* Deliverable Badge & Inline Graphic/Code Preview when Completed */}
+      {isCompleted && (() => {
+        const deliverableFile = task.milestones?.flatMap(m => m.plannedFiles || [])[0] || "weather.svg";
+        const isSvg = deliverableFile.toLowerCase().endsWith(".svg");
+        return (
+          <div className="space-y-3 pt-1">
+            <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                  Deliverable Generated: {deliverableFile}
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                Committed
+              </span>
+            </div>
+
+            {isSvg && (
+              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <SvgViewer
+                  url={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                  title={deliverableFile}
+                  initialTab="preview"
+                />
+              </div>
+            )}
           </div>
-          <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-            Committed
-          </span>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Stop Run Button (Prominent Filled-Tonal M3 Button) */}
       {isRunning && onStopRun && (

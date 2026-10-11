@@ -50,6 +50,23 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.equal(steps.length, 3);
       assert.equal(steps[0], "Analyzing weather requirements");
     });
+
+    it("formatThinkingDisplay preserves full reasoning text without truncating at 220 chars", () => {
+      const longReasoning = "We need to construct a comprehensive weather graphic that clearly demonstrates high pressure zones, cloud coverage, temperature gradients, and wind vector indicators across the primary coordinate map without dropping essential structural requirements or truncating sentences mid-thought.";
+      const steps = formatThinkingDisplay([longReasoning]);
+      assert.equal(steps.length, 1);
+      assert.equal(steps[0], longReasoning);
+      assert.ok(!steps[0].endsWith("..."), "Thinking should not be prematurely cut off with ellipsis");
+    });
+  });
+
+  describe("Deliverable Artifact Rendering in LiveRunBlock", () => {
+    it("mounts SvgViewer when a task is completed with an SVG deliverable", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      assert.ok(src.includes("SvgViewer"), "LiveRunBlock must import and mount SvgViewer");
+      assert.ok(src.includes("isCompleted") && src.includes("isSvg"), "Must conditionally render SvgViewer when deliverable is an SVG");
+      assert.ok(src.includes("/api/files?path="), "Must load deliverable file via /api/files endpoint");
+    });
   });
 
   describe("Code Block Syntax, Line Numbers & Copy Feedback", () => {

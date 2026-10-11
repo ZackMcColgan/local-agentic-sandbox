@@ -142,10 +142,8 @@ export function formatThinkingDisplay(entries: string[]): string[] {
       continue;
     }
 
-    // Truncate overly long single bullet lines to a readable narrative sentence
-    if (text.length > 220) {
-      text = text.slice(0, 220).trim() + "...";
-    }
+    // Clean stray leading/trailing quotes or punctuation often present in token streaming fragments
+    text = text.replace(/^["'`\s]+/, "").replace(/["'`\s]+$/, "");
 
     // Deduplicate
     const normalized = text.toLowerCase();
