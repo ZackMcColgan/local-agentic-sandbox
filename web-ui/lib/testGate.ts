@@ -392,7 +392,10 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
     for (const rawLine of statusOut.split("\n")) {
       if (!rawLine || rawLine.length < 3) continue;
       // In git status --porcelain: index 0 and 1 are status, index 2 is space, path is index 3+
-      const filePath = rawLine.slice(3).trim().replace(/^"|"$/g, "");
+      let filePath = rawLine.slice(3).trim().replace(/^"|"$/g, "");
+      if (filePath.includes(" -> ")) {
+        filePath = filePath.split(" -> ")[1].trim().replace(/^"|"$/g, "");
+      }
       if (filePath) files.add(filePath);
     }
 

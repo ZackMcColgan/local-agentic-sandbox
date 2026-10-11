@@ -4,8 +4,8 @@ import fs from "fs";
 import path from "path";
 import { formatThinkingDisplay, formatHumanReadableTrace, formatElapsedDuration } from "../lib/chatUtils";
 
-describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Readable Labels", () => {
-  describe("Item 1: Progress that moves", () => {
+describe("Chat Reasoning, Progress & Live Run Formatting", () => {
+  describe("formatElapsedDuration & LiveRunBlock Activity Tracking", () => {
     it("formatElapsedDuration accurately formats seconds into human readable time", () => {
       assert.equal(formatElapsedDuration(45), "45s");
       assert.equal(formatElapsedDuration(192), "3m 12s");
@@ -19,8 +19,8 @@ describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Reada
     });
   });
 
-  describe("Item 2: Thinking display (keep it, format it, filter raw noise)", () => {
-    it("formatThinkingDisplay filters out raw XML/SVG tags, coordinate dumps, and repetitive tokens", () => {
+  describe("formatThinkingDisplay & Reasoning Noise Filtering", () => {
+    it("filters out raw XML/SVG tags, coordinate dumps, and repetitive tokens", () => {
       const rawThinking = [
         "Analyzing prompt and goal requirements",
         "<svg viewBox='0 0 100 100'><path d='M10 20 L30 40 Z' fill='#fff'/></svg>",
@@ -52,7 +52,7 @@ describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Reada
     });
   });
 
-  describe("Item 4: Code block enhanced rendering & copy feedback", () => {
+  describe("Code Block Syntax, Line Numbers & Copy Feedback", () => {
     it("ChatStream and CodeBlock components support line numbers, copy button, language headers, and horizontal scroll", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
       assert.ok(src.includes("Copied") || src.includes("copied"), "Must show copy feedback");
@@ -60,7 +60,7 @@ describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Reada
     });
   });
 
-  describe("Item 5: Human-readable labels", () => {
+  describe("formatHumanReadableTrace & Telemetry Labels", () => {
     it("formatHumanReadableTrace translates technical tool names to plain language", () => {
       const searchTrace = {
         tool: "search_web",
@@ -81,7 +81,7 @@ describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Reada
     });
   });
 
-  describe("Item 7: Model indicator accuracy", () => {
+  describe("Active Model Indicator Resolution", () => {
     it("activeModel indicator resolves to swift-27b-mtp if backend is using swift-27b-mtp", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
       // Check that shortModelLabel handles swift-27b-mtp cleanly
@@ -89,7 +89,7 @@ describe("UX Polish Test Suite — Progress, Thinking, Code Blocks & Human-Reada
     });
   });
 
-  describe("Item 8: Duplicate message deduplication", () => {
+  describe("Message Stream Deduplication", () => {
     it("ChatStream or parent does not render duplicate sequential user messages with identical content", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
       assert.ok(
