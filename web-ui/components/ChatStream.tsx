@@ -36,7 +36,7 @@ import { LiveRunBlock } from "./LiveRunBlock";
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
 import { TaskManifest } from "../lib/subagents/types";
 
 export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
@@ -116,21 +116,97 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function CodeBlock({ language, code }: { language?: string; code: string }) {
-  const [copied, setCopied] = useState(false);
+function highlightTokens(code: string, language?: string): React.ReactNode[] {
+  // Simple, ultra-clean zero-dependency token highlighting for key languages (typescript, javascript, python, json, xml/svg, bash)
+  const lines = code.split("\n");
+  const lang = (language || "").toLowerCase();
 
-  if (isSvgCode(code, language)) {
+  return lines.map((line, lineIdx) => {
+    // If language is xml / svg / html
+    if (lang === "xml" || lang === "svg" || lang === "html") {
+      const parts = line.split(/(<\/?[a-zA-Z0-9:-]+|"[^"]*"|'[^']*'|\/>|>)/g);
+      return (
+        <span key={lineIdx} className="block leading-5">
+          {parts.map((p, pIdx) => {
+            if (/^<\/?[a-zA-Z0-9:-]+$/.test(p)) {
+              return <span key={pIdx} className="text-purple-600 dark:text-purple-400 font-semibold">{p}</span>;
+            }
+            if (/^["'].*["']$/.test(p)) {
+              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
+            }
+            if (p === ">" || p === "/>") {
+              return <span key={pIdx} className="text-slate-500 dark:text-zinc-500 font-semibold">{p}</span>;
+            }
+            return <span key={pIdx}>{p}</span>;
+          })}
+        </span>
+      );
+    }
+
+    // If language is json
+    if (lang === "json") {
+      const parts = line.split(/("[^"]*"\s*:|"[^"]*"|\b(?:true|false|null|\d+)\b)/g);
+      return (
+        <span key={lineIdx} className="block leading-5">
+          {parts.map((p, pIdx) => {
+            if (/^"[^"]*"\s*:$/.test(p)) {
+              return <span key={pIdx} className="text-indigo-600 dark:text-indigo-400 font-semibold">{p}</span>;
+            }
+            if (/^"[^"]*"$/.test(p)) {
+              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
+            }
+            if (/^(?:true|false|null|\d+)$/.test(p)) {
+              return <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">{p}</span>;
+            }
+            return <span key={pIdx}>{p}</span>;
+          })}
+        </span>
+      );
+    }
+
+    // General typescript / javascript / python / bash keywords
+    const keywordRegex = /\b(const|let|var|function|return|import|from|export|default|class|interface|type|async|await|if|else|for|while|try|catch|def|print|self|None|True|False)\b|("[^"]*"|'[^']*'|`[^`]*`)|(\/\/.*$|#.*$)/g;
+    const tokens: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = keywordRegex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push(line.slice(lastIndex, match.index));
+      }
+      if (match[1]) {
+        // Keyword
+        tokens.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-semibold">{match[1]}</span>);
+      } else if (match[2]) {
+        // String literal
+        tokens.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>);
+      } else if (match[3]) {
+        // Comment
+        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-500 italic">{match[3]}</span>);
+      }
+      lastIndex = keywordRegex.lastIndex;
+    }
+    if (lastIndex < line.length) {
+      tokens.push(line.slice(lastIndex));
+    }
+
     return (
-      <div className="my-3">
-        <SvgViewer
-          code={code}
-          title={language ? `${language.toUpperCase()} Vector Graphic` : "SVG Vector Graphic"}
-          initialTab="preview"
-          allowFullscreen={true}
-        />
-      </div>
+      <span key={lineIdx} className="block leading-5">
+        {tokens.length > 0 ? tokens : line}
+      </span>
     );
-  }
+  });
+}
+
+function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
+  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
+
+  const isSvg = isSvgCode(code, language);
+  const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
+  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "bash");
+  const lines = code.split("\n");
+  const showLineNumbers = lines.length >= 3;
 
   const handleCopy = async () => {
     const ok = await copyText(code);
@@ -140,10 +216,98 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
     }
   };
 
+  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
+  if (isSvg) {
+    return (
+      <div className="my-3">
+        <SvgViewer
+          code={code}
+          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
+          initialTab="preview"
+          allowFullscreen={true}
+        />
+      </div>
+    );
+  }
+
+  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe
+  if (isHtml) {
+    return (
+      <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
+        <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
+          <div className="flex items-center gap-2">
+            <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{filename || "index.html"}</span>
+            <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setActiveTab("preview")}
+                className={`px-2 py-0.5 rounded ${activeTab === "preview" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("code")}
+                className={`px-2 py-0.5 rounded ${activeTab === "code" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
+              >
+                Code
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
+            title="Copy code"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "preview" ? (
+          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
+            <iframe
+              srcDoc={code}
+              sandbox="allow-scripts"
+              className="w-full h-64 border-0 rounded-xl bg-white"
+              title="HTML Artifact Preview"
+            />
+          </div>
+        ) : (
+          <div className="flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c]">
+            {showLineNumbers && (
+              <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+                {lines.map((_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
+              </div>
+            )}
+            <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9]">
+              <code>{highlightTokens(code, langDisplay)}</code>
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
       <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-        <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{language || "bash"}</span>
+        <div className="flex items-center gap-2">
+          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
+          <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{langDisplay}</span>
+        </div>
         <button
           type="button"
           onClick={handleCopy}
@@ -163,9 +327,19 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
           )}
         </button>
       </div>
-      <pre className="p-3.5 text-xs font-mono text-[#1d1b20] dark:text-[#e6e0e9] overflow-x-auto leading-relaxed">
-        <code>{code}</code>
-      </pre>
+
+      <div className="flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c]">
+        {showLineNumbers && (
+          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+            {lines.map((_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
+        )}
+        <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
+          <code data-code={code}>{highlightTokens(code, langDisplay)}</code>
+        </pre>
+      </div>
     </div>
   );
 }
@@ -545,12 +719,24 @@ export function ChatStream({
     }
   };
 
-  const modelSafe = activeModel || "qwen3.8:27b-q3_k_m";
-  const shortModelLabel = modelSafe.includes("qwen")
+  const modelSafe = activeModel || "swift-27b-mtp";
+  const shortModelLabel = modelSafe.includes("swift")
+    ? "swift-27b"
+    : modelSafe.includes("qwen")
     ? "qwen3.8"
     : modelSafe.includes("gemma")
     ? "gemma4:e4b"
     : modelSafe.split(":")[0];
+
+  // Deduplicate consecutive identical user messages in UI stream
+  const deduplicatedMessages = messages.filter((m, i) => {
+    if (i === 0) return true;
+    const prev = messages[i - 1];
+    if (m.role === "user" && prev.role === "user" && m.content === prev.content) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div
@@ -618,7 +804,10 @@ export function ChatStream({
             </button>
           ) : null}
 
-          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate">
+          <h1
+            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate"
+            title={threadTitle || "New session"}
+          >
             {threadTitle || "New session"}
           </h1>
         </div>
@@ -629,7 +818,8 @@ export function ChatStream({
             type="button"
             onClick={onOpenModelSheet}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-[#6750a4] dark:text-[#d0bcff] shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-            title="Configure model and thinking effort"
+            title={`Active model: ${activeModel || "swift-27b-mtp"} · Tap to configure`}
+            aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
             <span>{shortModelLabel}</span>
@@ -641,8 +831,8 @@ export function ChatStream({
               type="button"
               onClick={onNewThread}
               className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
-              title="New session"
-              aria-label="New session"
+              title="Start new session"
+              aria-label="Start new session"
             >
               <Plus className="h-5 w-5" />
             </button>
@@ -655,6 +845,7 @@ export function ChatStream({
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
               className="p-1.5 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="More options"
+              aria-label="More options"
             >
               <MoreHorizontal className="h-5 w-5" />
             </button>
@@ -729,11 +920,25 @@ export function ChatStream({
 
       {/* Conversation Thread Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950">
-        {messages.map((m, idx) => {
+        {deduplicatedMessages.length === 0 && !activeTask && (
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
+            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
+              <Sparkles className="h-6 w-6 text-[#5b32e6] dark:text-indigo-400" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
+              Start an autonomous session
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+              Ask questions, inspect the air-gapped sandbox, or build autonomous software artifacts.
+            </p>
+          </div>
+        )}
+
+        {deduplicatedMessages.map((m, idx) => {
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
           const isThoughtOpen = expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
-          const hasLinkedTask = m.taskId || (activeTask && idx === messages.length - 1 && activeTask.status === "active");
+          const hasLinkedTask = m.taskId || (activeTask && idx === deduplicatedMessages.length - 1 && activeTask.status === "active");
 
           return (
             <div
@@ -803,32 +1008,48 @@ export function ChatStream({
                 /* Assistant Message View */
                 <div className="w-full max-w-2xl space-y-3">
                   {/* Reasoning Thought Accordion */}
-                  {(m.thought || (isLoading && idx === messages.length - 1 && !m.content)) && (
-                    <div className="w-full">
-                      <button
-                        type="button"
-                        onClick={() => toggleThought(m.id)}
-                        className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-2 rounded-2xl border border-slate-200/80 dark:border-zinc-800 transition-colors"
-                      >
-                        <Sparkles className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
-                        <span>Thinking · 3 steps</span>
-                        {isThoughtOpen ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-slate-500 ml-1" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-slate-500 ml-1" />
-                        )}
-                      </button>
+                  {(m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
+                    const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
+                    const thoughtLines = rawThought.split("\n").filter(l => l.trim().length > 0);
+                    const cleanedSteps = formatThinkingDisplay(thoughtLines);
+                    const stepCount = Math.max(cleanedSteps.length, 1);
+                    const firstStep = cleanedSteps[0] || "Analyzing prompt and formulating plan";
 
-                      {isThoughtOpen && (
-                        <div className="mt-2 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/60 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                          {m.thought || "Analyzing prompt and formulating execution plan..."}
-                          {isLoading && idx === messages.length - 1 && !m.content && (
-                            <span className="inline-block w-2 h-3.5 ml-1 bg-[#5b32e6] animate-pulse align-middle" />
+                    return (
+                      <div className="w-full">
+                        <button
+                          type="button"
+                          onClick={() => toggleThought(m.id)}
+                          className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-2 rounded-2xl border border-slate-200/80 dark:border-zinc-800 transition-colors"
+                        >
+                          <Sparkles className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                          <span>Thinking · {stepCount} {stepCount === 1 ? "step" : "steps"}: {firstStep.length > 40 ? firstStep.slice(0, 40) + "..." : firstStep}</span>
+                          {isThoughtOpen ? (
+                            <ChevronUp className="h-3.5 w-3.5 text-slate-500 ml-1" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-500 ml-1" />
                           )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        </button>
+
+                        {isThoughtOpen && (
+                          <div className="mt-2 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/60 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                            {cleanedSteps.length > 0 ? (
+                              <ul className="space-y-1.5 list-disc pl-4">
+                                {cleanedSteps.map((step, sIdx) => (
+                                  <li key={sIdx}>{step}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span>{rawThought}</span>
+                            )}
+                            {isLoading && idx === deduplicatedMessages.length - 1 && !m.content && (
+                              <span className="inline-block w-2 h-3.5 ml-1 bg-[#5b32e6] animate-pulse align-middle" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Inline Live Run Block if this message represents a builder task */}
                   {hasLinkedTask && activeTask && (
@@ -985,7 +1206,8 @@ export function ChatStream({
                       {m.traces.map((trace, tIdx) => {
                         const proofKey = `${m.id}-${tIdx}`;
                         const isExpanded = !!expandedProofs[proofKey];
-                        const isBrowser = trace.tier === "browser" || trace.tool.includes("search") || trace.tool.includes("fetch");
+                        const human = formatHumanReadableTrace(trace);
+                        const isBrowser = human.badge === "browser";
 
                         return (
                           <div
@@ -1001,22 +1223,26 @@ export function ChatStream({
                                 {isBrowser ? (
                                   <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
                                     <Globe className="h-3.5 w-3.5" />
-                                    <span>Isolated Egress Mesh</span>
+                                    <span>Web</span>
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
                                     <ShieldCheck className="h-3.5 w-3.5" />
-                                    <span>Executed in Docker Sandbox</span>
+                                    <span>Sandbox</span>
                                   </span>
                                 )}
                                 <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                <span className="text-slate-600 dark:text-zinc-300 font-medium">{trace.tool}</span>
-                                <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                <span className="text-slate-500 dark:text-zinc-400">{trace.durationMs}ms</span>
+                                <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans">{human.title}</span>
+                                {human.duration && (
+                                  <>
+                                    <span className="text-slate-400 dark:text-zinc-600">•</span>
+                                    <span className="text-slate-500 dark:text-zinc-400">{human.duration}</span>
+                                  </>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
-                                <span>{isExpanded ? "Hide Proof" : "Expand Proof"}</span>
+                                <span>{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
                                 {isExpanded ? (
                                   <ChevronUp className="h-3.5 w-3.5" />
                                 ) : (
@@ -1079,7 +1305,7 @@ export function ChatStream({
         })}
 
         {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
-        {activeTask && !messages.some(m => m.taskId === activeTask.taskId && m.role === 'assistant') && (
+        {activeTask && !deduplicatedMessages.some(m => m.taskId === activeTask.taskId && m.role === 'assistant') && (
           <div className="w-full max-w-2xl">
             <LiveRunBlock
               task={activeTask}

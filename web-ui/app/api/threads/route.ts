@@ -68,20 +68,30 @@ export async function POST(req: Request) {
           thread = existing;
           thread.taskId = taskId;
           thread.status = "active";
-          thread.messages.push({
-            id: `msg-${Date.now()}-u`,
-            role: "user",
-            content: goal,
-            attachments: body.attachments,
-            timestamp: new Date().toISOString()
-          });
-          thread.messages.push({
-            id: `msg-${Date.now()}-a`,
-            role: "assistant",
-            content: "Started autonomous engineering run.",
-            taskId,
-            timestamp: new Date().toISOString()
-          });
+          const lastMsg = thread.messages[thread.messages.length - 1];
+          const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === goal;
+          if (!isDuplicate) {
+            thread.messages.push({
+              id: `msg-${Date.now()}-u`,
+              role: "user",
+              content: goal,
+              attachments: body.attachments,
+              timestamp: new Date().toISOString()
+            });
+            thread.messages.push({
+              id: `msg-${Date.now()}-a`,
+              role: "assistant",
+              content: "Started autonomous engineering run.",
+              taskId,
+              timestamp: new Date().toISOString()
+            });
+          } else {
+            // Attach taskId to the last assistant message if present
+            const lastAssistant = thread.messages.slice().reverse().find(m => m.role === "assistant");
+            if (lastAssistant) {
+              lastAssistant.taskId = taskId;
+            }
+          }
           threadStore.saveThread(thread);
         } else {
           thread = threadStore.createThread({
