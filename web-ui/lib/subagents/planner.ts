@@ -1,4 +1,4 @@
-import { Milestone, ToolchainType, AcceptanceCriterion, TaskComplexity } from "./types";
+import { Milestone, ToolchainType, AcceptanceCriterion, TaskComplexity, TaskScope } from "./types";
 import {
   createOllamaGenerate,
   isFastGraphTestMode,
@@ -10,6 +10,7 @@ export interface PlanSpecInput {
   taskId: string;
   goal: string;
   toolchain?: ToolchainType;
+  scope?: TaskScope;
   model?: string;
   generate?: GenerateFn;
   ollamaUrl?: string;
@@ -20,6 +21,7 @@ export interface PlanSpec {
   taskId: string;
   goal: string;
   toolchain: ToolchainType;
+  scope?: TaskScope;
   complexity: TaskComplexity;
   milestones: Milestone[];
   toMarkdown: () => string;
@@ -66,29 +68,47 @@ export function classifyTaskComplexity(goal: string): TaskComplexity {
 }
 
 /**
- * Extracts the single artifact file name or default from a SINGLE_ARTIFACT goal.
+ * Extracts the single artifact file name or default from a SINGLE_ARTIFACT or SNIPPET goal.
  */
-function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } {
-  const matchFile = goal.match(/\b([a-zA-Z0-9_\-\.\/]+\.(svg|html|json|csv|md|txt|yaml|yml))\b/i);
+export function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } {
+  const matchFile = goal.match(/\b([a-zA-Z0-9_\-\.\/]+\.(svg|html|json|csv|md|txt|yaml|yml|ts|tsx|js|jsx|py|sh|sql))\b/i);
   if (matchFile) {
     const fn = matchFile[1];
     const ext = fn.split(".").pop()?.toLowerCase() || "txt";
     return { filename: fn, filetype: ext };
   }
 
-  const matchType = goal.match(/\b(svg|html|json|csv|md|markdown|txt|yaml|yml)\b/i);
-  const ext = matchType ? matchType[1].toLowerCase() : "txt";
-  const mappedExt = ext === "markdown" ? "md" : ext;
+  const matchType = goal.match(/\b(svg|html|json|csv|md|markdown|txt|yaml|yml|typescript|javascript|python|bash|shell|ts|tsx|js|jsx|py|sh|sql)\b/i);
+  const rawType = matchType ? matchType[1].toLowerCase() : "txt";
+  let mappedExt = rawType;
+  if (rawType === "markdown") mappedExt = "md";
+  if (rawType === "typescript") mappedExt = "ts";
+  if (rawType === "javascript") mappedExt = "js";
+  if (rawType === "python") mappedExt = "py";
+  if (rawType === "bash" || rawType === "shell") mappedExt = "sh";
 
   // Derive sensible default name
   if (mappedExt === "svg") {
     if (/weather/i.test(goal)) return { filename: "weather.svg", filetype: "svg" };
     return { filename: "artifact.svg", filetype: "svg" };
   }
+  if (mappedExt === "ts") {
+    if (/hello/i.test(goal)) return { filename: "hello.ts", filetype: "ts" };
+    return { filename: "snippet.ts", filetype: "ts" };
+  }
+  if (mappedExt === "js") {
+    if (/hello/i.test(goal)) return { filename: "hello.js", filetype: "js" };
+    return { filename: "snippet.js", filetype: "js" };
+  }
+  if (mappedExt === "py") {
+    if (/hello/i.test(goal)) return { filename: "hello.py", filetype: "py" };
+    return { filename: "script.py", filetype: "py" };
+  }
   if (mappedExt === "html") return { filename: "index.html", filetype: "html" };
   if (mappedExt === "json") return { filename: "data.json", filetype: "json" };
   if (mappedExt === "csv") return { filename: "output.csv", filetype: "csv" };
   if (mappedExt === "md") return { filename: "output.md", filetype: "md" };
+  if (mappedExt === "sh") return { filename: "script.sh", filetype: "sh" };
 
   return { filename: `output.${mappedExt}`, filetype: mappedExt };
 }
@@ -101,7 +121,14 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   const taskId = input.taskId || `task-${Date.now()}`;
   const goal = input.goal;
   const toolchain: ToolchainType = input.toolchain || "node:22";
-  const complexity = classifyTaskComplexity(goal);
+  const userScope: TaskScope = input.scope || "PROJECT";
+
+  // Derive effective complexity from userScope (user scope takes absolute precedence)
+  const complexity: TaskComplexity = (() => {
+    if (userScope === "SNIPPET") return "SINGLE_ARTIFACT";
+    if (userScope === "SCRIPT") return "SIMPLE_SCRIPT";
+    return classifyTaskComplexity(goal);
+  })();
 
   // Check if we should invoke a real model vs. test-only deterministic decomposition
   const isSynthetic = !input.generate && isFastGraphTestMode();
@@ -109,15 +136,15 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   let milestones: Milestone[] = [];
 
   // =========================================================================
-  // SINGLE_ARTIFACT Path: Generate exactly 1 milestone, producing ONLY that file
+  // SNIPPET / SINGLE_ARTIFACT Path: Exactly 1 milestone, 1 file, no scaffolding
   // =========================================================================
-  if (complexity === "SINGLE_ARTIFACT") {
+  if (userScope === "SNIPPET" || complexity === "SINGLE_ARTIFACT") {
     const { filename, filetype } = resolveSingleArtifactFile(goal);
     milestones = [
       {
         id: "M1",
         title: `Create ${filename}`,
-        description: `Generate ONLY the requested file "${filename}". Do NOT create supporting code, TypeScript modules, API clients, or project scaffolding. Output the file content directly matching: "${goal}".`,
+        description: `Generate ONLY the requested file "${filename}". Do NOT create supporting code, project scaffolding, build configs, or API clients. Output the file content directly matching: "${goal}".`,
         status: "pending",
         builderIterations: 0,
         criticRounds: 0,
@@ -138,8 +165,8 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
     const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000 });
     const modelToUse = input.model || process.env.PLANNER_MODEL || "swift-27b-mtp";
 
-    const prompt = complexity === "SIMPLE_SCRIPT"
-      ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise.
+    const prompt = (userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT")
+      ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise. No package.json, no build pipeline, no test scaffolding unless requested.
 
 Goal: ${goal}
 Toolchain: ${toolchain}
@@ -196,7 +223,9 @@ Respond strictly in valid JSON matching this schema:
 
     const parsed = JSON.parse(stripCodeFence(res.text));
     if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
-      milestones = parsed.milestones.map((m: any, idx: number) => ({
+      // Respect SCRIPT cap of 2 milestones max
+      const rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
+      milestones = rawList.map((m: any, idx: number) => ({
         id: m.id || `M${idx + 1}`,
         title: m.title || `Milestone ${idx + 1}`,
         description: m.description || "",
@@ -354,6 +383,7 @@ Respond strictly in valid JSON matching this schema:
     taskId,
     goal,
     toolchain,
+    scope: userScope,
     complexity,
     milestones,
     toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)

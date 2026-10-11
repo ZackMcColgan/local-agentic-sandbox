@@ -24,6 +24,8 @@
     "lan:bridge": "node scripts/lan-bridge.js",
     "dev:proxy": "node scripts/dev-proxy.js",
     "test:ui": "node scripts/test-ui-render.js",
+    "deploy:cluster": "node scripts/deploy-cluster.js",
+    "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
   }

@@ -65,10 +65,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/architectureSvgPair.test.ts"
     ]
   },
-  // ChatStream, chatUtils, and chat history components
+  // ChatStream, ThinkingPanel, chatUtils, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("lib/chatUtils"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils"),
     tests: [
+      "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
       "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
@@ -92,7 +93,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
+    tests: ["tests/chatReasoningAndProgress.test.ts", "tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
@@ -392,7 +393,10 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
     for (const rawLine of statusOut.split("\n")) {
       if (!rawLine || rawLine.length < 3) continue;
       // In git status --porcelain: index 0 and 1 are status, index 2 is space, path is index 3+
-      const filePath = rawLine.slice(3).trim().replace(/^"|"$/g, "");
+      let filePath = rawLine.slice(3).trim().replace(/^"|"$/g, "");
+      if (filePath.includes(" -> ")) {
+        filePath = filePath.split(" -> ")[1].trim().replace(/^"|"$/g, "");
+      }
       if (filePath) files.add(filePath);
     }
 

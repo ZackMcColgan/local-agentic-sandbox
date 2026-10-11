@@ -184,7 +184,8 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.ok(html.includes("Stop run"), "Must render prominent Stop run button");
 
       // Click Stop run button
-      const stopBtn = container.querySelector("button");
+      const buttons = Array.from(container.querySelectorAll("button"));
+      const stopBtn = buttons.find((b) => b.textContent?.includes("Stop run")) || container.querySelector("button");
       assert.ok(stopBtn, "Stop button exists");
       await act(async () => {
         stopBtn!.click();

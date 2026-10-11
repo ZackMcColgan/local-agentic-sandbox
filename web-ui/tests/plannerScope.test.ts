@@ -56,4 +56,84 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
     );
     assert.ok(hasValidCriteria);
   });
+
+  describe("Explicit Task Scope Options (SNIPPET / SCRIPT / PROJECT)", () => {
+    it("SNIPPET scope forces exactly 1 milestone, 1 plannedFile, and no scaffolding for 'Create a typescript hello world'", async () => {
+      const spec = await generatePlanSpec({
+        taskId: "task-snippet-ts-hello",
+        goal: "Create a typescript hello world",
+        scope: "SNIPPET"
+      });
+
+      assert.equal(spec.scope, "SNIPPET");
+      assert.equal(spec.milestones.length, 1, "SNIPPET must never produce more than 1 milestone");
+      const m = spec.milestones[0];
+      assert.equal(m.plannedFiles?.length, 1);
+      assert.ok(
+        m.description.includes("Generate ONLY the requested file") &&
+        m.description.includes("Do NOT create supporting code, project scaffolding, build configs, or API clients"),
+        "Builder prompt must forbid scaffolding and extra code"
+      );
+      assert.ok(!spec.milestones.some((item) => item.title.includes("Initialize TypeScript project")), "Must not have project initialization step");
+    });
+
+    it("SNIPPET scope forces exactly 1 milestone for 'Create a svg of the weather tomorrow'", async () => {
+      const spec = await generatePlanSpec({
+        taskId: "task-snippet-weather-svg",
+        goal: "Create a svg of the weather tomorrow",
+        scope: "SNIPPET"
+      });
+
+      assert.equal(spec.scope, "SNIPPET");
+      assert.equal(spec.milestones.length, 1);
+      assert.equal(spec.milestones[0].plannedFiles?.length, 1);
+      assert.ok(spec.milestones[0].plannedFiles![0].endsWith(".svg"));
+    });
+
+    it("SCRIPT scope constrains decomposition to 1-2 milestones max", async () => {
+      // Mock generate function returning 4 milestones
+      const mockGenerate = async () => ({
+        text: JSON.stringify({
+          milestones: [
+            { id: "M1", title: "Write ping script", plannedFiles: ["ping.py"] },
+            { id: "M2", title: "Add timeout handler", plannedFiles: ["ping.py"] },
+            { id: "M3", title: "Add extra docs", plannedFiles: ["README.md"] },
+            { id: "M4", title: "Add extra tests", plannedFiles: ["test_ping.py"] }
+          ]
+        })
+      });
+
+      const spec = await generatePlanSpec({
+        taskId: "task-script-test",
+        goal: "write a python script to ping servers",
+        scope: "SCRIPT",
+        generate: mockGenerate as any
+      });
+
+      assert.equal(spec.scope, "SCRIPT");
+      assert.ok(spec.milestones.length <= 2, `SCRIPT must cap at 2 milestones max, got ${spec.milestones.length}`);
+    });
+
+    it("PROJECT scope preserves full multi-milestone decomposition for 'Build a REST API'", async () => {
+      const mockGenerate = async () => ({
+        text: JSON.stringify({
+          milestones: [
+            { id: "M1", title: "Define routes & schema", plannedFiles: ["src/routes.ts"] },
+            { id: "M2", title: "Implement controller logic", plannedFiles: ["src/controller.ts"] },
+            { id: "M3", title: "Add authentication & integration tests", plannedFiles: ["src/auth.ts"] }
+          ]
+        })
+      });
+
+      const spec = await generatePlanSpec({
+        taskId: "task-project-rest-api",
+        goal: "Build a REST API",
+        scope: "PROJECT",
+        generate: mockGenerate as any
+      });
+
+      assert.equal(spec.scope, "PROJECT");
+      assert.equal(spec.milestones.length, 3, "PROJECT should retain full decomposition");
+    });
+  });
 });

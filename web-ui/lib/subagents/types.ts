@@ -4,6 +4,8 @@
 
 export type ToolchainType = "node:22" | "python:3.12" | "go" | "rust";
 
+export type TaskScope = "SNIPPET" | "SCRIPT" | "PROJECT";
+
 export type TaskComplexity = "SINGLE_ARTIFACT" | "SIMPLE_SCRIPT" | "PROJECT";
 
 export interface AssertionContract {
@@ -127,6 +129,7 @@ export interface TaskManifest {
   taskId: string;
   goal: string;
   toolchain: ToolchainType;
+  scope?: TaskScope;
   complexity?: TaskComplexity;
   branchName: string;
   branch?: string;

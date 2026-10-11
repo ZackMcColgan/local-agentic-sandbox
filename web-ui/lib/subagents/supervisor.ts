@@ -9,7 +9,8 @@ import {
   AmbiguityFlag,
   TaskStatus,
   ToolchainType,
-  TaskJournalEntry
+  TaskJournalEntry,
+  TaskScope
 } from "./types";
 import { generatePlanSpec } from "./planner";
 import { createOllamaGenerate, isFastGraphTestMode, type GenerateFn } from "./llmClient";
@@ -207,6 +208,10 @@ export const OvernightStateAnnotation = Annotation.Root({
     reducer: (curr, update) => update || curr,
     default: () => "node:22"
   }),
+  scope: Annotation<TaskScope | undefined>({
+    reducer: (curr, update) => update !== undefined ? update : curr,
+    default: () => undefined
+  }),
   currentMilestoneIndex: Annotation<number>({
     reducer: (curr, update) => (update !== undefined ? update : curr),
     default: () => 0
@@ -323,7 +328,8 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         : await generatePlanSpec({
             taskId: state.taskId,
             goal: state.goal,
-            toolchain: state.toolchain || "node:22"
+            toolchain: state.toolchain || "node:22",
+            scope: state.scope
           });
 
       return {

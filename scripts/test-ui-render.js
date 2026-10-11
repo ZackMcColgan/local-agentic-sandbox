@@ -73,14 +73,23 @@ async function capture(url, width, height, isMobile, outputPath) {
 
 async function run() {
   console.log('Capturing visual test screenshots across Desktop/Mobile and Light/Dark modes...');
-  await capture('http://127.0.0.1:3001/?theme=light', 1280, 800, false, 'test_ui_desktop_light.png');
-  await capture('http://127.0.0.1:3001/?theme=light', 390, 844, true, 'test_ui_mobile_light.png');
-  await capture('http://127.0.0.1:3001/?theme=dark', 1280, 800, false, 'test_ui_desktop_dark.png');
-  await capture('http://127.0.0.1:3001/?theme=dark', 390, 844, true, 'test_ui_mobile_dark.png');
+  let threadQuery = '';
+  try {
+    const tRes = await fetch('http://127.0.0.1:3001/api/threads');
+    if (tRes.ok) {
+      const tData = await tRes.json();
+      if (tData.threads && tData.threads.length > 0) {
+        threadQuery = `&thread=${encodeURIComponent(tData.threads[0].id)}`;
+      }
+    }
+  } catch {}
+
+  await capture(`http://127.0.0.1:3001/?theme=light${threadQuery}`, 1280, 800, false, 'test_ui_desktop_light.png');
+  await capture(`http://127.0.0.1:3001/?theme=light${threadQuery}`, 390, 844, true, 'test_ui_mobile_light.png');
+  await capture(`http://127.0.0.1:3001/?theme=dark${threadQuery}`, 1280, 800, false, 'test_ui_desktop_dark.png');
+  await capture(`http://127.0.0.1:3001/?theme=dark${threadQuery}`, 390, 844, true, 'test_ui_mobile_dark.png');
   await capture('http://127.0.0.1:3001/?theme=dark&tab=security', 1280, 900, false, 'test_ui_telemetry_desktop.png');
   await capture('http://127.0.0.1:3001/?theme=light&tab=security', 390, 844, true, 'test_ui_telemetry_mobile.png');
-  await capture('http://127.0.0.1:3001/?theme=light&tab=overnight', 1280, 800, false, 'test_ui_builder_desktop_light.png');
-  await capture('http://127.0.0.1:3001/?theme=dark&tab=overnight', 390, 844, true, 'test_ui_builder_mobile_dark.png');
   console.log('All visual screenshots captured successfully!');
   process.exit(0);
 }

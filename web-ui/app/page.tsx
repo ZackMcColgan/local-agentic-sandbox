@@ -9,7 +9,7 @@ import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport } from "@/lib/subagents/morningReport";
-import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
+import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import {
   Layers,
@@ -47,7 +47,7 @@ export default function Home() {
     airGapped: true
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
-  const [selectedModel, setSelectedModel] = useState<string>("qwen3.8:27b-q3_k_m");
+  const [selectedModel, setSelectedModel] = useState<string>("swift-27b-mtp");
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("medium");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
@@ -59,7 +59,7 @@ export default function Home() {
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage("qwen3.8:27b-q3_k_m")
+    getInitialWelcomeMessage("swift-27b-mtp")
   ]);
 
   // Synchronous-like hydration for theme support
@@ -240,6 +240,16 @@ export default function Home() {
             setActiveTask(data.task);
             if (data.task.status !== "active") {
               fetchThreads(false);
+              if (selectedThreadId) {
+                fetch(`/api/threads/${selectedThreadId}`)
+                  .then((r) => r.json())
+                  .then((td) => {
+                    if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
+                      setMessages(td.thread.messages);
+                    }
+                  })
+                  .catch((e) => console.warn("Failed to reload completed thread messages:", e));
+              }
             }
           }
           if (data.morningReport) {
@@ -341,7 +351,7 @@ export default function Home() {
   };
 
   // Launch a multi-milestone builder task inside the thread
-  const handleLaunchTask = async (goal: string, attachments?: any[]) => {
+  const handleLaunchTask = async (goal: string, attachments?: any[], scope?: TaskScope) => {
     try {
       const res = await fetch("/api/threads", {
         method: "POST",
@@ -350,6 +360,7 @@ export default function Home() {
           action: "launchTask",
           goal,
           toolchain: "node:22",
+          scope: scope || "PROJECT",
           threadId: selectedThreadId,
           attachments,
           model: selectedModel,
@@ -554,6 +565,7 @@ export default function Home() {
               threadId={currentThread?.id}
               threadTitle={currentThread?.title || "New session"}
               threadStatus={currentThread?.status}
+              threadScope={currentThread?.scope}
               activeTask={activeTask}
               onStopTask={handleStopRun}
               onBackToList={handleBackToList}
