@@ -203,6 +203,7 @@ function highlightTokens(code: string, language?: string): React.ReactNode[] {
 
 export function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
 
   const isSvg = isSvgCode(code, language);
@@ -210,8 +211,10 @@ export function CodeBlock({ language, code, filename }: { language?: string; cod
   const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "bash");
   const lines = code.split("\n");
   const showLineNumbers = lines.length >= 3;
+  const isLong = lines.length > 20;
 
   const handleCopy = async () => {
+    // Copy the full raw code, never truncated
     const ok = await copyText(code);
     if (ok) {
       setCopied(true);
@@ -257,6 +260,100 @@ export function CodeBlock({ language, code, filename }: { language?: string; cod
               </button>
             </div>
           </div>
+          <div className="flex items-center gap-3">
+            {isLong && activeTab === "code" && (
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium"
+                title={isExpanded ? "Collapse code block" : "Expand code block"}
+              >
+                {isExpanded ? "Collapse" : "Expand"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
+              title="Copy code"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "preview" ? (
+          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
+            <iframe
+              srcDoc={code}
+              sandbox="allow-scripts"
+              className="w-full h-64 border-0 rounded-xl bg-white"
+              title="HTML Artifact Preview"
+            />
+          </div>
+        ) : (
+          <div className="relative">
+            <div
+              className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
+                !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
+              }`}
+            >
+              {showLineNumbers && (
+                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+                  {lines.map((_, i) => (
+                    <div key={i}>{i + 1}</div>
+                  ))}
+                </div>
+              )}
+              <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
+                <code>{highlightTokens(code, langDisplay)}</code>
+              </pre>
+            </div>
+            {!isExpanded && isLong && (
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
+        <div className="flex items-center gap-2">
+          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
+          <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{langDisplay}</span>
+          {isLong && (
+            <span className="text-[10px] text-slate-500 dark:text-zinc-500">
+              ({lines.length} lines)
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-zinc-800/80"
+              title={isExpanded ? "Collapse code block" : "Expand code block"}
+            >
+              {isExpanded ? "Collapse" : "Expand"}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCopy}
@@ -276,72 +373,31 @@ export function CodeBlock({ language, code, filename }: { language?: string; cod
             )}
           </button>
         </div>
-
-        {activeTab === "preview" ? (
-          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
-            <iframe
-              srcDoc={code}
-              sandbox="allow-scripts"
-              className="w-full h-64 border-0 rounded-xl bg-white"
-              title="HTML Artifact Preview"
-            />
-          </div>
-        ) : (
-          <div className="flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c]">
-            {showLineNumbers && (
-              <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-                {lines.map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
-            )}
-            <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9]">
-              <code>{highlightTokens(code, langDisplay)}</code>
-            </pre>
-          </div>
-        )}
       </div>
-    );
-  }
 
-  return (
-    <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
-      <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
-          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
-          <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{langDisplay}</span>
-        </div>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
-          title="Copy code"
+      <div className="relative">
+        <div
+          className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
+            !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
+          }`}
         >
-          {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3.5 w-3.5" />
-              <span>Copy</span>
-            </>
+          {showLineNumbers && (
+            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+              {lines.map((_, i) => (
+                <div key={i}>{i + 1}</div>
+              ))}
+            </div>
           )}
-        </button>
-      </div>
-
-      <div className="flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c]">
-        {showLineNumbers && (
-          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-            {lines.map((_, i) => (
-              <div key={i}>{i + 1}</div>
-            ))}
-          </div>
+          <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
+            <code data-code={code}>{highlightTokens(code, langDisplay)}</code>
+          </pre>
+        </div>
+        {!isExpanded && isLong && (
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
+            aria-hidden="true"
+          />
         )}
-        <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
-          <code data-code={code}>{highlightTokens(code, langDisplay)}</code>
-        </pre>
       </div>
     </div>
   );

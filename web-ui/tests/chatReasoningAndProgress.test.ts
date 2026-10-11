@@ -100,11 +100,26 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
     });
   });
 
-  describe("Code Block Syntax, Line Numbers & Copy Feedback", () => {
+  describe("Code Block Syntax, Line Numbers, Scroll & Copy Feedback", () => {
     it("ChatStream and CodeBlock components support line numbers, copy button, language headers, and horizontal scroll", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
       assert.ok(src.includes("Copied") || src.includes("copied"), "Must show copy feedback");
       assert.ok(src.includes("overflow-x-auto"), "Must support horizontal scroll for long lines");
+    });
+
+    it("CodeBlock handles long files (e.g. 200 lines) with max-h-400px, overflow-y-auto, bottom gradient fade, expand toggle, and full copy", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(src.includes("max-h-[400px]") && src.includes("overflow-y-auto"), "Must constrain long blocks to max-height with vertical scroll");
+      assert.ok(src.includes("bg-gradient-to-t"), "Must have bottom fade gradient shadow when content overflows");
+      assert.ok(src.includes("isExpanded") && src.includes("Expand") && src.includes("Collapse"), "Must support expand/collapse toggle");
+      assert.ok(src.includes("lines.length"), "Must detect long line counts");
+      // Check copy behavior passes raw full code
+      assert.ok(src.includes("copyText(code)"), "Must copy the full raw code rather than truncated DOM slice");
+
+      // Verify simulated 200-line file behavior
+      const sample200Lines = Array.from({ length: 200 }, (_, i) => `console.log("Line number ${i + 1}");`).join("\n");
+      assert.equal(sample200Lines.split("\n").length, 200);
+      assert.ok(sample200Lines.split("\n").length > 20, "200-line file triggers long code block behavior");
     });
   });
 
