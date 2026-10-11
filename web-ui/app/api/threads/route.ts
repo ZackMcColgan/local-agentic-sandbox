@@ -5,7 +5,7 @@ import { ThreadStore, activeExecutionSet, Thread } from "@/lib/threads/threadSto
 import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
-import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
+import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
@@ -31,8 +31,9 @@ export async function POST(req: Request) {
       }
 
       const toolchain: ToolchainType = body.toolchain || "node:22";
+      const scope: TaskScope = body.scope || "PROJECT";
       const taskId = `task-${Date.now()}`;
-      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, model: body.model });
+      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: body.model });
 
       const manifest: TaskManifest = {
         taskId,
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
         branchName: "feat/v2.5-overnight",
         branch: "feat/v2.5-overnight",
         toolchain,
+        scope,
         complexity: planSpec.complexity,
         status: "active",
         milestones: planSpec.milestones,
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
           {
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Decomposed goal into ${planSpec.milestones.length} milestones. SPEC.md generated.`
+            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
           }
         ],
         startedAt: new Date().toISOString(),
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
         if (existing) {
           thread = existing;
           thread.taskId = taskId;
+          thread.scope = scope;
           thread.status = "active";
           const lastMsg = thread.messages[thread.messages.length - 1];
           const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === goal;
@@ -100,7 +103,8 @@ export async function POST(req: Request) {
             reasoningEffort: body.reasoningEffort || "medium",
             initialPrompt: goal,
             attachments: body.attachments,
-            taskId
+            taskId,
+            scope
           });
         }
       } else {
@@ -110,7 +114,8 @@ export async function POST(req: Request) {
           reasoningEffort: body.reasoningEffort || "medium",
           initialPrompt: goal,
           attachments: body.attachments,
-          taskId
+          taskId,
+          scope
         });
         thread.messages.push({
           id: `msg-${Date.now()}-a`,

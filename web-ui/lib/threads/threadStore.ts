@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { TaskManifest } from "../subagents/types";
+import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 
@@ -37,6 +37,7 @@ export interface Thread {
   reasoningEffort: "low" | "medium" | "xhigh";
   messages: ThreadMessage[];
   taskId?: string;
+  scope?: TaskScope;
   workerInfo?: string;
   timeLabel?: string;
   isTest?: boolean;
@@ -432,6 +433,7 @@ export class ThreadStore {
     initialPrompt?: string;
     attachments?: ThreadAttachment[];
     taskId?: string;
+    scope?: TaskScope;
     isTest?: boolean;
   }): Thread {
     const threadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -445,6 +447,7 @@ export class ThreadStore {
       model: params.model || "qwen3.8:27b-q3_k_m",
       reasoningEffort: params.reasoningEffort || "medium",
       taskId: params.taskId,
+      scope: params.scope,
       isTest: params.isTest ?? false,
       messages: params.initialPrompt
         ? [

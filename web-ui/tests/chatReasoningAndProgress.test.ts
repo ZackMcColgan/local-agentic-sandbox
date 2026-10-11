@@ -58,6 +58,23 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.equal(steps[0], longReasoning);
       assert.ok(!steps[0].endsWith("..."), "Thinking should not be prematurely cut off with ellipsis");
     });
+
+    it("suppresses meta-formatting noise (code fence syntax, counts, structural fences, etc.)", () => {
+      const mixedThoughts = [
+        "Decomposed goal into 1 milestone. SPEC.md generated.",
+        "in a ``` typescript (or appropriate language) code fence\" singular. But to include two files, two fences. No intro. Alternative: output a single code fence containing both files separated by markers",
+        "Determining temperature color scale for tomorrow forecast",
+        "Alternative: output a single code fence containing both files",
+        "Validating SVG viewBox bounds against screen geometry"
+      ];
+
+      const cleaned = formatThinkingDisplay(mixedThoughts);
+      assert.equal(cleaned.length, 3, "Should keep exactly the 3 genuine reasoning steps and drop the 2 meta-formatting noise lines");
+      assert.ok(cleaned.some(s => s.includes("Decomposed goal into 1 milestone")));
+      assert.ok(cleaned.some(s => s.includes("Determining temperature color scale")));
+      assert.ok(cleaned.some(s => s.includes("Validating SVG viewBox bounds")));
+      assert.ok(!cleaned.some(s => s.includes("code fence") || s.includes("two fences") || s.includes("separated by markers")));
+    });
   });
 
   describe("Deliverable Artifact Rendering in LiveRunBlock", () => {

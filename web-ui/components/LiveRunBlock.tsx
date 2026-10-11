@@ -127,6 +127,11 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
                 <span>Running</span>
               </span>
             )}
+            {task.scope && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 uppercase tracking-wider">
+                {task.scope}
+              </span>
+            )}
             {isStopped && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
                 • Stopped

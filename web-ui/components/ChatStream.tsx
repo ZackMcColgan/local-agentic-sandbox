@@ -37,7 +37,7 @@ import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractS
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
-import { TaskManifest } from "../lib/subagents/types";
+import { TaskManifest, TaskScope } from "../lib/subagents/types";
 
 export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
 
@@ -90,10 +90,12 @@ interface ChatStreamProps {
   threadTitle?: string;
   threadStatus?: "active" | "stopped" | "completed" | "failed";
   activeTask?: TaskManifest | null;
+  initialScope?: TaskScope;
+  threadScope?: TaskScope;
   onStopTask?: () => Promise<void> | void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
-  onLaunchTask?: (goal: string, attachments?: any[]) => Promise<void>;
+  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope) => Promise<void>;
   onNewThread?: () => void;
   onDeleteThread?: () => void;
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
@@ -357,6 +359,8 @@ export function ChatStream({
   threadTitle,
   threadStatus,
   activeTask,
+  initialScope = "PROJECT",
+  threadScope,
   onStopTask,
   onBackToList,
   onOpenModelSheet,
@@ -372,6 +376,9 @@ export function ChatStream({
   ]);
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
+
+  // Task Scope selection state: default is PROJECT
+  const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -551,7 +558,7 @@ export function ChatStream({
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(prompt, currentAttachments);
+        await onLaunchTask(prompt, currentAttachments, selectedScope);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
@@ -813,6 +820,16 @@ export function ChatStream({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Scope Badge if available */}
+          {(threadScope || activeTask?.scope) && (
+            <span
+              className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 text-xs font-semibold uppercase tracking-wider"
+              title={`Task Scope: ${threadScope || activeTask?.scope}`}
+            >
+              {threadScope || activeTask?.scope}
+            </span>
+          )}
+
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
             type="button"
@@ -1373,6 +1390,49 @@ export function ChatStream({
             ))}
           </div>
         )}
+
+        {/* Task Scope Segmented Control */}
+        <div className="max-w-2xl mx-auto mb-2 flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400">
+            <span className="font-medium text-[11px] uppercase tracking-wider text-slate-400 dark:text-zinc-500">Scope</span>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Task Scope Selector"
+            className="inline-flex rounded-xl p-0.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-medium"
+          >
+            {(["SNIPPET", "SCRIPT", "PROJECT"] as const).map((scopeOption) => {
+              const isSelected = selectedScope === scopeOption;
+              const labels = {
+                SNIPPET: "Snippet",
+                SCRIPT: "Script",
+                PROJECT: "Project"
+              };
+              const tooltips = {
+                SNIPPET: "Single file, single milestone (no scaffolding)",
+                SCRIPT: "1-2 milestones, small utility or script",
+                PROJECT: "Full milestone decomposition & multi-file system"
+              };
+              return (
+                <button
+                  key={scopeOption}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() => setSelectedScope(scopeOption)}
+                  title={tooltips[scopeOption]}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    isSelected
+                      ? "bg-white dark:bg-zinc-800 text-[#5b32e6] dark:text-indigo-300 font-semibold shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  {labels[scopeOption]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Input Bar Card: rounded-full pill matching Mockup 1 & 4 */}
         <form

@@ -9,7 +9,7 @@ import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport } from "@/lib/subagents/morningReport";
-import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
+import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import {
   Layers,
@@ -341,7 +341,7 @@ export default function Home() {
   };
 
   // Launch a multi-milestone builder task inside the thread
-  const handleLaunchTask = async (goal: string, attachments?: any[]) => {
+  const handleLaunchTask = async (goal: string, attachments?: any[], scope?: TaskScope) => {
     try {
       const res = await fetch("/api/threads", {
         method: "POST",
@@ -350,6 +350,7 @@ export default function Home() {
           action: "launchTask",
           goal,
           toolchain: "node:22",
+          scope: scope || "PROJECT",
           threadId: selectedThreadId,
           attachments,
           model: selectedModel,
@@ -554,6 +555,7 @@ export default function Home() {
               threadId={currentThread?.id}
               threadTitle={currentThread?.title || "New session"}
               threadStatus={currentThread?.status}
+              threadScope={currentThread?.scope}
               activeTask={activeTask}
               onStopTask={handleStopRun}
               onBackToList={handleBackToList}

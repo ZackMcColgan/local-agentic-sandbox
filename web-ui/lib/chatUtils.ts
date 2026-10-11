@@ -142,6 +142,16 @@ export function formatThinkingDisplay(entries: string[]): string[] {
       continue;
     }
 
+    // Suppress meta-formatting noise (code fence syntax, counts, structural fences, etc.)
+    // Examples: "in a ``` typescript (or appropriate language) code fence", "two fences", "separated by markers", "No intro", "Alternative: output a single..."
+    if (
+      /\b(code fence|code fences|two fences|single code fence|fences\b|separated by markers|no intro\b|no introductory|introductory or concluding|closing fence|markdown fence)\b/i.test(text) ||
+      /\b(alternative:\s*output|output a single code fence|enclose(d)? in a (```|markdown)|appropriate language\) code fence)/i.test(text) ||
+      /^in a\s+```/i.test(text)
+    ) {
+      continue;
+    }
+
     // Clean stray leading/trailing quotes or punctuation often present in token streaming fragments
     text = text.replace(/^["'`\s]+/, "").replace(/["'`\s]+$/, "");
 

@@ -354,7 +354,7 @@ export class BuilderWorker {
       const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
       const prompt = isSingleArtifact
         ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
-Generate ONLY the requested file "${targetRelPath}". Do NOT create supporting code, TypeScript modules, API clients, or project scaffolding. Output the file content directly.
+Generate ONLY the requested file. Do NOT create supporting code, project scaffolding, build configs, or API clients. Output the file content directly.
 Task Requirements:
 ${milestone.description}
 Acceptance Criteria:
