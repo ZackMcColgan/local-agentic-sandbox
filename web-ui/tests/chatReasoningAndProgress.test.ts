@@ -75,6 +75,14 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.ok(cleaned.some(s => s.includes("Validating SVG viewBox bounds")));
       assert.ok(!cleaned.some(s => s.includes("code fence") || s.includes("two fences") || s.includes("separated by markers")));
     });
+
+    it("ThinkingPanel source contains phased cards (Planning, Building, Validating), streaming badge, and is expanded by default", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/ThinkingPanel.tsx"), "utf8");
+      assert.ok(src.includes("planning") && src.includes("building") && src.includes("validating"), "Must have 3 pipeline phases");
+      assert.ok(src.includes("Worker reasoning"), "Must have panel header matching mockup");
+      assert.ok(src.includes("Streaming") || src.includes("streaming-badge"), "Must have streaming badge");
+      assert.ok(src.includes("defaultExpanded = true"), "Must be expanded by default as requested by user");
+    });
   });
 
   describe("Deliverable Artifact Rendering in LiveRunBlock", () => {
@@ -83,6 +91,12 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.ok(src.includes("SvgViewer"), "LiveRunBlock must import and mount SvgViewer");
       assert.ok(src.includes("isCompleted") && src.includes("isSvg"), "Must conditionally render SvgViewer when deliverable is an SVG");
       assert.ok(src.includes("/api/files?path="), "Must load deliverable file via /api/files endpoint");
+    });
+
+    it("mounts CodeBlock when a task produces non-SVG code deliverable (e.g. hello.ts)", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      assert.ok(src.includes("CodeBlock"), "LiveRunBlock must import and mount CodeBlock for non-SVG code deliverables");
+      assert.ok(src.includes("codeSnippet"), "LiveRunBlock must extract code snippet from milestone diff or content");
     });
   });
 

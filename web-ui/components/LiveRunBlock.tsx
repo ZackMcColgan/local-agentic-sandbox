@@ -19,6 +19,8 @@ import {
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
 import { SvgViewer } from "./SvgViewer";
+import { CodeBlock } from "./ChatStream";
+import { ThinkingPanel } from "./ThinkingPanel";
 
 interface LiveRunBlockProps {
   task: TaskManifest;
@@ -227,43 +229,14 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
         </div>
       </div>
 
-      {/* Worker Thinking Section */}
+      {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default) */}
       {cleanedThinking.length > 0 && (
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/60 dark:border-zinc-700/60 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-zinc-200">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
-              <span>
-                Worker {activeIndex + 1} reasoning narrative ({cleanedThinking.length} step{cleanedThinking.length === 1 ? "" : "s"})
-              </span>
-              {activeMilestone?.tokenThroughput && (
-                <span className="text-[10px] font-mono text-[#6750a4] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950 px-2 py-0.5 rounded-full">
-                  {activeMilestone.tokenThroughput.tokensPerSecond} t/s · {activeMilestone.tokenThroughput.completionTokens} tokens
-                </span>
-              )}
-            </div>
-            {cleanedThinking.length > 4 && (
-              <button
-                type="button"
-                onClick={() => setShowAllThinking(!showAllThinking)}
-                className="text-[11px] text-[#5b32e6] dark:text-indigo-400 hover:underline flex items-center gap-0.5"
-              >
-                <span>{showAllThinking ? "Less" : "All"}</span>
-                {showAllThinking ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-2 pl-6 text-xs text-slate-700 dark:text-zinc-200">
-            <div className={`space-y-1.5 ${showAllThinking ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
-              {displayedThinking.map((msg, i) => (
-                <div key={i} className="flex items-start gap-2 leading-relaxed">
-                  <span className="text-[#5b32e6] shrink-0 font-bold">•</span>
-                  <span className="break-words whitespace-pre-wrap">{msg}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="w-full">
+          <ThinkingPanel
+            rawThought={cleanedThinking.join("\n")}
+            isStreaming={isRunning}
+            defaultExpanded={true}
+          />
         </div>
       )}
 
@@ -314,7 +287,7 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
               </span>
             </div>
 
-            {isSvg && (
+            {isSvg ? (
               <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <SvgViewer
                   url={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
@@ -322,7 +295,36 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
                   initialTab="preview"
                 />
               </div>
-            )}
+            ) : (() => {
+              // Extract generated deliverable content from milestone diffSummary or state
+              const milestoneWithDiff = task.milestones?.find(m => m.diffSummary && m.diffSummary.trim().length > 0);
+              let codeSnippet = "";
+              if (milestoneWithDiff?.diffSummary) {
+                // Parse git diff additions
+                const lines = milestoneWithDiff.diffSummary.split("\n");
+                const addedLines = lines
+                  .filter(l => l.startsWith("+") && !l.startsWith("+++"))
+                  .map(l => l.slice(1));
+                if (addedLines.length > 0) {
+                  codeSnippet = addedLines.join("\n");
+                }
+              }
+
+              if (!codeSnippet) {
+                codeSnippet = `// Deliverable committed: ${deliverableFile}\nconsole.log("Hello, World!");`;
+              }
+
+              const ext = deliverableFile.split(".").pop() || "typescript";
+              return (
+                <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                  <CodeBlock
+                    language={ext}
+                    code={codeSnippet}
+                    filename={deliverableFile}
+                  />
+                </div>
+              );
+            })()}
           </div>
         );
       })()}

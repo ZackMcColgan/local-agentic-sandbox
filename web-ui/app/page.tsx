@@ -240,6 +240,16 @@ export default function Home() {
             setActiveTask(data.task);
             if (data.task.status !== "active") {
               fetchThreads(false);
+              if (selectedThreadId) {
+                fetch(`/api/threads/${selectedThreadId}`)
+                  .then((r) => r.json())
+                  .then((td) => {
+                    if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
+                      setMessages(td.thread.messages);
+                    }
+                  })
+                  .catch((e) => console.warn("Failed to reload completed thread messages:", e));
+              }
             }
           }
           if (data.morningReport) {

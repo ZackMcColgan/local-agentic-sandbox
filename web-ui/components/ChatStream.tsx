@@ -33,6 +33,7 @@ import { copyText } from "../lib/clipboard";
 import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
+import { ThinkingPanel } from "./ThinkingPanel";
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
@@ -200,7 +201,7 @@ function highlightTokens(code: string, language?: string): React.ReactNode[] {
   });
 }
 
-function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
+export function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
 
@@ -1024,46 +1025,18 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-2xl space-y-3">
-                  {/* Reasoning Thought Accordion */}
+                  {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default) */}
                   {(m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
-                    const thoughtLines = rawThought.split("\n").filter(l => l.trim().length > 0);
-                    const cleanedSteps = formatThinkingDisplay(thoughtLines);
-                    const stepCount = Math.max(cleanedSteps.length, 1);
-                    const firstStep = cleanedSteps[0] || "Analyzing prompt and formulating plan";
+                    const isStreamingThis = isLoading && idx === deduplicatedMessages.length - 1;
 
                     return (
                       <div className="w-full">
-                        <button
-                          type="button"
-                          onClick={() => toggleThought(m.id)}
-                          className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-zinc-200 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-850 px-3.5 py-2 rounded-2xl border border-slate-200/80 dark:border-zinc-800 transition-colors"
-                        >
-                          <Sparkles className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
-                          <span>Thinking · {stepCount} {stepCount === 1 ? "step" : "steps"}: {firstStep.length > 40 ? firstStep.slice(0, 40) + "..." : firstStep}</span>
-                          {isThoughtOpen ? (
-                            <ChevronUp className="h-3.5 w-3.5 text-slate-500 ml-1" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5 text-slate-500 ml-1" />
-                          )}
-                        </button>
-
-                        {isThoughtOpen && (
-                          <div className="mt-2 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/60 text-slate-600 dark:text-zinc-400 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                            {cleanedSteps.length > 0 ? (
-                              <ul className="space-y-1.5 list-disc pl-4">
-                                {cleanedSteps.map((step, sIdx) => (
-                                  <li key={sIdx}>{step}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <span>{rawThought}</span>
-                            )}
-                            {isLoading && idx === deduplicatedMessages.length - 1 && !m.content && (
-                              <span className="inline-block w-2 h-3.5 ml-1 bg-[#5b32e6] animate-pulse align-middle" />
-                            )}
-                          </div>
-                        )}
+                        <ThinkingPanel
+                          rawThought={rawThought}
+                          isStreaming={isStreamingThis}
+                          defaultExpanded={true}
+                        />
                       </div>
                     );
                   })()}
@@ -1077,8 +1050,8 @@ export function ChatStream({
                     />
                   )}
 
-                  {/* Text Markdown Content */}
-                  {m.content && (
+                  {/* Text Markdown Content (Suppress disconnected 'Started autonomous...' text if LiveRunBlock is rendered) */}
+                  {m.content && (!hasLinkedTask || !m.content.includes("Started autonomous engineering run.")) && (
                     <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}

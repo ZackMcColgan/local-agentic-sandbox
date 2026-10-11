@@ -221,3 +221,37 @@ export function formatHumanReadableTrace(trace: { tool: string; durationMs?: num
     badge
   };
 }
+
+/**
+ * Buffers streaming token fragments until complete sentences/clauses are formed,
+ * preventing mid-word text cuts in the UI.
+ */
+export function bufferSentenceStream(accumulatedText: string): { completedText: string; pendingFragment: string } {
+  if (!accumulatedText) return { completedText: "", pendingFragment: "" };
+
+  // Find the last sentence-ending punctuation followed by space or newline
+  const match = accumulatedText.match(/^(.*[.!?](?:\s+|\n|$))([\s\S]*)$/);
+  if (match) {
+    return {
+      completedText: match[1].trim(),
+      pendingFragment: match[2]
+    };
+  }
+
+  // If text is long (>140 chars) without terminal punctuation, cut at the last word boundary
+  if (accumulatedText.length > 140) {
+    const lastSpace = accumulatedText.lastIndexOf(" ");
+    if (lastSpace > 60) {
+      return {
+        completedText: accumulatedText.slice(0, lastSpace).trim(),
+        pendingFragment: accumulatedText.slice(lastSpace + 1)
+      };
+    }
+  }
+
+  return {
+    completedText: "",
+    pendingFragment: accumulatedText
+  };
+}
+

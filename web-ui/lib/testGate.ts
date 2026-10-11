@@ -65,10 +65,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/architectureSvgPair.test.ts"
     ]
   },
-  // ChatStream, chatUtils, and chat history components
+  // ChatStream, ThinkingPanel, chatUtils, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("lib/chatUtils"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils"),
     tests: [
+      "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
       "tests/chatStreaming.test.ts",
       "tests/svgComponent.test.ts",
@@ -92,7 +93,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
+    tests: ["tests/chatReasoningAndProgress.test.ts", "tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
