@@ -15,6 +15,8 @@ export interface GenerateRequest {
   keepAlive?: string | number;
   signal?: AbortSignal;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+  /** Task scope driving per-request context window (e.g. SNIPPET, SCRIPT, PROJECT). */
+  scope?: string;
 }
 
 export interface GenerateResult {
@@ -55,6 +57,22 @@ export function resolveWorkerTimeoutMs(explicit?: number): number {
 }
 
 /**
+ * Maps task scope to Ollama context size (num_ctx).
+ * - PROJECT: 8192 tokens (headroom for multi-file architecture/context)
+ * - SCRIPT / SNIPPET / default: 4096 tokens (fits in 16GB VRAM alongside 14GB weights, 100% GPU)
+ */
+export function getContextSizeForScope(scope?: string): number {
+  switch (scope?.toUpperCase()) {
+    case "PROJECT":
+      return 8192; // More room for complex tasks, accept potential VRAM spillover
+    case "SCRIPT":
+    case "SNIPPET":
+    default:
+      return 4096; // Fits in VRAM on 16GB cards, maximum speed
+  }
+}
+
+/**
  * Creates a GenerateFn bound to an Ollama endpoint.
  * Network errors, non-2xx responses, timeouts and empty responses all throw ModelUnavailableError.
  */
@@ -62,6 +80,7 @@ export function createOllamaGenerate(options?: {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  scope?: string;
 }): GenerateFn {
   const baseUrl = resolveOllamaBaseUrl(options?.baseUrl);
   const timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
@@ -72,6 +91,18 @@ export function createOllamaGenerate(options?: {
     const endpoint = `${baseUrl}/api/generate`;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
+
+    const taskScope = req.scope || options?.scope;
+    const numCtx = getContextSizeForScope(taskScope);
+
+    // Note: Environment variable fallback: If OLLAMA_CONTEXT_LENGTH is set in the environment,
+    // the per-request num_ctx overrides it (standard Ollama API behavior).
+    // This is intentional — the application knows the task scope, whereas the environment variable does not.
+    const requestOptions = {
+      num_ctx: numCtx,
+      num_predict: 2048,
+      ...(req.options || {})
+    };
 
     let res: Response;
     try {
@@ -85,7 +116,7 @@ export function createOllamaGenerate(options?: {
           stream: true,
           ...(req.format ? { format: req.format } : {}),
           ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
-          options: req.options || {}
+          options: requestOptions
         })
       });
     } catch (err: any) {

@@ -361,7 +361,8 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
           createProductionStepExecutor({
             workerPool: options?.workerPool || this.workerPool,
             repoRoot: this.workspaceDir,
-            model: "swift-27b-mtp"
+            model: "swift-27b-mtp",
+            scope: manifest.scope
           });
 
         result = await supervisor.executeTaskWithRecovery(manifest, {

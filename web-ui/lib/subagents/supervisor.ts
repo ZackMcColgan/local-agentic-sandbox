@@ -698,6 +698,7 @@ export interface ProductionStepExecutorOptions {
   workerPool?: WorkerPool;
   repoRoot?: string;
   model?: string;
+  scope?: string;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
@@ -722,6 +723,7 @@ export function createProductionStepExecutor(
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
+      scope: options?.scope,
       modelRoster: {
         builder: modelToUse,
         critic: modelToUse,

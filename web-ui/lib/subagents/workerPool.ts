@@ -27,6 +27,8 @@ export interface WorkerPoolOptions {
   generate?: GenerateFn;
   /** Residency plan supplying keep_alive per model (see residency.ts). */
   residencyPlan?: ResidencyPlan;
+  /** Task scope driving per-request context window (e.g. SNIPPET, SCRIPT, PROJECT). */
+  scope?: string;
 }
 
 export interface WorkerJob<T = any> {
@@ -77,6 +79,7 @@ export interface WorkerModelOptions {
   ollamaUrl?: string;
   generate?: GenerateFn;
   keepAlive?: string | number;
+  scope?: string;
 }
 
 export class ExplorerWorker {
@@ -286,6 +289,7 @@ export class BuilderWorker {
   private readonly injectedGenerate?: GenerateFn;
   private readonly ollamaUrl?: string;
   private readonly keepAlive?: string | number;
+  private readonly scope?: string;
   private readonly scopedTools = [
     "workspace_write_file",
     "workspace_run_command",
@@ -298,6 +302,7 @@ export class BuilderWorker {
     this.injectedGenerate = options?.generate;
     this.ollamaUrl = options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
+    this.scope = options?.scope;
   }
 
   getScopedToolNames(): string[] {
@@ -350,7 +355,7 @@ export class BuilderWorker {
       console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
-      const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+      const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
       const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
       const prompt = isSingleArtifact
         ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
@@ -380,6 +385,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         keepAlive: this.keepAlive,
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
+        scope: this.scope,
         options: { temperature: 0.2, num_predict: 2048 }
       });
       newContent = stripCodeFence(result.text);
@@ -417,7 +423,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         }
 
         astAttempts++;
-        const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+        const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
         const correctionPrompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
@@ -429,6 +435,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
           prompt: correctionPrompt,
           keepAlive: this.keepAlive,
           signal: options?.signal,
+          scope: this.scope,
           options: { temperature: 0.2, num_predict: 2048 }
         });
         newContent = stripCodeFence(retryResult.text);
@@ -578,6 +585,7 @@ export class CriticWorker {
   private readonly injectedGenerate?: GenerateFn;
   private readonly ollamaUrl?: string;
   private readonly keepAlive?: string | number;
+  private readonly scope?: string;
   private readonly scopedTools = [
     "workspace_read_file",
     "workspace_grep",
@@ -589,6 +597,7 @@ export class CriticWorker {
     this.injectedGenerate = options?.generate;
     this.ollamaUrl = options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
+    this.scope = options?.scope;
   }
 
   getScopedToolNames(): string[] {
@@ -786,7 +795,7 @@ export class CriticWorker {
     }
 
     // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
-    const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl });
+    const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
     const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
@@ -815,6 +824,7 @@ Respond strictly in JSON:
         ...(useJsonFormat ? { format: "json" } : {}),
         keepAlive: this.keepAlive,
         signal: options?.signal,
+        scope: this.scope,
         options: { temperature: 0.1, num_predict: 512 }
       });
       verdictText = result.text;
@@ -923,6 +933,7 @@ export class WorkerPool {
   private readonly modelRoster: ModelRosterConfig;
   readonly generate?: GenerateFn;
   readonly residencyPlan?: ResidencyPlan;
+  readonly scope?: string;
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
@@ -930,6 +941,7 @@ export class WorkerPool {
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
     this.generate = options?.generate;
     this.residencyPlan = options?.residencyPlan;
+    this.scope = options?.scope;
   }
 
   getActiveWorkerCount(): number {
@@ -955,10 +967,10 @@ export class WorkerPool {
     return this.residencyPlan ? keepAliveFor(this.residencyPlan, model) : "24h";
   }
 
-  /** Model options for a role: configured model, injected client, residency keep_alive. */
+  /** Model options for a role: configured model, injected client, residency keep_alive, task scope. */
   workerOptionsFor(role: WorkerRole | "planner"): WorkerModelOptions {
     const model = this.getModelForRole(role);
-    return { model, generate: this.generate, keepAlive: this.keepAliveFor(model) };
+    return { model, generate: this.generate, keepAlive: this.keepAliveFor(model), scope: this.scope };
   }
 
   async executeJob<T>(job: WorkerJob<T>): Promise<T> {
