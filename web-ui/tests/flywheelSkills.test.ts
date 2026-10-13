@@ -129,4 +129,17 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
     assert.ok(formatted.includes("Standard Next.js Route Handler"));
     assert.ok(formatted.includes("NextResponse.json"));
   });
+
+  it("Fix 4.1: docs/FLYWHEEL_SPIKE.md contains honest Limitations section", () => {
+    const docPath = path.resolve(process.cwd(), fs.existsSync("docs") ? "docs/FLYWHEEL_SPIKE.md" : "../docs/FLYWHEEL_SPIKE.md");
+    assert.ok(fs.existsSync(docPath), "docs/FLYWHEEL_SPIKE.md must exist");
+    const content = fs.readFileSync(docPath, "utf8");
+
+    assert.ok(content.includes("## Limitations"), "Must include Limitations section");
+    assert.ok(content.includes("Hardcoded Pattern Matching"), "Must disclose hardcoded pattern matching");
+    assert.ok(content.includes("Placeholder Confidence Scores"), "Must disclose placeholder confidence scores");
+    assert.ok(content.includes("Unvalidated Against Real Ledger Tasks"), "Must disclose unvalidated status against real runs");
+    assert.ok(content.includes("Not Wired into Planner"), "Must disclose future planner integration");
+    assert.ok(content.includes("Canned Template Literals"), "Must disclose canned templates");
+  });
 });

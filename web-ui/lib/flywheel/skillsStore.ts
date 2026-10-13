@@ -48,6 +48,12 @@ export function getDefaultSkillsDbPath(): string {
   return path.join(os.homedir(), ".local-agentic-sandbox", "runs.db");
 }
 
+/**
+ * @experimental
+ * FlywheelSkillsStore is an architectural spike evaluating SQLite-backed pattern
+ * persistence and retrieval for local agentic sandboxes.
+ * Not intended for production autonomous planning without model-driven extraction.
+ */
 export class FlywheelSkillsStore {
   private db: SqliteDatabase;
   private dbPath: string;
@@ -176,6 +182,11 @@ export class FlywheelSkillsStore {
   }
 }
 
+/**
+ * @experimental
+ * Prototype pattern extractor using heuristic domain fingerprints.
+ * Uses placeholder confidence scores and static template strings.
+ */
 export function extractSkillsFromCompletedTask(task: TaskManifest): SkillPattern[] {
   const extracted: SkillPattern[] = [];
   const nowIso = new Date().toISOString();
@@ -234,6 +245,10 @@ export function extractSkillsFromCompletedTask(task: TaskManifest): SkillPattern
   return extracted;
 }
 
+/**
+ * @experimental
+ * Prototype prompt formatter for skills injection.
+ */
 export function formatSkillsForPlannerPrompt(skills: SkillPattern[]): string {
   if (!skills || skills.length === 0) return "";
 

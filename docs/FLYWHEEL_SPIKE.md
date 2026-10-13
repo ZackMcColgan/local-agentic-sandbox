@@ -32,7 +32,7 @@ When a task status transitions to `completed`:
    - **SVG / Visualization**: ViewBox dimensions, responsive canvas grids, coordinate systems.
    - **Testing**: `node:test` + `node:assert/strict` test scaffolds, async timeout handling.
    - **Kubernetes / Deploy**: NodePort allocation patterns, ephemeral namespaces, probe configurations.
-3. Computes confidence score based on critic verdicts (`criticScore >= 85` -> `confidenceScore >= 0.9`).
+3. Assigns baseline confidence scores (static placeholder constants in v1 spike; dynamic computation from critic verdicts is planned for future work).
 4. Persists patterns with `source_task_id` for provenance tracking.
 
 ---
@@ -52,17 +52,30 @@ When a task status transitions to `completed`:
 
 ---
 
+## Limitations (Spike Honest Assessment)
+
+> [!NOTE]
+> This component is an architectural spike evaluating SQLite-backed pattern persistence. The following constraints and technical debt apply to the current prototype:
+
+1. **Hardcoded Pattern Matching**: Extraction relies on simple static heuristics (`if` checks against title/diff keywords) rather than learning from observed task execution data or semantic LLM synthesis.
+2. **Placeholder Confidence Scores**: Confidence scores are static hardcoded constants (`0.95`, `0.90`, `0.92`) rather than dynamically computed from critic verdicts, test exit codes, or iteration counts.
+3. **Unvalidated Against Real Ledger Tasks**: The prototype has only been verified against synthetic unit test fixtures; it has never been validated against real completed tasks in `runs.db`.
+4. **Not Wired into Planner**: Pattern retrieval exists in isolation; automated injection of retrieved skills into the LangGraph planner's live decomposition prompt is future work.
+5. **Canned Template Literals**: The Kubernetes (`k8s`) and testing (`testing`) pattern templates are hardcoded string literals rather than synthesized from actual worker diffs.
+
+---
+
 ## Findings & Evaluation
 
-1. **Deterministic Accuracy**:
-   Extracting verified diff additions ensures that only code that actually passed critic review and unit tests becomes a pattern.
-2. **Zero Hallucination**:
-   Because patterns come with explicit `source_task_id` links, they provide grounded few-shot examples for local models (e.g. `swift-27b-mtp`).
-3. **Keyword vs. Vector Search**:
-   For the local air-gapped sandbox, SQLite keyword + token scoring operates in `<5ms` without requiring external embedding models or heavy vector database daemons. For Sprint 13, embedding vector search (via Ollama embeddings or sqlite-vss) can supplement keyword search for semantic synonym expansion.
+1. **Local SQLite Retrieval Speed**:
+   For the local air-gapped sandbox, SQLite keyword + token scoring executes in `<5ms` without requiring external embedding models or heavy vector database daemons.
+2. **Provenance Traceability**:
+   Linking skills to `source_task_id` allows inspecting the run ledger entry that produced the pattern.
 
 ---
 
 ## Recommendations for Sprint 13
-1. **Auto-Promotion**: Automatically promote patterns with `use_count >= 3` into the system instructions for builder workers.
-2. **Negative Pattern Filtering**: Store failed / rejected patterns in an `anti_patterns` table so critic workers can warn against repeating known flaws.
+1. **Dynamic Synthesis**: Replace heuristic pattern extraction with a dedicated `recorder` LLM worker pass that abstracts completed diffs.
+2. **Planner Integration**: Hook `retrieveRelevantSkills` into the LangGraph planner node's input state.
+3. **Vector Synonym Expansion**: Supplement keyword scoring with local embedding models (Ollama embeddings or sqlite-vss).
+4. **Auto-Promotion & Anti-Patterns**: Promote patterns with `use_count >= 3`; store failed patterns in `anti_patterns` to warn critics.
