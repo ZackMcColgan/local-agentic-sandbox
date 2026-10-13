@@ -921,6 +921,15 @@ export class OvernightSupervisor {
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
+  private pausedTasks = new Set<string>();
+
+  isPaused(taskId?: string): boolean {
+    return !!taskId && this.pausedTasks.has(taskId);
+  }
+
+  resumeTask(taskId: string): void {
+    this.pausedTasks.delete(taskId);
+  }
 
   constructor(options?: SupervisorOptions) {
     let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR;
@@ -1243,6 +1252,10 @@ export class OvernightSupervisor {
     }
 
     while (task.currentMilestoneIndex < task.milestones.length) {
+      if (task.status === "paused" || this.isPaused(task.taskId)) {
+        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+        break;
+      }
       const mIdx = task.currentMilestoneIndex;
       const milestone = task.milestones[mIdx];
       let attempt = 0;
@@ -1334,9 +1347,17 @@ export class OvernightSupervisor {
       }
     }
 
-    task.status = "completed";
-    task.completedAt = new Date().toISOString();
-    this.saveCheckpoint(task);
+    if (task.status === "paused" || this.isPaused(task.taskId)) {
+      task.status = "paused";
+      this.saveCheckpoint(task);
+      return task;
+    }
+
+    if (task.currentMilestoneIndex >= task.milestones.length) {
+      task.status = "completed";
+      task.completedAt = new Date().toISOString();
+      this.saveCheckpoint(task);
+    }
     return task;
   }
 
@@ -1407,6 +1428,9 @@ export class OvernightSupervisor {
   }
 
   pauseTask(task: TaskManifest, reason: string = "User paused run"): TaskManifest {
+    if (task.taskId) {
+      this.pausedTasks.add(task.taskId);
+    }
     task.status = "paused";
     task.parkedReason = reason;
     task.updatedAt = new Date().toISOString();
@@ -1420,6 +1444,9 @@ export class OvernightSupervisor {
   }
 
   restartTask(original: TaskManifest): TaskManifest {
+    if (original.taskId) {
+      this.pausedTasks.delete(original.taskId);
+    }
     const newTaskId = `task-${Date.now()}`;
     const nowIso = new Date().toISOString();
     const restarted: TaskManifest = {

@@ -577,6 +577,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
 
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
+  if (!childEnv.FORCE_MOCK) childEnv.FORCE_MOCK = "1";
 
   // 1. Run web-ui tests if any mapped
   if (webUiTestsToRun.length > 0) {

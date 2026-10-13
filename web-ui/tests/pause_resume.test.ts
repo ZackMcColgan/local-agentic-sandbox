@@ -103,4 +103,46 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("Fix 2.3: executeTaskWithRecovery halts milestone loop when paused or removed from activeExecutionSet", async () => {
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    const { activeExecutionSet } = await import("../lib/threads/threadStore.js");
+
+    const supervisor = new OvernightSupervisor();
+    const taskId = "task-pause-in-flight-test";
+    activeExecutionSet.add(taskId);
+
+    const executedMilestones: string[] = [];
+
+    const task: any = {
+      taskId,
+      goal: "Test in-flight pause stop semantics",
+      branchName: "feature/pause-test",
+      toolchain: "node:22",
+      status: "active",
+      currentMilestoneIndex: 0,
+      milestones: [
+        { id: "M1", title: "M1", status: "pending" },
+        { id: "M2", title: "M2", status: "pending" },
+        { id: "M3", title: "M3", status: "pending" }
+      ],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    };
+
+    const mockExecutor = async (milestone: any) => {
+      executedMilestones.push(milestone.id);
+      if (milestone.id === "M1") {
+        activeExecutionSet.delete(taskId);
+        task.status = "paused";
+      }
+      return { status: "completed" as const, gitSha: `sha-${milestone.id}` };
+    };
+
+    await supervisor.executeTaskWithRecovery(task, { stepExecutor: mockExecutor });
+
+    assert.deepEqual(executedMilestones, ["M1"], "Milestone 2 and 3 must never execute after pause");
+    assert.equal(task.status, "paused");
+  });
 });

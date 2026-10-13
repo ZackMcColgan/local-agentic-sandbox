@@ -24,6 +24,7 @@ export interface DeployBuildTaskInput {
   workspaceDir: string;
   appName?: string;
   hostAddress?: string;
+  keepNamespace?: boolean;
 }
 
 export interface DeployBuildTaskResult {
@@ -86,7 +87,9 @@ export function deriveShortBuildId(runId: string): string {
 
 async function defaultCommandRunner(command: string): Promise<CommandRunnerResult> {
   try {
-    const { stdout, stderr } = await execAsync(command, { timeout: 60000 });
+    const isBuild = command.startsWith("docker build") || command.includes("images import");
+    const timeout = isBuild ? 600000 : 60000;
+    const { stdout, stderr } = await execAsync(command, { timeout });
     return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
   } catch (err: any) {
     return {
@@ -116,7 +119,27 @@ export class DeployPipeline {
     this.commandRunner = options.commandRunner ?? defaultCommandRunner;
     this.healthChecker = options.healthChecker ?? defaultHealthChecker;
     this.healthProbeUrlOverride = options.healthProbeUrlOverride;
-    this.defaultHost = options.defaultHost ?? "http://localhost";
+    this.defaultHost =
+      options.defaultHost ??
+      (process.env.NODE_IP ? `http://${process.env.NODE_IP}` : "http://host.docker.internal");
+  }
+
+  public async syncAllocatedNodePortsFromCluster(): Promise<void> {
+    try {
+      const res = await this.commandRunner(
+        "kubectl get svc --all-namespaces -o jsonpath='{range .items[?(@.spec.type==\"NodePort\")]}{range .spec.ports[*]}{.nodePort}{\"\\n\"}{end}{end}'"
+      );
+      if (res.exitCode === 0 && res.stdout) {
+        const ports = res.stdout
+          .trim()
+          .split(/\s+/)
+          .map((p) => parseInt(p, 10))
+          .filter((p) => !isNaN(p) && p >= 30000);
+        for (const p of ports) {
+          allocatedNodePorts.add(p);
+        }
+      }
+    } catch {}
   }
 
   public async deployBuildTask(input: DeployBuildTaskInput): Promise<DeployBuildTaskResult> {
@@ -151,62 +174,77 @@ export class DeployPipeline {
       }
     };
 
-    // 1. Build image
-    const builtOk = await runStage("build_image", async () => {
-      const res = await this.commandRunner(
-        `docker build -t ${imageTag} "${input.workspaceDir}"`
-      );
-      if (res.exitCode !== 0) {
-        throw new Error(`Docker build failed: ${res.stderr || res.stdout}`);
+    let cleanupNeeded = false;
+
+    try {
+      // 1. Build image and import into cluster containerd
+      const builtOk = await runStage("build_image", async () => {
+        const buildRes = await this.commandRunner(
+          `docker build -t ${imageTag} "${input.workspaceDir}"`
+        );
+        if (buildRes.exitCode !== 0) {
+          throw new Error(`Docker build failed: ${buildRes.stderr || buildRes.stdout}`);
+        }
+
+        const k8sNode = process.env.K8S_NODE || "desktop-control-plane";
+        const importCmd =
+          process.env.K8S_CTR_IMPORT_CMD ||
+          `docker save ${imageTag} | docker exec -i ${k8sNode} ctr -n k8s.io images import -`;
+        const importRes = await this.commandRunner(importCmd);
+        if (importRes.exitCode !== 0) {
+          throw new Error(`Cluster containerd image import failed: ${importRes.stderr || importRes.stdout}`);
+        }
+
+        return `Built image ${imageTag} and imported into cluster containerd`;
+      });
+
+      if (!builtOk) {
+        const errText = stages[stages.length - 1].detail || "Image build failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
       }
-      return `Built image ${imageTag}`;
-    });
 
-    if (!builtOk) {
-      const errText = stages[stages.length - 1].detail || "Image build failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
+      // 2. Create ephemeral namespace build-<shortid>
+      cleanupNeeded = true;
+      const nsOk = await runStage("create_namespace", async () => {
+        const res = await this.commandRunner(
+          `kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -`
+        );
+        if (res.exitCode !== 0) {
+          throw new Error(`Namespace creation failed: ${res.stderr || res.stdout}`);
+        }
+        return `Created namespace ${namespace}`;
+      });
 
-    // 2. Create ephemeral namespace build-<shortid>
-    const nsOk = await runStage("create_namespace", async () => {
-      const res = await this.commandRunner(
-        `kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -`
-      );
-      if (res.exitCode !== 0) {
-        throw new Error(`Namespace creation failed: ${res.stderr || res.stdout}`);
+      if (!nsOk) {
+        const errText = stages[stages.length - 1].detail || "Namespace creation failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
       }
-      return `Created namespace ${namespace}`;
-    });
 
-    if (!nsOk) {
-      const errText = stages[stages.length - 1].detail || "Namespace creation failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
-
-    // 3. Allocate unique NodePort
-    const portOk = await runStage("allocate_port", async () => {
-      nodePort = allocateUniqueNodePort();
-      deployedUrl = `${host}:${nodePort}`;
-      return `Allocated NodePort ${nodePort}`;
-    });
+      // 3. Allocate unique NodePort
+      const portOk = await runStage("allocate_port", async () => {
+        await this.syncAllocatedNodePortsFromCluster();
+        nodePort = allocateUniqueNodePort();
+        deployedUrl = `${host}:${nodePort}`;
+        return `Allocated NodePort ${nodePort}`;
+      });
 
     if (!portOk) {
       const errText = stages[stages.length - 1].detail || "Port allocation failed";
@@ -304,18 +342,25 @@ export class DeployPipeline {
       return threadMessageMarkdown;
     });
 
-    return {
-      runId: input.runId,
-      threadId: input.threadId,
-      status: "succeeded",
-      namespace,
-      imageTag,
-      nodePort,
-      deployedUrl,
-      healthStatus,
-      stages,
-      threadMessageMarkdown
-    };
+      return {
+        runId: input.runId,
+        threadId: input.threadId,
+        status: "succeeded",
+        namespace,
+        imageTag,
+        nodePort,
+        deployedUrl,
+        healthStatus,
+        stages,
+        threadMessageMarkdown
+      };
+    } finally {
+      if (cleanupNeeded && !input.keepNamespace) {
+        try {
+          await this.commandRunner(`kubectl delete namespace ${namespace} --wait=false`);
+        } catch {}
+      }
+    }
   }
 
   private buildFailureResult(

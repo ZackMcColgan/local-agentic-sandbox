@@ -145,4 +145,69 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
       "Thread message must report the rollout failure clearly in the thread"
     );
   });
+
+  it("Fix 2.4 & 2.8: command sequence imports image to containerd and cleans up ephemeral namespace on completion", async () => {
+    const {
+      DeployPipeline,
+      resetAllocatedNodePortsForTesting
+    } = await import("../lib/deploy/deployPipeline.js");
+
+    resetAllocatedNodePortsForTesting();
+
+    const executedCommands: string[] = [];
+    const pipeline = new DeployPipeline({
+      commandRunner: async (cmd: string) => {
+        executedCommands.push(cmd);
+        return { exitCode: 0, stdout: "ok", stderr: "" };
+      },
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    const result = await pipeline.deployBuildTask({
+      runId: "run-import-clean-1234",
+      threadId: "thread-import",
+      workspaceDir: "/tmp/w-import",
+      appName: "app-import"
+    });
+
+    assert.equal(result.status, "succeeded");
+
+    const buildIdx = executedCommands.findIndex((cmd) => cmd.includes("docker build"));
+    const importIdx = executedCommands.findIndex((cmd) => cmd.includes("images import") || cmd.includes("ctr"));
+    assert.ok(buildIdx !== -1, "docker build must be executed");
+    assert.ok(importIdx !== -1, "ctr images import command must be executed");
+    assert.ok(importIdx > buildIdx, "ctr images import must run after docker build");
+
+    const deleteNsCmd = executedCommands.find((cmd) => cmd.includes(`kubectl delete namespace ${result.namespace}`));
+    assert.ok(deleteNsCmd, "Ephemeral namespace must be cleaned up");
+  });
+
+  it("Fix 2.7: queries live cluster NodePorts to prevent port collisions on pod restart", async () => {
+    const {
+      DeployPipeline,
+      resetAllocatedNodePortsForTesting
+    } = await import("../lib/deploy/deployPipeline.js");
+
+    resetAllocatedNodePortsForTesting();
+
+    const pipeline = new DeployPipeline({
+      commandRunner: async (cmd: string) => {
+        if (cmd.includes("kubectl get svc --all-namespaces")) {
+          return { exitCode: 0, stdout: "30100\n", stderr: "" };
+        }
+        return { exitCode: 0, stdout: "ok", stderr: "" };
+      },
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    const result = await pipeline.deployBuildTask({
+      runId: "run-port-sync-1111",
+      threadId: "thread-port-sync",
+      workspaceDir: "/tmp/w-port",
+      appName: "app-port"
+    });
+
+    assert.equal(result.status, "succeeded");
+    assert.notEqual(result.nodePort, 30100, "Must not allocate 30100 when already in use by cluster");
+  });
 });
