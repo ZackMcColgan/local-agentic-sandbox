@@ -21,7 +21,9 @@ import {
 import {
   MorningReport,
   OvernightMorningReport,
-  MorningReportArtifact
+  MorningReportArtifact,
+  OvernightTaskEntry,
+  MorningReportMilestone
 } from "@/lib/subagents/morningReport";
 import { AmbiguityFlag } from "@/lib/subagents/types";
 
@@ -85,12 +87,17 @@ export function MorningReportView({
             taskId: report.taskId,
             goal: report.goal,
             status: (report.status === "active" ? "active" : report.status) as any,
+            branch: report.branch || "develop",
+            gitHeadSha: report.gitHeadSha || "",
+            startedAt: report.startedAt || new Date().toISOString(),
             durationSeconds: 0,
             durationFormatted: report.durationFormatted || "0s",
-            branch: report.branch,
-            milestones: report.milestones,
+            milestones: report.milestones || [],
             artifacts: artList,
-            parkedReason: report.parkedItems?.[0]
+            parkedReason: report.parkedItems?.[0],
+            ambiguityFlags: report.ambiguityFlags || [],
+            testsPassed: report.totalTestsPassed || 0,
+            testsFailed: report.totalTestsFailed || 0
           }
         ],
         artifactsProduced: artList,
@@ -481,7 +488,7 @@ export function MorningReportView({
                               Milestones ({t.milestones.length}):
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {t.milestones.map((m) => (
+                              {t.milestones.map((m: MorningReportMilestone) => (
                                 <div
                                   key={m.id}
                                   className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800 text-xs flex items-center justify-between"
