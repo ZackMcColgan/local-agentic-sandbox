@@ -14,7 +14,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Loader2
+  Loader2,
+  Pause,
+  Play
 } from "lucide-react";
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
@@ -25,10 +27,20 @@ import { ThinkingPanel } from "./ThinkingPanel";
 interface LiveRunBlockProps {
   task: TaskManifest;
   onStopRun?: () => void;
+  onPauseRun?: () => void;
+  onResumeRun?: () => void;
+  onRestartRun?: () => void;
   isStopping?: boolean;
 }
 
-export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps) {
+export function LiveRunBlock({
+  task,
+  onStopRun,
+  onPauseRun,
+  onResumeRun,
+  onRestartRun,
+  isStopping
+}: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
     if (task.startedAt) {
@@ -41,6 +53,8 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
 
   const status = String(task.status || "active");
   const isRunning = status === "active" || status === "in_progress";
+  const isPaused = status === "paused";
+  const isCrashed = status === "crashed";
   const isStopped = status === "cancelled" || status === "stopped";
   const isCompleted = status === "completed";
   const isFailed = status === "failed" || status === "parked";
@@ -139,9 +153,24 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
                 • Stopped
               </span>
             )}
+            {isPaused && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                • Paused
+              </span>
+            )}
+            {isCrashed && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                • Crashed
+              </span>
+            )}
             {isCompleted && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                 • Completed
+              </span>
+            )}
+            {task.parentRunId && (
+              <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                Parent: {task.parentRunId}
               </span>
             )}
           </div>
@@ -329,20 +358,144 @@ export function LiveRunBlock({ task, onStopRun, isStopping }: LiveRunBlockProps)
         );
       })()}
 
-      {/* Stop Run Button (Prominent Filled-Tonal M3 Button) */}
-      {isRunning && onStopRun && (
-        <button
-          type="button"
-          onClick={onStopRun}
-          disabled={isStopping}
-          className="w-full py-2.5 px-4 rounded-xl bg-[#ede7fe] hover:bg-[#e0d6fd] dark:bg-indigo-950 dark:hover:bg-indigo-900 text-[#5b32e6] dark:text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
-        >
-          <Square className="h-3.5 w-3.5 stroke-[2.5] fill-none" />
-          <span>{isStopping ? "Stopping run..." : "Stop run"}</span>
-        </button>
+      {/* Deployed Ephemeral Build Link (Phase 5) */}
+      {task.deploymentUrl && (
+        <div className="p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/70 dark:bg-indigo-950/40 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <ExternalLink className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+            <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 truncate">
+              Deployed Build {task.deploymentNamespace ? `(${task.deploymentNamespace})` : ""}
+            </span>
+          </div>
+          <a
+            href={task.deploymentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1 rounded-lg bg-[#5b32e6] hover:bg-[#4a25c4] text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+          >
+            <span>Open Live Preview</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
       )}
 
-      {isStopped && (
+      {/* Crashed Run Recovery Prompt (Phase 4) */}
+      {isCrashed && (
+        <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/70 bg-rose-50/80 dark:bg-rose-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                Run interrupted unexpectedly — Resume?
+              </p>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                Completed milestones are checkpointed and will not be re-executed.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onResumeRun && (
+              <button
+                type="button"
+                onClick={onResumeRun}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                <Play className="h-3.5 w-3.5" />
+                <span>Resume?</span>
+              </button>
+            )}
+            {onRestartRun && (
+              <button
+                type="button"
+                onClick={onRestartRun}
+                className="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-zinc-900 text-rose-800 dark:text-rose-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Restart</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Run Controls: Pause / Stop when running */}
+      {isRunning && (onPauseRun || onStopRun) && (
+        <div className="flex items-center gap-2">
+          {onPauseRun && (
+            <button
+              type="button"
+              onClick={onPauseRun}
+              disabled={isStopping}
+              className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white hover:bg-slate-50 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+            >
+              <Pause className="h-3.5 w-3.5" />
+              <span>Pause</span>
+            </button>
+          )}
+          {onStopRun && (
+            <button
+              type="button"
+              onClick={onStopRun}
+              disabled={isStopping}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-[#ede7fe] hover:bg-[#e0d6fd] dark:bg-indigo-950 dark:hover:bg-indigo-900 text-[#5b32e6] dark:text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+            >
+              <Square className="h-3.5 w-3.5 stroke-[2.5] fill-none" />
+              <span>{isStopping ? "Stopping run..." : "Stop run"}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Paused Controls: Resume / Restart */}
+      {isPaused && (onResumeRun || onRestartRun) && (
+        <div className="flex items-center gap-2">
+          {onResumeRun && (
+            <button
+              type="button"
+              onClick={onResumeRun}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-[#5b32e6] hover:bg-[#4a25c4] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <Play className="h-3.5 w-3.5" />
+              <span>Resume run</span>
+            </button>
+          )}
+          {onRestartRun && (
+            <button
+              type="button"
+              onClick={onRestartRun}
+              className="py-2.5 px-4 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white hover:bg-slate-50 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Restart</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Completed / Failed / Stopped Controls: Restart */}
+      {(isCompleted || isFailed || isStopped) && onRestartRun && (
+        <div className="flex items-center justify-between pt-1">
+          {isStopped ? (
+            <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
+              Run stopped · Workers halted &amp; VRAM released.
+            </span>
+          ) : (
+            <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
+              Run {status}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onRestartRun}
+            className="py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white hover:bg-slate-50 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Restart run</span>
+          </button>
+        </div>
+      )}
+
+      {isStopped && !onRestartRun && (
         <div className="text-center py-1 text-xs font-medium text-slate-500 dark:text-zinc-400">
           Run stopped · Workers halted &amp; VRAM released.
         </div>

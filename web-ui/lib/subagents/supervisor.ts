@@ -30,6 +30,7 @@ import {
   persistOvernightMorningReport,
   MORNING_REPORT_CHECKPOINT_DIR
 } from "./morningReport";
+import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 
 let sycophancyProbeExecuted = false;
 
@@ -920,6 +921,15 @@ export class OvernightSupervisor {
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
+  private pausedTasks = new Set<string>();
+
+  isPaused(taskId?: string): boolean {
+    return !!taskId && this.pausedTasks.has(taskId);
+  }
+
+  resumeTask(taskId: string): void {
+    this.pausedTasks.delete(taskId);
+  }
 
   constructor(options?: SupervisorOptions) {
     let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR;
@@ -1057,6 +1067,7 @@ export class OvernightSupervisor {
         "utf8"
       );
       console.log(`[supervisor] checkpoint saved for ${task.taskId}`);
+      this.syncTaskToRunLedger(task);
       if (
         task.status === "completed" ||
         task.status === "parked" ||
@@ -1073,6 +1084,72 @@ export class OvernightSupervisor {
     }
 
     return checkpoint;
+  }
+
+  syncTaskToRunLedger(task: TaskManifest): void {
+    try {
+      const ledger = getSharedRunLedger();
+      const statusMap: Record<string, RunLedgerStatus> = {
+        queued: "running",
+        active: "running",
+        in_progress: "running",
+        paused: "paused",
+        crashed: "crashed",
+        stopped: "stopped",
+        cancelled: "stopped",
+        completed: "completed",
+        parked: "parked",
+        failed: "failed"
+      };
+      const mappedStatus: RunLedgerStatus = statusMap[task.status] || "running";
+      const gitShas = Array.from(
+        new Set(
+          [
+            ...(task.milestones || []).map((m) => m.commitSha).filter(Boolean),
+            ...(task.checkpoints || []).map((c) => c.gitHeadSha).filter((s) => s && s !== "HEAD")
+          ] as string[]
+        )
+      );
+      const model =
+        task.milestones?.find((m) => m.builderModel)?.builderModel ||
+        process.env.CODER_MODEL ||
+        "swift-27b-mtp";
+
+      ledger.recordRunStart({
+        runId: task.taskId,
+        parentRunId: task.parentRunId,
+        threadId: task.threadId || `thread-${task.taskId}`,
+        prompt: task.goal || "Autonomous engineering task",
+        status: mappedStatus,
+        startedAt: task.startedAt || new Date().toISOString(),
+        completedAt: task.completedAt,
+        lastHeartbeatAt: task.updatedAt || new Date().toISOString(),
+        model,
+        gitShas,
+        milestoneSummary: (task.milestones || []).map((m) => ({
+          id: m.id,
+          title: m.title,
+          status:
+            m.status === "completed"
+              ? "completed"
+              : m.status === "failed" || m.status === "rejected"
+              ? "failed"
+              : m.status === "in_progress"
+              ? "in_progress"
+              : "pending",
+          commitSha: m.commitSha
+        })),
+        deploymentRef: task.deploymentUrl || task.deploymentNamespace || "local",
+        checkpointPath: this.getCheckpointFilePath(task.taskId),
+        resumable:
+          mappedStatus === "paused" ||
+          mappedStatus === "crashed" ||
+          mappedStatus === "stopped",
+        errorMessage: task.parkedReason || task.errorSummary
+      });
+    } catch (err: any) {
+      console.warn(`[supervisor] Could not sync task ${task.taskId} to RunLedger:`, err?.message || err);
+    }
   }
 
   async syncOvernightMorningReport(): Promise<void> {
@@ -1175,6 +1252,10 @@ export class OvernightSupervisor {
     }
 
     while (task.currentMilestoneIndex < task.milestones.length) {
+      if (task.status === "paused" || this.isPaused(task.taskId)) {
+        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+        break;
+      }
       const mIdx = task.currentMilestoneIndex;
       const milestone = task.milestones[mIdx];
       let attempt = 0;
@@ -1266,9 +1347,17 @@ export class OvernightSupervisor {
       }
     }
 
-    task.status = "completed";
-    task.completedAt = new Date().toISOString();
-    this.saveCheckpoint(task);
+    if (task.status === "paused" || this.isPaused(task.taskId)) {
+      task.status = "paused";
+      this.saveCheckpoint(task);
+      return task;
+    }
+
+    if (task.currentMilestoneIndex >= task.milestones.length) {
+      task.status = "completed";
+      task.completedAt = new Date().toISOString();
+      this.saveCheckpoint(task);
+    }
     return task;
   }
 
@@ -1336,5 +1425,61 @@ export class OvernightSupervisor {
     });
     this.saveCheckpoint(task);
     return task;
+  }
+
+  pauseTask(task: TaskManifest, reason: string = "User paused run"): TaskManifest {
+    if (task.taskId) {
+      this.pausedTasks.add(task.taskId);
+    }
+    task.status = "paused";
+    task.parkedReason = reason;
+    task.updatedAt = new Date().toISOString();
+    task.journal.push({
+      timestamp: new Date().toISOString(),
+      role: "supervisor",
+      message: `Task paused at milestone ${task.currentMilestoneIndex + 1}: ${reason}. Checkpoint saved.`
+    });
+    this.saveCheckpoint(task);
+    return task;
+  }
+
+  restartTask(original: TaskManifest): TaskManifest {
+    if (original.taskId) {
+      this.pausedTasks.delete(original.taskId);
+    }
+    const newTaskId = `task-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const restarted: TaskManifest = {
+      ...original,
+      taskId: newTaskId,
+      parentRunId: original.taskId,
+      status: "active",
+      currentMilestoneIndex: 0,
+      startedAt: nowIso,
+      updatedAt: nowIso,
+      completedAt: undefined,
+      parkedReason: undefined,
+      errorSummary: undefined,
+      checkpoints: [],
+      ambiguityFlags: [],
+      milestones: (original.milestones || []).map((m) => ({
+        ...m,
+        status: "pending",
+        commitSha: undefined,
+        diffSummary: undefined,
+        completedAt: undefined,
+        builderIterations: 0,
+        criticRounds: 0
+      })),
+      journal: [
+        {
+          timestamp: nowIso,
+          role: "supervisor",
+          message: `Restarted run from parent task ${original.taskId} with fresh milestone state.`
+        }
+      ]
+    };
+    this.saveCheckpoint(restarted);
+    return restarted;
   }
 }

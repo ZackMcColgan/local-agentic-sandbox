@@ -578,6 +578,19 @@ export function ChatStream({
     });
   };
 
+  const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
+    if (!threadId) return;
+    try {
+      await fetch(`/api/threads/${threadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action })
+      });
+    } catch {
+      // Non-fatal
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
@@ -1102,6 +1115,9 @@ export function ChatStream({
                     <LiveRunBlock
                       task={activeTask}
                       onStopRun={onStopTask}
+                      onPauseRun={() => handleRunControlAction("pause")}
+                      onResumeRun={() => handleRunControlAction("resume")}
+                      onRestartRun={() => handleRunControlAction("restart")}
                       isStopping={isStoppingTask}
                     />
                   )}
@@ -1356,6 +1372,9 @@ export function ChatStream({
             <LiveRunBlock
               task={activeTask}
               onStopRun={onStopTask}
+              onPauseRun={() => handleRunControlAction("pause")}
+              onResumeRun={() => handleRunControlAction("resume")}
+              onRestartRun={() => handleRunControlAction("restart")}
               isStopping={isStoppingTask}
             />
           </div>
