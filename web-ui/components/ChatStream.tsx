@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   MoreHorizontal,
   Menu,
-  Plus
+  Plus,
+  ArrowDown
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -454,16 +455,32 @@ export function ChatStream({
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
 
+  const handleContainerScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    setIsUserScrolledUp(distanceFromBottom > 90);
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    setIsUserScrolledUp(false);
+    scrollRef.current?.scrollIntoView({ behavior });
+  };
+
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading, isTaskActive]);
+    if (!isUserScrolledUp) {
+      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoading, isTaskActive, isUserScrolledUp]);
 
   const toggleThought = (msgId: string) => {
     setExpandedThoughts((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
@@ -1006,7 +1023,12 @@ export function ChatStream({
       </header>
 
       {/* Conversation Thread Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950">
+      <div
+        ref={chatContainerRef}
+        onScroll={handleContainerScroll}
+        data-scroll-container="true"
+        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950 relative"
+      >
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
@@ -1397,6 +1419,21 @@ export function ChatStream({
 
         <div ref={scrollRef} />
       </div>
+
+      {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
+      {isUserScrolledUp && (
+        <div className="flex justify-center -mt-12 mb-2 z-30 pointer-events-none">
+          <button
+            type="button"
+            onClick={() => scrollToBottom("smooth")}
+            className="pointer-events-auto px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 text-xs font-semibold shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all"
+            title="Jump to bottom"
+          >
+            <ArrowDown className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+            <span>Jump to bottom</span>
+          </button>
+        </div>
+      )}
 
       {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
       <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">

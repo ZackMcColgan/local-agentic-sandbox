@@ -569,9 +569,11 @@ export default function Home() {
             <ThreadsSidebar
               threads={threads}
               selectedThreadId={selectedThreadId}
+              activeNavView={activeNavView}
               onSelectThread={handleSelectThread}
               onNewThread={handleNewThread}
               onDeleteThread={handleDeleteThread}
+              onNavigate={setActiveNavView}
               onOpenDrawer={() => setIsDrawerOpen(true)}
             />
           </div>
