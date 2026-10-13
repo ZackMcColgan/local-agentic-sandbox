@@ -361,7 +361,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
           createProductionStepExecutor({
             workerPool: options?.workerPool || this.workerPool,
             repoRoot: this.workspaceDir,
-            model: "swift-27b-mtp",
+            model: "swift-15-27b-mtp",
             scope: manifest.scope
           });
 

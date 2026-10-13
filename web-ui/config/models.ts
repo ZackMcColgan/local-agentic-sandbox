@@ -24,27 +24,27 @@ export const AGENT_MODES: Record<AgentMode, AgentModeConfig> = {
     label: "Auto",
     badgeLabel: "Auto (Hierarchical)",
     description: "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
-    defaultModel: "swift-27b-mtp"
+    defaultModel: "swift-15-27b-mtp"
   },
   flash: {
     id: "flash",
     label: "Flash",
     badgeLabel: "Flash ~80 t/s",
     description: "Ultra-fast execution and multimodal diagram ingestion via Gemma 4 E4B (~80 tok/s).",
-    defaultModel: "swift-27b-mtp"
+    defaultModel: "swift-15-27b-mtp"
   },
   pro: {
     id: "pro",
     label: "Pro",
     badgeLabel: "Pro (27B)",
     description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Qwen 3.8 27B / Hermes 3.",
-    defaultModel: "swift-27b-mtp"
+    defaultModel: "swift-15-27b-mtp"
   }
 };
 
 export const DEFAULT_AGENT_MODE: AgentMode = "auto";
-export const DEFAULT_PRIMARY_MODEL = "swift-27b-mtp";
-export const DEFAULT_SUBAGENT_MODEL = "swift-27b-mtp";
+export const DEFAULT_PRIMARY_MODEL = "swift-15-27b-mtp";
+export const DEFAULT_SUBAGENT_MODEL = "swift-15-27b-mtp";
 
 export const PRESET_MODEL_PROFILES: ModelProfile[] = [
   {

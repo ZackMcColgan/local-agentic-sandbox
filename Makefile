@@ -5,8 +5,8 @@ all: help
 help:
 	@echo "local-agentic-sandbox - Management Commands"
 	@echo "============================================"
-	@echo "make pull-primary  Pull primary orchestrator model (swift-27b-mtp)"
-	@echo "make pull-subagent Pull fast execution sub-agent model (swift-27b-mtp)"
+	@echo "make pull-primary  Pull primary orchestrator model (swift-15-27b-mtp)"
+	@echo "make pull-subagent Pull fast execution sub-agent model (swift-15-27b-mtp)"
 	@echo "make pull-all      Pull both primary and sub-agent models"
 	@echo "make list-models   List locally installed Ollama models & VRAM usage"
 	@echo "make up            Build and launch all services in detached mode"
@@ -21,10 +21,10 @@ help:
 	@echo "make k8s-deploy   Build image and rollout restart K8s web-ui"
 
 pull-primary:
-	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-15-27b-mtp
 
 pull-subagent:
-	docker compose run --rm --network egress-mesh ollama ollama pull swift-27b-mtp
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-15-27b-mtp
 
 pull-all: pull-primary pull-subagent
 

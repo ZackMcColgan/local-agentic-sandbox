@@ -831,8 +831,10 @@ export function ChatStream({
     }
   };
 
-  const modelSafe = activeModel || "swift-27b-mtp";
-  const shortModelLabel = modelSafe.includes("swift")
+  const modelSafe = activeModel || "swift-15-27b-mtp";
+  const shortModelLabel = modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
+    ? "swift-15-27b"
+    : modelSafe.includes("swift")
     ? "swift-27b"
     : modelSafe.includes("qwen")
     ? "qwen3.8"

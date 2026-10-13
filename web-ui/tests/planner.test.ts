@@ -122,7 +122,7 @@ describe("Phase 1 — Planner Worker Suite", () => {
     }
   });
 
-  it("defaults to swift-27b-mtp when model and PLANNER_MODEL are unset", async () => {
+  it("defaults to swift-15-27b-mtp when model and PLANNER_MODEL are unset", async () => {
     const savedPlannerModel = process.env.PLANNER_MODEL;
     delete process.env.PLANNER_MODEL;
     let capturedModel: string | undefined;
@@ -168,7 +168,7 @@ describe("Phase 1 — Planner Worker Suite", () => {
         generate: mockGenerate
       });
 
-      assert.equal(capturedModel, "swift-27b-mtp", "Planner must default to swift-27b-mtp");
+      assert.equal(capturedModel, "swift-15-27b-mtp", "Planner must default to swift-15-27b-mtp");
 
       // Verify no occurrences of qwen3.8 remain in lib/subagents/
       const candidateDirs = [

@@ -338,7 +338,7 @@ export class BuilderWorker {
   ): Promise<BuilderResult> {
     const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
-    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
     const criticFeedback = options?.criticFeedback || [];
     const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
 
@@ -611,7 +611,7 @@ export class CriticWorker {
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "swift-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "swift-15-27b-mtp";
 
     // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
     // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
@@ -1003,11 +1003,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || "swift-27b-mtp",
-    builder: process.env.BUILDER_MODEL || "swift-27b-mtp",
-    critic: process.env.CRITIC_MODEL || "swift-27b-mtp",
-    explorer: process.env.EXPLORER_MODEL || "swift-27b-mtp",
-    recorder: process.env.RECORDER_MODEL || "swift-27b-mtp"
+    planner: process.env.PLANNER_MODEL || "swift-15-27b-mtp",
+    builder: process.env.BUILDER_MODEL || "swift-15-27b-mtp",
+    critic: process.env.CRITIC_MODEL || "swift-15-27b-mtp",
+    explorer: process.env.EXPLORER_MODEL || "swift-15-27b-mtp",
+    recorder: process.env.RECORDER_MODEL || "swift-15-27b-mtp"
   };
 }
 

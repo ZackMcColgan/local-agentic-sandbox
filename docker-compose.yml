@@ -68,8 +68,8 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
-      - MODEL_NAME=swift-27b-mtp
-      - PLANNER_MODEL=swift-27b-mtp
+      - MODEL_NAME=swift-15-27b-mtp
+      - PLANNER_MODEL=swift-15-27b-mtp
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
       - OTEL_SERVICE_NAME=enterprise-ai-portal
     extra_hosts:
@@ -99,8 +99,8 @@ services:
       # supervisor runs, and llmClient defaults to 127.0.0.1:11434 (the
       # container itself) when OLLAMA_BASE_URL is unset.
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - MODEL_NAME=swift-27b-mtp
-      - PLANNER_MODEL=swift-27b-mtp
+      - MODEL_NAME=swift-15-27b-mtp
+      - PLANNER_MODEL=swift-15-27b-mtp
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - BROWSER_MCP_URL=http://browser-mcp:8081/sse
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318

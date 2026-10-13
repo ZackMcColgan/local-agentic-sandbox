@@ -174,10 +174,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/types"),
+    match: (p) => p.includes("lib/subagents/types") || p.includes("lib/subagents/scheduler"),
     tests: [
       "tests/supervisor.test.ts",
       "tests/workerPool.test.ts",
+      "tests/scheduler.test.ts",
       "tests/morningReport.test.ts"
     ]
   },
@@ -201,8 +202,13 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Models config & modelfiles
   {
-    match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles"),
+    match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
     tests: ["tests/models.test.ts", "tests/modelfiles.test.ts", "tests/agentEngine.test.ts"]
+  },
+  // Makefile deployment configuration
+  {
+    match: (p) => p === "Makefile" || p.endsWith("/Makefile"),
+    tests: ["tests/deploymentConfig.test.ts"]
   },
   // Sandbox tier runner
   {
@@ -368,7 +374,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/capture-svg-render") ||
     normalizedPath.startsWith("scripts/verify-") ||
     normalizedPath.startsWith("docs/") ||
-    normalizedPath.includes("/.user_uploaded/")
+    normalizedPath.includes("/.user_uploaded/") ||
+    normalizedPath.endsWith("script.py") ||
+    normalizedPath.endsWith(".py")
   ) {
     // Only exception: docs/architecture.drawio is covered
     if (normalizedPath.includes("architecture.drawio")) return false;

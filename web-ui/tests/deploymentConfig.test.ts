@@ -18,11 +18,11 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
     throw new Error(`Could not find repo root with docker-compose.yml in: ${candidates.join(", ")}`);
   }
 
-  it("docker-compose.yml contains swift-27b-mtp and has zero stale model references", () => {
+  it("docker-compose.yml contains swift-15-27b-mtp and has zero stale model references", () => {
     const root = findRepoRoot();
     const composeContent = fs.readFileSync(path.join(root, "docker-compose.yml"), "utf8");
 
-    assert.ok(composeContent.includes("MODEL_NAME=swift-27b-mtp"), "docker-compose.yml must set MODEL_NAME=swift-27b-mtp");
+    assert.ok(composeContent.includes("MODEL_NAME=swift-15-27b-mtp"), "docker-compose.yml must set MODEL_NAME=swift-15-27b-mtp");
     assert.equal(composeContent.includes("qwen3.8"), false, "docker-compose.yml must not contain qwen3.8");
     assert.equal(composeContent.includes("gemma4"), false, "docker-compose.yml must not contain gemma4");
     assert.equal(composeContent.includes("hermes3"), false, "docker-compose.yml must not contain hermes3");
@@ -43,11 +43,11 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
     );
   });
 
-  it("Makefile contains swift-27b-mtp and has zero stale model references", () => {
+  it("Makefile contains swift-15-27b-mtp and has zero stale model references", () => {
     const root = findRepoRoot();
     const makefileContent = fs.readFileSync(path.join(root, "Makefile"), "utf8");
 
-    assert.ok(makefileContent.includes("swift-27b-mtp"), "Makefile must reference swift-27b-mtp");
+    assert.ok(makefileContent.includes("swift-15-27b-mtp"), "Makefile must reference swift-15-27b-mtp");
     assert.equal(makefileContent.includes("qwen3.8"), false, "Makefile must not contain qwen3.8");
     assert.equal(makefileContent.includes("gemma4"), false, "Makefile must not contain gemma4");
     assert.equal(makefileContent.includes("hermes3"), false, "Makefile must not contain hermes3");
