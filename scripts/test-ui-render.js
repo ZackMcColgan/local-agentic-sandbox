@@ -1,7 +1,10 @@
 const { exec } = require('child_process');
 const fs = require('fs');
 
-async function waitForPort(port, maxRetries = 10) {
+const os = require('os');
+const path = require('path');
+
+async function waitForPort(port, maxRetries = 15) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json`);
@@ -14,8 +17,9 @@ async function waitForPort(port, maxRetries = 10) {
 
 async function capture(url, width, height, isMobile, outputPath, delayMs = 1200) {
   const port = 9300 + Math.floor(Math.random() * 500);
+  const tmpUserData = path.join(os.tmpdir(), `chrome-test-ui-${port}`);
   const chrome = exec(
-    `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --headless=new --remote-debugging-port=${port} --window-size=${width},${height} "${url}"`
+    `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --headless=new --remote-debugging-port=${port} --user-data-dir="${tmpUserData}" --no-first-run --no-default-browser-check --disable-gpu --window-size=${width},${height} "${url}"`
   );
 
   try {
@@ -40,6 +44,7 @@ async function capture(url, width, height, isMobile, outputPath, delayMs = 1200)
           })
         );
 
+        ws.send(JSON.stringify({ id: 3, method: 'Page.enable' }));
         setTimeout(() => {
           ws.send(
             JSON.stringify({
