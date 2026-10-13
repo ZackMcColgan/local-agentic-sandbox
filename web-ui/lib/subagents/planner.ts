@@ -162,7 +162,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       }
     ];
   } else if (!isSynthetic) {
-    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000 });
+    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000, scope: userScope });
     const modelToUse = input.model || process.env.PLANNER_MODEL || "swift-27b-mtp";
 
     const prompt = (userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT")

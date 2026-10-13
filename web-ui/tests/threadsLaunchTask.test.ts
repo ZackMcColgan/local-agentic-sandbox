@@ -10,7 +10,7 @@ import { TaskManifest } from "../lib/subagents/types";
 describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario)", () => {
   it("Case 1: POST /api/threads triggers execution and calls executeTaskWithRecovery with manifest", async () => {
     let executeCalled = false;
-    let receivedManifest: TaskManifest | null = null;
+    let receivedManifest = null as TaskManifest | null;
 
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
     OvernightSupervisor.prototype.executeTaskWithRecovery = async function(task: TaskManifest, options?: any) {
@@ -53,6 +53,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
     const manifest: TaskManifest = {
       taskId: `test-weather-progress-${Date.now()}`,
       goal: "Create a svg of the weather tomorrow",
+      branchName: "feat/weather-svg",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
@@ -60,28 +61,39 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
         {
           id: "M1",
           title: "Scaffold weather SVG component",
+          description: "Scaffold weather SVG component",
           dependencies: [],
           acceptanceCriteria: [{ id: "c1", assertion: "SVG layout defined" }],
-          status: "pending"
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0
         },
         {
           id: "M2",
           title: "Render dynamic sun and cloud elements",
+          description: "Render dynamic sun and cloud elements",
           dependencies: ["M1"],
           acceptanceCriteria: [{ id: "c2", assertion: "Weather glyphs present" }],
-          status: "pending"
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0
         },
         {
           id: "M3",
           title: "Style SVG with forecast metadata text",
+          description: "Style SVG with forecast metadata text",
           dependencies: ["M2"],
           acceptanceCriteria: [{ id: "c3", assertion: "Forecast metadata included" }],
-          status: "pending"
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0
         }
       ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -109,6 +121,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
     const manifest: TaskManifest = {
       taskId: `test-weather-nostall-${Date.now()}`,
       goal: "Create a svg of the weather tomorrow",
+      branchName: "feat/weather-nostall",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
@@ -116,14 +129,19 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
         {
           id: "M1",
           title: "Create weather SVG markup",
+          description: "Create weather SVG markup",
           dependencies: [],
           acceptanceCriteria: [{ id: "c1", assertion: "SVG exists" }],
-          status: "pending"
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0
         }
       ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -153,6 +171,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
     const manifest: TaskManifest = {
       taskId: `test-weather-park-${Date.now()}`,
       goal: "Create a svg of the weather tomorrow",
+      branchName: "feat/weather-park",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
@@ -160,14 +179,19 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
         {
           id: "M1",
           title: "Scaffold weather SVG",
+          description: "Scaffold weather SVG",
           dependencies: [],
           acceptanceCriteria: [{ id: "c1", assertion: "SVG canvas defined" }],
-          status: "pending"
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0
         }
       ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);

@@ -28,9 +28,12 @@ RUN npm prune --production
 # ==========================================
 FROM node:22-alpine AS runner
 
-# Install Python3, pytest, git, bash, and ripgrep for autonomous workspace operations
+# Upgrade Alpine packages (expat, zlib) and install runtime tools
 RUN apk update && \
+    apk upgrade --no-cache && \
     apk add --no-cache python3 py3-pip py3-pytest git bash ripgrep && \
+    npm install -g npm@latest && \
+    npm cache clean --force && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /app

@@ -220,7 +220,10 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // UI views and components
   {
-    match: (p) => p.includes("components/MorningReportView"),
+    match: (p) =>
+      p.includes("components/MorningReportView") ||
+      p.includes("app/morning-report") ||
+      p.includes("app/api/morning-report"),
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
   },
   {

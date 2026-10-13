@@ -25,6 +25,10 @@ RUN npm prune --production
 # ==========================================
 FROM node:22-alpine AS runner
 
+RUN apk update && \
+    apk upgrade --no-cache && \
+    rm -rf /var/cache/apk/*
+
 WORKDIR /app
 
 # Create unprivileged browser-agent user (UID/GID: 10002)

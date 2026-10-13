@@ -25,6 +25,11 @@ import {
   compareAndRevertIfWorse
 } from "./workerPool";
 import { TelemetryTracer, formatTraceparent } from "../telemetry";
+import {
+  generateOvernightMorningReport,
+  persistOvernightMorningReport,
+  MORNING_REPORT_CHECKPOINT_DIR
+} from "./morningReport";
 
 let sycophancyProbeExecuted = false;
 
@@ -693,6 +698,7 @@ export interface ProductionStepExecutorOptions {
   workerPool?: WorkerPool;
   repoRoot?: string;
   model?: string;
+  scope?: string;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
 }
 
@@ -717,6 +723,7 @@ export function createProductionStepExecutor(
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
+      scope: options?.scope,
       modelRoster: {
         builder: modelToUse,
         critic: modelToUse,
@@ -938,7 +945,7 @@ export class OvernightSupervisor {
         }
       }
     }
-    this.checkpointDirectory = resolvedDir || path.resolve("/tmp/.agent/checkpoints");
+    this.checkpointDirectory = resolvedDir || MORNING_REPORT_CHECKPOINT_DIR;
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
@@ -1050,6 +1057,14 @@ export class OvernightSupervisor {
         "utf8"
       );
       console.log(`[supervisor] checkpoint saved for ${task.taskId}`);
+      if (
+        task.status === "completed" ||
+        task.status === "parked" ||
+        task.status === "failed" ||
+        task.status === "stopped"
+      ) {
+        this.syncOvernightMorningReport().catch(() => {});
+      }
     } catch (err: any) {
       console.error(`[supervisor] Failed to persist checkpoint ${checkpoint.checkpointId} for task ${task.taskId} (milestone: ${checkpoint.milestoneId}):`, err?.message || err);
       (checkpoint as any).failed = true;
@@ -1058,6 +1073,16 @@ export class OvernightSupervisor {
     }
 
     return checkpoint;
+  }
+
+  async syncOvernightMorningReport(): Promise<void> {
+    try {
+      const allTasks = await this.listAllTasks();
+      const report = generateOvernightMorningReport(allTasks);
+      persistOvernightMorningReport(report, this.checkpointDirectory);
+    } catch (err: any) {
+      console.warn(`[supervisor] Could not sync overnight morning report:`, err?.message || err);
+    }
   }
 
   async resumeTaskFromCheckpoint(taskId: string): Promise<TaskManifest | null> {

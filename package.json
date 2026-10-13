@@ -28,5 +28,10 @@
     "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
+  },
+  "overrides": {
+    "ip-address": "^10.7.4",
+    "picomatch": "^4.0.7",
+    "postcss": "^8.5.30"
   }
 }

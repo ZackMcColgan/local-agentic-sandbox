@@ -137,3 +137,309 @@ describe("Phase 1 — Morning Report Suite", () => {
     assert.ok(md.includes("All 21 web-ui suites and 9 mcp-server suites green"), "Contains details");
   });
 });
+
+describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window)", () => {
+  it("generates an overnight report from a mix of completed, parked, and failed tasks", async () => {
+    const mod = await import("../lib/subagents/morningReport.js") as any;
+    assert.equal(typeof mod.generateOvernightMorningReport, "function", "generateOvernightMorningReport must be exported");
+
+    const tasks = [
+      {
+        taskId: "task-101-completed",
+        threadId: "thread-101",
+        goal: "Create a markdown checklist for a weekend camping trip",
+        branchName: "feature/camping-checklist",
+        toolchain: "node:22",
+        status: "completed",
+        startedAt: "2026-10-13T23:15:00.000Z",
+        completedAt: "2026-10-13T23:18:30.000Z",
+        updatedAt: "2026-10-13T23:18:30.000Z",
+        currentMilestoneIndex: 1,
+        milestones: [
+          {
+            id: "M1",
+            title: "Generate camping-checklist.md",
+            description: "Create markdown checklist",
+            acceptanceCriteria: [],
+            status: "completed",
+            builderIterations: 1,
+            criticRounds: 1,
+            plannedFiles: ["docs/camping-checklist.md"],
+            diffSummary: "File: docs/camping-checklist.md\n+# Weekend Camping Checklist\n- [ ] Tent",
+            testsPassed: 5,
+            testsFailed: 0
+          }
+        ],
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [
+          {
+            timestamp: "2026-10-13T23:18:00.000Z",
+            role: "builder",
+            message: "Generated deliverable docs/camping-checklist.md (420 bytes)."
+          }
+        ]
+      },
+      {
+        taskId: "task-102-parked",
+        threadId: "thread-102",
+        goal: "Refactor OAuth2 token exchange with external provider",
+        branchName: "feature/oauth2-refactor",
+        toolchain: "node:22",
+        status: "parked",
+        parkedReason: "Milestone M2 stalled waiting for external OAuth client secret configuration",
+        startedAt: "2026-10-14T01:10:00.000Z",
+        updatedAt: "2026-10-14T01:35:00.000Z",
+        currentMilestoneIndex: 1,
+        milestones: [
+          {
+            id: "M1",
+            title: "Scaffold token client",
+            description: "Token client types",
+            acceptanceCriteria: [],
+            status: "completed",
+            builderIterations: 1,
+            criticRounds: 1,
+            plannedFiles: ["src/auth/tokenClient.ts"],
+            testsPassed: 3,
+            testsFailed: 0
+          },
+          {
+            id: "M2",
+            title: "Verify live OAuth handshake",
+            description: "Live handshake",
+            acceptanceCriteria: [],
+            status: "failed",
+            builderIterations: 3,
+            criticRounds: 1,
+            testsPassed: 0,
+            testsFailed: 2
+          }
+        ],
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: []
+      },
+      {
+        taskId: "task-103-failed",
+        threadId: "thread-103",
+        goal: "Compile legacy WebAssembly crypto module",
+        branchName: "feature/wasm-crypto",
+        toolchain: "rust",
+        status: "failed",
+        errorSummary: "SyntaxError: wasm-pack target binary missing in air-gapped container",
+        startedAt: "2026-10-14T03:00:00.000Z",
+        completedAt: "2026-10-14T03:04:15.000Z",
+        updatedAt: "2026-10-14T03:04:15.000Z",
+        currentMilestoneIndex: 0,
+        milestones: [
+          {
+            id: "M1",
+            title: "Build WASM module",
+            description: "Compile rust to wasm",
+            acceptanceCriteria: [],
+            status: "failed",
+            builderIterations: 3,
+            criticRounds: 0,
+            criticCritique: "SyntaxError: wasm-pack target binary missing in air-gapped container",
+            testsPassed: 0,
+            testsFailed: 1
+          }
+        ],
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [
+          {
+            timestamp: "2026-10-14T03:04:10.000Z",
+            role: "supervisor",
+            message: "Worker crash detected in milestone M1: SyntaxError: wasm-pack target binary missing"
+          }
+        ]
+      }
+    ];
+
+    const report = mod.generateOvernightMorningReport(tasks);
+
+    assert.equal(report.totalTasks, 3, "Should include all 3 tasks from the overnight window");
+    assert.equal(report.completedCount, 1);
+    assert.equal(report.parkedCount, 1);
+    assert.equal(report.failedCount, 1);
+
+    // Check task entries have status, duration, artifacts with preview links, and park/failure reasons
+    const completedEntry = report.tasks.find((t: any) => t.taskId === "task-101-completed");
+    assert.ok(completedEntry);
+    assert.equal(completedEntry.status, "completed");
+    assert.equal(completedEntry.durationFormatted, "3m 30s");
+    assert.ok(completedEntry.artifacts.length >= 1, "Completed task should list produced artifacts");
+    assert.ok(
+      completedEntry.artifacts[0].previewUrl.includes("/api/files?path=") &&
+      completedEntry.artifacts[0].previewUrl.includes("camping-checklist.md"),
+      "Artifact must include a working preview link"
+    );
+
+    const parkedEntry = report.tasks.find((t: any) => t.taskId === "task-102-parked");
+    assert.ok(parkedEntry);
+    assert.equal(parkedEntry.status, "parked");
+    assert.equal(parkedEntry.durationFormatted, "25m 0s");
+    assert.ok(parkedEntry.parkedReason.includes("OAuth client secret"));
+
+    const failedEntry = report.tasks.find((t: any) => t.taskId === "task-103-failed");
+    assert.ok(failedEntry);
+    assert.equal(failedEntry.status, "failed");
+    assert.equal(failedEntry.durationFormatted, "4m 15s");
+    assert.ok(failedEntry.errorSummary.includes("wasm-pack target binary missing"));
+
+    // What needs attention section must include both parked and failed tasks
+    assert.equal(report.attentionItems.length, 2);
+    assert.ok(report.attentionItems.some((item: any) => item.taskId === "task-102-parked" && item.status === "parked"));
+    assert.ok(report.attentionItems.some((item: any) => item.taskId === "task-103-failed" && item.status === "failed"));
+  });
+
+  it("persists and reloads the overnight morning report to disk so it is readable at 7am without log diving", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const os = await import("os");
+    const mod = await import("../lib/subagents/morningReport.js") as any;
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "morning-report-test-"));
+    try {
+      const report = mod.generateOvernightMorningReport([
+        {
+          taskId: "task-persist-1",
+          goal: "Generate SVG badge",
+          branchName: "feature/svg-badge",
+          toolchain: "node:22",
+          status: "completed",
+          startedAt: "2026-10-14T02:00:00.000Z",
+          completedAt: "2026-10-14T02:01:15.000Z",
+          updatedAt: "2026-10-14T02:01:15.000Z",
+          currentMilestoneIndex: 1,
+          milestones: [
+            {
+              id: "M1",
+              title: "Create badge.svg",
+              description: "Create SVG",
+              acceptanceCriteria: [],
+              status: "completed",
+              builderIterations: 1,
+              criticRounds: 1,
+              plannedFiles: ["badge.svg"]
+            }
+          ],
+          checkpoints: [],
+          ambiguityFlags: [],
+          journal: []
+        }
+      ]);
+
+      mod.persistOvernightMorningReport(report, tmpDir);
+      const loaded = mod.loadPersistedOvernightMorningReport(tmpDir);
+      assert.ok(loaded, "Persisted report must load from disk");
+      assert.equal(loaded.totalTasks, 1);
+      assert.equal(loaded.tasks[0].taskId, "task-persist-1");
+      assert.equal(loaded.tasks[0].durationFormatted, "1m 15s");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes /morning-report page route and /api/morning-report API endpoint", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const pagePath = path.resolve(__dirname, "../app/morning-report/page.tsx");
+    const apiPath = path.resolve(__dirname, "../app/api/morning-report/route.ts");
+    assert.ok(fs.existsSync(pagePath), "/morning-report standalone Next.js page must exist");
+    assert.ok(fs.existsSync(apiPath), "/api/morning-report API route must exist");
+  });
+
+  it("Fix 1.1: supervisor persistence hook and API route load function round-trip using unified checkpoint directory", async () => {
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    const { loadPersistedOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+
+    const supervisor = new OvernightSupervisor();
+    const manifest = {
+      taskId: "task-roundtrip-7am",
+      goal: "Generate morning report roundtrip verification",
+      branchName: "feature/test",
+      toolchain: "node:22",
+      status: "completed",
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      completedAt: new Date().toISOString(),
+      milestones: [],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    } as any;
+
+    supervisor.saveCheckpoint(manifest);
+    await supervisor.syncOvernightMorningReport();
+
+    // Calling load without arguments (as the API route did) MUST load the report saved by the supervisor
+    const loaded = loadPersistedOvernightMorningReport();
+    assert.ok(loaded, "Persisted report written by supervisor must be found by loadPersistedOvernightMorningReport()");
+    assert.ok(loaded.tasks.some(t => t.taskId === "task-roundtrip-7am"), "Loaded report must contain supervisor task");
+  });
+
+  it("Addendum 1: MorningReportView renders exactly 1 task-row and 1 artifact-card with no duplicate sections", async () => {
+    const React = await import("react");
+    const { renderToString } = await import("react-dom/server");
+    const { Window } = await import("happy-dom");
+    const { MorningReportView } = await import("../components/MorningReportView.js");
+    const { generateOvernightMorningReport, generateMorningReport } = await import("../lib/subagents/morningReport.js");
+
+    const sampleTask: any = {
+      taskId: "task-single-001",
+      goal: "Generate solitary report artifact",
+      branchName: "feature/single-artifact",
+      toolchain: "node:22",
+      status: "completed",
+      startedAt: new Date(Date.now() - 30000).toISOString(),
+      completedAt: new Date().toISOString(),
+      currentMilestoneIndex: 1,
+      milestones: [
+        {
+          id: "M1",
+          title: "Generate artifact",
+          description: "Artifact generation",
+          status: "completed",
+          plannedFiles: ["docs/single-output.md"]
+        }
+      ],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    };
+
+    const overnightReport = generateOvernightMorningReport([sampleTask]);
+    const singleReport = generateMorningReport({
+      taskId: sampleTask.taskId,
+      goal: sampleTask.goal,
+      branch: sampleTask.branchName,
+      gitHeadSha: "abc1234",
+      status: "completed",
+      startedAt: sampleTask.startedAt,
+      completedAt: sampleTask.completedAt,
+      milestones: [],
+      ambiguityFlags: [],
+      parkedItems: []
+    });
+
+    const html = renderToString(
+      React.createElement(MorningReportView, {
+        overnightReport,
+        report: singleReport
+      })
+    );
+
+    const window = new Window();
+    window.document.body.innerHTML = html;
+
+    const taskRows = window.document.querySelectorAll('[data-testid="task-row"]');
+    const artifactCards = window.document.querySelectorAll('[data-testid="artifact-card"]');
+
+    assert.equal(taskRows.length, 1, `Expected exactly 1 task-row, got ${taskRows.length}`);
+    assert.equal(artifactCards.length, 1, `Expected exactly 1 artifact-card, got ${artifactCards.length}`);
+  });
+});
+
+

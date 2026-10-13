@@ -10,6 +10,18 @@ function getMimeType(filePath: string): string {
     case ".drawio":
     case ".xml":
       return "application/xml; charset=utf-8";
+    case ".md":
+      return "text/markdown; charset=utf-8";
+    case ".txt":
+      return "text/plain; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".csv":
+      return "text/csv; charset=utf-8";
+    case ".log":
+      return "text/plain; charset=utf-8";
     default:
       return "application/octet-stream";
   }
@@ -39,11 +51,8 @@ export async function GET(request: NextRequest) {
       process.env.WORKSPACE_DIR || "/workspace",
       path.resolve(cwd, "..", "workspace"),
       path.resolve(cwd, "workspace"),
-      fs.existsSync(path.join(cwd, "docs"))
-        ? cwd
-        : fs.existsSync(path.resolve(cwd, "..", "docs"))
-        ? path.resolve(cwd, "..")
-        : cwd
+      cwd,
+      path.resolve(cwd, "..")
     ];
 
     // Check if target is a directory across candidate roots (directory listing is forbidden)
@@ -61,17 +70,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Strict content-type check: only SVG and Draw.io XML files permitted
+    // Strict content-type check: text and diagram artifacts permitted (.svg, .drawio, .xml, .md, .txt, .json, .html, .csv, .log)
     const ext = path.extname(cleanPath).toLowerCase();
     const isAllowedExt =
       ext === ".svg" ||
       ext === ".drawio" ||
       cleanPath.endsWith(".drawio.xml") ||
-      ext === ".xml";
+      ext === ".xml" ||
+      ext === ".md" ||
+      ext === ".txt" ||
+      ext === ".json" ||
+      ext === ".html" ||
+      ext === ".csv" ||
+      ext === ".log";
 
     if (!isAllowedExt) {
       return NextResponse.json(
-        { error: "Unsupported media type: only SVG and Draw.io XML diagrams are permitted" },
+        { error: "Unsupported media type: only text and diagram artifacts (.svg, .drawio, .xml, .md, .txt, .json, .html, .csv, .log) are permitted" },
         { status: 415 }
       );
     }

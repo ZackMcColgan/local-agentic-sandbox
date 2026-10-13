@@ -52,7 +52,11 @@ export async function generateOllamaEmbedding(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        prompt: text.slice(0, 500)
+        prompt: text.slice(0, 500),
+        options: {
+          num_gpu: 0 // Force embedding model to CPU — it's 23MB, doesn't need GPU,
+                     // and this prevents VRAM contention with the main chat model
+        }
       }),
       signal: AbortSignal.timeout(Number(process.env.OLLAMA_EMBED_TIMEOUT_MS) || 60000)
     });

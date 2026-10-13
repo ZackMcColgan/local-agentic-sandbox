@@ -134,8 +134,9 @@ export async function POST(req: Request) {
       let lastRecordedLength = 0;
 
       const executor = createProductionStepExecutor({
-        workerPool: new WorkerPool(),
+        workerPool: new WorkerPool({ scope }),
         model: "swift-27b-mtp",
+        scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
           const now = Date.now();
           // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
