@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { unloadAllModels } from "@/lib/subagents/residency";
+import { getSharedRunLedger } from "@/lib/ledger/runLedger";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
@@ -17,6 +18,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     let task = null;
     if (thread.taskId) {
       task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
+      const ledgerEntry = getSharedRunLedger().getRun(thread.taskId);
+      if (task && ledgerEntry?.status === "crashed" && task.status === "active") {
+        task.status = "crashed";
+      }
     }
 
     return NextResponse.json({ thread, task });
@@ -60,6 +65,64 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
       threadStore.saveThread(thread);
       return NextResponse.json({ status: "stopped", thread });
+    }
+
+    // 1b. Action: Pause Run
+    if (body.action === "pause") {
+      if (thread.taskId) {
+        activeExecutionSet.delete(thread.taskId);
+        const task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
+        if (task) {
+          supervisor.pauseTask(task, "User paused run");
+          getSharedRunLedger().pauseRun(task.taskId);
+          threadStore.saveThread(thread);
+          return NextResponse.json({ status: "paused", thread, task });
+        }
+      }
+      return NextResponse.json({ error: "No active task to pause" }, { status: 400 });
+    }
+
+    // 1c. Action: Resume Run
+    if (body.action === "resume") {
+      if (thread.taskId) {
+        const task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
+        if (task) {
+          task.status = "active";
+          task.updatedAt = new Date().toISOString();
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            message: "Resumed run from last saved checkpoint. Completed milestones preserved."
+          });
+          supervisor.saveCheckpoint(task);
+          activeExecutionSet.add(task.taskId);
+          thread.status = "active";
+          threadStore.saveThread(thread);
+          return NextResponse.json({ status: "running", thread, task });
+        }
+      }
+      return NextResponse.json({ error: "No task checkpoint found to resume" }, { status: 400 });
+    }
+
+    // 1d. Action: Restart Run
+    if (body.action === "restart") {
+      if (thread.taskId) {
+        const original = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
+        if (original) {
+          const restarted = supervisor.restartTask(original);
+          try {
+            getSharedRunLedger().restartRun(original.taskId, restarted.taskId);
+          } catch {
+            // synced by saveCheckpoint
+          }
+          thread.taskId = restarted.taskId;
+          thread.status = "active";
+          activeExecutionSet.add(restarted.taskId);
+          threadStore.saveThread(thread);
+          return NextResponse.json({ status: "running", thread, task: restarted });
+        }
+      }
+      return NextResponse.json({ error: "No task found to restart" }, { status: 400 });
     }
 
     // 2. Action: Rename Thread

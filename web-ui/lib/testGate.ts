@@ -226,6 +226,41 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/morning-report"),
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
   },
+  // Run Ledger & Run Controls (Sprint 12 Phase 4)
+  {
+    match: (p) => p.includes("lib/ledger/"),
+    tests: [
+      "tests/ledger.test.ts",
+      "tests/pause_resume.test.ts",
+      "tests/restart.test.ts",
+      "tests/crash_recovery.test.ts"
+    ]
+  },
+  // Build Deploy Flow (Sprint 12 Phase 5)
+  {
+    match: (p) => p.includes("lib/deploy/"),
+    tests: ["tests/deployFlow.test.ts"]
+  },
+  // Flywheel Skills Spike (Sprint 12 Phase 7)
+  {
+    match: (p) => p.includes("lib/flywheel/"),
+    tests: ["tests/flywheelSkills.test.ts"]
+  },
+  // Worker Git Operations (Sprint 12 Phase 8)
+  {
+    match: (p) => p.includes("lib/git/"),
+    tests: ["tests/workerGitOps.test.ts"]
+  },
+  // Worker CI Feedback (Sprint 12 Phase 9)
+  {
+    match: (p) => p.includes("lib/ci/"),
+    tests: ["tests/workerCiFeedback.test.ts"]
+  },
+  // Self-Deploy Pipeline (Sprint 12 Phase 10)
+  {
+    match: (p) => p.includes("lib/deploy/selfDeploy"),
+    tests: ["tests/selfDeploy.test.ts"]
+  },
   {
     match: (p) =>
       p.includes("components/Navbar") ||
