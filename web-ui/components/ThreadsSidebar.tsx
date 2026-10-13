@@ -320,6 +320,7 @@ export function ThreadsSidebar({
         <button
           type="button"
           onClick={() => onNavigate ? onNavigate("sessions") : undefined}
+          aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
             activeNavView === "sessions" || activeNavView === "thread"
               ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60"
@@ -344,6 +345,7 @@ export function ThreadsSidebar({
         <button
           type="button"
           onClick={() => onNavigate ? onNavigate("morning-report") : undefined}
+          aria-current={activeNavView === "morning-report" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
             activeNavView === "morning-report"
               ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
@@ -358,6 +360,7 @@ export function ThreadsSidebar({
         <button
           type="button"
           onClick={() => onNavigate ? onNavigate("settings") : undefined}
+          aria-current={activeNavView === "settings" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
             activeNavView === "settings"
               ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"

@@ -438,6 +438,13 @@ export default function Home() {
     setTraces((prev) => [...newTraces, ...prev]);
   };
 
+  const handleNavigate = (view: NavView) => {
+    setActiveNavView(view);
+    if (view === "sessions") {
+      setSelectedThreadId(null);
+    }
+  };
+
   const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
 
   return (
@@ -447,12 +454,7 @@ export default function Home() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         activeView={activeNavView}
-        onNavigate={(view) => {
-          setActiveNavView(view);
-          if (view === "sessions") {
-            setSelectedThreadId(null);
-          }
-        }}
+        onNavigate={handleNavigate}
         onNewSession={handleNewThread}
         pendingSkillsCount={0}
       />
@@ -573,7 +575,7 @@ export default function Home() {
               onSelectThread={handleSelectThread}
               onNewThread={handleNewThread}
               onDeleteThread={handleDeleteThread}
-              onNavigate={setActiveNavView}
+              onNavigate={handleNavigate}
               onOpenDrawer={() => setIsDrawerOpen(true)}
             />
           </div>

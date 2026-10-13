@@ -459,12 +459,23 @@ export function ChatStream({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const programmaticScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
 
+  useEffect(() => {
+    return () => {
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleContainerScroll = () => {
+    if (isProgrammaticScrollRef.current) return;
     const el = chatContainerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
@@ -472,7 +483,14 @@ export function ChatStream({
   };
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    isProgrammaticScrollRef.current = true;
     setIsUserScrolledUp(false);
+    if (programmaticScrollTimerRef.current) {
+      clearTimeout(programmaticScrollTimerRef.current);
+    }
+    programmaticScrollTimerRef.current = setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 600);
     scrollRef.current?.scrollIntoView({ behavior });
   };
 
