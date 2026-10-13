@@ -30,7 +30,8 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
       const gitOps = new WorkerGitOps({
         runId: "run-git-1",
         ledger,
-        commandRunner: async (cmd: string) => {
+        commandRunner: async (file: string, args: string[]) => {
+          const cmd = [file, ...args].join(" ");
           executedCommands.push(cmd);
           if (cmd.includes("rev-parse HEAD")) {
             return { exitCode: 0, stdout: "abc1234567890\n", stderr: "" };
@@ -123,5 +124,67 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
       /Branch deletion is strictly prohibited/i,
       "Branch deletion must be blocked"
     );
+  });
+
+  it("Fix 5.1: stageAndCommit and openPullRequest prevent command injection via execFile array arguments", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gitops-inject-test-"));
+    const pwnedFile = path.join(tmpDir, "pwned.txt");
+
+    try {
+      const { WorkerGitOps } = await import("../lib/git/workerGitOps.js");
+
+      const executedArgs: { file: string; args: string[] }[] = [];
+      const gitOps = new WorkerGitOps({
+        runId: "run-inject-test",
+        repoDir: tmpDir,
+        commandRunner: async (file: string, args: string[]) => {
+          executedArgs.push({ file, args });
+          if (args.includes("rev-parse")) {
+            return { exitCode: 0, stdout: "commit123456789\n", stderr: "" };
+          }
+          if (args.includes("create")) {
+            return {
+              exitCode: 0,
+              stdout: "https://github.com/ZackMcColgan/local-agentic-sandbox/pull/101\n",
+              stderr: ""
+            };
+          }
+          return { exitCode: 0, stdout: "ok\n", stderr: "" };
+        }
+      });
+
+      // 1. Filename with command injection payload
+      const maliciousFilename = `evil"; touch "${pwnedFile}"; echo "`;
+      await gitOps.stageAndCommit([maliciousFilename], "normal commit");
+
+      assert.equal(fs.existsSync(pwnedFile), false, "Command in filename must NEVER execute");
+      const addCall = executedArgs.find((e) => e.file === "git" && e.args[0] === "add");
+      assert.ok(addCall, "git add must have been called");
+      assert.deepEqual(addCall.args, ["add", maliciousFilename], "Filename passed literally as array element");
+
+      // 2. Commit message with $(...) injection payload
+      const maliciousMessage = `fix: $(touch "${pwnedFile}")`;
+      await gitOps.stageAndCommit(["file.txt"], maliciousMessage);
+
+      assert.equal(fs.existsSync(pwnedFile), false, "Command in commit message must NEVER execute");
+      const commitCalls = executedArgs.filter((e) => e.file === "git" && e.args[0] === "commit");
+      const commitCall = commitCalls[commitCalls.length - 1];
+      assert.ok(commitCall, "git commit must have been called");
+      assert.equal(commitCall.args[2], maliciousMessage, "Commit message passed literally without shell expansion");
+
+      // 3. PR title with backticks injection payload
+      await gitOps.createAndSwitchBranch("feature/test-pr-title");
+      await gitOps.openPullRequest({
+        title: `feat: \`touch "${pwnedFile}"\``,
+        body: "Automated PR body"
+      });
+
+      assert.equal(fs.existsSync(pwnedFile), false, "Backticks in PR title must NEVER execute");
+      const prCall = executedArgs.find((e) => e.file === "gh" && e.args[0] === "pr");
+      assert.ok(prCall, "gh pr create must have been called");
+      assert.equal(prCall.args[7], `feat: \`touch "${pwnedFile}"\``, "PR title passed literally");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

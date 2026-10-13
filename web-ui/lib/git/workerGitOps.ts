@@ -1,8 +1,8 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { RunLedger, getSharedRunLedger } from "../ledger/runLedger";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface GitCommandResult {
   exitCode: number;
@@ -10,7 +10,7 @@ export interface GitCommandResult {
   stderr: string;
 }
 
-export type GitCommandRunner = (command: string) => Promise<GitCommandResult>;
+export type GitCommandRunner = (file: string, args: string[]) => Promise<GitCommandResult>;
 
 export interface GitAuditLogEntry {
   timestamp: string;
@@ -43,9 +43,9 @@ export class WorkerGitOps {
     this.ledger = options.ledger;
     this.commandRunner =
       options.commandRunner ??
-      (async (cmd: string) => {
+      (async (file: string, args: string[]) => {
         try {
-          const { stdout, stderr } = await execAsync(cmd, {
+          const { stdout, stderr } = await execFileAsync(file, args, {
             cwd: this.repoDir,
             timeout: 60000
           });
@@ -95,9 +95,9 @@ export class WorkerGitOps {
     eventMarkdown: string;
   }> {
     this.assertSafeBranchName(branchName);
-    const cmd = `git checkout -B ${branchName}`;
-    const res = await this.commandRunner(cmd);
-    this.recordAudit(cmd, res);
+    const args = ["checkout", "-B", branchName];
+    const res = await this.commandRunner("git", args);
+    this.recordAudit(["git", ...args].join(" "), res);
 
     if (res.exitCode !== 0) {
       throw new Error(`Failed to create/switch branch ${branchName}: ${res.stderr || res.stdout}`);
@@ -122,25 +122,23 @@ export class WorkerGitOps {
       throw new Error("Commit message is required");
     }
 
-    const targets = files.length > 0 ? files.map((f) => `"${f}"`).join(" ") : "-A";
-    const addCmd = `git add ${targets}`;
-    const addRes = await this.commandRunner(addCmd);
-    this.recordAudit(addCmd, addRes);
+    const addArgs = files.length > 0 ? ["add", ...files] : ["add", "-A"];
+    const addRes = await this.commandRunner("git", addArgs);
+    this.recordAudit(["git", ...addArgs].join(" "), addRes);
     if (addRes.exitCode !== 0) {
       throw new Error(`git add failed: ${addRes.stderr || addRes.stdout}`);
     }
 
-    const safeMessage = commitMessage.replace(/"/g, '\\"');
-    const commitCmd = `git commit -m "${safeMessage}"`;
-    const commitRes = await this.commandRunner(commitCmd);
-    this.recordAudit(commitCmd, commitRes);
+    const commitArgs = ["commit", "-m", commitMessage];
+    const commitRes = await this.commandRunner("git", commitArgs);
+    this.recordAudit(["git", ...commitArgs].join(" "), commitRes);
     if (commitRes.exitCode !== 0) {
       throw new Error(`git commit failed: ${commitRes.stderr || commitRes.stdout}`);
     }
 
-    const shaCmd = "git rev-parse HEAD";
-    const shaRes = await this.commandRunner(shaCmd);
-    this.recordAudit(shaCmd, shaRes);
+    const shaArgs = ["rev-parse", "HEAD"];
+    const shaRes = await this.commandRunner("git", shaArgs);
+    this.recordAudit(["git", ...shaArgs].join(" "), shaRes);
     const commitSha = shaRes.stdout.trim() || "HEAD";
     const shortSha = commitSha.slice(0, 7);
 
@@ -178,9 +176,9 @@ export class WorkerGitOps {
     const targetBranch = (branchName || this.currentBranch).trim();
     this.assertSafeBranchName(targetBranch);
 
-    const cmd = `git push -u origin ${targetBranch}`;
-    const res = await this.commandRunner(cmd);
-    this.recordAudit(cmd, res);
+    const pushArgs = ["push", "-u", "origin", targetBranch];
+    const res = await this.commandRunner("git", pushArgs);
+    this.recordAudit(["git", ...pushArgs].join(" "), res);
 
     if (res.exitCode !== 0) {
       throw new Error(`git push failed for ${targetBranch}: ${res.stderr || res.stdout}`);
@@ -211,11 +209,9 @@ export class WorkerGitOps {
     const head = input.headBranch || this.currentBranch;
     this.assertSafeBranchName(head);
 
-    const safeTitle = input.title.replace(/"/g, '\\"');
-    const safeBody = input.body.replace(/"/g, '\\"');
-    const cmd = `gh pr create --base ${base} --head ${head} --title "${safeTitle}" --body "${safeBody}"`;
-    const res = await this.commandRunner(cmd);
-    this.recordAudit(cmd, res);
+    const prArgs = ["pr", "create", "--base", base, "--head", head, "--title", input.title, "--body", input.body];
+    const res = await this.commandRunner("gh", prArgs);
+    this.recordAudit(["gh", ...prArgs].join(" "), res);
 
     if (res.exitCode !== 0) {
       throw new Error(`Failed to open PR: ${res.stderr || res.stdout}`);
