@@ -271,10 +271,10 @@ Hope this helps!`;
     assert.equal(drawioRes.status, 200);
     assert.ok(drawioRes.headers.get("Content-Type")?.includes("xml"));
 
-    // 3. Strict content-type enforcement: Non-SVG/XML file returns 415 Unsupported Media Type
-    const nonSvgReq = new NextRequest("http://localhost:3000/api/files?path=package.json");
+    // 3. Strict content-type enforcement: Non-allowlisted file returns 415 Unsupported Media Type
+    const nonSvgReq = new NextRequest("http://localhost:3000/api/files?path=deploy.sh");
     const nonSvgRes = await GET(nonSvgReq);
-    assert.equal(nonSvgRes.status, 415, "Non-SVG/XML file must return 415 Unsupported Media Type");
+    assert.equal(nonSvgRes.status, 415, "Non-allowlisted file must return 415 Unsupported Media Type");
 
     // 4. Directory listing forbidden: requesting a directory returns 403 Forbidden
     const dirReq = new NextRequest("http://localhost:3000/api/files?path=docs");

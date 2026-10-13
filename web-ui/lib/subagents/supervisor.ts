@@ -27,7 +27,8 @@ import {
 import { TelemetryTracer, formatTraceparent } from "../telemetry";
 import {
   generateOvernightMorningReport,
-  persistOvernightMorningReport
+  persistOvernightMorningReport,
+  MORNING_REPORT_CHECKPOINT_DIR
 } from "./morningReport";
 
 let sycophancyProbeExecuted = false;
@@ -942,7 +943,7 @@ export class OvernightSupervisor {
         }
       }
     }
-    this.checkpointDirectory = resolvedDir || path.resolve("/tmp/.agent/checkpoints");
+    this.checkpointDirectory = resolvedDir || MORNING_REPORT_CHECKPOINT_DIR;
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);

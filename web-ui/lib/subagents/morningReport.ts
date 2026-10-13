@@ -452,6 +452,33 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
   return lines.join("\n");
 }
 
+export const MORNING_REPORT_CHECKPOINT_DIR: string = (() => {
+  if (process.env.MORNING_REPORT_DIR) return process.env.MORNING_REPORT_DIR;
+  if (process.env.AGENT_CHECKPOINT_DIR) return process.env.AGENT_CHECKPOINT_DIR;
+
+  const candidates = [
+    fs.existsSync(path.resolve(process.cwd(), "../workspace"))
+      ? path.resolve(process.cwd(), "../workspace/.agent/checkpoints")
+      : null,
+    path.resolve(process.cwd(), ".agent/checkpoints"),
+    path.resolve(process.cwd(), ".checkpoints"),
+    path.resolve("/tmp/.agent/checkpoints")
+  ].filter(Boolean) as string[];
+
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.accessSync(dir, fs.constants.W_OK);
+      return dir;
+    } catch {
+      // try next candidate
+    }
+  }
+  return path.resolve(process.cwd(), ".checkpoints");
+})();
+
 /**
  * Persists the Overnight Morning Report to disk so it is readable at 7am without digging through logs.
  */
@@ -459,7 +486,7 @@ export function persistOvernightMorningReport(
   report: OvernightMorningReport,
   checkpointDir?: string
 ): string {
-  const dir = checkpointDir || path.resolve(process.cwd(), ".checkpoints");
+  const dir = checkpointDir || MORNING_REPORT_CHECKPOINT_DIR;
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -474,7 +501,7 @@ export function persistOvernightMorningReport(
 export function loadPersistedOvernightMorningReport(
   checkpointDir?: string
 ): OvernightMorningReport | null {
-  const dir = checkpointDir || path.resolve(process.cwd(), ".checkpoints");
+  const dir = checkpointDir || MORNING_REPORT_CHECKPOINT_DIR;
   const filePath = path.join(dir, "overnight-morning-report.json");
   if (!fs.existsSync(filePath)) return null;
   try {

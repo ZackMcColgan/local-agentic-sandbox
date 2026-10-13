@@ -351,5 +351,33 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.ok(fs.existsSync(pagePath), "/morning-report standalone Next.js page must exist");
     assert.ok(fs.existsSync(apiPath), "/api/morning-report API route must exist");
   });
+
+  it("Fix 1.1: supervisor persistence hook and API route load function round-trip using unified checkpoint directory", async () => {
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    const { loadPersistedOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+
+    const supervisor = new OvernightSupervisor();
+    const manifest = {
+      taskId: "task-roundtrip-7am",
+      goal: "Generate morning report roundtrip verification",
+      branchName: "feature/test",
+      toolchain: "node:22",
+      status: "completed",
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      completedAt: new Date().toISOString(),
+      milestones: [],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    } as any;
+
+    supervisor.saveCheckpoint(manifest);
+    await supervisor.syncOvernightMorningReport();
+
+    // Calling load without arguments (as the API route did) MUST load the report saved by the supervisor
+    const loaded = loadPersistedOvernightMorningReport();
+    assert.ok(loaded, "Persisted report written by supervisor must be found by loadPersistedOvernightMorningReport()");
+    assert.ok(loaded.tasks.some(t => t.taskId === "task-roundtrip-7am"), "Loaded report must contain supervisor task");
+  });
 });
 

@@ -29,10 +29,10 @@ export async function GET() {
     let overnightReport =
       tasks.length > 0
         ? generateOvernightMorningReport(tasks)
-        : loadPersistedOvernightMorningReport();
+        : loadPersistedOvernightMorningReport(supervisor.checkpointDirectory);
 
     if (tasks.length > 0 && overnightReport) {
-      persistOvernightMorningReport(overnightReport);
+      persistOvernightMorningReport(overnightReport, supervisor.checkpointDirectory);
     }
 
     if (!overnightReport) {

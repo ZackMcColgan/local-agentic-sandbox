@@ -30,12 +30,8 @@
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
   },
   "overrides": {
-    "brace-expansion": "^2.0.2",
-    "pacote": "^22.0.0",
-    "http-cache-semantics": "^4.3.0",
     "ip-address": "^10.7.4",
     "picomatch": "^4.0.7",
-    "sigstore": "^5.0.0",
     "postcss": "^8.5.30"
   }
 }
