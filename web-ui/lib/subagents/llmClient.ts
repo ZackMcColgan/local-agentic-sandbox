@@ -22,8 +22,9 @@ export interface GenerateResult {
   thinking?: string;
   model: string;
   /** Time Ollama spent loading weights for this call (ms). >~1000ms means a cold load. */
-  loadDurationMs: number;
-  totalDurationMs: number;
+  loadDurationMs?: number;
+  totalDurationMs?: number;
+  [key: string]: any;
 }
 
 export type GenerateFn = (req: GenerateRequest) => Promise<GenerateResult>;

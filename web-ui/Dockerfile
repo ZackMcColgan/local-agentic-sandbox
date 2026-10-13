@@ -35,8 +35,11 @@ RUN npm run build
 # Stage 3: Production Runner (Lean Standalone)
 # ==========================================
 FROM node:22-alpine AS runner
-RUN apk add --no-cache git && \
-    git config --system --add safe.directory '*'
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache git && \
+    git config --system --add safe.directory '*' && \
+    rm -rf /var/cache/apk/*
 WORKDIR /app
 
 ENV NODE_ENV=production \

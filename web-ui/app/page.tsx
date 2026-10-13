@@ -8,7 +8,7 @@ import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace"
 import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
-import { MorningReport } from "@/lib/subagents/morningReport";
+import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import {
@@ -38,6 +38,7 @@ export default function Home() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TaskManifest | null>(null);
   const [morningReport, setMorningReport] = useState<MorningReport | null>(null);
+  const [overnightReport, setOvernightReport] = useState<OvernightMorningReport | null>(null);
 
   // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
@@ -168,6 +169,19 @@ export default function Home() {
     }
   };
 
+  const fetchMorningReport = async () => {
+    try {
+      const res = await fetch("/api/morning-report");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.overnightReport) setOvernightReport(data.overnightReport);
+        if (data.morningReport) setMorningReport(data.morningReport);
+      }
+    } catch (err) {
+      console.warn("Could not fetch overnight morning report:", err);
+    }
+  };
+
   // Rehydrate active task from API on mount
   const fetchActiveTask = async () => {
     try {
@@ -195,7 +209,14 @@ export default function Home() {
   useEffect(() => {
     fetchThreads(true);
     fetchActiveTask();
+    fetchMorningReport();
   }, []);
+
+  useEffect(() => {
+    if (activeNavView === "morning-report") {
+      fetchMorningReport();
+    }
+  }, [activeNavView]);
 
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
@@ -472,9 +493,9 @@ export default function Home() {
           pendingCount={0}
         />
       ) : activeNavView === "morning-report" ? (
-        <div className="flex-1 min-h-0 flex flex-col bg-[#f4f3f7] dark:bg-zinc-950 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
           <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -484,15 +505,21 @@ export default function Home() {
                 >
                   <Menu className="h-6 w-6" />
                 </button>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
                   Morning Report
                 </h1>
               </div>
+              <a
+                href="/morning-report"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Permalink (/morning-report)
+              </a>
             </div>
-            {morningReport ? (
-              <MorningReportView report={morningReport} />
+            {overnightReport || morningReport ? (
+              <MorningReportView overnightReport={overnightReport} report={morningReport} />
             ) : (
-              <div className="p-8 text-center text-slate-400 dark:text-zinc-500 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-100 dark:border-zinc-800">
+              <div className="p-8 text-center text-slate-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-200 dark:border-zinc-800">
                 No overnight report generated yet. Reports synthesize at completion of overnight supervisor runs.
               </div>
             )}

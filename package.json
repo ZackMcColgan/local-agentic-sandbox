@@ -28,5 +28,17 @@
     "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
+  },
+  "overrides": {
+    "brace-expansion": "^2.0.2",
+    "pacote": "^22.0.0",
+    "http-cache-semantics": "^4.3.0",
+    "ip-address": "^10.7.4",
+    "picomatch": "^4.0.7",
+    "sigstore": "^5.0.0",
+    "braces": "^3.0.3",
+    "postcss": "^8.5.30",
+    "postcss-selector-parser": "^7.1.6",
+    "sprintf-js": "^1.1.3"
   }
 }

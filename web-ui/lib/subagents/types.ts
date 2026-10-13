@@ -62,6 +62,7 @@ export interface Milestone {
   id: string;
   title: string;
   description: string;
+  dependencies?: string[];
   acceptanceCriteria: AcceptanceCriterion[];
   assertions?: AssertionContract[];
   status: MilestoneStatus;
@@ -116,7 +117,7 @@ export interface CheckpointState {
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "queued" | "active" | "completed" | "parked" | "cancelled" | "stopped";
+export type TaskStatus = "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
 
 export interface TaskJournalEntry {
   timestamp: string;
@@ -127,6 +128,8 @@ export interface TaskJournalEntry {
 
 export interface TaskManifest {
   taskId: string;
+  threadId?: string;
+  parentRunId?: string;
   goal: string;
   toolchain: ToolchainType;
   scope?: TaskScope;
@@ -143,6 +146,9 @@ export interface TaskManifest {
   updatedAt: string;
   completedAt?: string;
   parkedReason?: string;
+  errorSummary?: string;
+  deploymentUrl?: string;
+  deploymentNamespace?: string;
 }
 
 export interface MorningReport {

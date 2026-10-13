@@ -11,29 +11,38 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
       {
         id: "M1",
         title: "Implement core CSV parsing algorithm",
+        description: "Implement core CSV parsing algorithm",
         dependencies: [],
         acceptanceCriteria: [{ id: "c1", assertion: "parseCsv function handles quoted commas" }],
-        status: "pending"
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0
       },
       {
         id: "M2",
         title: "Implement streaming buffer support for large CSVs",
+        description: "Implement streaming buffer support for large CSVs",
         dependencies: ["M1"],
         acceptanceCriteria: [{ id: "c2", assertion: "createCsvStream processes chunks" }],
-        status: "pending"
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0
       }
     ];
 
     const manifest: TaskManifest = {
       taskId: `task-e2e-complete-${Date.now()}`,
       goal: "Build a robust CSV parsing and streaming utility",
+      branchName: "feat/csv-streaming",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
       milestones,
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);

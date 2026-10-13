@@ -9,21 +9,27 @@ describe("Browser-MCP Connectivity — Internet Egress & Failure Handling", () =
     const milestone: Milestone = {
       id: "M-browser-1",
       title: "Query documentation via browser-mcp search_web",
+      description: "Query documentation via browser-mcp search_web",
       dependencies: [],
       acceptanceCriteria: [{ id: "c1", assertion: "Retrieve SVG documentation from web" }],
-      status: "pending"
+      status: "pending",
+      builderIterations: 0,
+      criticRounds: 0
     };
 
     const manifest: TaskManifest = {
       taskId: `task-browser-success-${Date.now()}`,
       goal: "Search web for SVG specification and render chart",
+      branchName: "feat/browser-mcp-test",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
       milestones: [milestone],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -57,21 +63,27 @@ describe("Browser-MCP Connectivity — Internet Egress & Failure Handling", () =
     const milestone: Milestone = {
       id: "M-browser-fail",
       title: "Fetch external weather API documentation",
+      description: "Fetch external weather API documentation",
       dependencies: [],
       acceptanceCriteria: [{ id: "c1", assertion: "Weather docs fetched" }],
-      status: "pending"
+      status: "pending",
+      builderIterations: 0,
+      criticRounds: 0
     };
 
     const manifest: TaskManifest = {
       taskId: `task-browser-fail-${Date.now()}`,
       goal: "Fetch external weather docs",
+      branchName: "feat/browser-mcp-fail",
       toolchain: "node:22",
       status: "active",
       currentMilestoneIndex: 0,
       milestones: [milestone],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     supervisor.saveCheckpoint(manifest);

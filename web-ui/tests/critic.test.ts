@@ -7,12 +7,15 @@ describe("Critic Worker — Validation, Rejection, and Fail-Closed Abstention", 
   const sampleMilestone: Milestone = {
     id: "M-test-critic",
     title: "Implement SVG weather card",
+    description: "Implement SVG weather card",
     dependencies: [],
     acceptanceCriteria: [
       { id: "c1", assertion: "Canvas background is #ffffff" },
       { id: "c2", assertion: "Diagram models browser-mcp attached to egress-mesh" }
     ],
-    status: "in_progress"
+    status: "in_progress",
+    builderIterations: 1,
+    criticRounds: 0
   };
 
   it("approves valid builder output meeting all criteria", async () => {
