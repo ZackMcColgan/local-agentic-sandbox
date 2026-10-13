@@ -149,6 +149,13 @@ export interface TaskManifest {
   errorSummary?: string;
   deploymentUrl?: string;
   deploymentNamespace?: string;
+  prUrl?: string;
+  ciStatus?: {
+    state: "running" | "passed" | "failed";
+    actionsUrl?: string;
+    failingStep?: string;
+    summary?: string;
+  };
 }
 
 export interface MorningReport {
