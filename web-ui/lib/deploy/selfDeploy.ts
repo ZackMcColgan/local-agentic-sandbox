@@ -1,11 +1,13 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
+import fs from "fs";
+import path from "path";
 import { RunLedger, getSharedRunLedger } from "../ledger/runLedger";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-export type SelfDeployStatus = "deployed" | "rolled_back" | "failed";
-export type RollbackStatus = "none" | "rolled_back";
+export type SelfDeployStatus = "deployed" | "rolled_back" | "failed" | "rollback_failed";
+export type RollbackStatus = "none" | "rolled_back" | "failed";
 
 export interface SelfDeployTimelineStage {
   stage: "rebuild_image" | "rolling_update" | "health_check" | "rollback";
@@ -34,14 +36,21 @@ export interface SelfDeployInput {
   deploymentName?: string;
   namespace?: string;
   imageTag?: string;
+  hostAddress?: string; // Node IP or hostname, defaults to host.docker.internal
 }
 
-export type CommandRunner = (command: string) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+export type CommandRunner = (
+  file: string,
+  args: string[],
+  options?: { cwd?: string; timeout?: number }
+) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+
 export type HealthChecker = (url: string) => Promise<{ status: number; ok: boolean }>;
 
 export interface SelfDeployPipelineOptions {
   enabled?: boolean;
   ledger?: RunLedger;
+  repoRoot?: string;
   commandRunner?: CommandRunner;
   healthChecker?: HealthChecker;
   healthCheckUrl?: string;
@@ -57,23 +66,40 @@ export function isSelfDeployKillSwitchEnabled(): boolean {
   return process.env.SELF_DEPLOY_ENABLED === "true" || process.env.SELF_DEPLOY_ENABLED === "1";
 }
 
+const K8S_DNS_LABEL_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+export function validateK8sResourceName(name: string, label: string = "resource"): void {
+  if (!name || !K8S_DNS_LABEL_REGEX.test(name)) {
+    throw new Error(
+      `Invalid Kubernetes ${label} '${name}'. Must conform to RFC 1123 DNS label regex: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
+    );
+  }
+}
+
 export class SelfDeployPipeline {
   private enabled: boolean;
   private ledger?: RunLedger;
+  private repoRoot: string;
   private commandRunner: CommandRunner;
   private healthChecker: HealthChecker;
-  private healthCheckUrl: string;
+  private explicitHealthCheckUrl?: string;
 
   constructor(options: SelfDeployPipelineOptions = {}) {
     this.enabled = options.enabled ?? isSelfDeployKillSwitchEnabled();
     this.ledger = options.ledger;
-    this.healthCheckUrl = options.healthCheckUrl || "http://localhost:3001/api/sandbox-status";
+    this.explicitHealthCheckUrl = options.healthCheckUrl;
+    this.repoRoot =
+      options.repoRoot ||
+      path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
 
     this.commandRunner =
       options.commandRunner ??
-      (async (cmd: string) => {
+      (async (file: string, args: string[], cmdOpts?: { cwd?: string; timeout?: number }) => {
         try {
-          const { stdout, stderr } = await execAsync(cmd, { timeout: 120000 });
+          const { stdout, stderr } = await execFileAsync(file, args, {
+            cwd: cmdOpts?.cwd || this.repoRoot,
+            timeout: cmdOpts?.timeout || 120000
+          });
           return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
         } catch (err: any) {
           return {
@@ -97,6 +123,43 @@ export class SelfDeployPipeline {
   }
 
   public getDeployHistory(): SelfDeployRecord[] {
+    try {
+      const ledgerToUse = this.ledger || getSharedRunLedger();
+      const db = ledgerToUse.getDatabase();
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS self_deploy_history (
+          deploy_id TEXT PRIMARY KEY,
+          timestamp TEXT NOT NULL,
+          branch_name TEXT NOT NULL,
+          previous_sha TEXT NOT NULL,
+          new_sha TEXT NOT NULL,
+          status TEXT NOT NULL,
+          rollback_status TEXT NOT NULL,
+          health_status INTEGER NOT NULL,
+          error_message TEXT
+        );
+      `);
+      const rows = db.prepare("SELECT * FROM self_deploy_history ORDER BY timestamp DESC").all() as any[];
+      if (rows && rows.length > 0) {
+        return rows.map((r) => ({
+          deployId: r.deploy_id,
+          timestamp: r.timestamp,
+          branchName: r.branch_name,
+          previousSha: r.previous_sha,
+          newSha: r.new_sha,
+          status: r.status as SelfDeployStatus,
+          rollbackStatus: r.rollback_status as RollbackStatus,
+          healthCheckResult: {
+            status: r.health_status,
+            ok: r.health_status >= 200 && r.health_status < 400
+          },
+          timeline: [],
+          errorMessage: r.error_message || undefined
+        }));
+      }
+    } catch {
+      // Non-fatal, fallback to in-memory history
+    }
     return [...inMemoryDeployHistory];
   }
 
@@ -105,6 +168,9 @@ export class SelfDeployPipeline {
     const timestamp = new Date().toISOString();
     const deploymentName = input.deploymentName || "web-ui";
     const namespace = input.namespace || "local-agentic-sandbox";
+    const hostAddress = input.hostAddress || "host.docker.internal";
+    const healthCheckUrl =
+      this.explicitHealthCheckUrl || `http://${hostAddress}:3001/api/sandbox-status`;
     const newImage = input.imageTag || `local-agentic-sandbox/web-ui:${input.newSha.slice(0, 8)}`;
 
     // 1. Safety Rails: Kill Switch check
@@ -118,15 +184,25 @@ export class SelfDeployPipeline {
       throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");
     }
 
+    // 3. Security: Validate namespace and deploymentName against strict Kubernetes DNS label regex
+    validateK8sResourceName(namespace, "namespace");
+    validateK8sResourceName(deploymentName, "deployment");
+
     const timeline: SelfDeployTimelineStage[] = [];
 
-    // Stage 1: Rebuild image
+    // Stage 1: Rebuild image from repo root with explicit Dockerfile
     timeline.push({
       stage: "rebuild_image",
       status: "in_progress",
       timestamp: new Date().toISOString()
     });
-    const buildRes = await this.commandRunner(`docker build -t ${newImage} web-ui`);
+
+    const buildRes = await this.commandRunner(
+      "docker",
+      ["build", "-f", "web-ui/Dockerfile", "-t", newImage, "."],
+      { cwd: this.repoRoot }
+    );
+
     if (buildRes.exitCode !== 0) {
       timeline[0].status = "failed";
       timeline[0].detail = buildRes.stderr;
@@ -143,6 +219,7 @@ export class SelfDeployPipeline {
         errorMessage: `Build failed: ${buildRes.stderr || buildRes.stdout}`
       };
       inMemoryDeployHistory.unshift(record);
+      this.logToLedger(record);
       return record;
     }
     timeline[0].status = "completed";
@@ -153,9 +230,16 @@ export class SelfDeployPipeline {
       status: "in_progress",
       timestamp: new Date().toISOString()
     });
-    const deployRes = await this.commandRunner(
-      `kubectl -n ${namespace} set image deployment/${deploymentName} web-ui=${newImage}`
-    );
+
+    const deployRes = await this.commandRunner("kubectl", [
+      "-n",
+      namespace,
+      "set",
+      "image",
+      `deployment/${deploymentName}`,
+      `web-ui=${newImage}`
+    ]);
+
     if (deployRes.exitCode !== 0) {
       timeline[1].status = "failed";
       timeline[1].detail = deployRes.stderr;
@@ -172,6 +256,7 @@ export class SelfDeployPipeline {
         errorMessage: `kubectl deployment set image failed: ${deployRes.stderr || deployRes.stdout}`
       };
       inMemoryDeployHistory.unshift(record);
+      this.logToLedger(record);
       return record;
     }
     timeline[1].status = "completed";
@@ -182,7 +267,7 @@ export class SelfDeployPipeline {
       status: "in_progress",
       timestamp: new Date().toISOString()
     });
-    const healthResult = await this.healthChecker(this.healthCheckUrl);
+    const healthResult = await this.healthChecker(healthCheckUrl);
 
     if (!healthResult.ok) {
       timeline[2].status = "failed";
@@ -195,26 +280,73 @@ export class SelfDeployPipeline {
         timestamp: new Date().toISOString()
       });
 
-      const rollbackCmd = `kubectl -n ${namespace} rollout undo deployment/${deploymentName}`;
-      const rollbackRes = await this.commandRunner(rollbackCmd);
-      timeline[3].status = rollbackRes.exitCode === 0 ? "completed" : "failed";
-      timeline[3].detail = rollbackRes.exitCode === 0 ? "Rolled back to previous revision" : rollbackRes.stderr;
+      const rollbackRes = await this.commandRunner("kubectl", [
+        "-n",
+        namespace,
+        "rollout",
+        "undo",
+        `deployment/${deploymentName}`
+      ]);
 
-      const record: SelfDeployRecord = {
-        deployId,
-        timestamp,
-        branchName: input.branchName,
-        previousSha: input.previousSha,
-        newSha: input.newSha,
-        status: "rolled_back",
-        rollbackStatus: "rolled_back",
-        healthCheckResult: healthResult,
-        timeline,
-        errorMessage: `Health check failed with HTTP ${healthResult.status}. Automatic rollback executed.`
-      };
-      inMemoryDeployHistory.unshift(record);
-      this.logToLedger(record);
-      return record;
+      if (rollbackRes.exitCode !== 0) {
+        timeline[3].status = "failed";
+        timeline[3].detail = rollbackRes.stderr;
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rollback_failed",
+          rollbackStatus: "failed",
+          healthCheckResult: healthResult,
+          timeline,
+          errorMessage: `Health check failed (HTTP ${healthResult.status}) and rollout undo failed: ${rollbackRes.stderr}`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      }
+
+      // Fix 7.4: Verify health of the rolled-back deployment
+      const rollbackHealth = await this.healthChecker(healthCheckUrl);
+      if (rollbackHealth.ok) {
+        timeline[3].status = "completed";
+        timeline[3].detail = "Rolled back to previous revision and health verified";
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rolled_back",
+          rollbackStatus: "rolled_back",
+          healthCheckResult: healthResult,
+          timeline,
+          errorMessage: `Health check failed with HTTP ${healthResult.status}. Automatic rollback executed and verified.`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      } else {
+        timeline[3].status = "failed";
+        timeline[3].detail = `Rollback health check failed with HTTP ${rollbackHealth.status}`;
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rollback_failed",
+          rollbackStatus: "failed",
+          healthCheckResult: rollbackHealth,
+          timeline,
+          errorMessage: `CRITICAL: Deployment rolled back but health check still failing with HTTP ${rollbackHealth.status}. Manual inspection required.`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      }
     }
 
     timeline[2].status = "completed";

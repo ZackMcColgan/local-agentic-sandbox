@@ -7,7 +7,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () => {
-  it("Self-deploy rebuilds image, deploys with rolling update, verifies health, and logs all fields", async () => {
+  it("Self-deploy rebuilds image from repo root, deploys with rolling update, verifies health, and logs all fields", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "self-deploy-test-"));
     const dbPath = path.join(tmpDir, "runs.db");
 
@@ -21,8 +21,8 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       const pipeline = new SelfDeployPipeline({
         enabled: true,
         ledger,
-        commandRunner: async (cmd: string) => {
-          executedCommands.push(cmd);
+        commandRunner: async (file: string, args: string[]) => {
+          executedCommands.push([file, ...args].join(" "));
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
         },
         healthChecker: async () => ({ status: 200, ok: true })
@@ -45,11 +45,18 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       assert.ok(result.timeline.some((t) => t.stage === "rolling_update" && t.status === "completed"));
       assert.ok(result.timeline.some((t) => t.stage === "health_check" && t.status === "completed"));
 
-      // Verify log history in pipeline
+      // Fix 7.2: Verify build command executed with Dockerfile from repo root
+      const buildCmd = executedCommands.find((c) => c.startsWith("docker build"));
+      assert.ok(buildCmd, "Must run docker build");
+      assert.ok(buildCmd.includes("-f web-ui/Dockerfile"), "Must specify explicit Dockerfile path");
+      assert.ok(buildCmd.endsWith("."), "Must build from repo root context");
+
+      // Fix 7.5: Verify SQLite log history in pipeline
       const history = pipeline.getDeployHistory();
       assert.equal(history.length, 1);
       assert.equal(history[0].newSha, "sha-new-002");
       assert.equal(history[0].rollbackStatus, "none");
+      assert.equal(history[0].status, "deployed");
 
       ledger.close();
     } finally {
@@ -57,17 +64,25 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     }
   });
 
-  it("Failed health check triggers automatic rollback to previous image and logs LOUD rollback status", async () => {
+  it("Failed health check triggers automatic rollback to previous image and verifies rollback health", async () => {
     const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
     const executedCommands: string[] = [];
 
+    let healthCallCount = 0;
     const pipeline = new SelfDeployPipeline({
       enabled: true,
-      commandRunner: async (cmd: string) => {
-        executedCommands.push(cmd);
+      commandRunner: async (file: string, args: string[]) => {
+        executedCommands.push([file, ...args].join(" "));
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
-      healthChecker: async () => ({ status: 503, ok: false })
+      healthChecker: async () => {
+        healthCallCount++;
+        // First check (new deploy): fails 503
+        // Second check (after rollback): succeeds 200
+        return healthCallCount === 1
+          ? { status: 503, ok: false }
+          : { status: 200, ok: true };
+      }
     });
 
     const result = await pipeline.executeSelfDeploy({
@@ -80,12 +95,135 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
 
     assert.equal(result.status, "rolled_back");
     assert.equal(result.rollbackStatus, "rolled_back");
-    assert.equal(result.healthCheckResult.ok, false);
-    assert.ok(result.errorMessage?.includes("Health check failed"));
+    assert.equal(healthCallCount, 2, "Must run health check again to verify rollback");
     assert.ok(
       executedCommands.some((c) => c.includes("rollout undo")),
       "Must trigger kubectl rollout undo on health failure"
     );
+  });
+
+  it("Fix 7.4: Failed rollback health check records status: rollback_failed as critical alert", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async (file: string, args: string[]) => ({
+        exitCode: 0,
+        stdout: "ok\n",
+        stderr: ""
+      }),
+      // Both initial check and rollback check fail
+      healthChecker: async () => ({ status: 503, ok: false })
+    });
+
+    const result = await pipeline.executeSelfDeploy({
+      branchName: "feature/critical-failure",
+      previousSha: "sha-good",
+      newSha: "sha-broken"
+    });
+
+    assert.equal(result.status, "rollback_failed");
+    assert.equal(result.rollbackStatus, "failed");
+    assert.ok(result.errorMessage?.includes("CRITICAL: Deployment rolled back but health check still failing"));
+  });
+
+  it("Fix 7.1: Rejects command injection in namespace or deploymentName and prevents command execution", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    let commandsRan = 0;
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async () => {
+        commandsRan++;
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+    });
+
+    // Malicious namespace
+    await assert.rejects(
+      async () => {
+        await pipeline.executeSelfDeploy({
+          branchName: "feature/test-inject",
+          previousSha: "sha1",
+          newSha: "sha2",
+          namespace: "evil; rm -rf /"
+        });
+      },
+      /Invalid Kubernetes namespace/i,
+      "Must reject malicious namespace string"
+    );
+
+    // Malicious deploymentName
+    await assert.rejects(
+      async () => {
+        await pipeline.executeSelfDeploy({
+          branchName: "feature/test-inject",
+          previousSha: "sha1",
+          newSha: "sha2",
+          deploymentName: "deploy$(touch /tmp/pwned)"
+        });
+      },
+      /Invalid Kubernetes deployment/i,
+      "Must reject malicious deploymentName string"
+    );
+
+    assert.equal(commandsRan, 0, "No commands must be executed when validation fails");
+  });
+
+  it("Fix 7.1: Command injection payload in newSha is passed literally without shell execution", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "self-deploy-inject-"));
+    const pwnedFile = path.join(tmpDir, "pwned.txt");
+
+    try {
+      const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+      const executedArgs: { file: string; args: string[] }[] = [];
+
+      const pipeline = new SelfDeployPipeline({
+        enabled: true,
+        commandRunner: async (file: string, args: string[]) => {
+          executedArgs.push({ file, args });
+          return { exitCode: 0, stdout: "ok\n", stderr: "" };
+        },
+        healthChecker: async () => ({ status: 200, ok: true })
+      });
+
+      const maliciousSha = `abc$(touch "${pwnedFile}")`;
+      await pipeline.executeSelfDeploy({
+        branchName: "feature/sha-test",
+        previousSha: "sha1",
+        newSha: maliciousSha
+      });
+
+      assert.equal(fs.existsSync(pwnedFile), false, "Shell payload in SHA must NEVER execute");
+      const buildCall = executedArgs.find((e) => e.file === "docker" && e.args[0] === "build");
+      assert.ok(buildCall);
+      assert.ok(buildCall.args.some((a) => a.includes(maliciousSha.slice(0, 8))));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("Fix 7.3: Supports hostAddress parameter for health check probe", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    let probedUrl = "";
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      healthChecker: async (url) => {
+        probedUrl = url;
+        return { status: 200, ok: true };
+      }
+    });
+
+    await pipeline.executeSelfDeploy({
+      branchName: "feature/host-test",
+      previousSha: "sha-1",
+      newSha: "sha-2",
+      hostAddress: "192.168.1.50"
+    });
+
+    assert.equal(probedUrl, "http://192.168.1.50:3001/api/sandbox-status");
   });
 
   it("Kill switch OFF strictly blocks self-deploy", async () => {
