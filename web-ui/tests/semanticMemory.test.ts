@@ -52,6 +52,28 @@ describe("Phase D — Tier 2 Semantic Memory & Skill Gate Suite", () => {
     assert.ok(typeof vec[0] === "number");
   });
 
+  it("Addendum 3: Force Embedding Model to CPU (num_gpu: 0) to prevent VRAM contention", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody: any = null;
+    try {
+      globalThis.fetch = (async (url: any, init: any) => {
+        if (typeof url === "string" && url.includes("/api/embeddings")) {
+          capturedBody = JSON.parse(init.body);
+          return new Response(JSON.stringify({ embedding: Array(384).fill(0.1) }), { status: 200 });
+        }
+        return originalFetch(url, init);
+      }) as any;
+
+      const vec = await generateOllamaEmbedding("Supervisor worker crash recovery");
+      assert.ok(capturedBody, "Outgoing request body to /api/embeddings must be captured");
+      assert.ok(capturedBody.options, "Request options must be present in /api/embeddings body");
+      assert.equal(capturedBody.options.num_gpu, 0, "num_gpu must strictly be 0 to force embedding model to CPU");
+      assert.equal(vec.length, 384);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("Locality: Ollama unreachable throws loudly during embedding generation", async () => {
     await assert.rejects(
       async () => {
