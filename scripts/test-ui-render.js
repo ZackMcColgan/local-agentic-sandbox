@@ -12,7 +12,7 @@ async function waitForPort(port, maxRetries = 10) {
   throw new Error(`Failed to connect to Chrome on port ${port}`);
 }
 
-async function capture(url, width, height, isMobile, outputPath) {
+async function capture(url, width, height, isMobile, outputPath, delayMs = 1200) {
   const port = 9300 + Math.floor(Math.random() * 500);
   const chrome = exec(
     `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --headless=new --remote-debugging-port=${port} --window-size=${width},${height} "${url}"`
@@ -48,7 +48,7 @@ async function capture(url, width, height, isMobile, outputPath) {
               params: { format: 'png' },
             })
           );
-        }, 800);
+        }, delayMs);
       };
 
       ws.onmessage = (event) => {
@@ -90,6 +90,10 @@ async function run() {
   await capture(`http://127.0.0.1:3001/?theme=dark${threadQuery}`, 390, 844, true, 'test_ui_mobile_dark.png');
   await capture('http://127.0.0.1:3001/?theme=dark&tab=security', 1280, 900, false, 'test_ui_telemetry_desktop.png');
   await capture('http://127.0.0.1:3001/?theme=light&tab=security', 390, 844, true, 'test_ui_telemetry_mobile.png');
+  await capture('http://127.0.0.1:3001/morning-report?theme=light', 1280, 900, false, 'test_ui_morning_report_desktop_light.png', 2200);
+  await capture('http://127.0.0.1:3001/morning-report?theme=light', 390, 844, true, 'test_ui_morning_report_mobile_light.png', 2200);
+  await capture('http://127.0.0.1:3001/morning-report?theme=dark', 1280, 900, false, 'test_ui_morning_report_desktop_dark.png', 2200);
+  await capture('http://127.0.0.1:3001/morning-report?theme=dark', 390, 844, true, 'test_ui_morning_report_mobile_dark.png', 2200);
   console.log('All visual screenshots captured successfully!');
   process.exit(0);
 }

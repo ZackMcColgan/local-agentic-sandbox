@@ -292,6 +292,8 @@ export function generateOvernightMorningReport(
   const allArtifacts: MorningReportArtifact[] = [];
   const attentionItems: OvernightAttentionItem[] = [];
 
+  const seenGlobalArtifactPaths = new Set<string>();
+
   for (const task of candidateTasks) {
     const outcome = resolveTaskOutcome(task);
     if (outcome.status === "completed") completedCount++;
@@ -305,7 +307,14 @@ export function generateOvernightMorningReport(
 
     const artifacts = extractTaskArtifacts(task);
     for (const art of artifacts) {
-      allArtifacts.push(art);
+      const norm = art.path.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      if (!seenGlobalArtifactPaths.has(norm)) {
+        seenGlobalArtifactPaths.add(norm);
+        allArtifacts.push({
+          ...art,
+          path: norm
+        });
+      }
     }
 
     let testsPassed = 0;

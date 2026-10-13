@@ -379,5 +379,67 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.ok(loaded, "Persisted report written by supervisor must be found by loadPersistedOvernightMorningReport()");
     assert.ok(loaded.tasks.some(t => t.taskId === "task-roundtrip-7am"), "Loaded report must contain supervisor task");
   });
+
+  it("Addendum 1: MorningReportView renders exactly 1 task-row and 1 artifact-card with no duplicate sections", async () => {
+    const React = await import("react");
+    const { renderToString } = await import("react-dom/server");
+    const { Window } = await import("happy-dom");
+    const { MorningReportView } = await import("../components/MorningReportView.js");
+    const { generateOvernightMorningReport, generateMorningReport } = await import("../lib/subagents/morningReport.js");
+
+    const sampleTask: any = {
+      taskId: "task-single-001",
+      goal: "Generate solitary report artifact",
+      branchName: "feature/single-artifact",
+      toolchain: "node:22",
+      status: "completed",
+      startedAt: new Date(Date.now() - 30000).toISOString(),
+      completedAt: new Date().toISOString(),
+      currentMilestoneIndex: 1,
+      milestones: [
+        {
+          id: "M1",
+          title: "Generate artifact",
+          description: "Artifact generation",
+          status: "completed",
+          plannedFiles: ["docs/single-output.md"]
+        }
+      ],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    };
+
+    const overnightReport = generateOvernightMorningReport([sampleTask]);
+    const singleReport = generateMorningReport({
+      taskId: sampleTask.taskId,
+      goal: sampleTask.goal,
+      branch: sampleTask.branchName,
+      gitHeadSha: "abc1234",
+      status: "completed",
+      startedAt: sampleTask.startedAt,
+      completedAt: sampleTask.completedAt,
+      milestones: [],
+      ambiguityFlags: [],
+      parkedItems: []
+    });
+
+    const html = renderToString(
+      React.createElement(MorningReportView, {
+        overnightReport,
+        report: singleReport
+      })
+    );
+
+    const window = new Window();
+    window.document.body.innerHTML = html;
+
+    const taskRows = window.document.querySelectorAll('[data-testid="task-row"]');
+    const artifactCards = window.document.querySelectorAll('[data-testid="artifact-card"]');
+
+    assert.equal(taskRows.length, 1, `Expected exactly 1 task-row, got ${taskRows.length}`);
+    assert.equal(artifactCards.length, 1, `Expected exactly 1 artifact-card, got ${artifactCards.length}`);
+  });
 });
+
 
