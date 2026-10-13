@@ -11,25 +11,33 @@ import {
   CheckCircle2,
   StopCircle,
   AlertCircle,
-  X
+  X,
+  FileText,
+  Settings,
+  List
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
+import { NavView } from "./NavigationDrawer";
 
 interface ThreadsSidebarProps {
   threads: Thread[];
   selectedThreadId: string | null;
+  activeNavView?: NavView;
   onSelectThread: (threadId: string) => void;
   onNewThread: () => void;
   onDeleteThread?: (threadId: string) => void;
+  onNavigate?: (view: NavView) => void;
   onOpenDrawer?: () => void;
 }
 
 export function ThreadsSidebar({
   threads,
   selectedThreadId,
+  activeNavView = "sessions",
   onSelectThread,
   onNewThread,
   onDeleteThread,
+  onNavigate,
   onOpenDrawer
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -305,6 +313,64 @@ export function ThreadsSidebar({
             );
           })
         )}
+      </div>
+
+      {/* Persistent Desktop Navigation Dock (S7) */}
+      <div className="p-2.5 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 flex items-center justify-around gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => onNavigate ? onNavigate("sessions") : undefined}
+          aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
+            activeNavView === "sessions" || activeNavView === "thread"
+              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60"
+              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+          }`}
+          title="Sessions"
+        >
+          <List className="h-4 w-4" />
+          <span>Sessions</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onNewThread}
+          className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+          title="New session"
+        >
+          <Plus className="h-4 w-4" />
+          <span>New</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate ? onNavigate("morning-report") : undefined}
+          aria-current={activeNavView === "morning-report" ? "page" : undefined}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+            activeNavView === "morning-report"
+              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
+              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+          }`}
+          title="Morning report"
+        >
+          <FileText className="h-4 w-4" />
+          <span>Report</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate ? onNavigate("settings") : undefined}
+          aria-current={activeNavView === "settings" ? "page" : undefined}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+            activeNavView === "settings"
+              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
+              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+          }`}
+          title="Settings"
+        >
+          <Settings className="h-4 w-4" />
+          <span>Settings</span>
+        </button>
       </div>
     </aside>
   );

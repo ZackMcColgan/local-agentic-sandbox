@@ -76,7 +76,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatHistory.test.ts",
       "tests/frontendRefreshRehydration.test.ts",
       "tests/unifiedUi.test.ts",
-      "tests/chatPolish.test.ts"
+      "tests/chatPolish.test.ts",
+      "tests/sprint2UiNavigationAndScroll.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API
@@ -93,7 +94,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
       p.includes("app/layout.tsx"),
-    tests: ["tests/chatReasoningAndProgress.test.ts", "tests/threadsLaunchTask.test.ts", "tests/unifiedUi.test.ts", "tests/sessionIntegrity.test.ts", "tests/chatPolish.test.ts", "tests/taskControls.test.ts"]
+    tests: [
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/threadsLaunchTask.test.ts",
+      "tests/unifiedUi.test.ts",
+      "tests/sessionIntegrity.test.ts",
+      "tests/chatPolish.test.ts",
+      "tests/taskControls.test.ts",
+      "tests/sprint2UiNavigationAndScroll.test.ts"
+    ]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
