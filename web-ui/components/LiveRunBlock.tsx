@@ -379,6 +379,54 @@ export function LiveRunBlock({
         </div>
       )}
 
+      {/* CI Status Badge & Link (Phase 9) */}
+      {task.ciStatus && (
+        <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${
+          task.ciStatus.state === "passed"
+            ? "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40"
+            : task.ciStatus.state === "failed"
+            ? "border-rose-200 dark:border-rose-900/70 bg-rose-50/70 dark:bg-rose-950/40"
+            : "border-sky-200 dark:border-sky-900/60 bg-sky-50/70 dark:bg-sky-950/40"
+        }`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {task.ciStatus.state === "passed" ? (
+              <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[3]" />
+            ) : task.ciStatus.state === "failed" ? (
+              <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            ) : (
+              <Loader2 className="h-4 w-4 text-sky-600 dark:text-sky-400 animate-spin shrink-0" />
+            )}
+            <div className="min-w-0">
+              <span className={`text-xs font-semibold block truncate ${
+                task.ciStatus.state === "passed"
+                  ? "text-emerald-900 dark:text-emerald-100"
+                  : task.ciStatus.state === "failed"
+                  ? "text-rose-900 dark:text-rose-100"
+                  : "text-sky-900 dark:text-sky-100"
+              }`}>
+                CI Check: {task.ciStatus.state === "passed" ? "Passed" : task.ciStatus.state === "failed" ? "Failed" : "Running"}
+              </span>
+              {task.ciStatus.failingStep && (
+                <span className="text-[11px] text-rose-700 dark:text-rose-300 font-mono block truncate">
+                  Failing: {task.ciStatus.failingStep}
+                </span>
+              )}
+            </div>
+          </div>
+          {task.ciStatus.actionsUrl && (
+            <a
+              href={task.ciStatus.actionsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-850 inline-flex items-center gap-1 shrink-0 transition-colors"
+            >
+              <span>GitHub Actions</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Crashed Run Recovery Prompt (Phase 4) */}
       {isCrashed && (
         <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/70 bg-rose-50/80 dark:bg-rose-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
