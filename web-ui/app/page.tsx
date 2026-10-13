@@ -48,7 +48,7 @@ export default function Home() {
     airGapped: true
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
-  const [selectedModel, setSelectedModel] = useState<string>("swift-27b-mtp");
+  const [selectedModel, setSelectedModel] = useState<string>("swift-15-27b-mtp");
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("medium");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
@@ -60,7 +60,7 @@ export default function Home() {
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage("swift-27b-mtp")
+    getInitialWelcomeMessage("swift-15-27b-mtp")
   ]);
 
   // Synchronous-like hydration for theme support

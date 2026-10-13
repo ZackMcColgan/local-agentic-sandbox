@@ -14,7 +14,7 @@ describe("Phase 2 — Item 4: Model Roster Refresh Suite", () => {
     process.env = { ...savedEnv };
   });
 
-  it("resolveModelRosterFromEnv defaults all roles to swift-27b-mtp", () => {
+  it("resolveModelRosterFromEnv defaults all roles to swift-15-27b-mtp", () => {
     delete process.env.BUILDER_MODEL;
     delete process.env.CRITIC_MODEL;
     delete process.env.EXPLORER_MODEL;
@@ -22,26 +22,26 @@ describe("Phase 2 — Item 4: Model Roster Refresh Suite", () => {
     delete process.env.RECORDER_MODEL;
 
     const roster = resolveModelRosterFromEnv();
-    assert.equal(roster.builder, "swift-27b-mtp");
-    assert.equal(roster.critic, "swift-27b-mtp");
-    assert.equal(roster.explorer, "swift-27b-mtp");
-    assert.equal(roster.planner, "swift-27b-mtp");
-    assert.equal(roster.recorder, "swift-27b-mtp");
+    assert.equal(roster.builder, "swift-15-27b-mtp");
+    assert.equal(roster.critic, "swift-15-27b-mtp");
+    assert.equal(roster.explorer, "swift-15-27b-mtp");
+    assert.equal(roster.planner, "swift-15-27b-mtp");
+    assert.equal(roster.recorder, "swift-15-27b-mtp");
   });
 
-  it("getModelForRole('builder') returns swift-27b-mtp", () => {
+  it("getModelForRole('builder') returns swift-15-27b-mtp", () => {
     const pool = new WorkerPool();
-    assert.equal(pool.getModelForRole("builder"), "swift-27b-mtp");
+    assert.equal(pool.getModelForRole("builder"), "swift-15-27b-mtp");
   });
 
-  it("getModelForRole('critic') returns swift-27b-mtp", () => {
+  it("getModelForRole('critic') returns swift-15-27b-mtp", () => {
     const pool = new WorkerPool();
-    assert.equal(pool.getModelForRole("critic"), "swift-27b-mtp");
+    assert.equal(pool.getModelForRole("critic"), "swift-15-27b-mtp");
   });
 
-  it("getModelForRole('explorer') returns swift-27b-mtp", () => {
+  it("getModelForRole('explorer') returns swift-15-27b-mtp", () => {
     const pool = new WorkerPool();
-    assert.equal(pool.getModelForRole("explorer"), "swift-27b-mtp");
+    assert.equal(pool.getModelForRole("explorer"), "swift-15-27b-mtp");
   });
 
   it("No references to qwen3.8 or gemma4 or hermes3 remain in workerPool.ts", () => {

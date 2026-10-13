@@ -99,7 +99,7 @@ export async function POST(req: Request) {
         } else {
           thread = threadStore.createThread({
             title: goal.slice(0, 36),
-            model: body.model || "swift-27b-mtp",
+            model: body.model || "swift-15-27b-mtp",
             reasoningEffort: body.reasoningEffort || "medium",
             initialPrompt: goal,
             attachments: body.attachments,
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       } else {
         thread = threadStore.createThread({
           title: goal.slice(0, 36),
-          model: body.model || "swift-27b-mtp",
+          model: body.model || "swift-15-27b-mtp",
           reasoningEffort: body.reasoningEffort || "medium",
           initialPrompt: goal,
           attachments: body.attachments,
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
 
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool({ scope }),
-        model: "swift-27b-mtp",
+        model: body.model || "swift-15-27b-mtp",
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
           const now = Date.now();

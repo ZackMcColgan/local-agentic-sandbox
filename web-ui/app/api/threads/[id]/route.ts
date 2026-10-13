@@ -17,7 +17,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
 
   const executor = createProductionStepExecutor({
     workerPool: new WorkerPool(),
-    model: "swift-27b-mtp",
+    model: "swift-15-27b-mtp",
     onThinkingChunk: (_chunk: string, totalThinking: string) => {
       const now = Date.now();
       if (now - lastThinkingUpdate > 3000 || totalThinking.length - lastRecordedLength > 120) {
