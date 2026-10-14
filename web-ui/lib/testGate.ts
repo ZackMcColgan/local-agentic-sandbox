@@ -468,13 +468,13 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
         if (trimmed) files.add(trimmed);
       }
     } else if (files.size === 0) {
-      // Find merge-base with feat/v2-autonomous-platform or HEAD~1
+      // Find merge-base with origin/develop, origin/main, or HEAD~1
       let baseSha = "";
       try {
-        baseSha = execSync("git merge-base HEAD feat/v2-autonomous-platform", { cwd: root, encoding: "utf8" }).trim();
+        baseSha = execSync("git merge-base HEAD origin/develop", { cwd: root, encoding: "utf8" }).trim();
       } catch {
         try {
-          baseSha = execSync("git merge-base HEAD origin/feat/v2-autonomous-platform", { cwd: root, encoding: "utf8" }).trim();
+          baseSha = execSync("git merge-base HEAD origin/main", { cwd: root, encoding: "utf8" }).trim();
         } catch {
           baseSha = "HEAD~1";
         }
