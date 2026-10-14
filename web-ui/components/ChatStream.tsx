@@ -95,6 +95,7 @@ interface ChatStreamProps {
   initialScope?: TaskScope;
   threadScope?: TaskScope;
   onStopTask?: () => Promise<void> | void;
+  onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
   onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope) => Promise<void>;
@@ -420,6 +421,7 @@ export function ChatStream({
   initialScope = "PROJECT",
   threadScope,
   onStopTask,
+  onTaskUpdated,
   onBackToList,
   onOpenModelSheet,
   onLaunchTask,
@@ -616,11 +618,17 @@ export function ChatStream({
   const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
     if (!threadId) return;
     try {
-      await fetch(`/api/threads/${threadId}`, {
+      const res = await fetch(`/api/threads/${threadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action })
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (onTaskUpdated) {
+          onTaskUpdated(data.task, data.thread);
+        }
+      }
     } catch {
       // Non-fatal
     }

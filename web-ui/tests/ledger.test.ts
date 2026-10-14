@@ -148,4 +148,47 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("Task 2: pauseRun writes checkpoints into supervisor.checkpointDirectory when initialized without overrides", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-chk-unify-"));
+    const dbPath = path.join(tmpDir, "runs.db");
+    let ledger: any = null;
+    let expectedCheckpointPath = "";
+
+    try {
+      const { RunLedger } = await import("../lib/ledger/runLedger.js");
+      const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+
+      const supervisor = new OvernightSupervisor();
+      ledger = new RunLedger(dbPath);
+
+      const runId = `run-unify-${Date.now()}`;
+      ledger.recordRunStart({
+        runId,
+        threadId: "thread-unify",
+        prompt: "Verify unified checkpoint directory",
+        status: "running",
+        startedAt: new Date().toISOString(),
+        model: "swift-15-27b-mtp",
+        gitShas: [],
+        milestoneSummary: [{ id: "M1", title: "M1", status: "in_progress" }],
+        deploymentRef: "local"
+      });
+
+      const pausedEntry = ledger.pauseRun(runId);
+      assert.ok(pausedEntry.checkpointPath, "Must have checkpointPath");
+
+      expectedCheckpointPath = path.join(supervisor.checkpointDirectory, `${runId}.checkpoint.json`);
+      assert.equal(pausedEntry.checkpointPath, expectedCheckpointPath, "Checkpoint path must match supervisor.checkpointDirectory");
+      assert.ok(fs.existsSync(expectedCheckpointPath), "Checkpoint file must exist in supervisor.checkpointDirectory");
+    } finally {
+      if (expectedCheckpointPath) {
+        try { fs.unlinkSync(expectedCheckpointPath); } catch {}
+      }
+      if (ledger) {
+        try { ledger.close(); } catch {}
+      }
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
 });

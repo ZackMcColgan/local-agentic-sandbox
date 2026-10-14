@@ -742,7 +742,9 @@ export function createProductionStepExecutor(
       ? process.cwd()
       : path.resolve(process.cwd(), ".."));
 
-  return async (milestone: Milestone, attempt: number): Promise<StepExecutorResult> => {
+  const effectiveScope = options?.scope || workerPool.scope;
+
+  const stepExec: StepExecutor = async (milestone: Milestone, attempt: number): Promise<StepExecutorResult> => {
     console.log(`[executor] step start milestone=${milestone.id} attempt=${attempt}`);
     try {
       const builderModel = workerPool.getModelForRole("builder") || modelToUse;
@@ -751,13 +753,15 @@ export function createProductionStepExecutor(
       const builder = createBuilderWorker({
         model: builderModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(builderModel)
+        keepAlive: workerPool.keepAliveFor(builderModel),
+        scope: effectiveScope
       });
 
       const critic = createCriticWorker({
         model: criticModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(criticModel)
+        keepAlive: workerPool.keepAliveFor(criticModel),
+        scope: effectiveScope
       });
 
       let currentDiff = "";
@@ -909,7 +913,21 @@ export function createProductionStepExecutor(
       throw err;
     }
   };
+  (stepExec as any).scope = effectiveScope;
+  return stepExec;
 }
+
+interface GlobalSupervisorState {
+  pausedTasks: Set<string>;
+  abortControllers: Map<string, AbortController>;
+}
+
+const globalSupervisorState: GlobalSupervisorState =
+  (globalThis as any).__argonSupervisorState ||
+  ((globalThis as any).__argonSupervisorState = {
+    pausedTasks: new Set<string>(),
+    abortControllers: new Map<string, AbortController>()
+  });
 
 /**
  * Overnight Supervisor / Watchdog
@@ -921,14 +939,27 @@ export class OvernightSupervisor {
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
-  private pausedTasks = new Set<string>();
 
   isPaused(taskId?: string): boolean {
-    return !!taskId && this.pausedTasks.has(taskId);
+    return !!taskId && globalSupervisorState.pausedTasks.has(taskId);
   }
 
   resumeTask(taskId: string): void {
-    this.pausedTasks.delete(taskId);
+    if (taskId) {
+      globalSupervisorState.pausedTasks.delete(taskId);
+    }
+  }
+
+  getAbortController(taskId: string): AbortController | undefined {
+    return globalSupervisorState.abortControllers.get(taskId);
+  }
+
+  setAbortController(taskId: string, controller: AbortController): void {
+    globalSupervisorState.abortControllers.set(taskId, controller);
+  }
+
+  deleteAbortController(taskId: string): void {
+    globalSupervisorState.abortControllers.delete(taskId);
   }
 
   constructor(options?: SupervisorOptions) {
@@ -1267,6 +1298,10 @@ export class OvernightSupervisor {
           if (executor) {
             console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
             const res = await executor(milestone, attempt);
+            if (task.status === "paused" || this.isPaused(task.taskId)) {
+              console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+              break;
+            }
             console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
             if (res.status === "completed") {
               milestone.status = "completed";
@@ -1297,6 +1332,10 @@ export class OvernightSupervisor {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
+          if (task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+            console.log(`[supervisor] Task ${task.taskId} caught abort/pause during milestone ${milestone.id}. Halting.`);
+            break;
+          }
           console.error(`[supervisor] stepExecutor threw for milestone ${milestone.id}:`, err?.stack || err);
           if (err.message && /no stepExecutor provided/i.test(err.message)) {
             throw err;
@@ -1320,6 +1359,11 @@ export class OvernightSupervisor {
             }
           }
         }
+      }
+
+      if (task.status === "paused" || this.isPaused(task.taskId)) {
+        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop.`);
+        break;
       }
 
       if (milestoneCompleted) {
@@ -1429,7 +1473,11 @@ export class OvernightSupervisor {
 
   pauseTask(task: TaskManifest, reason: string = "User paused run"): TaskManifest {
     if (task.taskId) {
-      this.pausedTasks.add(task.taskId);
+      globalSupervisorState.pausedTasks.add(task.taskId);
+      const controller = globalSupervisorState.abortControllers.get(task.taskId);
+      if (controller) {
+        controller.abort();
+      }
     }
     task.status = "paused";
     task.parkedReason = reason;
@@ -1445,7 +1493,7 @@ export class OvernightSupervisor {
 
   restartTask(original: TaskManifest): TaskManifest {
     if (original.taskId) {
-      this.pausedTasks.delete(original.taskId);
+      globalSupervisorState.pausedTasks.delete(original.taskId);
     }
     const newTaskId = `task-${Date.now()}`;
     const nowIso = new Date().toISOString();

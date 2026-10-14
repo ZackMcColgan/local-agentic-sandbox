@@ -121,4 +121,85 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       OvernightSupervisor.prototype.executeTaskWithRecovery = originalExecute;
     }
   });
+
+  it("preserves scope='PROJECT' on manifest and passes scope='PROJECT' on resume and restart", async () => {
+    let executedTask: TaskManifest | null = null;
+    let executedOptions: any = null;
+    const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
+    OvernightSupervisor.prototype.executeTaskWithRecovery = async function(task: TaskManifest, options?: any) {
+      executedTask = task;
+      executedOptions = options;
+      return task;
+    };
+
+    const threadStore = new ThreadStore();
+    const supervisor = new OvernightSupervisor();
+    const taskId = `task-scope-resume-test-${Date.now()}`;
+    const manifest: TaskManifest = {
+      taskId,
+      goal: "Test scope preservation",
+      branchName: "feat/test-scope",
+      toolchain: "node:22",
+      scope: "PROJECT",
+      status: "paused",
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentMilestoneIndex: 0,
+      milestones: [{ id: "M1", title: "M1", status: "pending", description: "M1", acceptanceCriteria: [], builderIterations: 0, criticRounds: 0 }],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    };
+    supervisor.saveCheckpoint(manifest);
+
+    const thread = threadStore.createThread({
+      title: "Test Scope Resume Thread",
+      model: "swift-15-27b-mtp",
+      taskId
+    });
+
+    try {
+      // 1. Resume
+      const reqResume = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resume" })
+      });
+
+      const resResume = await POST(reqResume, { params: Promise.resolve({ id: thread.id }) });
+      assert.equal(resResume.status, 200);
+
+      const start = Date.now();
+      while (!executedTask && Date.now() - start < 1500) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(executedTask, "executeTaskWithRecovery must be called on resume");
+      assert.equal((executedTask as TaskManifest).scope, "PROJECT", "Resumed task must preserve scope === 'PROJECT'");
+      assert.equal((executedOptions?.stepExecutor as any)?.scope, "PROJECT", "Resumed stepExecutor must receive scope === 'PROJECT'");
+
+      // 2. Restart
+      executedTask = null;
+      executedOptions = null;
+      const reqRestart = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restart" })
+      });
+
+      const resRestart = await POST(reqRestart, { params: Promise.resolve({ id: thread.id }) });
+      assert.equal(resRestart.status, 200);
+
+      const startRestart = Date.now();
+      while (!executedTask && Date.now() - startRestart < 1500) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(executedTask, "executeTaskWithRecovery must be called on restart");
+      assert.equal((executedTask as TaskManifest).scope, "PROJECT", "Restarted task must preserve scope === 'PROJECT'");
+      assert.equal((executedOptions?.stepExecutor as any)?.scope, "PROJECT", "Restarted stepExecutor must receive scope === 'PROJECT'");
+    } finally {
+      OvernightSupervisor.prototype.executeTaskWithRecovery = originalExecute;
+    }
+  });
 });

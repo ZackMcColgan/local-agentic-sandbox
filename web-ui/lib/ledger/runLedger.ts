@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createRequire } from "module";
+import { MORNING_REPORT_CHECKPOINT_DIR } from "../subagents/morningReport";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -83,8 +84,11 @@ export function getDefaultLedgerDbPath(): string {
   return path.join(os.homedir(), ".local-agentic-sandbox", "runs.db");
 }
 
-function getDefaultCheckpointDir(dbPath: string): string {
-  return path.join(path.dirname(dbPath), "checkpoints");
+export function getDefaultCheckpointDir(_dbPath?: string): string {
+  if (process.env.AGENT_CHECKPOINT_DIR) {
+    return path.resolve(process.env.AGENT_CHECKPOINT_DIR);
+  }
+  return MORNING_REPORT_CHECKPOINT_DIR;
 }
 
 interface SqliteStatement {

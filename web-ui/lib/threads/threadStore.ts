@@ -30,7 +30,7 @@ export interface ThreadMessage {
 export interface Thread {
   id: string;
   title: string;
-  status: "active" | "stopped" | "completed" | "failed";
+  status: "active" | "paused" | "stopped" | "completed" | "failed";
   createdAt: string;
   updatedAt: string;
   model: string;
@@ -285,12 +285,29 @@ export class ThreadStore {
         (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
 
       if (!isLive) {
-        thread.status = "stopped";
+        let isTaskPaused = false;
+        if (thread.taskId) {
+          try {
+            const checkpointFile = this.supervisor.getCheckpointFilePath(thread.taskId);
+            if (fs.existsSync(checkpointFile)) {
+              const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+              if (data && data.status === "paused") {
+                isTaskPaused = true;
+              }
+            }
+          } catch {}
+        }
+
+        if (isTaskPaused) {
+          thread.status = "paused";
+        } else {
+          thread.status = "stopped";
+        }
         changed = true;
         if (thread.messages && thread.messages.length > 0) {
           const lastMsg = thread.messages[thread.messages.length - 1];
-          if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped")) {
-            lastMsg.isStopped = true;
+          if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
+            lastMsg.isStopped = !isTaskPaused;
           }
         }
       }
@@ -356,7 +373,9 @@ export class ThreadStore {
           const isActivelyRunning = activeExecutionSet.has(task.taskId);
           const honestStatus = isActivelyRunning
             ? "active"
-            : (task.status === "active" ? "stopped" : (task.status === "completed" ? "completed" : "stopped"));
+            : (task.status === "paused"
+                ? "paused"
+                : (task.status === "active" ? "stopped" : (task.status === "completed" ? "completed" : "stopped")));
 
           const newThread: Thread = {
             id: `thread-${task.taskId}`,

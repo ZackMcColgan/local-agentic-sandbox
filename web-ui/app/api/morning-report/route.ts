@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const tasks = Array.isArray(body.tasks) ? body.tasks : await supervisor.listAllTasks();
     const overnightReport = generateOvernightMorningReport(tasks);
-    persistOvernightMorningReport(overnightReport);
+    persistOvernightMorningReport(overnightReport, supervisor.checkpointDirectory);
     return NextResponse.json({ overnightReport });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

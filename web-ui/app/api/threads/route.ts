@@ -138,6 +138,9 @@ export async function POST(req: Request) {
         model: body.model || "swift-15-27b-mtp",
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
+          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
+            return;
+          }
           const now = Date.now();
           // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
           if (now - lastThinkingUpdate > 3000 || totalThinking.length - lastRecordedLength > 120) {
@@ -234,10 +237,13 @@ export async function POST(req: Request) {
         } catch (err: any) {
           console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
           throw err;
+        } finally {
+          activeExecutionSet.delete(taskId);
         }
       })().catch((err) => {
         console.error(`[threads] Task ${taskId} execution failed:`, err);
       });
+
 
       return NextResponse.json({ thread, task: manifest }, { status: 201 });
     }

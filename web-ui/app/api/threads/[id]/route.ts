@@ -12,13 +12,18 @@ const supervisor = new OvernightSupervisor();
 
 function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
   const taskId = manifest.taskId;
+  const scope = manifest.scope || "PROJECT";
   let lastThinkingUpdate = 0;
   let lastRecordedLength = 0;
 
   const executor = createProductionStepExecutor({
-    workerPool: new WorkerPool(),
+    workerPool: new WorkerPool({ scope }),
     model: "swift-15-27b-mtp",
+    scope,
     onThinkingChunk: (_chunk: string, totalThinking: string) => {
+      if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
+        return;
+      }
       const now = Date.now();
       if (now - lastThinkingUpdate > 3000 || totalThinking.length - lastRecordedLength > 120) {
         lastThinkingUpdate = now;
@@ -62,9 +67,40 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
         const currentThread = await threadStore.getThread(activeThreadId);
         if (currentThread) {
           const lastMilestone = result.milestones?.[result.milestones.length - 1];
-          const completedMsg = lastMilestone?.plannedFiles?.length
-            ? `Task completed successfully! Here is the generated \`${lastMilestone.plannedFiles[0]}\`:`
+          const targetFile = lastMilestone?.plannedFiles?.[0];
+          let fileContent = "";
+
+          if (targetFile) {
+            const repoCandidates = [
+              process.env.WORKSPACE_DIR,
+              "/workspace",
+              process.cwd(),
+              path.resolve(process.cwd(), "..")
+            ].filter(Boolean) as string[];
+
+            for (const dir of repoCandidates) {
+              const fullP = path.resolve(dir, targetFile);
+              if (fs.existsSync(fullP)) {
+                try {
+                  fileContent = fs.readFileSync(fullP, "utf8");
+                  break;
+                } catch {}
+              }
+            }
+          }
+
+          let completedMsg = targetFile
+            ? `Task completed successfully! Here is the generated \`${targetFile}\`:\n\n`
             : "Task completed successfully!";
+
+          if (targetFile && fileContent.trim()) {
+            const isSvg = targetFile.endsWith(".svg") || fileContent.includes("<svg");
+            const fenceLang = isSvg ? "xml" : path.extname(targetFile).replace(".", "") || "text";
+            completedMsg += `\`\`\`${fenceLang}\n${fileContent.trim()}\n\`\`\``;
+          } else if (targetFile) {
+            completedMsg += `Deliverable committed as \`${targetFile}\`.`;
+          }
+
           currentThread.status = "completed";
           currentThread.messages.push({
             id: `msg-${Date.now()}-done`,
@@ -81,6 +117,8 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
       try {
         supervisor.parkTask(manifest, `Execution failure: ${err?.message || err}`);
       } catch {}
+    } finally {
+      activeExecutionSet.delete(taskId);
     }
   })();
 }
@@ -153,6 +191,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         if (task) {
           supervisor.pauseTask(task, "User paused run");
           getSharedRunLedger().pauseRun(task.taskId);
+          thread.status = "paused";
           threadStore.saveThread(thread);
           return NextResponse.json({ status: "paused", thread, task });
         }

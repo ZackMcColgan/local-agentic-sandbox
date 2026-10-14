@@ -55,4 +55,49 @@ describe("Phase 1 — Tasks API Route Suite", () => {
     const verifyData = await verifyRes.json();
     assert.equal(verifyData.task.status, "cancelled");
   });
+
+  it("GET /api/tasks?taskId=<id> returns latest disk state when task transitions to paused on disk", async () => {
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    const supervisor = new OvernightSupervisor();
+
+    const diskTaskId = `task-disk-refresh-${Date.now()}`;
+    const testManifest = {
+      taskId: diskTaskId,
+      goal: "Test disk refresh",
+      branchName: "feat/test",
+      toolchain: "node:22",
+      status: "active",
+      milestones: [{ id: "M1", title: "Milestone 1", status: "pending" }],
+      currentMilestoneIndex: 0,
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    supervisor.saveCheckpoint(testManifest as any);
+
+    // Initial GET caches the task in tasksRegistry as "active"
+    const req1 = new Request(`http://localhost:3000/api/tasks?taskId=${diskTaskId}`);
+    const res1 = await GET(req1);
+    assert.equal(res1.status, 200);
+    const data1 = await res1.json();
+    assert.equal(data1.task.status, "active");
+
+    // Outside route, task is paused on disk
+    testManifest.status = "paused";
+    testManifest.updatedAt = new Date().toISOString();
+    supervisor.saveCheckpoint(testManifest as any);
+
+    // If supervisor.listAllTasks() was skipped or if tasksRegistry held onto stale state,
+    // let's verify resumeTaskFromCheckpoint overrides tasksRegistry cache:
+    const req2 = new Request(`http://localhost:3000/api/tasks?taskId=${diskTaskId}`);
+    const res2 = await GET(req2);
+    assert.equal(res2.status, 200);
+    const data2 = await res2.json();
+    assert.equal(data2.task.status, "paused");
+  });
 });
+
+

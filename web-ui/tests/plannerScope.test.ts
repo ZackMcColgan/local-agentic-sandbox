@@ -135,5 +135,56 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
       assert.equal(spec.scope, "PROJECT");
       assert.equal(spec.milestones.length, 3, "PROJECT should retain full decomposition");
     });
+
+    it("createProductionStepExecutor forwards scope='PROJECT' to Builder and Critic generate calls", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const os = await import("os");
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scope-test-"));
+
+      const { createProductionStepExecutor } = await import("../lib/subagents/supervisor");
+      const { WorkerPool } = await import("../lib/subagents/workerPool");
+      const capturedRequests: any[] = [];
+      const spyGenerate = async (req: any) => {
+        capturedRequests.push(req);
+        if (req.prompt && (req.prompt.includes("CRITIC") || req.prompt.includes("grade") || req.prompt.includes("VERDICT"))) {
+          return { text: "VERDICT: APPROVED\nAll tests pass" };
+        }
+        return { text: "```typescript\nexport const foo = 42;\n```" };
+      };
+
+      const workerPool = new WorkerPool({
+        scope: "PROJECT",
+        generate: spyGenerate as any
+      });
+
+      const executor = createProductionStepExecutor({
+        workerPool,
+        scope: "PROJECT",
+        repoRoot: tmpDir
+      });
+
+      const milestone = {
+        id: "M1",
+        title: "Test milestone",
+        description: "Write foo.ts",
+        status: "pending" as const,
+        builderIterations: 0,
+        criticRounds: 0,
+        plannedFiles: ["foo.ts"],
+        acceptanceCriteria: [{ id: "AC1", assertion: "foo exists", fileMatch: "foo.ts" }]
+      };
+
+      try {
+        await executor(milestone, 1);
+
+        assert.ok(capturedRequests.length >= 1, "At least one generate request must be captured");
+        for (const req of capturedRequests) {
+          assert.equal(req.scope, "PROJECT", `Expected req.scope to be PROJECT, got ${req.scope}`);
+        }
+      } finally {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      }
+    });
   });
 });

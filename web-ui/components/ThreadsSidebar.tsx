@@ -194,6 +194,8 @@ export function ThreadsSidebar({
             const statusLabel =
               thread.status === "active"
                 ? "Active"
+                : thread.status === "paused"
+                ? "Paused"
                 : thread.status === "stopped"
                 ? "Stopped"
                 : thread.status === "failed"

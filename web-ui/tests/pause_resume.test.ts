@@ -145,4 +145,98 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
     assert.deepEqual(executedMilestones, ["M1"], "Milestone 2 and 3 must never execute after pause");
     assert.equal(task.status, "paused");
   });
+
+  it("cross-supervisor pause: supB.pauseTask halts supA.executeTaskWithRecovery in-flight, saves status=paused on disk", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cross-sup-pause-"));
+    try {
+      const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+      const { activeExecutionSet } = await import("../lib/threads/threadStore.js");
+
+      const supA = new OvernightSupervisor(tmpDir);
+      const supB = new OvernightSupervisor(tmpDir);
+
+      const taskId = `task-cross-sup-pause-${Date.now()}`;
+      activeExecutionSet.add(taskId);
+
+      const executedMilestones: string[] = [];
+
+      const task: any = {
+        taskId,
+        goal: "Test cross-supervisor in-flight pause",
+        branchName: "feature/cross-sup-test",
+        toolchain: "node:22",
+        status: "active",
+        currentMilestoneIndex: 0,
+        milestones: [
+          { id: "M1", title: "M1", status: "pending" },
+          { id: "M2", title: "M2", status: "pending" },
+          { id: "M3", title: "M3", status: "pending" }
+        ],
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: []
+      };
+
+      const mockExecutor = async (milestone: any) => {
+        executedMilestones.push(milestone.id);
+        if (milestone.id === "M1") {
+          supB.pauseTask(task, "User paused mid-milestone via supB");
+        }
+        return { status: "completed" as const, gitSha: `sha-${milestone.id}` };
+      };
+
+      const result = await supA.executeTaskWithRecovery(task, { stepExecutor: mockExecutor });
+
+      assert.deepEqual(executedMilestones, ["M1"], "Milestone 2 and 3 must never execute after supB pause");
+      assert.equal(result.status, "paused", "supA must return status=paused");
+
+      const checkpointFile = supA.getCheckpointFilePath(taskId);
+      assert.ok(fs.existsSync(checkpointFile), "Checkpoint file must exist on disk");
+      const onDisk = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+      assert.equal(onDisk.status, "paused", "Checkpoint on disk must have status=paused");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("ThreadStore.reconcileThread keeps thread.status === 'paused' when checkpoint on disk has status === 'paused'", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "threadstore-pause-"));
+    try {
+      const { ThreadStore, activeExecutionSet } = await import("../lib/threads/threadStore.js");
+      const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+
+      const supervisor = new OvernightSupervisor(tmpDir);
+      const threadStore = new ThreadStore(path.join(tmpDir, "threads.json"), supervisor);
+
+      const taskId = `task-thread-pause-${Date.now()}`;
+      supervisor.saveCheckpoint({
+        taskId,
+        goal: "Test paused thread reconcile",
+        branchName: "feat/test",
+        toolchain: "node:22",
+        status: "paused",
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        currentMilestoneIndex: 0,
+        milestones: [{ id: "M1", title: "M1", status: "pending" }],
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: []
+      } as any);
+
+      activeExecutionSet.delete(taskId);
+
+      const thread = threadStore.createThread({
+        title: "Paused thread test",
+        taskId
+      });
+      thread.status = "active";
+      threadStore.saveThread(thread);
+
+      threadStore.reconcileThread(thread);
+      assert.equal(thread.status, "paused", "Thread must be reconciled to 'paused', NOT 'stopped'");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

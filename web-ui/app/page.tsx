@@ -599,6 +599,14 @@ export default function Home() {
               threadScope={currentThread?.scope}
               activeTask={activeTask}
               onStopTask={handleStopRun}
+              onTaskUpdated={(task, updatedThread) => {
+                if (task) setActiveTask(task);
+                if (updatedThread) {
+                  setThreads((prev) =>
+                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
+                  );
+                }
+              }}
               onBackToList={handleBackToList}
               onOpenModelSheet={() => setIsModelSheetOpen(true)}
               onOpenDrawer={() => setIsDrawerOpen(true)}
