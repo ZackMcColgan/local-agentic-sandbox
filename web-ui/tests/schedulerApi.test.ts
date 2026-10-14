@@ -7,6 +7,8 @@ import { DELETE as deleteScheduleById } from "../app/api/schedules/[id]/route.js
 import { POST as triggerSchedule } from "../app/api/schedules/[id]/trigger/route.js";
 import { resetGlobalScheduler } from "../lib/subagents/scheduler.js";
 
+process.env.FAST_GRAPH_TEST = "1";
+
 describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
   let testWorkspace: string;
   let savedWorkspace: string | undefined;

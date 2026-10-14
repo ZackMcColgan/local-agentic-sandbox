@@ -28,12 +28,14 @@ import { TelemetryTracer, formatTraceparent } from "../telemetry";
 import {
   generateOvernightMorningReport,
   persistOvernightMorningReport,
-  MORNING_REPORT_CHECKPOINT_DIR
+  MORNING_REPORT_CHECKPOINT_DIR,
+  getCanonicalCheckpointDir
 } from "./morningReport";
 export {
   generateOvernightMorningReport,
   persistOvernightMorningReport,
-  MORNING_REPORT_CHECKPOINT_DIR
+  MORNING_REPORT_CHECKPOINT_DIR,
+  getCanonicalCheckpointDir
 };
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
@@ -1008,30 +1010,11 @@ export class OvernightSupervisor {
   }
 
   constructor(options?: SupervisorOptions) {
-    let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR || process.env.CHECKPOINT_DIR;
-    if (!resolvedDir) {
-      const candidates = [
-        fs.existsSync(path.resolve(process.cwd(), "../workspace"))
-          ? path.resolve(process.cwd(), "../workspace/.agent/checkpoints")
-          : null,
-        path.resolve(process.cwd(), ".agent/checkpoints"),
-        path.resolve("/tmp/.agent/checkpoints")
-      ].filter(Boolean) as string[];
-
-      for (const dir of candidates) {
-        try {
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-          fs.accessSync(dir, fs.constants.W_OK);
-          resolvedDir = dir;
-          break;
-        } catch (err: any) {
-          console.warn(`[supervisor] Candidate checkpoint dir ${dir} is not writable or failed to initialize:`, err?.message || err);
-        }
-      }
-    }
-    this.checkpointDirectory = resolvedDir || MORNING_REPORT_CHECKPOINT_DIR;
+    this.checkpointDirectory =
+      options?.checkpointDirectory ||
+      process.env.AGENT_CHECKPOINT_DIR ||
+      process.env.CHECKPOINT_DIR ||
+      getCanonicalCheckpointDir();
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);

@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createRequire } from "module";
-import { MORNING_REPORT_CHECKPOINT_DIR } from "../subagents/morningReport";
+import { MORNING_REPORT_CHECKPOINT_DIR, getCanonicalCheckpointDir } from "../subagents/morningReport";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -88,7 +88,7 @@ export function getDefaultCheckpointDir(_dbPath?: string): string {
   if (process.env.AGENT_CHECKPOINT_DIR) {
     return path.resolve(process.env.AGENT_CHECKPOINT_DIR);
   }
-  return MORNING_REPORT_CHECKPOINT_DIR;
+  return getCanonicalCheckpointDir();
 }
 
 interface SqliteStatement {

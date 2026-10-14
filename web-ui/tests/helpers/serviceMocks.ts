@@ -7,7 +7,8 @@ let qdrantAvailable: boolean | null = null;
 let drawioAvailable: boolean | null = null;
 
 export async function checkOllama(baseUrl = "http://127.0.0.1:11434"): Promise<boolean> {
-  if (process.env.FORCE_MOCK === "1") return false;
+  if (process.env.FORCE_MOCK === "1" || process.env.FAST_GRAPH_TEST === "1") return false;
+  if (process.env.FORCE_REAL !== "1") return false;
   if (ollamaAvailable !== null) return ollamaAvailable;
   try {
     const res = await fetch(`${baseUrl}/api/tags`, {
@@ -24,7 +25,8 @@ export async function checkOllama(baseUrl = "http://127.0.0.1:11434"): Promise<b
 }
 
 export async function checkQdrant(url = "http://127.0.0.1:6333"): Promise<boolean> {
-  if (process.env.FORCE_MOCK === "1") return false;
+  if (process.env.FORCE_MOCK === "1" || process.env.FAST_GRAPH_TEST === "1") return false;
+  if (process.env.FORCE_REAL !== "1") return false;
   if (qdrantAvailable !== null) return qdrantAvailable;
   try {
     const res = await fetch(`${url}/collections`, {
@@ -41,7 +43,8 @@ export async function checkQdrant(url = "http://127.0.0.1:6333"): Promise<boolea
 }
 
 export function checkDrawio(): boolean {
-  if (process.env.FORCE_MOCK === "1") return false;
+  if (process.env.FORCE_MOCK === "1" || process.env.FAST_GRAPH_TEST === "1") return false;
+  if (process.env.FORCE_REAL !== "1") return false;
   if (drawioAvailable !== null) return drawioAvailable;
   try {
     execSync("which drawio || which draw.io", { stdio: "ignore" });

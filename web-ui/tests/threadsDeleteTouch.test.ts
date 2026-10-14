@@ -10,7 +10,9 @@ describe("ThreadsSidebar — delete confirm touch handling", () => {
   it("onTouchEnd skips confirm reset when touch ends on a button", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const sidebarPath = path.join(process.cwd(), "components/ThreadsSidebar.tsx");
+    const candidate1 = path.join(process.cwd(), "components/ThreadsSidebar.tsx");
+    const candidate2 = path.join(process.cwd(), "web-ui/components/ThreadsSidebar.tsx");
+    const sidebarPath = fs.existsSync(candidate1) ? candidate1 : candidate2;
     const source = fs.readFileSync(sidebarPath, "utf-8");
 
     // The touch-end handler must bail out when the touch target is a button,

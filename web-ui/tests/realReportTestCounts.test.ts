@@ -9,7 +9,9 @@ import { TaskManifest } from "../lib/subagents/types.js";
 
 describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
   it("grep check: report generation path contains zero hardcoded test counts", () => {
-    const tasksRoutePath = path.resolve(process.cwd(), "app/api/tasks/route.ts");
+    const tasksRoutePath = fs.existsSync(path.resolve(process.cwd(), "app/api/tasks/route.ts"))
+      ? path.resolve(process.cwd(), "app/api/tasks/route.ts")
+      : path.resolve(process.cwd(), "web-ui/app/api/tasks/route.ts");
     const routeContent = fs.readFileSync(tasksRoutePath, "utf8");
 
     // Must not contain hardcoded "m.status === 'completed' ? 2 : 0"

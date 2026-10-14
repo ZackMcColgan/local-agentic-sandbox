@@ -191,4 +191,28 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
   });
+
+  it("Task 2.1: OvernightSupervisor and RunLedger checkpoint directories remain strictly unified without drift", async () => {
+    const { RunLedger, getDefaultCheckpointDir } = await import("../lib/ledger/runLedger.js");
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+
+    const supervisor = new OvernightSupervisor();
+    const ledger = new RunLedger();
+
+    try {
+      assert.equal(
+        supervisor.checkpointDirectory,
+        getDefaultCheckpointDir(),
+        "supervisor.checkpointDirectory must strictly match getDefaultCheckpointDir()"
+      );
+      assert.equal(
+        (ledger as any).checkpointDir,
+        supervisor.checkpointDirectory,
+        "RunLedger default checkpointDir must match supervisor.checkpointDirectory"
+      );
+    } finally {
+      ledger.close();
+    }
+  });
 });
+

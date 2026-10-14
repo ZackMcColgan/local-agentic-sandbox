@@ -470,9 +470,20 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
   return lines.join("\n");
 }
 
-export const MORNING_REPORT_CHECKPOINT_DIR: string = (() => {
-  if (process.env.MORNING_REPORT_DIR) return process.env.MORNING_REPORT_DIR;
-  if (process.env.AGENT_CHECKPOINT_DIR) return process.env.AGENT_CHECKPOINT_DIR;
+let cachedCanonicalDir: string | null = null;
+
+export function resetCanonicalCheckpointDirCache(): void {
+  cachedCanonicalDir = null;
+}
+
+export function getCanonicalCheckpointDir(): string {
+  if (process.env.AGENT_CHECKPOINT_DIR) return path.resolve(process.env.AGENT_CHECKPOINT_DIR);
+  if (process.env.CHECKPOINT_DIR) return path.resolve(process.env.CHECKPOINT_DIR);
+  if (process.env.MORNING_REPORT_DIR) return path.resolve(process.env.MORNING_REPORT_DIR);
+
+  if (cachedCanonicalDir && fs.existsSync(cachedCanonicalDir)) {
+    return cachedCanonicalDir;
+  }
 
   const candidates = [
     fs.existsSync(path.resolve(process.cwd(), "../workspace"))
@@ -489,13 +500,18 @@ export const MORNING_REPORT_CHECKPOINT_DIR: string = (() => {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.accessSync(dir, fs.constants.W_OK);
+      cachedCanonicalDir = dir;
       return dir;
     } catch {
       // try next candidate
     }
   }
-  return path.resolve(process.cwd(), ".checkpoints");
-})();
+  const fallback = path.resolve(process.cwd(), ".checkpoints");
+  cachedCanonicalDir = fallback;
+  return fallback;
+}
+
+export const MORNING_REPORT_CHECKPOINT_DIR: string = getCanonicalCheckpointDir();
 
 /**
  * Persists the Overnight Morning Report to disk so it is readable at 7am without digging through logs.
@@ -504,7 +520,7 @@ export function persistOvernightMorningReport(
   report: OvernightMorningReport,
   checkpointDir?: string
 ): string {
-  const dir = checkpointDir || MORNING_REPORT_CHECKPOINT_DIR;
+  const dir = checkpointDir || getCanonicalCheckpointDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -519,7 +535,7 @@ export function persistOvernightMorningReport(
 export function loadPersistedOvernightMorningReport(
   checkpointDir?: string
 ): OvernightMorningReport | null {
-  const dir = checkpointDir || MORNING_REPORT_CHECKPOINT_DIR;
+  const dir = checkpointDir || getCanonicalCheckpointDir();
   const filePath = path.join(dir, "overnight-morning-report.json");
   if (!fs.existsSync(filePath)) return null;
   try {

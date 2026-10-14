@@ -51,6 +51,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => /tests\/[^/]+\.test\.ts$/.test(p),
     tests: [] // handled dynamically
   },
+  // Test helpers (e.g. tests/helpers/serviceMocks.ts)
+  {
+    match: (p) => p.includes("tests/helpers/"),
+    tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"]
+  },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),
