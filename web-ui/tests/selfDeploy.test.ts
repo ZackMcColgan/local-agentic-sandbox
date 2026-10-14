@@ -45,6 +45,22 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       assert.ok(result.timeline.some((t) => t.stage === "rolling_update" && t.status === "completed"));
       assert.ok(result.timeline.some((t) => t.stage === "health_check" && t.status === "completed"));
 
+      // Verify default image name format: local-agentic-sandbox-web-ui:<shortSha>
+      const setImageCmd = executedCommands.find((c) => c.includes("set image"));
+      assert.ok(setImageCmd, "Must run kubectl set image");
+      assert.ok(
+        setImageCmd.includes(`web-ui=local-agentic-sandbox-web-ui:${"sha-new-002".slice(0, 8)}`),
+        `Expected image local-agentic-sandbox-web-ui:sha-new- but got: ${setImageCmd}`
+      );
+
+      // Verify rollout status wait command executed
+      const rolloutStatusCmd = executedCommands.find((c) => c.includes("rollout status"));
+      assert.ok(rolloutStatusCmd, "Must run kubectl rollout status");
+      assert.ok(
+        rolloutStatusCmd.includes("rollout status deployment/web-ui --timeout=90s"),
+        `Expected rollout status with --timeout=90s, got: ${rolloutStatusCmd}`
+      );
+
       // Fix 7.2: Verify build command executed with Dockerfile from repo root
       const buildCmd = executedCommands.find((c) => c.startsWith("docker build"));
       assert.ok(buildCmd, "Must run docker build");
@@ -60,8 +76,45 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
 
       ledger.close();
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignored on Windows EBUSY
+      }
     }
+  });
+
+  it("Rollout status failure triggers automatic rollback and returns rolled_back", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const executedCommands: string[] = [];
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async (file: string, args: string[]) => {
+        const fullCmd = [file, ...args].join(" ");
+        executedCommands.push(fullCmd);
+        if (fullCmd.includes("rollout status")) {
+          return { exitCode: 1, stdout: "", stderr: "error: deployment timed out\n" };
+        }
+        return { exitCode: 0, stdout: "ok\n", stderr: "" };
+      },
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    const result = await pipeline.executeSelfDeploy({
+      branchName: "feature/rollout-timeout",
+      previousSha: "sha-prev-111",
+      newSha: "sha-new-222",
+      deploymentName: "web-ui",
+      namespace: "local-agentic-sandbox"
+    });
+
+    assert.equal(result.status, "rolled_back");
+    assert.equal(result.rollbackStatus, "rolled_back");
+    assert.ok(
+      executedCommands.some((c) => c.includes("rollout undo")),
+      "Must trigger kubectl rollout undo when rollout status fails"
+    );
   });
 
   it("Failed health check triggers automatic rollback to previous image and verifies rollback health", async () => {

@@ -114,7 +114,7 @@ export class SelfDeployPipeline {
       options.healthChecker ??
       (async (url: string) => {
         try {
-          const res = await fetch(url);
+          const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
           return { status: res.status, ok: res.status >= 200 && res.status < 400 };
         } catch {
           return { status: 503, ok: false };
@@ -171,7 +171,7 @@ export class SelfDeployPipeline {
     const hostAddress = input.hostAddress || "host.docker.internal";
     const healthCheckUrl =
       this.explicitHealthCheckUrl || `http://${hostAddress}:3001/api/sandbox-status`;
-    const newImage = input.imageTag || `local-agentic-sandbox/web-ui:${input.newSha.slice(0, 8)}`;
+    const newImage = input.imageTag || `local-agentic-sandbox-web-ui:${input.newSha.slice(0, 8)}`;
 
     // 1. Safety Rails: Kill Switch check
     if (!this.enabled) {
@@ -258,6 +258,93 @@ export class SelfDeployPipeline {
       inMemoryDeployHistory.unshift(record);
       this.logToLedger(record);
       return record;
+    }
+
+    const rolloutStatusRes = await this.commandRunner("kubectl", [
+      "-n",
+      namespace,
+      "rollout",
+      "status",
+      `deployment/${deploymentName}`,
+      "--timeout=90s"
+    ]);
+
+    if (rolloutStatusRes.exitCode !== 0) {
+      timeline[1].status = "failed";
+      timeline[1].detail = rolloutStatusRes.stderr || "rollout status timed out";
+
+      timeline.push({
+        stage: "rollback",
+        status: "in_progress",
+        timestamp: new Date().toISOString()
+      });
+
+      const rollbackRes = await this.commandRunner("kubectl", [
+        "-n",
+        namespace,
+        "rollout",
+        "undo",
+        `deployment/${deploymentName}`
+      ]);
+
+      if (rollbackRes.exitCode !== 0) {
+        timeline[2].status = "failed";
+        timeline[2].detail = rollbackRes.stderr;
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rollback_failed",
+          rollbackStatus: "failed",
+          healthCheckResult: { status: 0, ok: false },
+          timeline,
+          errorMessage: `Rollout status failed and rollout undo failed: ${rollbackRes.stderr}`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      }
+
+      const rollbackHealth = await this.healthChecker(healthCheckUrl);
+      if (rollbackHealth.ok) {
+        timeline[2].status = "completed";
+        timeline[2].detail = "Rolled back to previous revision and health verified";
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rolled_back",
+          rollbackStatus: "rolled_back",
+          healthCheckResult: rollbackHealth,
+          timeline,
+          errorMessage: `Rollout status failed: ${rolloutStatusRes.stderr || rolloutStatusRes.stdout}. Automatic rollback executed and verified.`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      } else {
+        timeline[2].status = "failed";
+        timeline[2].detail = `Rollback health check failed with HTTP ${rollbackHealth.status}`;
+        const record: SelfDeployRecord = {
+          deployId,
+          timestamp,
+          branchName: input.branchName,
+          previousSha: input.previousSha,
+          newSha: input.newSha,
+          status: "rollback_failed",
+          rollbackStatus: "failed",
+          healthCheckResult: rollbackHealth,
+          timeline,
+          errorMessage: `CRITICAL: Deployment rolled back after rollout timeout but health check still failing with HTTP ${rollbackHealth.status}. Manual inspection required.`
+        };
+        inMemoryDeployHistory.unshift(record);
+        this.logToLedger(record);
+        return record;
+      }
     }
     timeline[1].status = "completed";
 

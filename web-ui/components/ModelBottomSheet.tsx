@@ -35,6 +35,12 @@ export function ModelBottomSheet({
 
   const modelsList = [
     {
+      id: "swift-15-27b-mtp",
+      displayName: "swift-1.5",
+      subtext: "27B MTP · default orchestrator & workers",
+      icon: "bot"
+    },
+    {
       id: "qwen3.8:27b-q3_k_m",
       displayName: "qwen3.8",
       subtext: "27B · planner & critic",

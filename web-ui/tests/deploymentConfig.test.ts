@@ -52,4 +52,28 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
     assert.equal(makefileContent.includes("gemma4"), false, "Makefile must not contain gemma4");
     assert.equal(makefileContent.includes("hermes3"), false, "Makefile must not contain hermes3");
   });
+
+  it("Makefile k8s-build builds with repo root context (-f web-ui/Dockerfile .)", () => {
+    const root = findRepoRoot();
+    const makefileContent = fs.readFileSync(path.join(root, "Makefile"), "utf8");
+
+    assert.ok(
+      makefileContent.includes("-f web-ui/Dockerfile ."),
+      "Makefile k8s-build target must build with repo root context: -f web-ui/Dockerfile ."
+    );
+  });
+
+  it("deploy/k8s/web-ui.yaml configures swift-15-27b-mtp model environment variables", () => {
+    const root = findRepoRoot();
+    const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
+
+    assert.ok(
+      k8sDeployContent.includes("swift-15-27b-mtp"),
+      "deploy/k8s/web-ui.yaml must configure swift-15-27b-mtp"
+    );
+    assert.ok(
+      k8sDeployContent.includes("MODEL_NAME"),
+      "deploy/k8s/web-ui.yaml must set MODEL_NAME"
+    );
+  });
 });

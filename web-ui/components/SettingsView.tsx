@@ -35,7 +35,7 @@ export interface SettingsViewProps {
 export function SettingsView({
   onBack,
   onClose,
-  selectedModel = "swift-27b-mtp",
+  selectedModel = "swift-15-27b-mtp",
   defaultModel,
   models,
   onDefaultModelChange,

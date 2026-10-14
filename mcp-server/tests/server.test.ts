@@ -34,6 +34,7 @@ describe("MCP Server Express Endpoints", () => {
       assert.equal(data.security.network_egress, "BLOCKED");
       assert.equal(data.security.capabilities, "DROPPED_ALL");
     } finally {
+      (server as any).closeAllConnections?.();
       server.close();
     }
   });
@@ -98,8 +99,87 @@ describe("MCP Server Express Endpoints", () => {
       const badReqRes = await fetch(`http://127.0.0.1:${port}/files`);
       assert.equal(badReqRes.status, 400);
     } finally {
+      (server as any).closeAllConnections?.();
       server.close();
       await fs.unlink(testSvgPath).catch(() => {});
     }
   });
+
+  it("isAllowedFileArtifact and getArtifactMimeType validate file extensions correctly", async () => {
+    const { isAllowedFileArtifact, getArtifactMimeType } = await import("../src/index.js");
+
+    const validCases = [
+      { ext: ".svg", mime: "image/svg+xml; charset=utf-8" },
+      { ext: ".drawio", mime: "application/xml; charset=utf-8" },
+      { ext: ".drawio.xml", mime: "application/xml; charset=utf-8" },
+      { ext: ".xml", mime: "application/xml; charset=utf-8" },
+      { ext: ".md", mime: "text/markdown; charset=utf-8" },
+      { ext: ".txt", mime: "text/plain; charset=utf-8" },
+      { ext: ".json", mime: "application/json; charset=utf-8" },
+      { ext: ".html", mime: "text/html; charset=utf-8" },
+      { ext: ".csv", mime: "text/csv; charset=utf-8" },
+      { ext: ".log", mime: "text/plain; charset=utf-8" }
+    ];
+
+    for (const { ext, mime } of validCases) {
+      const fileName = `sample${ext}`;
+      assert.equal(isAllowedFileArtifact(fileName), true, `Expected ${fileName} to be allowed`);
+      assert.equal(getArtifactMimeType(fileName), mime, `Expected ${fileName} to have mime ${mime}`);
+    }
+
+    assert.equal(isAllowedFileArtifact("script.sh"), false);
+    assert.equal(isAllowedFileArtifact("program.exe"), false);
+    assert.equal(isAllowedFileArtifact("hidden/.git"), false);
+  });
+
+  it("files endpoint serves all allowed file extensions with correct MIME types and rejects unallowed types with 415", async () => {
+    const { resolveSafePath, WORKSPACE_DIR } = await import("../src/tools/workspaceTools.js");
+    const { handleFilesRequest } = await import("../src/index.js");
+    const fs = (await import("fs/promises")).default;
+    const path = (await import("path")).default;
+
+    const testFiles = [
+      { name: "test_doc.md", content: "# Title", expectedMime: "text/markdown" },
+      { name: "test_plain.txt", content: "hello world", expectedMime: "text/plain" },
+      { name: "test_data.json", content: '{"ok":true}', expectedMime: "application/json" },
+      { name: "test_page.html", content: "<h1>Hi</h1>", expectedMime: "text/html" },
+      { name: "test_table.csv", content: "a,b\n1,2", expectedMime: "text/csv" },
+      { name: "test_output.log", content: "log output", expectedMime: "text/plain" }
+    ];
+
+    for (const tf of testFiles) {
+      await fs.writeFile(path.join(WORKSPACE_DIR, tf.name), tf.content, "utf8");
+    }
+    const badFilePath = path.join(WORKSPACE_DIR, "bad_script.sh");
+    await fs.writeFile(badFilePath, "#!/bin/sh\necho bad", "utf8");
+
+    const app = express();
+    app.use(cors());
+    app.get("/files", handleFilesRequest);
+
+    const server = app.listen(0);
+    const port = (server.address() as any).port;
+
+    try {
+      for (const tf of testFiles) {
+        const res = await fetch(`http://127.0.0.1:${port}/files?path=${tf.name}`);
+        assert.equal(res.status, 200, `Expected 200 for ${tf.name}`);
+        const ctype = res.headers.get("content-type") || "";
+        assert.ok(ctype.includes(tf.expectedMime), `Expected ${tf.expectedMime} in ${ctype} for ${tf.name}`);
+        const body = await res.text();
+        assert.equal(body, tf.content);
+      }
+
+      const badRes = await fetch(`http://127.0.0.1:${port}/files?path=bad_script.sh`);
+      assert.equal(badRes.status, 415, "Expected 415 for unallowed .sh file");
+    } finally {
+      (server as any).closeAllConnections?.();
+      server.close();
+      for (const tf of testFiles) {
+        await fs.unlink(path.join(WORKSPACE_DIR, tf.name)).catch(() => {});
+      }
+      await fs.unlink(badFilePath).catch(() => {});
+    }
+  });
 });
+

@@ -188,7 +188,7 @@ export class ThreadStore {
       workerInfo: "Worker 2",
       createdAt: new Date(now - 1000 * 60 * 18).toISOString(),
       updatedAt: new Date(now - 1000 * 30).toISOString(),
-      model: "qwen3.8:27b-q3_k_m",
+      model: "swift-15-27b-mtp",
       reasoningEffort: "medium",
       taskId: "task-rebuild-settings",
       messages: [
@@ -208,7 +208,7 @@ export class ThreadStore {
       timeLabel: "2h ago",
       createdAt: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-      model: "qwen3.8:27b-q3_k_m",
+      model: "swift-15-27b-mtp",
       reasoningEffort: "medium",
       messages: [
         {
@@ -243,7 +243,7 @@ export class ThreadStore {
       timeLabel: "Yesterday",
       createdAt: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
-      model: "qwen3.8:27b-q3_k_m",
+      model: "swift-15-27b-mtp",
       reasoningEffort: "medium",
       messages: [
         {
@@ -383,7 +383,7 @@ export class ThreadStore {
             status: honestStatus,
             createdAt: task.startedAt || new Date().toISOString(),
             updatedAt: task.updatedAt || task.startedAt || new Date().toISOString(),
-            model: "qwen3.8:27b-q3_k_m",
+            model: "swift-15-27b-mtp",
             reasoningEffort: "medium",
             taskId: task.taskId,
             messages: [
@@ -463,7 +463,7 @@ export class ThreadStore {
       status: params.taskId ? "active" : "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      model: params.model || "qwen3.8:27b-q3_k_m",
+      model: params.model || "swift-15-27b-mtp",
       reasoningEffort: params.reasoningEffort || "medium",
       taskId: params.taskId,
       scope: params.scope,

@@ -276,6 +276,15 @@ export function generateOvernightMorningReport(
     }
   }
 
+  // Deduplicate candidate tasks by taskId so each task appears exactly once
+  const seenTaskIds = new Set<string>();
+  candidateTasks = candidateTasks.filter((task) => {
+    if (!task.taskId) return true;
+    if (seenTaskIds.has(task.taskId)) return false;
+    seenTaskIds.add(task.taskId);
+    return true;
+  });
+
   // Sort newest first
   candidateTasks.sort((a, b) => {
     const tA = new Date(a.updatedAt || a.completedAt || a.startedAt || 0).getTime();

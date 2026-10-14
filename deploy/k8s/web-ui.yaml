@@ -52,6 +52,12 @@ spec:
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
+            - name: MODEL_NAME
+              value: "swift-15-27b-mtp"
+            - name: PLANNER_MODEL
+              value: "swift-15-27b-mtp"
+            - name: SUBAGENT_MODEL
+              value: "swift-15-27b-mtp"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
           securityContext:

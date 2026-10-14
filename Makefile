@@ -72,7 +72,7 @@ clean:
 # Builds the web-ui image locally and restarts the K8s deployment.
 # Image uses imagePullPolicy: Never, so the local build is picked up directly.
 k8s-build:
-	docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile web-ui
+	docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile .
 
 k8s-deploy: k8s-build
 	kubectl rollout restart deployment/web-ui -n local-agentic-sandbox

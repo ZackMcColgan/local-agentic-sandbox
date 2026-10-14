@@ -90,7 +90,7 @@ interface ChatStreamProps {
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   threadId?: string;
   threadTitle?: string;
-  threadStatus?: "active" | "stopped" | "completed" | "failed";
+  threadStatus?: "active" | "paused" | "stopped" | "completed" | "failed";
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
@@ -950,7 +950,7 @@ export function ChatStream({
             type="button"
             onClick={onOpenModelSheet}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-[#6750a4] dark:text-[#d0bcff] shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-            title={`Active model: ${activeModel || "swift-27b-mtp"} · Tap to configure`}
+            title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />

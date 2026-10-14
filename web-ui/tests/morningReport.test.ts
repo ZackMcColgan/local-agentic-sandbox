@@ -440,6 +440,34 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.equal(taskRows.length, 1, `Expected exactly 1 task-row, got ${taskRows.length}`);
     assert.equal(artifactCards.length, 1, `Expected exactly 1 artifact-card, got ${artifactCards.length}`);
   });
+
+  it("generateOvernightMorningReport deduplicates candidate tasks by taskId", async () => {
+    const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+
+    const sampleTask1: any = {
+      taskId: "task-dup-001",
+      goal: "First copy of task",
+      branchName: "feature/task-dup",
+      toolchain: "node:22",
+      status: "completed",
+      startedAt: new Date(Date.now() - 60000).toISOString(),
+      completedAt: new Date().toISOString(),
+      currentMilestoneIndex: 1,
+      milestones: [],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: []
+    };
+
+    const sampleTask2: any = {
+      ...sampleTask1,
+      goal: "Duplicate copy of task with same taskId"
+    };
+
+    const report = generateOvernightMorningReport([sampleTask1, sampleTask2]);
+    assert.equal(report.tasks.length, 1, `Expected 1 deduplicated task, got ${report.tasks.length}`);
+    assert.equal(report.completedCount, 1, `Expected completedCount to be 1, got ${report.completedCount}`);
+  });
 });
 
 
