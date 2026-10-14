@@ -34,7 +34,19 @@ export const ALLOWED_FILE_EXTENSIONS = new Set([
   ".json",
   ".html",
   ".csv",
-  ".log"
+  ".log",
+  ".py",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".yaml",
+  ".yml",
+  ".sql",
+  ".css",
+  ".toml"
 ]);
 
 export function isAllowedFileArtifact(filePath: string): boolean {
@@ -55,6 +67,19 @@ export function getArtifactMimeType(filePath: string): string {
       return "text/markdown; charset=utf-8";
     case ".txt":
     case ".log":
+    case ".py":
+    case ".ts":
+    case ".tsx":
+    case ".js":
+    case ".jsx":
+    case ".mjs":
+    case ".cjs":
+    case ".sh":
+    case ".yaml":
+    case ".yml":
+    case ".sql":
+    case ".css":
+    case ".toml":
       return "text/plain; charset=utf-8";
     case ".json":
       return "application/json; charset=utf-8";

@@ -139,6 +139,8 @@ export function cleanResidualToolTags(content: string): string {
   if (!content) return "";
   return content
     .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<tool_call>[\s\S]*$/gi, "")
     .replace(/<function(?:=|\s+name=)[\"']?[a-zA-Z0-9_\-]+[\"']?>[\s\S]*?<\/function>/gi, "")
+    .replace(/<\/?function[^>]*>/gi, "")
     .trim();
 }

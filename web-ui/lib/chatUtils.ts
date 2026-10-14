@@ -56,38 +56,58 @@ export function computeModelOptions(
 }
 
 /**
+ * Checks if the user's prompt references codebase, architectural, or repository concepts.
+ * General conversational questions (weather, greetings, trivia) bypass cold RAG lookups.
+ */
+export function shouldConsultLocalOracle(prompt: string): boolean {
+  if (!prompt || typeof prompt !== "string") return false;
+  return /\b(repo|codebase|file|function|class|test|supervisor|worker|critic|planner|ledger|mcp|qdrant|k8s|kubernetes|docker|deploy|sandbox|morning report|\.ts|\.tsx|\.js|\.py|\.md|\.yaml)\b/i.test(prompt);
+}
+
+/**
  * Parses raw assistant stream content extracting complete or in-progress <think>...</think> reasoning blocks.
  */
 export function parseThinkingAndContent(raw: string): { thought?: string; content: string } {
   if (!raw) return { content: "" };
 
-  const thinkRegex = /<think>([\s\S]*?)<\/think>/i;
-  const match = raw.match(thinkRegex);
-  if (match) {
-    const thought = match[1].trim();
-    const content = raw.replace(thinkRegex, "").trim();
-    return { thought, content };
+  const thoughts: string[] = [];
+  let working = raw;
+
+  // 1. Extract all complete <think>...</think> blocks
+  working = working.replace(/<think>([\s\S]*?)<\/think>/gi, (_match, inner) => {
+    if (inner && inner.trim()) thoughts.push(inner.trim());
+    return "";
+  });
+
+  // 2. Handle orphan leading reasoning terminated by </think> (swift-15-27b-mtp pattern)
+  if (working.includes("</think>")) {
+    const idx = working.indexOf("</think>");
+    const before = working.slice(0, idx).replace(/<think>/gi, "").trim();
+    if (before) thoughts.push(before);
+    working = working.slice(idx + "</think>".length);
   }
 
-  if (raw.includes("<think>")) {
-    const parts = raw.split(/<think>/i);
-    const beforeThink = parts[0];
-    const afterThink = parts.slice(1).join("<think>");
-    if (afterThink.includes("</think>")) {
-      const sub = afterThink.split(/<\/think>/i);
-      return {
-        thought: sub[0].trim(),
-        content: (beforeThink + "\n" + sub.slice(1).join("</think>")).trim()
-      };
-    } else {
-      return {
-        thought: afterThink,
-        content: beforeThink.trim()
-      };
-    }
+  // 3. Handle in-progress unclosed <think> block during live streaming
+  if (/<\s*think\s*>/i.test(working)) {
+    const parts = working.split(/<\s*think\s*>/i);
+    const beforeThink = parts[0].trim();
+    const inProgressThought = parts.slice(1).join("").trim();
+    if (inProgressThought) thoughts.push(inProgressThought);
+    working = beforeThink;
   }
 
-  return { content: raw };
+  // 4. Strip any residual <tool_call>...</tool_call> or <function=...> XML tags from visible content
+  working = working
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<tool_call>[\s\S]*$/gi, "")
+    .replace(/<\/?function[^>]*>/gi, "")
+    .trim();
+
+  const combinedThought = thoughts.join("\n\n").trim();
+  return {
+    thought: combinedThought.length > 0 ? combinedThought : undefined,
+    content: working
+  };
 }
 
 /**

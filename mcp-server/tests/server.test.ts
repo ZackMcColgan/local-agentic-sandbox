@@ -127,8 +127,15 @@ describe("MCP Server Express Endpoints", () => {
       assert.equal(getArtifactMimeType(fileName), mime, `Expected ${fileName} to have mime ${mime}`);
     }
 
+    // Also verify new code extensions
+    assert.equal(isAllowedFileArtifact("script.py"), true);
+    assert.equal(isAllowedFileArtifact("index.ts"), true);
+    assert.equal(isAllowedFileArtifact("config.yaml"), true);
+
+    // Unallowed binary / executable / script extensions
     assert.equal(isAllowedFileArtifact("script.sh"), false);
     assert.equal(isAllowedFileArtifact("program.exe"), false);
+    assert.equal(isAllowedFileArtifact("binary.bin"), false);
     assert.equal(isAllowedFileArtifact("hidden/.git"), false);
   });
 
@@ -144,14 +151,15 @@ describe("MCP Server Express Endpoints", () => {
       { name: "test_data.json", content: '{"ok":true}', expectedMime: "application/json" },
       { name: "test_page.html", content: "<h1>Hi</h1>", expectedMime: "text/html" },
       { name: "test_table.csv", content: "a,b\n1,2", expectedMime: "text/csv" },
-      { name: "test_output.log", content: "log output", expectedMime: "text/plain" }
+      { name: "test_output.log", content: "log output", expectedMime: "text/plain" },
+      { name: "test_code.py", content: "print('hi')", expectedMime: "text/plain" }
     ];
 
     for (const tf of testFiles) {
       await fs.writeFile(path.join(WORKSPACE_DIR, tf.name), tf.content, "utf8");
     }
-    const badFilePath = path.join(WORKSPACE_DIR, "bad_script.sh");
-    await fs.writeFile(badFilePath, "#!/bin/sh\necho bad", "utf8");
+    const badFilePath = path.join(WORKSPACE_DIR, "bad_program.exe");
+    await fs.writeFile(badFilePath, "binary-content", "utf8");
 
     const app = express();
     app.use(cors());
@@ -170,14 +178,15 @@ describe("MCP Server Express Endpoints", () => {
         assert.equal(body, tf.content);
       }
 
-      const badRes = await fetch(`http://127.0.0.1:${port}/files?path=bad_script.sh`);
-      assert.equal(badRes.status, 415, "Expected 415 for unallowed .sh file");
+      const badRes = await fetch(`http://127.0.0.1:${port}/files?path=bad_program.exe`);
+      assert.equal(badRes.status, 415, "Expected 415 for unallowed .exe file");
     } finally {
       (server as any).closeAllConnections?.();
       server.close();
       for (const tf of testFiles) {
         await fs.unlink(path.join(WORKSPACE_DIR, tf.name)).catch(() => {});
       }
+      await fs.unlink(badFilePath).catch(() => {});
       await fs.unlink(badFilePath).catch(() => {});
     }
   });

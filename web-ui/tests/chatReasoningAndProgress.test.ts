@@ -161,4 +161,32 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       );
     });
   });
+
+  describe("Sprint 13 Task 1 — Thinking Extraction & Residual Tool-Tag Stripping", () => {
+    it("parseThinkingAndContent extracts orphan leading reasoning terminated by </think> without opening <think>", async () => {
+      const { parseThinkingAndContent } = await import("../lib/chatUtils.js");
+      const raw = "Let me check the forecast for Spanish Fort.\n</think>\nHere is the weather:";
+      const parsed = parseThinkingAndContent(raw);
+      assert.equal(parsed.thought, "Let me check the forecast for Spanish Fort.");
+      assert.equal(parsed.content, "Here is the weather:");
+    });
+
+    it("parseThinkingAndContent concatenates all <think> blocks and strips them from content", async () => {
+      const { parseThinkingAndContent } = await import("../lib/chatUtils.js");
+      const raw = "<think>Round 1 thought</think>Looking up...\n<think>Round 2 thought</think>Final answer";
+      const parsed = parseThinkingAndContent(raw);
+      assert.equal(parsed.thought, "Round 1 thought\n\nRound 2 thought");
+      assert.equal(parsed.content, "Looking up...\nFinal answer");
+    });
+
+    it("cleanResidualToolTags strips Qwen XML tool call blocks including unclosed and malformed tags", async () => {
+      const { cleanResidualToolTags } = await import("../lib/toolParser.js");
+      const raw = 'Here is the data: <tool_call> <function=search_web>{"query":"weather"}</function> </tool_call> and also <tool_call> <function=search_web</function> </tool_call> Done.';
+      const cleaned = cleanResidualToolTags(raw);
+      assert.ok(!cleaned.includes("<tool_call>"), "Must strip tool_call");
+      assert.ok(!cleaned.includes("search_web"), "Must strip function name");
+      assert.ok(cleaned.includes("Here is the data:"));
+      assert.ok(cleaned.includes("Done."));
+    });
+  });
 });

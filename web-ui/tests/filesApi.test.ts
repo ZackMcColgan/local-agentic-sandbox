@@ -28,9 +28,40 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
     assert.equal(res.status, 415);
   });
 
+  it("serves code and config files (.py, .ts, .yaml) with HTTP 200", async () => {
+    const pyPath = path.resolve(process.cwd(), "test-script.py");
+    const tsPath = path.resolve(process.cwd(), "test-util.ts");
+    const yamlPath = path.resolve(process.cwd(), "test-config.yaml");
+
+    fs.writeFileSync(pyPath, "print('hello')", "utf8");
+    fs.writeFileSync(tsPath, "export const x = 1;", "utf8");
+    fs.writeFileSync(yamlPath, "key: value", "utf8");
+
+    try {
+      const resPy = await GET(new NextRequest("http://localhost:3000/api/files?path=test-script.py"));
+      assert.equal(resPy.status, 200);
+      assert.ok(resPy.headers.get("content-type")?.includes("text/plain"));
+      const bodyPy = await resPy.text();
+      assert.ok(bodyPy.includes("print('hello')"));
+
+      const resTs = await GET(new NextRequest("http://localhost:3000/api/files?path=test-util.ts"));
+      assert.equal(resTs.status, 200);
+      assert.ok(resTs.headers.get("content-type")?.includes("text/plain"));
+
+      const resYaml = await GET(new NextRequest("http://localhost:3000/api/files?path=test-config.yaml"));
+      assert.equal(resYaml.status, 200);
+      assert.ok(resYaml.headers.get("content-type")?.includes("text/plain"));
+    } finally {
+      if (fs.existsSync(pyPath)) fs.unlinkSync(pyPath);
+      if (fs.existsSync(tsPath)) fs.unlinkSync(tsPath);
+      if (fs.existsSync(yamlPath)) fs.unlinkSync(yamlPath);
+    }
+  });
+
   it("blocks directory traversal with HTTP 403", async () => {
     const req = new NextRequest("http://localhost:3000/api/files?path=../../../etc/passwd");
     const res = await GET(req);
     assert.equal(res.status, 403);
   });
 });
+

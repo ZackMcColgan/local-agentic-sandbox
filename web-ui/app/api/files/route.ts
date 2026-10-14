@@ -13,6 +13,20 @@ function getMimeType(filePath: string): string {
     case ".md":
       return "text/markdown; charset=utf-8";
     case ".txt":
+    case ".log":
+    case ".py":
+    case ".ts":
+    case ".tsx":
+    case ".js":
+    case ".jsx":
+    case ".mjs":
+    case ".cjs":
+    case ".sh":
+    case ".yaml":
+    case ".yml":
+    case ".sql":
+    case ".css":
+    case ".toml":
       return "text/plain; charset=utf-8";
     case ".json":
       return "application/json; charset=utf-8";
@@ -20,12 +34,34 @@ function getMimeType(filePath: string): string {
       return "text/html; charset=utf-8";
     case ".csv":
       return "text/csv; charset=utf-8";
-    case ".log":
-      return "text/plain; charset=utf-8";
     default:
       return "application/octet-stream";
   }
 }
+
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  ".svg",
+  ".drawio",
+  ".xml",
+  ".md",
+  ".txt",
+  ".json",
+  ".html",
+  ".csv",
+  ".log",
+  ".py",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".yaml",
+  ".yml",
+  ".sql",
+  ".css",
+  ".toml"
+]);
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,23 +106,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Strict content-type check: text and diagram artifacts permitted (.svg, .drawio, .xml, .md, .txt, .json, .html, .csv, .log)
+    // Strict content-type check: text, diagram, and code artifacts permitted
     const ext = path.extname(cleanPath).toLowerCase();
-    const isAllowedExt =
-      ext === ".svg" ||
-      ext === ".drawio" ||
-      cleanPath.endsWith(".drawio.xml") ||
-      ext === ".xml" ||
-      ext === ".md" ||
-      ext === ".txt" ||
-      ext === ".json" ||
-      ext === ".html" ||
-      ext === ".csv" ||
-      ext === ".log";
+    const isAllowedExt = ALLOWED_FILE_EXTENSIONS.has(ext) || cleanPath.endsWith(".drawio.xml");
 
     if (!isAllowedExt) {
       return NextResponse.json(
-        { error: "Unsupported media type: only text and diagram artifacts (.svg, .drawio, .xml, .md, .txt, .json, .html, .csv, .log) are permitted" },
+        { error: "Unsupported media type: only allowed text, diagram, and code artifacts are permitted" },
         { status: 415 }
       );
     }

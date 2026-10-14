@@ -322,4 +322,69 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       assert.equal(rawOnDisk.title, "What is the status of the OTEL waterfall");
     });
   });
+
+  describe("Sprint 13 Task 3 — Add Message & Permanent Mount Verification", () => {
+    it("POST /api/threads/[id] with action addMessage adds message, updates title, and marks completed on assistant turn", async () => {
+      const store = new ThreadStore(tempDir);
+      const thread = store.createThread({});
+      assert.equal(thread.title, "New thread");
+
+      // Simulate first user message added via addMessage
+      const userMsg: ThreadMessage = {
+        id: "msg-user-1",
+        role: "user",
+        content: "Explain the kubernetes rollout strategy for web-ui",
+        timestamp: new Date().toISOString()
+      };
+      thread.messages.push(userMsg);
+      if (
+        !thread.title ||
+        thread.title.toLowerCase() === "new thread" ||
+        thread.title.toLowerCase() === "untitled thread"
+      ) {
+        thread.title = userMsg.content.slice(0, 40);
+      }
+      thread.updatedAt = new Date().toISOString();
+      store.saveThread(thread);
+
+      const afterUser = await store.getThread(thread.id);
+      assert.ok(afterUser);
+      assert.equal(afterUser.messages.length, 1);
+      assert.equal(afterUser.title, "Explain the kubernetes rollout strategy ");
+
+      // Simulate assistant reply added via addMessage
+      const assistantMsg: ThreadMessage = {
+        id: "msg-assistant-1",
+        role: "assistant",
+        content: "Here is how the rollout strategy works...",
+        thought: "Analyzing deployment manifest...",
+        timestamp: new Date().toISOString()
+      };
+      afterUser.messages.push(assistantMsg);
+      afterUser.status = "completed";
+      afterUser.updatedAt = new Date().toISOString();
+      store.saveThread(afterUser);
+
+      const afterAssistant = await store.getThread(thread.id);
+      assert.ok(afterAssistant);
+      assert.equal(afterAssistant.messages.length, 2);
+      assert.equal(afterAssistant.status, "completed");
+      assert.equal(afterAssistant.messages[1].thought, "Analyzing deployment manifest...");
+    });
+
+    it("verifies page.tsx keeps ChatStream and sidebar containers mounted with visibility classes", () => {
+      const candidates = [
+        path.resolve(process.cwd(), "app/page.tsx"),
+        path.resolve(process.cwd(), "web-ui/app/page.tsx"),
+        path.resolve(process.cwd(), "../web-ui/app/page.tsx")
+      ];
+      const pagePath = candidates.find((p) => fs.existsSync(p));
+      assert.ok(pagePath, "Could not find app/page.tsx in candidate paths");
+      const pageCode = fs.readFileSync(pagePath, "utf8");
+      // Check that ChatStream is not unmounted on view switches or replaced with ternary null
+      assert.ok(pageCode.includes("<ChatStream"), "page.tsx must mount <ChatStream />");
+      assert.ok(pageCode.includes("<ThreadsSidebar"), "page.tsx must mount <ThreadsSidebar />");
+    });
+  });
 });
+

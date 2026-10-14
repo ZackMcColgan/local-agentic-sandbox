@@ -39,74 +39,56 @@ export function ThinkingPanel({
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
 
-  // Group default phases if none provided or map from raw thought
+  // Group default phases if provided, or synthesize live reasoning card from rawThought
+  const formattedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
   const effectivePhases: ThinkingPhaseCardData[] = (() => {
     if (phases && phases.length > 0) return phases;
 
-    // Synthesize structured phases from rawThought if available
-    const rawLines = rawThought.split("\n").map(l => l.trim()).filter(Boolean);
-    const planLines: string[] = [];
-    const buildLines: string[] = [];
-    const valLines: string[] = [];
-
-    for (const line of rawLines) {
-      const lower = line.toLowerCase();
-      if (lower.includes("plan") || lower.includes("decompose") || lower.includes("milestone") || lower.includes("scope") || lower.includes("spec")) {
-        planLines.push(line);
-      } else if (lower.includes("validat") || lower.includes("critic") || lower.includes("test") || lower.includes("compil") || lower.includes("syntax")) {
-        valLines.push(line);
-      } else {
-        buildLines.push(line);
-      }
+    if (rawThought && rawThought.trim()) {
+      return [
+        {
+          phase: "planning",
+          title: isStreaming ? "Reasoning in progress" : "Reasoning summary",
+          timestamp: formattedTime,
+          timeAgo: "Now",
+          narrative: rawThought.trim(),
+          status: isStreaming ? "in_progress" : "complete",
+          progressPercent: isStreaming ? 85 : 100
+        }
+      ];
     }
 
-    const defaultTime = "12:00 PM";
-    const result: ThinkingPhaseCardData[] = [];
-
-    // 1. Planning phase
-    result.push({
-      phase: "planning",
-      title: "Planning",
-      timestamp: defaultTime,
-      timeAgo: "Just now",
-      narrative: planLines.length > 0
-        ? planLines.join(" ")
-        : "Broke the task into milestones. Scope evaluated. No unnecessary scaffolding.",
-      status: buildLines.length > 0 || valLines.length > 0 || !isStreaming ? "complete" : "in_progress",
-      progressPercent: buildLines.length > 0 || valLines.length > 0 || !isStreaming ? 100 : 85
-    });
-
-    // 2. Building phase
-    if (buildLines.length > 0 || valLines.length > 0 || !isStreaming) {
-      result.push({
-        phase: "building",
-        title: "Building",
-        timestamp: defaultTime,
-        timeAgo: valLines.length > 0 ? "1m ago" : "Now",
-        narrative: buildLines.length > 0
-          ? buildLines.join(" ")
-          : "Generating clean deliverable markup and implementation code.",
-        status: valLines.length > 0 || !isStreaming ? "complete" : "in_progress",
-        progressPercent: valLines.length > 0 || !isStreaming ? 100 : 75
-      });
-    }
-
-    // 3. Validating phase
-    if (valLines.length > 0 || !isStreaming) {
-      result.push({
-        phase: "validating",
-        title: "Validating",
-        timestamp: defaultTime,
-        timeAgo: "Now",
-        narrative: valLines.length > 0
-          ? valLines.join(" ")
-          : "Checking output compiles, adheres to constraints, and passes validation.",
+    // Default 3-phase fallback when neither explicit phases nor raw thought are provided
+    return [
+      {
+        phase: "planning",
+        title: "Planning",
+        timestamp: formattedTime,
+        timeAgo: "Just now",
+        narrative: "Broke the task into milestones. Scope evaluated. No unnecessary scaffolding.",
         status: isStreaming ? "in_progress" : "complete",
         progressPercent: isStreaming ? 85 : 100
-      });
-    }
-
-    return result;
+      },
+      {
+        phase: "building",
+        title: "Building",
+        timestamp: formattedTime,
+        timeAgo: "Now",
+        narrative: "Generating clean deliverable markup and implementation code.",
+        status: isStreaming ? "in_progress" : "complete",
+        progressPercent: isStreaming ? 75 : 100
+      },
+      {
+        phase: "validating",
+        title: "Validating",
+        timestamp: formattedTime,
+        timeAgo: "Now",
+        narrative: "Checking output compiles, adheres to constraints, and passes validation.",
+        status: isStreaming ? "in_progress" : "complete",
+        progressPercent: isStreaming ? 85 : 100
+      }
+    ];
   })();
 
   const activeStepsCount = effectivePhases.length;

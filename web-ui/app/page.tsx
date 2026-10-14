@@ -441,7 +441,10 @@ export default function Home() {
   const handleNavigate = (view: NavView) => {
     setActiveNavView(view);
     if (view === "sessions") {
-      setSelectedThreadId(null);
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+      if (isMobile) {
+        setSelectedThreadId(null);
+      }
     }
   };
 

@@ -664,6 +664,25 @@ export function ChatStream({
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
+    // If inside a persistent thread, persist the user message
+    if (threadId) {
+      try {
+        fetch(`/api/threads/${threadId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "addMessage",
+            message: {
+              id: userMsgId,
+              role: "user",
+              content: userMessage.content,
+              timestamp: new Date().toISOString()
+            }
+          })
+        }).catch((err) => console.warn("Failed to persist user message:", err));
+      } catch {}
+    }
+
     // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
     const isBuilder = isBuilderPrompt(prompt);
 
@@ -763,6 +782,17 @@ export function ChatStream({
               if (event.model) currentModel = event.model;
             } else if (event.type === "status") {
               setStreamStatus(event.status);
+            } else if (event.type === "thought") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        thought: event.thought
+                      }
+                    : msg
+                )
+              );
             } else if (event.type === "token") {
               accumulatedRawContent += event.content || "";
               const parsed = parseThinkingAndContent(accumulatedRawContent);
@@ -794,15 +824,40 @@ export function ChatStream({
             } else if (event.type === "done") {
               const durationMs = Math.round(performance.now() - startTime);
               const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
+              const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
+              const finalModel = event.model || currentModel;
+
+              if (threadId) {
+                try {
+                  fetch(`/api/threads/${threadId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "addMessage",
+                      message: {
+                        id: assistantMsgId,
+                        role: "assistant",
+                        content: parsed.content,
+                        thought: finalThought,
+                        modelUsed: finalModel,
+                        traces: event.traces || currentTraces,
+                        durationMs,
+                        timestamp: new Date().toISOString()
+                      }
+                    })
+                  }).catch((err) => console.warn("Failed to persist assistant message:", err));
+                } catch {}
+              }
+
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
                     ? {
                         ...msg,
                         content: parsed.content,
-                        thought: event.thought !== undefined ? event.thought : parsed.thought,
+                        thought: finalThought,
                         traces: event.traces || currentTraces,
-                        modelUsed: event.model || currentModel,
+                        modelUsed: finalModel,
                         durationMs: event.durationMs || durationMs
                       }
                     : msg

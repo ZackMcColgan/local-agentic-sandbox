@@ -260,6 +260,23 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     // 3. Action: Add Message
     if (body.action === "addMessage" && body.message) {
       thread.messages.push(body.message);
+      if (body.message.role === "user") {
+        if (
+          !thread.title ||
+          thread.title.toLowerCase() === "new thread" ||
+          thread.title.toLowerCase() === "untitled thread" ||
+          thread.title.toLowerCase() === "new task"
+        ) {
+          const content = body.message.content || "";
+          if (content.trim()) {
+            thread.title = content.trim().slice(0, 40);
+          }
+        }
+      } else if (body.message.role === "assistant") {
+        if (thread.status !== "active") {
+          thread.status = "completed";
+        }
+      }
       thread.updatedAt = new Date().toISOString();
       threadStore.saveThread(thread);
       return NextResponse.json({ thread });

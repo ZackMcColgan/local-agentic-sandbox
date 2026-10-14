@@ -12,7 +12,12 @@ import { parseAttachment } from "@/lib/fileParser";
 import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
-import { computeModelOptions, resolveEffectiveReasoningEffort } from "@/lib/chatUtils";
+import {
+  computeModelOptions,
+  resolveEffectiveReasoningEffort,
+  shouldConsultLocalOracle,
+  parseThinkingAndContent
+} from "@/lib/chatUtils";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   loadUserProfile,
@@ -219,39 +224,6 @@ export async function POST(req: NextRequest) {
     // Resolve honest effective reasoning effort
     let effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
 
-    // 2. Connect to Sandboxed Code-Runner / Workspace MCP
-    const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
-    if (sandboxSession) {
-      activeSessions.push(sandboxSession);
-      for (const t of sandboxSession.tools) {
-        toolClientMap.set(t.name, { client: sandboxSession.client, tier: "sandbox" });
-      }
-    }
-
-    // 3. Connect to Isolated Browser/Scraper MCP
-    const browserSession = await connectMcpClient(BROWSER_MCP_URL, "orchestrator-browser-client");
-    if (browserSession) {
-      activeSessions.push(browserSession);
-      for (const t of browserSession.tools) {
-        toolClientMap.set(t.name, { client: browserSession.client, tier: "browser" });
-      }
-    }
-
-    const allTools = [
-      ...(sandboxSession?.tools || []),
-      ...(browserSession?.tools || [])
-    ];
-
-    // Format tools for Ollama / OpenAI function calling specification
-    const ollamaTools = allTools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description || "",
-        parameters: t.inputSchema || {}
-      }
-    }));
-
     const SYSTEM_PROMPT = `You are an intelligent autonomous AI engineering platform running on local hardware with Model Context Protocol (MCP) tool integration, workspace automation, and native multimodal support.
 
 You have access to two distinct tool tiers:
@@ -332,82 +304,8 @@ CRITICAL INSTRUCTIONS:
       }
     }
 
-    // 4. Grounding via Local Repository Oracle (consults local repos/docs)
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     const userPrompt = lastUserMsg?.content || "";
-    let oracleSnippet = "";
-    let oracleCitations: string[] = [];
-
-    // Tier 1 User Profile Memory: Extract & record explicit durable preferences (gated)
-    if (userPrompt.trim()) {
-      try {
-        const durableFacts = extractDurablePreferences(userPrompt, clientSessionId);
-        for (const fact of durableFacts) {
-          recordProfileEntry(fact.key, fact.value, {
-            sessionId: clientSessionId,
-            origin: fact.origin
-          });
-        }
-      } catch (err: any) {
-        console.warn("[ChatRoute] Failed to record durable preferences:", err.message);
-      }
-    }
-
-    if (userPrompt.trim()) {
-      try {
-        const semanticRes = await searchSemanticMemory(userPrompt);
-        if (!semanticRes.degraded && semanticRes.citations.length > 0) {
-          oracleSnippet = semanticRes.contextSnippet;
-          oracleCitations = semanticRes.citations;
-        } else {
-          const oracleResult = await searchOracleCodebase(userPrompt);
-          if (oracleResult.contextSnippet) {
-            oracleSnippet = oracleResult.contextSnippet;
-            oracleCitations = oracleResult.citations;
-          }
-        }
-      } catch (err: any) {
-        console.warn("[ChatRoute] Semantic memory retrieval warning:", err.message);
-      }
-    }
-
-    const conversationMessages = [...messages];
-    if (conversationMessages.length > 0) {
-      const lastIdx = conversationMessages.length - 1;
-      const lastMsg = { ...conversationMessages[lastIdx] };
-
-      if (docContexts.length > 0) {
-        lastMsg.content = `${lastMsg.content || ""}${docContexts.join("\n")}`;
-      }
-      if (imagePayloads.length > 0) {
-        lastMsg.images = imagePayloads;
-      }
-      if (oracleSnippet) {
-        lastMsg.content = `${lastMsg.content || ""}\n${oracleSnippet}`;
-      }
-      conversationMessages[lastIdx] = lastMsg;
-    }
-
-    const userProfile = loadUserProfile();
-    const profileContext = formatProfileForContext(userProfile);
-
-    if (!conversationMessages.some((m: any) => m.role === "system")) {
-      conversationMessages.unshift({
-        role: "system",
-        content: SYSTEM_PROMPT + profileContext + effortDirective
-      });
-    } else {
-      const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
-      conversationMessages[sysIdx].content += profileContext;
-    }
-
-    // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
-    const getEffectiveToolCalls = (msg: any) => {
-      if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
-        return msg.tool_calls;
-      }
-      return parseToolCallsFromText(msg.content, toolClientMap);
-    };
 
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
     const encoder = new TextEncoder();
@@ -425,7 +323,129 @@ CRITICAL INSTRUCTIONS:
     // Run async orchestrator pipeline in background feeding SSE stream
     (async () => {
       const traces: TraceItem[] = [];
+      let accumulatedThoughts: string[] = [];
+      let oracleSnippet = "";
+      let oracleCitations: string[] = [];
+
       try {
+        await sendEvent({
+          type: "status",
+          status: "Preparing context & tools..."
+        });
+
+        // 1. Gated Oracle Codebase & Semantic Memory Lookup with 2500ms timeout
+        if (userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
+          try {
+            const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) =>
+              setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
+            );
+            const ragPromise = (async () => {
+              const semanticRes = await searchSemanticMemory(userPrompt);
+              if (!semanticRes.degraded && semanticRes.citations.length > 0) {
+                return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
+              }
+              const oracleResult = await searchOracleCodebase(userPrompt);
+              return {
+                contextSnippet: oracleResult.contextSnippet || "",
+                citations: oracleResult.citations || []
+              };
+            })();
+
+            const lookupResult = await Promise.race([ragPromise, timeoutPromise]);
+            if (lookupResult.contextSnippet) {
+              oracleSnippet = lookupResult.contextSnippet;
+              oracleCitations = lookupResult.citations;
+            }
+          } catch (err: any) {
+            console.warn("[ChatRoute] Semantic memory retrieval warning:", err.message);
+          }
+        }
+
+        // Tier 1 User Profile Memory
+        if (userPrompt.trim()) {
+          try {
+            const durableFacts = extractDurablePreferences(userPrompt, clientSessionId);
+            for (const fact of durableFacts) {
+              recordProfileEntry(fact.key, fact.value, {
+                sessionId: clientSessionId,
+                origin: fact.origin
+              });
+            }
+          } catch (err: any) {
+            console.warn("[ChatRoute] Failed to record durable preferences:", err.message);
+          }
+        }
+
+        // 2. Connect to Sandboxed Code-Runner / Workspace MCP
+        const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
+        if (sandboxSession) {
+          activeSessions.push(sandboxSession);
+          for (const t of sandboxSession.tools) {
+            toolClientMap.set(t.name, { client: sandboxSession.client, tier: "sandbox" });
+          }
+        }
+
+        // 3. Connect to Isolated Browser/Scraper MCP
+        const browserSession = await connectMcpClient(BROWSER_MCP_URL, "orchestrator-browser-client");
+        if (browserSession) {
+          activeSessions.push(browserSession);
+          for (const t of browserSession.tools) {
+            toolClientMap.set(t.name, { client: browserSession.client, tier: "browser" });
+          }
+        }
+
+        const allTools = [
+          ...(sandboxSession?.tools || []),
+          ...(browserSession?.tools || [])
+        ];
+
+        const ollamaTools = allTools.map((t) => ({
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description || "",
+            parameters: t.inputSchema || {}
+          }
+        }));
+
+        const conversationMessages = [...messages];
+        if (conversationMessages.length > 0) {
+          const lastIdx = conversationMessages.length - 1;
+          const lastMsg = { ...conversationMessages[lastIdx] };
+
+          if (docContexts.length > 0) {
+            lastMsg.content = `${lastMsg.content || ""}${docContexts.join("\n")}`;
+          }
+          if (imagePayloads.length > 0) {
+            lastMsg.images = imagePayloads;
+          }
+          if (oracleSnippet) {
+            lastMsg.content = `${lastMsg.content || ""}\n${oracleSnippet}`;
+          }
+          conversationMessages[lastIdx] = lastMsg;
+        }
+
+        const userProfile = loadUserProfile();
+        const profileContext = formatProfileForContext(userProfile);
+
+        if (!conversationMessages.some((m: any) => m.role === "system")) {
+          conversationMessages.unshift({
+            role: "system",
+            content: SYSTEM_PROMPT + profileContext + effortDirective
+          });
+        } else {
+          const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
+          conversationMessages[sysIdx].content += profileContext;
+        }
+
+        // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
+        const getEffectiveToolCalls = (msg: any) => {
+          if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+            return msg.tool_calls;
+          }
+          return parseToolCallsFromText(msg.content, toolClientMap);
+        };
+
         // Send initial metadata
         await sendEvent({
           type: "meta",
@@ -440,6 +460,8 @@ CRITICAL INSTRUCTIONS:
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
+
+        let accumulatedThoughts: string[] = [];
 
         while (round < MAX_TOOL_ROUNDS) {
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
@@ -459,9 +481,14 @@ CRITICAL INSTRUCTIONS:
           }
 
           let fullRoundContent = "";
+          let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
           for await (const chunk of streamOllamaChat(OLLAMA_URL, ollamaPayload)) {
+            if (chunk.message?.thinking) {
+              roundThinking += chunk.message.thinking;
+              await sendEvent({ type: "thought", thought: roundThinking });
+            }
             if (chunk.message?.content) {
               const textChunk = chunk.message.content;
               fullRoundContent += textChunk;
@@ -470,6 +497,10 @@ CRITICAL INSTRUCTIONS:
             if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
               toolCallsFromMessage.push(...chunk.message.tool_calls);
             }
+          }
+
+          if (roundThinking.trim()) {
+            accumulatedThoughts.push(roundThinking.trim());
           }
 
           reasoningSpan.end("ok");
@@ -482,6 +513,13 @@ CRITICAL INSTRUCTIONS:
           const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
           if (!toolCalls || toolCalls.length === 0) {
             break;
+          }
+
+          if (accumulatedThoughts.length > 0) {
+            await sendEvent({
+              type: "thought",
+              thought: accumulatedThoughts.join("\n\n")
+            });
           }
 
           round++;
@@ -653,6 +691,7 @@ CRITICAL INSTRUCTIONS:
         await sendEvent({
           type: "done",
           content: cleanedContent,
+          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
           traces,
           model: activeModel,
           mode,

@@ -122,4 +122,21 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
       }
     }
   });
+
+  describe("Sprint 13 Task 2 — Eliminate Pre-Chat Stall & shouldConsultLocalOracle", () => {
+    it("shouldConsultLocalOracle returns false for general conversational/weather prompts", async () => {
+      const { shouldConsultLocalOracle } = await import("../lib/chatUtils.js");
+      assert.equal(shouldConsultLocalOracle("Explain what the weather will be like in Spanish Fort tomorrow"), false);
+      assert.equal(shouldConsultLocalOracle("What about Saturday?"), false);
+      assert.equal(shouldConsultLocalOracle("Hello, how are you today?"), false);
+    });
+
+    it("shouldConsultLocalOracle returns true for repository, architecture, and code prompts", async () => {
+      const { shouldConsultLocalOracle } = await import("../lib/chatUtils.js");
+      assert.equal(shouldConsultLocalOracle("How does supervisor.ts handle checkpoints?"), true);
+      assert.equal(shouldConsultLocalOracle("Where is mcp-runner configured?"), true);
+      assert.equal(shouldConsultLocalOracle("Can you check the k8s deployment?"), true);
+      assert.equal(shouldConsultLocalOracle("Explain how the worker and critic verify tests"), true);
+    });
+  });
 });
