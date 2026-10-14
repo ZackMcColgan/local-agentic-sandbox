@@ -30,6 +30,7 @@ interface LiveRunBlockProps {
   onPauseRun?: () => void;
   onResumeRun?: () => void;
   onRestartRun?: () => void;
+  onDeployRun?: (taskId: string) => Promise<void> | void;
   isStopping?: boolean;
 }
 
@@ -39,6 +40,7 @@ export function LiveRunBlock({
   onPauseRun,
   onResumeRun,
   onRestartRun,
+  onDeployRun,
   isStopping
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
@@ -520,9 +522,9 @@ export function LiveRunBlock({
         </div>
       )}
 
-      {/* Completed / Failed / Stopped Controls: Restart */}
-      {(isCompleted || isFailed || isStopped) && onRestartRun && (
-        <div className="flex items-center justify-between pt-1">
+      {/* Completed / Failed / Stopped Controls: Restart & Deploy Preview */}
+      {(isCompleted || isFailed || isStopped) && (
+        <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
           {isStopped ? (
             <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
               Run stopped · Workers halted &amp; VRAM released.
@@ -532,14 +534,40 @@ export function LiveRunBlock({
               Run {status}
             </span>
           )}
-          <button
-            type="button"
-            onClick={onRestartRun}
-            className="py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white hover:bg-slate-50 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Restart run</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {isCompleted && !task.deploymentUrl && onDeployRun && (
+              <button
+                type="button"
+                data-testid="deploy-preview-btn"
+                onClick={() => onDeployRun(task.taskId)}
+                className="py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Deploy Preview</span>
+              </button>
+            )}
+            {task.deploymentUrl && (
+              <a
+                href={task.deploymentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-1.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-xs inline-flex items-center gap-1.5 transition-all"
+              >
+                <span>Preview Ready</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+            {onRestartRun && (
+              <button
+                type="button"
+                onClick={onRestartRun}
+                className="py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white hover:bg-slate-50 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Restart run</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 

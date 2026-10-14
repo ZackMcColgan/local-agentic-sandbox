@@ -30,7 +30,14 @@ import {
   persistOvernightMorningReport,
   MORNING_REPORT_CHECKPOINT_DIR
 } from "./morningReport";
+export {
+  generateOvernightMorningReport,
+  persistOvernightMorningReport,
+  MORNING_REPORT_CHECKPOINT_DIR
+};
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
+import { recordObservedPattern } from "./skillGate";
+import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 
 let sycophancyProbeExecuted = false;
 
@@ -701,6 +708,11 @@ export interface ProductionStepExecutorOptions {
   model?: string;
   scope?: string;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+  testRunner?: (
+    milestone: Milestone,
+    targetFile: string,
+    repoRoot: string
+  ) => Promise<{ exitCode: number; passed: number; failed: number; output: string }>;
 }
 
 /**
@@ -820,9 +832,28 @@ export function createProductionStepExecutor(
           };
         }
 
-        // 2. Critic worker evaluates diff (Skip critic loop if milestone has skipCriticOnValidSyntax enabled)
+        let testExitCode = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0;
+        let testOutput = "";
+
+        if (options?.testRunner) {
+          try {
+            console.log(`[executor] running testRunner for milestone ${milestone.id}`);
+            const testRes = await options.testRunner(milestone, lastTargetFile, repoRoot);
+            milestone.testsPassed = testRes.passed;
+            milestone.testsFailed = testRes.failed;
+            testExitCode = testRes.exitCode;
+            testOutput = testRes.output;
+            console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}`);
+          } catch (tErr: any) {
+            console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
+            testExitCode = 1;
+            milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+          }
+        }
+
+        // 2. Critic worker evaluates diff (Skip critic loop if milestone has skipCriticOnValidSyntax enabled and tests passed)
         let isApproved = false;
-        if (milestone.skipCriticOnValidSyntax && builderRes.targetFile && !builderRes.stuck) {
+        if (milestone.skipCriticOnValidSyntax && builderRes.targetFile && !builderRes.stuck && testExitCode === 0) {
           console.log(`[executor] SINGLE_ARTIFACT valid deliverable produced (${builderRes.targetFile}) — skipping critic loop.`);
           isApproved = true;
         } else {
@@ -837,7 +868,8 @@ export function createProductionStepExecutor(
                 {
                   diff: builderRes.diff,
                   filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
-                  testExitCode: (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0,
+                  testExitCode,
+                  testOutput,
                   noChangeReason: milestone.diffSummary
                 },
                 { signal }
@@ -852,6 +884,19 @@ export function createProductionStepExecutor(
         }
 
         if (isApproved) {
+          if (builderIterations >= 2) {
+            try {
+              recordObservedPattern(
+                `milestone-${milestone.id}-multifix`,
+                {
+                  title: `Fix pattern for ${milestone.title}`,
+                  solutionSummary: `Resolved after ${builderIterations} iterations: ${lastTargetFile}`
+                }
+              );
+            } catch (pErr: any) {
+              console.warn(`[executor] Failed to record observed pattern:`, pErr?.message || pErr);
+            }
+          }
           // Enforce commit scoping: stage ONLY builder's explicit target file.
           // If targetFile is missing/empty, do NOT commit - return status "failed". Never git add ".".
           if (!lastTargetFile || !lastTargetFile.trim()) {
@@ -963,7 +1008,7 @@ export class OvernightSupervisor {
   }
 
   constructor(options?: SupervisorOptions) {
-    let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR;
+    let resolvedDir = options?.checkpointDirectory || process.env.AGENT_CHECKPOINT_DIR || process.env.CHECKPOINT_DIR;
     if (!resolvedDir) {
       const candidates = [
         fs.existsSync(path.resolve(process.cwd(), "../workspace"))
@@ -1099,6 +1144,22 @@ export class OvernightSupervisor {
       );
       console.log(`[supervisor] checkpoint saved for ${task.taskId}`);
       this.syncTaskToRunLedger(task);
+      if (task.status === "completed") {
+        try {
+          const extracted = extractSkillsFromCompletedTask(task);
+          if (extracted && extracted.length > 0) {
+            const store = new FlywheelSkillsStore();
+            try {
+              store.saveSkills(extracted);
+              console.log(`[supervisor] Saved ${extracted.length} flywheel skills for completed task ${task.taskId}`);
+            } finally {
+              store.close();
+            }
+          }
+        } catch (fErr: any) {
+          console.warn(`[supervisor] Flywheel skill extraction failed for task ${task.taskId}:`, fErr?.message || fErr);
+        }
+      }
       if (
         task.status === "completed" ||
         task.status === "parked" ||

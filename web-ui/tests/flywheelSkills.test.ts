@@ -142,4 +142,132 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
     assert.ok(content.includes("Not Wired into Planner"), "Must disclose future planner integration");
     assert.ok(content.includes("Canned Template Literals"), "Must disclose canned templates");
   });
+
+  it("Sprint 9 Loop Closure: supervisor.saveCheckpoint on completed task automatically extracts and persists skills", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "flywheel-loop-chk-"));
+    const dbPath = path.join(tmpDir, "runs.db");
+    const origDb = process.env.RUN_LEDGER_DB_PATH;
+    process.env.RUN_LEDGER_DB_PATH = dbPath;
+
+    try {
+      const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+      const { FlywheelSkillsStore } = await import("../lib/flywheel/skillsStore.js");
+
+      const supervisor = new OvernightSupervisor({
+        checkpointDirectory: tmpDir
+      });
+
+      const completedTask = {
+        taskId: "task-auto-persist-svg-1",
+        goal: "Build weather SVG forecast vector badge",
+        toolchain: "node:22" as const,
+        status: "completed" as const,
+        branchName: "feat/auto-persist-svg",
+        milestones: [
+          {
+            id: "M1",
+            title: "Build weather SVG vector card",
+            description: "Generate standalone valid SVG with viewBox 0 0 800 600",
+            status: "completed" as const,
+            builderIterations: 1,
+            criticRounds: 1,
+            plannedFiles: ["weather.svg"],
+            diffSummary: `+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n+<rect width="800" height="600" rx="24" fill="#0f172a"/>\n+</svg>`,
+            acceptanceCriteria: []
+          }
+        ],
+        currentMilestoneIndex: 1,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      supervisor.saveCheckpoint(completedTask as any);
+
+      const store = new FlywheelSkillsStore(dbPath);
+      try {
+        const skills = store.listSkills();
+        assert.ok(skills.length > 0, "Skills must be automatically saved when supervisor checkpoints a completed task");
+        assert.equal(skills[0].sourceTaskId, "task-auto-persist-svg-1");
+      } finally {
+        store.close();
+      }
+    } finally {
+      const { closeSharedRunLedger } = await import("../lib/ledger/runLedger.js");
+      closeSharedRunLedger();
+      if (origDb !== undefined) process.env.RUN_LEDGER_DB_PATH = origDb;
+      else delete process.env.RUN_LEDGER_DB_PATH;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("Sprint 9 Loop Closure: generatePlanSpec injects retrieved reusable patterns into planner prompt", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "flywheel-planner-inj-"));
+    const dbPath = path.join(tmpDir, "runs.db");
+    const origDb = process.env.RUN_LEDGER_DB_PATH;
+    process.env.RUN_LEDGER_DB_PATH = dbPath;
+
+    try {
+      const { FlywheelSkillsStore } = await import("../lib/flywheel/skillsStore.js");
+      const store = new FlywheelSkillsStore(dbPath);
+      try {
+        store.saveSkills([
+          {
+            skillId: "skill-weather-svg-1",
+            name: "Weather SVG Vector Badge",
+            description: "Responsive SVG card layout with viewBox coordinates",
+            domain: "svg",
+            patternTemplate: "<svg viewBox=\"0 0 800 600\"><rect rx=\"16\" /></svg>",
+            sourceTaskId: "task-prev-run",
+            confidenceScore: 0.95,
+            createdAt: new Date().toISOString(),
+            useCount: 1
+          }
+        ]);
+      } finally {
+        store.close();
+      }
+
+      const { generatePlanSpec } = await import("../lib/subagents/planner.js");
+      let capturedPrompt = "";
+      const mockGenerate = async (options: any) => {
+        capturedPrompt = options.prompt || "";
+        return {
+          text: JSON.stringify({
+            milestones: [
+              {
+                id: "M1",
+                title: "Create weather SVG icon",
+                description: "SVG milestone",
+                plannedFiles: ["weather.svg"],
+                acceptanceCriteria: []
+              }
+            ]
+          })
+        };
+      };
+
+      const plan = await generatePlanSpec({
+        goal: "Create a modern weather SVG card with temperature indicator",
+        scope: "SCRIPT",
+        generate: mockGenerate
+      });
+
+      assert.ok(plan.milestones.length > 0);
+      assert.ok(
+        capturedPrompt.includes("[REUSABLE PATTERNS FROM PAST SUCCESSFUL RUNS]"),
+        "Prompt must include [REUSABLE PATTERNS FROM PAST SUCCESSFUL RUNS]"
+      );
+      assert.ok(
+        capturedPrompt.includes("Weather SVG Vector Badge"),
+        "Prompt must include matching skill name"
+      );
+    } finally {
+      if (origDb !== undefined) process.env.RUN_LEDGER_DB_PATH = origDb;
+      else delete process.env.RUN_LEDGER_DB_PATH;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

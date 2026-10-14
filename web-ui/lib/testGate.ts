@@ -146,9 +146,9 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/subagents/supervisor"),
     tests: [
       "tests/supervisor.test.ts",
+      "tests/canonicalLifecycle.test.ts",
       "tests/taskCompletion.test.ts",
       "tests/browserMcpConnectivity.test.ts",
-      "tests/langgraphSupervisorNodes.test.ts",
       "tests/activeTaskRehydration.test.ts",
       "tests/taskControls.test.ts"
     ]
@@ -167,7 +167,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
-    tests: ["tests/planner.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+    tests: ["tests/planner.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/morningReport"),
@@ -246,15 +246,26 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/ledger/"),
     tests: [
       "tests/ledger.test.ts",
+      "tests/ledgerStats.test.ts",
       "tests/pause_resume.test.ts",
       "tests/restart.test.ts",
       "tests/crash_recovery.test.ts"
     ]
   },
+  // Deploy API (Sprint 7)
+  {
+    match: (p) => p.includes("app/api/deploy") || p.includes("components/LiveRunBlock"),
+    tests: ["tests/deployApiWiring.test.ts"]
+  },
   // Build Deploy Flow (Sprint 12 Phase 5)
   {
     match: (p) => p.includes("lib/deploy/"),
     tests: ["tests/deployFlow.test.ts"]
+  },
+  // Human Skill Gates (Sprint 3)
+  {
+    match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
+    tests: ["tests/humanSkillGates.test.ts"]
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
@@ -275,6 +286,10 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("lib/deploy/selfDeploy"),
     tests: ["tests/selfDeploy.test.ts"]
+  },
+  {
+    match: (p) => p.includes("components/ChatStream"),
+    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts"]
   },
   {
     match: (p) =>
@@ -600,12 +615,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
   if (!childEnv.FORCE_MOCK) childEnv.FORCE_MOCK = "1";
+  if (!childEnv.FAST_GRAPH_TEST) childEnv.FAST_GRAPH_TEST = "1";
 
   // 1. Run web-ui tests if any mapped
   if (webUiTestsToRun.length > 0) {
     try {
       const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
-      const cmd = `npx tsx --test ${webUiTestsToRun.join(" ")}`;
+      const cmd = `npx tsx --tsconfig tsconfig.json --test ${webUiTestsToRun.join(" ")}`;
       const out = execSync(cmd, {
         cwd: webUiCwd,
         encoding: "utf8",

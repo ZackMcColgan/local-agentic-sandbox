@@ -5,6 +5,7 @@ import {
   stripCodeFence,
   type GenerateFn
 } from "./llmClient";
+import { FlywheelSkillsStore, formatSkillsForPlannerPrompt } from "../flywheel/skillsStore";
 
 export interface PlanSpecInput {
   taskId: string;
@@ -165,7 +166,22 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
     const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000, scope: userScope });
     const modelToUse = input.model || process.env.PLANNER_MODEL || "swift-15-27b-mtp";
 
-    const prompt = (userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT")
+    let retrievedPatternsContext = "";
+    try {
+      const skillsStore = new FlywheelSkillsStore();
+      try {
+        const matches = skillsStore.retrieveRelevantSkills(goal, 3);
+        if (matches && matches.length > 0) {
+          retrievedPatternsContext = `\n\n${formatSkillsForPlannerPrompt(matches)}\n`;
+        }
+      } finally {
+        skillsStore.close();
+      }
+    } catch {
+      // Best-effort retrieval; ignore if skills store unavailable
+    }
+
+    const basePrompt = (userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT")
       ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise. No package.json, no build pipeline, no test scaffolding unless requested.
 
 Goal: ${goal}
@@ -212,6 +228,10 @@ Respond strictly in valid JSON matching this schema:
     }
   ]
 }`;
+
+    const prompt = retrievedPatternsContext
+      ? `${basePrompt}\n\n${retrievedPatternsContext}`
+      : basePrompt;
 
     const res = await generate({
       model: modelToUse,

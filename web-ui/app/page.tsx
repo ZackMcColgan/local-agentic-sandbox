@@ -57,6 +57,9 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
+  const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
+  const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
+  const [deployHistory, setDeployHistory] = useState<any[]>([]);
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -127,9 +130,79 @@ export default function Home() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 15000);
+    fetchSkills();
+    fetchDeployStatus();
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchSkills();
+      fetchDeployStatus();
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchSkills = async () => {
+    try {
+      const res = await fetch("/api/skills");
+      if (res.ok) {
+        const data = await res.json();
+        setPendingSkillsCount(data.pendingCount || 0);
+      }
+    } catch {}
+  };
+
+  const fetchDeployStatus = async () => {
+    try {
+      const res = await fetch("/api/deploy");
+      if (res.ok) {
+        const data = await res.json();
+        setSelfDeployEnabled(Boolean(data.selfDeployEnabled));
+        if (Array.isArray(data.deployHistory)) {
+          setDeployHistory(data.deployHistory);
+        }
+      }
+    } catch {}
+  };
+
+  const handleToggleSelfDeploy = async () => {
+    try {
+      const targetState = !selfDeployEnabled;
+      const res = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState })
+      });
+      if (res.ok) {
+        setSelfDeployEnabled(targetState);
+      }
+    } catch {}
+  };
+
+  const handleDeployRun = async (taskId: string) => {
+    try {
+      const res = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deployBuild",
+          taskId,
+          threadId: selectedThreadId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (activeTask && activeTask.taskId === taskId) {
+          setActiveTask({
+            ...activeTask,
+            deploymentUrl: data.deploymentUrl,
+            deploymentNamespace: data.deploymentNamespace
+          });
+        }
+        await fetchThreads(false);
+      }
+    } catch (err) {
+      console.error("Failed to deploy run:", err);
+    }
+  };
 
   // Load threads from server on initial load (Durable Threads Item 1)
   const fetchThreads = async (selectLatest: boolean = true) => {
@@ -459,7 +532,7 @@ export default function Home() {
         activeView={activeNavView}
         onNavigate={handleNavigate}
         onNewSession={handleNewThread}
-        pendingSkillsCount={0}
+        pendingSkillsCount={pendingSkillsCount}
       />
 
       {/* Modal Bottom Sheet for Model & Thinking Effort */}
@@ -484,6 +557,9 @@ export default function Home() {
           selectedModel={selectedModel}
           reasoningEffort={reasoningEffort}
           onOpenModelSheet={() => setIsModelSheetOpen(true)}
+          selfDeployEnabled={selfDeployEnabled}
+          onToggleSelfDeploy={handleToggleSelfDeploy}
+          deployHistory={deployHistory}
         />
       ) : activeNavView === "builds" ? (
         <BuildsView
@@ -495,7 +571,7 @@ export default function Home() {
       ) : activeNavView === "skills" ? (
         <SkillsView
           onOpenDrawer={() => setIsDrawerOpen(true)}
-          pendingCount={0}
+          pendingCount={pendingSkillsCount}
         />
       ) : activeNavView === "morning-report" ? (
         <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
@@ -616,6 +692,7 @@ export default function Home() {
               onLaunchTask={handleLaunchTask}
               onNewThread={handleNewThread}
               onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
+              onDeployRun={handleDeployRun}
               onViewSecurityTelemetry={() => setViewMode("security")}
               placeholder="Message..."
             />

@@ -60,7 +60,7 @@ When a task status transitions to `completed`:
 1. **Hardcoded Pattern Matching**: Extraction relies on simple static heuristics (`if` checks against title/diff keywords) rather than learning from observed task execution data or semantic LLM synthesis.
 2. **Placeholder Confidence Scores**: Confidence scores are static hardcoded constants (`0.95`, `0.90`, `0.92`) rather than dynamically computed from critic verdicts, test exit codes, or iteration counts.
 3. **Unvalidated Against Real Ledger Tasks**: The prototype has only been verified against synthetic unit test fixtures; it has never been validated against real completed tasks in `runs.db`.
-4. **Not Wired into Planner**: Pattern retrieval exists in isolation; automated injection of retrieved skills into the LangGraph planner's live decomposition prompt is future work.
+4. **Not Wired into Planner (Wired in Sprint 9)**: Pattern retrieval was originally tested in isolation; as of Sprint 9, automated extraction on completed task checkpointing in `supervisor.ts` and automated injection of retrieved skills into `generatePlanSpec` prompt in `planner.ts` are fully wired into production.
 5. **Canned Template Literals**: The Kubernetes (`k8s`) and testing (`testing`) pattern templates are hardcoded string literals rather than synthesized from actual worker diffs.
 
 ---

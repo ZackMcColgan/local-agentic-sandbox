@@ -102,6 +102,7 @@ interface ChatStreamProps {
   onNewThread?: () => void;
   onDeleteThread?: () => void;
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
+  onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenDrawer?: () => void;
   placeholder?: string;
 }
@@ -428,6 +429,7 @@ export function ChatStream({
   onNewThread,
   onDeleteThread,
   onSendMessage,
+  onDeployRun,
   onOpenDrawer,
   placeholder
 }: ChatStreamProps) {
@@ -1480,6 +1482,7 @@ export function ChatStream({
               onPauseRun={() => handleRunControlAction("pause")}
               onResumeRun={() => handleRunControlAction("resume")}
               onRestartRun={() => handleRunControlAction("restart")}
+              onDeployRun={onDeployRun}
               isStopping={isStoppingTask}
             />
           </div>

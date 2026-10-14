@@ -599,3 +599,12 @@ export function getSharedRunLedger(): RunLedger {
   }
   return sharedLedger;
 }
+
+export function closeSharedRunLedger(): void {
+  if (sharedLedger) {
+    sharedLedger.close();
+    sharedLedger = null;
+    startupScanCompleted = false;
+  }
+}
+
