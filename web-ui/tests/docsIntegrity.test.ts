@@ -13,6 +13,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     "docs/FIRST_OVERNIGHT_TASK.md",
     "docs/KUBERNETES_DEPLOYMENT.md",
     "docs/FLYWHEEL_SPIKE.md",
+    "docs/AI_GOVERNANCE.md",
     "deploy/modelfiles/README.md"
   ];
 
@@ -107,5 +108,58 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
         `Proof file must exist on disk: ${proof}`
       );
     }
+  });
+
+  it("docs/AI_GOVERNANCE.md exists, aligns with NIST AI RMF & OWASP Agentic Top 10, links to enforcement files, and is linked in README", () => {
+    const govPath = path.join(repoRoot, "docs/AI_GOVERNANCE.md");
+    assert.ok(fs.existsSync(govPath), "docs/AI_GOVERNANCE.md must exist on disk");
+
+    const govContent = fs.readFileSync(govPath, "utf8");
+    assert.ok(govContent.length > 500, "docs/AI_GOVERNANCE.md must be non-empty and substantive");
+
+    // Assert NIST AI RMF core functions
+    assert.ok(govContent.includes("NIST AI RMF"), "Must reference NIST AI RMF");
+    assert.ok(govContent.includes("GOVERN"), "Must reference NIST GOVERN function");
+    assert.ok(govContent.includes("MAP"), "Must reference NIST MAP function");
+    assert.ok(govContent.includes("MEASURE"), "Must reference NIST MEASURE function");
+    assert.ok(govContent.includes("MANAGE"), "Must reference NIST MANAGE function");
+
+    // Assert OWASP Top 10 for Agentic Applications
+    assert.ok(govContent.includes("OWASP"), "Must reference OWASP framework");
+    assert.ok(govContent.includes("ASI01"), "Must reference OWASP ASI01 (Agent Goal Hijack)");
+    assert.ok(govContent.includes("ASI02"), "Must reference OWASP ASI02 (Tool Misuse & Exploitation)");
+    assert.ok(govContent.includes("ASI03"), "Must reference OWASP ASI03 (Identity & Privilege Abuse)");
+
+    // Assert relative links to enforcement source files
+    const requiredEnforcementFiles = [
+      "deploy/k8s/mcp-runner.yaml",
+      "deploy/k8s/network-policies.yaml",
+      "web-ui/lib/subagents/workerPool.ts",
+      "web-ui/lib/subagents/supervisor.ts",
+      "web-ui/lib/subagents/skillGate.ts",
+      "web-ui/lib/ledger/runLedger.ts",
+      "web-ui/lib/git/workerGitOps.ts",
+      "web-ui/lib/deploy/selfDeploy.ts",
+      "web-ui/lib/memory/profile.ts",
+      "mcp-server/src/tools/attestation.ts"
+    ];
+
+    for (const relFile of requiredEnforcementFiles) {
+      assert.ok(
+        govContent.includes(relFile),
+        `docs/AI_GOVERNANCE.md must contain reference/link to enforcement file: ${relFile}`
+      );
+      assert.ok(
+        fs.existsSync(path.join(repoRoot, relFile)),
+        `Enforcement file must exist on disk: ${relFile}`
+      );
+    }
+
+    // Assert README.md links to docs/AI_GOVERNANCE.md
+    const readmeContent = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    assert.ok(
+      readmeContent.includes("docs/AI_GOVERNANCE.md") || readmeContent.includes("./docs/AI_GOVERNANCE.md"),
+      "README.md must link to ./docs/AI_GOVERNANCE.md"
+    );
   });
 });
