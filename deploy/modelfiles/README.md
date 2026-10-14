@@ -5,7 +5,7 @@ This directory contains tailored Ollama `Modelfile` definitions for the speciali
 ## Modelfiles
 
 ### 1. `Modelfile.builder`
-- **Base Model**: `gemma4:e4b`
+- **Base Model**: `swift-15-27b-mtp`
 - **Role**: Sandboxed Builder worker.
 - **Tuning**: Low temperature (`0.2`), high context (`8192`), strict code-emission prompt without conversational preambles.
 - **Build Command**:
@@ -14,7 +14,7 @@ This directory contains tailored Ollama `Modelfile` definitions for the speciali
   ```
 
 ### 2. `Modelfile.critic`
-- **Base Model**: `qwen3.8:27b-q3_k_m`
+- **Base Model**: `swift-15-27b-mtp`
 - **Role**: Adversarial grading and quality critic.
 - **Tuning**: Deterministic temperature (`0.1`), structured JSON verdict output (`approved`, `score`, `feedback`), fail-closed abstention rules.
 - **Build Command**:

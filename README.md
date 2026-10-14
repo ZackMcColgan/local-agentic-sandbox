@@ -11,11 +11,30 @@ Overnight autonomous AI coding system for local hardware. Hand it an engineering
 - **Overnight Autonomy**: Dispatches tasks to a multi-subagent supervisor loop that works through milestones independently.
 - **Verifiable Git Trail**: Every completed milestone produces real git commits with scoped diffs, explicit target files, and commit hashes.
 - **Fail-Closed Resilience**: Strict contract assertions, automated test gates, and durable checkpointing ensure flawed code is rejected rather than committed.
-- **Zero Cloud Dependencies**: Powered locally by `swift-27b-mtp` via Ollama with active VRAM lease management (`keep_alive: "24h"`).
+- **Zero Cloud Dependencies**: Powered locally by `swift-15-27b-mtp` (Swift 1.5 Qwen3.8-27B Q3_K_M with Multi-Token Prediction `draft_num_predict 3` on AMD Radeon RX 9070 XT 16GB VRAM) via Ollama with active VRAM lease management (`keep_alive: "24h"`).
+
+---
+
+## Architecture Topology
+
+![Architecture Diagram](./docs/architecture.drawio.svg)
+
+### Key Engineering Proofs (Code Map)
+
+| System Subsystem | Implementation Proof | Key Capabilities |
+| :--- | :--- | :--- |
+| **Fail-Closed Supervisor** | [`web-ui/lib/subagents/supervisor.ts`](./web-ui/lib/subagents/supervisor.ts) | LangGraph checkpoint engine, crash recovery, crash-to-disk sync, and multi-subagent orchestration |
+| **Pre-Validation & Gates** | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts) | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback |
+| **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts) | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser |
+| **Durable Run Ledger** | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts) | SQLite-backed task state, pause/resume lifecycle, and restart lineage |
+| **Safe Git Operations** | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts) | Argv-safe git commands, branch isolation, and commit validation immune to shell injection |
+| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, image push, Kubernetes rollout wait, and rollback on failure |
+| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary, path traversal guards, and ReDoS-safe workspace inspection |
 
 ---
 
 ## The Autonomy Loop
+
 
 The core architecture follows an iterative, fail-closed supervisor pipeline:
 
@@ -66,7 +85,7 @@ The core architecture follows an iterative, fail-closed supervisor pipeline:
 | **`mcp-runner`** | `local-agentic-sandbox` | `read_only: true`, `cap_drop: ALL`, UID `10001` | Deny-All Egress (Air-Gapped) | Sandboxed filesystem operations, command execution, and test runs in `/workspace`. |
 | **`browser-mcp`** | `local-agentic-sandbox` | Read-only rootfs, unprivileged UID `10002` | Egress-Mesh Only | Isolated web scraper for documentation retrieval and DuckDuckGo searches (`search_web`). Blocks RFC 1918 private subnets. |
 | **`web-ui`** | `local-agentic-sandbox` | Non-root, Next.js 15 | Cluster Internal | Interactive portal, chat streaming, thread management, and LiveRunBlock supervisor dashboard. |
-| **`ollama`** | Host Passthrough | Native GPU / ROCm | Host Only (Port 11434) | GPU inference engine hosting `swift-27b-mtp`. |
+| **`ollama`** | Host Passthrough | Native GPU / ROCm | Host Only (Port 11434) | GPU inference engine hosting `swift-15-27b-mtp`. |
 
 > **LAN Appliance Security Notice**: API routes have no auth — this is a LAN appliance design decision, not an oversight. The sandbox is built as a single-tenant appliance within an isolated local network, deliberately eliminating authentication overhead. Do not expose these ports directly to the public internet without a secure reverse proxy.
 

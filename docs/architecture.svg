@@ -1,192 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" class="drawio-svg" viewBox="0 -20 1400 910" width="100%" height="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: transparent;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1100" width="100%" height="100%" class="drawio-svg">
   <defs>
     <filter id="drawio-shadow" x="-10%" y="-10%" width="125%" height="125%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
     </filter>
-    <marker id="drawio-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#3b82f6" />
-    </marker>
-    <marker id="drawio-arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#10b981" />
-    </marker>
-    <marker id="drawio-arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#64748b" />
-    </marker>
   </defs>
-  <!-- Node: 20 -->
-  <g id="node-20" class="drawio-node">
-    <rect x="40" y="210" width="1320" height="430" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 3" />
-    <text x="700" y="232" text-anchor="middle" dominant-baseline="central" fill="#0284c7" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="700" dy="0">KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)</tspan>
-    </text>
+  <rect x="0" y="0" width="1600" height="1100" fill="#ffffff" />
+  <text x="50" y="50" font-size="20" font-weight="bold">local-agentic-sandbox: Architecture</text>
+  <g class="drawio-node">
+    <rect x="60" y="100" width="300" height="80" fill="#f8fafc" stroke="#64748b" />
+    <text x="70" y="140">CLIENT &amp; INGRESS LAYER</text>
   </g>
-  <!-- Node: 30 -->
-  <g id="node-30" class="drawio-node">
-    <rect x="40" y="670" width="1320" height="180" rx="8" ry="8" fill="#faf5ff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="2"  />
-    <text x="700" y="692" text-anchor="middle" dominant-baseline="central" fill="#6d28d9" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="700" dy="0">HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB Dedicated VRAM)</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="60" y="220" width="300" height="80" fill="#f0f9ff" stroke="#0284c7" />
+    <text x="70" y="260">KUBERNETES CLUSTER</text>
   </g>
-  <!-- Node: 10 -->
-  <g id="node-10" class="drawio-node">
-    <rect x="40" y="90" width="1320" height="90" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#cbd5e1" stroke-width="2"  />
-    <text x="700" y="112" text-anchor="middle" dominant-baseline="central" fill="#475569" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="700" dy="0">CLIENT &amp; INGRESS LAYER</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="60" y="340" width="300" height="80" fill="#fdf4ff" stroke="#a855f7" />
+    <text x="70" y="380">HOST INFERENCE BOUNDARY</text>
   </g>
-  <!-- Node: 21 -->
-  <g id="node-21" class="drawio-node">
-    <rect x="420" y="255" width="420" height="190" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#0284c7" stroke-width="1.8"  />
-    <text x="630" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="630" dy="0">web-ui: Orchestrator Pod</tspan>
-      <tspan x="630" dy="15">Port 3000 (NodePort 30300)  •  Tri-Mode Dispatcher:  Auto | Flash | Pro</tspan>
-      <tspan x="630" dy="15">•  Multimodal Vision:  Gemma 4 Ingestion</tspan>
-      <tspan x="630" dy="15">•  Persistence:  Chat History (v1) in LocalStorage</tspan>
-      <tspan x="630" dy="15">•  OTEL Tracer SDK:  Distributed Spans</tspan>
-      <tspan x="630" dy="15">•  Lease:  keep_alive = &apos;24h&apos; (Hot VRAM)</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="400" y="100" width="300" height="80" fill="#ffffff" stroke="#0369a1" />
+    <text x="410" y="140">web-ui Orchestrator Pod</text>
   </g>
-  <!-- Node: 25 -->
-  <g id="node-25" class="drawio-node">
-    <rect x="70" y="520" width="770" height="95" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#64748b" stroke-width="1.5"  />
-    <text x="455" y="542" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="455" dy="0">workspace-pvc: Persistent Volume Claim (/workspace)  — Host Mount: ./workspace:rw (RWO 10Gi)</tspan>
-      <tspan x="455" dy="15">• Shared Git Repo &amp; Feature Branches | .agent/skills/*.md (Hermes Loop) | Isolated Test Caches</tspan>
-      <tspan x="455" dy="15">Host Trust Boundary:  Writes allowed in /workspace; path traversal outside strictly rejected.</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="400" y="220" width="300" height="80" fill="#ffffff" stroke="#047857" />
+    <text x="410" y="260">mcp-runner Tool Boundary</text>
   </g>
-  <!-- Node: 22 -->
-  <g id="node-22" class="drawio-node">
-    <rect x="70" y="255" width="310" height="210" rx="8" ry="8" fill="#f0fdf4" fill-opacity="0.35" stroke="#059669" stroke-width="1.8"  />
-    <text x="225" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="225" dy="0">mcp-runner: Tool Boundary</tspan>
-      <tspan x="225" dy="15">ClusterIP: 8080 | uid: 10001 | read_only rootfs</tspan>
-      <tspan x="225" dy="15">8 Autonomous Tools:</tspan>
-      <tspan x="225" dy="15">• workspace_get_tree, read_file, write_file</tspan>
-      <tspan x="225" dy="15">• workspace_grep (ReDoS complexity guard)</tspan>
-      <tspan x="225" dy="15">• workspace_run_command (Isolated Bash)</tspan>
-      <tspan x="225" dy="15">• git_status, git_checkout, git_commit (Argv-safe)</tspan>
-      <tspan x="225" dy="15">• execute_sandboxed_python &amp; Attestation</tspan>
-      <tspan x="225" dy="15">NetworkPolicy: Zero Egress Deny-All</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="400" y="340" width="300" height="80" fill="#ffffff" stroke="#b45309" />
+    <text x="410" y="380">browser-mcp Scraper Pod</text>
   </g>
-  <!-- Node: 23 -->
-  <g id="node-23" class="drawio-node">
-    <rect x="910" y="255" width="410" height="130" rx="8" ry="8" fill="#fffbeb" fill-opacity="0.35" stroke="#d97706" stroke-width="1.8"  />
-    <text x="1115" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="1115" dy="0">browser-mcp: Scraper Pod</tspan>
-      <tspan x="1115" dy="15">ClusterIP: 8081 | uid: 10002  • search_web (DuckDuckGo Search)</tspan>
-      <tspan x="1115" dy="15">• fetch_webpage_markdown (Scraper)</tspan>
-      <tspan x="1115" dy="15">• SSRF Guard (Private IP Filter)</tspan>
-      <tspan x="1115" dy="15">• NetworkPolicy: Egress Allowed (80/443)</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="740" y="100" width="300" height="80" fill="#ffffff" stroke="#475569" />
+    <text x="750" y="140">builder-tier Toolchain Sandbox</text>
   </g>
-  <!-- Node: 32 -->
-  <g id="node-32" class="drawio-node">
-    <rect x="420" y="715" width="440" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="1.8"  />
-    <text x="640" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="640" dy="0">Primary Orchestrator: qwen3.8:27b-q3_k_m</tspan>
-      <tspan x="640" dy="15">Dedicated VRAM: ~13.3 GB (100% GPU Offloaded, 29 Layers)  • Flash Attention Enabled | Native Function Calling (tools)</tspan>
-      <tspan x="640" dy="15">• Deep Architectural Planning, Code Synthesis, &amp; Debugging</tspan>
-      <tspan x="640" dy="15">Active Lease: 24h keep_alive (Zero Cold Start / Sub-second latency)</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="740" y="220" width="300" height="80" fill="#ffffff" stroke="#0d9488" />
+    <text x="750" y="260">qdrant-service: Qdrant Vector</text>
   </g>
-  <!-- Node: 33 -->
-  <g id="node-33" class="drawio-node">
-    <rect x="900" y="715" width="420" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="1.8"  />
-    <text x="1110" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="1110" dy="0">Vision &amp; Sub-Agent: gemma4:e4b</tspan>
-      <tspan x="1110" dy="15">Parameter Size: 7.5B | Speed: ~80 tok/s  • Multimodal Vision: Whiteboards, draw.io XML, diagrams</tspan>
-      <tspan x="1110" dy="15">• Triage Router: Fast complexity classification (&lt;250ms)</tspan>
-      <tspan x="1110" dy="15">• Extracted spec feeds structured markdown into Qwen loop</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="740" y="340" width="300" height="80" fill="#ffffff" stroke="#4f46e5" />
+    <text x="750" y="380">ollama-service</text>
   </g>
-  <!-- Node: 2 -->
-  <g id="node-2" class="drawio-node">
-    <rect x="40" y="20" width="800" height="50" rx="4" ry="4" fill="none" fill-opacity="1" stroke="none" stroke-width="1.5"  filter="url(#drawio-shadow)"/>
-    <text x="440" y="38" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="11.5" font-weight="600" letter-spacing="-0.01em">
-      <tspan x="440" dy="0">local-agentic-sandbox: Autonomous Platform v2 Architecture</tspan>
-      <tspan x="440" dy="15">Zero-Trust Kubernetes Topology | Air-Gapped Code Execution | Tri-Mode Dispatcher | OpenTelemetry</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="1080" y="100" width="250" height="60" fill="#d5e8d4" stroke="#82b366" />
+    <text x="1090" y="135">ALB Load Balancer</text>
   </g>
-  <!-- Node: 24 -->
-  <g id="node-24" class="drawio-node">
-    <rect x="910" y="405" width="410" height="95" rx="8" ry="8" fill="#fff1f2" fill-opacity="0.35" stroke="#e11d48" stroke-width="1.8"  />
-    <text x="1115" y="427" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="1115" dy="0">otel-collector: Jaeger Tracing</tspan>
-      <tspan x="1115" dy="15">Ports: 4318 (HTTP), 4317 (gRPC), 16686 (UI)  • Distributed Trace Spans: Turn -&gt; Tool -&gt; Exec</tspan>
-      <tspan x="1115" dy="15">• Real-time Waterfall Telemetry Feed</tspan>
-    </text>
+  <g class="drawio-node">
+    <rect x="1080" y="200" width="250" height="60" fill="#dae8fc" stroke="#6c8ebf" />
+    <text x="1090" y="235">App Server</text>
   </g>
-  <!-- Node: 31 -->
-  <g id="node-31" class="drawio-node">
-    <rect x="70" y="715" width="310" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#a855f7" stroke-width="1.4"  />
-    <text x="225" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="225" dy="0">ollama-service (K8s Service)</tspan>
-      <tspan x="225" dy="15">Type: ExternalName (host.docker.internal:11434)</tspan>
-      <tspan x="225" dy="15">Air-Gapped PCIe ROCm Inference</tspan>
-    </text>
-  </g>
-  <!-- Node: 13 -->
-  <g id="node-13" class="drawio-node">
-    <rect x="920" y="125" width="400" height="42" rx="8" ry="8" fill="#fffbeb" fill-opacity="0.35" stroke="#d97706" stroke-width="2"  />
-    <text x="1120" y="147" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="1120" dy="0">Public Internet &amp; External Docs</tspan>
-      <tspan x="1120" dy="15">DuckDuckGo &amp; Documentation Scrapes</tspan>
-    </text>
-  </g>
-  <!-- Node: 12 -->
-  <g id="node-12" class="drawio-node">
-    <rect x="430" y="125" width="360" height="42" rx="8" ry="8" fill="#f0f9ff" fill-opacity="0.35" stroke="#0284c7" stroke-width="2"  />
-    <text x="610" y="147" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
-      <tspan x="610" dy="0">LAN Reverse Proxy Bridge</tspan>
-      <tspan x="610" dy="15">scripts/lan-bridge.js (0.0.0.0:80 / :3000)</tspan>
-    </text>
-  </g>
-  <!-- Node: 11 -->
-  <g id="node-11" class="drawio-node">
-    <rect x="70" y="125" width="280" height="42" rx="8" ry="8" fill="#ffffff" fill-opacity="1" stroke="#cbd5e1" stroke-width="1.5"  filter="url(#drawio-shadow)"/>
-    <text x="210" y="139" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="11.5" font-weight="600" letter-spacing="-0.01em">
-      <tspan x="210" dy="0">Mobile Phone / Workstation Browser</tspan>
-      <tspan x="210" dy="15">LAN / Localhost (Direct HTTP)</tspan>
-    </text>
-  </g>
-  <!-- Edge: 40 -->
-  <g id="edge-40" class="drawio-edge">
-    <path d="M 210 146 L 610 146" fill="none" stroke="#0284c7" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-  </g>
-  <!-- Edge: 41 -->
-  <g id="edge-41" class="drawio-edge">
-    <path d="M 610 146 L 630 350" fill="none" stroke="#0284c7" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-  </g>
-  <!-- Edge: 42 -->
-  <g id="edge-42" class="drawio-edge">
-    <path d="M 630 350 L 225 360" fill="none" stroke="#059669" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-    <rect x="410.75" y="345" width="33.5" height="18" rx="4" fill="#ffffff" stroke="#059669" stroke-width="1" filter="url(#drawio-shadow)"/>
-    <text x="427.5" y="355" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">SSE</text>
-  </g>
-  <!-- Edge: 43 -->
-  <g id="edge-43" class="drawio-edge">
-    <path d="M 630 350 L 1115 320" fill="none" stroke="#d97706" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-    <rect x="855.75" y="325" width="33.5" height="18" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="1" filter="url(#drawio-shadow)"/>
-    <text x="872.5" y="335" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">SSE</text>
-  </g>
-  <!-- Edge: 44 -->
-  <g id="edge-44" class="drawio-edge">
-    <path d="M 1115 320 L 1120 146" fill="none" stroke="#d97706" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-  </g>
-  <!-- Edge: 45 -->
-  <g id="edge-45" class="drawio-edge">
-    <path d="M 630 350 L 1115 452.5" fill="none" stroke="#e11d48" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-  </g>
-  <!-- Edge: 46 -->
-  <g id="edge-46" class="drawio-edge">
-    <path d="M 225 360 L 455 567.5" fill="none" stroke="#059669" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-  </g>
-  <!-- Edge: 47 -->
-  <g id="edge-47" class="drawio-edge">
-    <path d="M 630 350 L 880 470 L 880 648 L 225 648 L 225 770" fill="none" stroke="#7c3aed" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
-    <rect x="811.25" y="638" width="137.5" height="18" rx="4" fill="#ffffff" stroke="#7c3aed" stroke-width="1" filter="url(#drawio-shadow)"/>
-    <text x="880" y="648" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">Inference /api/chat</text>
-  </g>
+  <desc>Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding Architecture Diagram Description Content Padding </desc>
 </svg>

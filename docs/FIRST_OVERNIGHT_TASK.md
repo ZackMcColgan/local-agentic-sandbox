@@ -205,4 +205,4 @@ Autonomous development is only useful if its claims are verifiable. `local-agent
    - The Critic subagent uses a **Ground-Truth Override** gate: if the test suite exits with non-zero exit codes, the milestone is immediately rejected as `needs_fix`, regardless of model narration.
 
 3. **Model Lock Integrity**:
-   - All components (Planner, Builder, Critic, Supervisor) run on `swift-27b-mtp`. No legacy or unaligned models are used.
+   - All components (Planner, Builder, Critic, Supervisor) run on `swift-15-27b-mtp`. No legacy or unaligned models are used.

@@ -343,6 +343,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/tasksApi.test.ts",
       "tests/supervisor.test.ts"
     ]
+  },
+  // Repository hygiene & documentation integrity (Sprint 4 & 5)
+  {
+    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
+    tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
   }
 ];
 
