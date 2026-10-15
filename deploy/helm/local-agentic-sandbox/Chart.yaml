@@ -2,8 +2,8 @@ apiVersion: v2
 name: local-agentic-sandbox
 description: Enterprise Private Autonomous Multi-Agent Platform on Local Workstation Hardware
 type: application
-version: 2.0.0
-appVersion: "2.0.0"
+version: 1.0.0
+appVersion: "1.0.0"
 keywords:
   - ai-agent
   - mcp

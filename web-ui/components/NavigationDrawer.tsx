@@ -188,7 +188,7 @@ export function NavigationDrawer({
         {/* Footer info */}
         <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 px-3">
           <div className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono">
-            Antigravity Local v2.7
+            Local Agentic Sandbox v1.0.0
           </div>
         </div>
       </div>

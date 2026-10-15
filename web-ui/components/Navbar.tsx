@@ -89,7 +89,7 @@ export function Navbar({
                   agentic-sandbox
                 </span>
                 <span className="text-[9px] font-mono uppercase bg-emerald-100 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-500/20">
-                  v2.0
+                  v1.0.0
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-zinc-400 font-mono">

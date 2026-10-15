@@ -42,13 +42,13 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     }
   });
 
-  it("ARCHITECTURE.md does NOT reference nonexistent paths ANTIGRAVITY_AUTONOMOUS_SPEC.md or modelDispatcher.ts", () => {
+  it("ARCHITECTURE.md does NOT reference nonexistent paths AUTONOMOUS_SPEC.md or modelDispatcher.ts", () => {
     const archPath = path.join(repoRoot, "ARCHITECTURE.md");
     const content = fs.readFileSync(archPath, "utf8");
     assert.equal(
-      content.includes("ANTIGRAVITY_AUTONOMOUS_SPEC.md"),
+      content.includes("AUTONOMOUS_SPEC.md"),
       false,
-      "ARCHITECTURE.md must not reference nonexistent ANTIGRAVITY_AUTONOMOUS_SPEC.md"
+      "ARCHITECTURE.md must not reference nonexistent AUTONOMOUS_SPEC.md"
     );
     assert.equal(
       content.includes("modelDispatcher.ts"),

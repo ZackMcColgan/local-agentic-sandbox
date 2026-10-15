@@ -7,7 +7,7 @@ Docker Compose is **not** used for the live deployment.
 
 | Component | Location | Notes |
 |-----------|----------|-------|
-| web-ui | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v2.7-unified` with `imagePullPolicy: Never` |
+| web-ui | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v1.0.0` with `imagePullPolicy: Never` |
 | browser-mcp | K8s | Web search + page fetch |
 | mcp-runner | K8s | Sandboxed code execution |
 | qdrant | K8s | Semantic memory |
@@ -64,7 +64,7 @@ This builds the Docker image locally and rollout-restarts the K8s deployment.
 
 Manual equivalent (no `make` on Windows):
 ```powershell
-docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile web-ui
+docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile web-ui
 kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
 kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
 ```
@@ -84,7 +84,7 @@ Scheduled Task that runs the port-forward command at logon.
 
 ```bash
 # Build image first (imagePullPolicy: Never requires it locally)
-docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile web-ui
+docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile web-ui
 
 # Deploy everything
 kubectl apply -k deploy/k8s

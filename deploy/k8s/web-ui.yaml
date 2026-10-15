@@ -13,13 +13,13 @@ spec:
     matchLabels:
       app: web-ui
       app.kubernetes.io/part-of: local-agentic-sandbox
-      app.kubernetes.io/version: "2.0.0"
+      app.kubernetes.io/version: "1.0.0"
   template:
     metadata:
       labels:
         app: web-ui
         app.kubernetes.io/part-of: local-agentic-sandbox
-        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/version: "1.0.0"
         tier: frontend
     spec:
       securityContext:
@@ -30,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-ui
-          image: local-agentic-sandbox-web-ui:v2.7-unified
+          image: local-agentic-sandbox-web-ui:v1.0.0
           imagePullPolicy: Never
           ports:
             - containerPort: 3000

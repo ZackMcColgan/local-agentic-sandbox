@@ -28,7 +28,7 @@ async function main() {
   }
 
   console.log("===================================================================");
-  console.log("  ANTIGRAVITY TEST GATE (Tier 1: Change-Aware Verification)");
+  console.log("  LOCAL AGENTIC SANDBOX TEST GATE (Tier 1: Change-Aware Verification)");
   console.log("===================================================================");
 
   const outcome = runTestGate(options);

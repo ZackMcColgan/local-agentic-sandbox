@@ -165,7 +165,7 @@ export class TelemetryTracer {
             },
             scopeSpans: [
               {
-                scope: { name: "antigravity-router", version: "2.0.0" },
+                scope: { name: "sandbox-router", version: "1.0.0" },
                 spans: [
                   {
                     traceId: span.traceId,

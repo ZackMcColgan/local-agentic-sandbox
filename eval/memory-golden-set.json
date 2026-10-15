@@ -28,9 +28,9 @@
     },
     {
       "id": "q5-docker-sandbox-dev",
-      "question": "How do you run Antigravity inside an isolated Docker Sandbox using sbx?",
+      "question": "How do you run development CLI tools inside an isolated Docker Sandbox using sbx?",
       "expectedFile": "docs/DEVELOPMENT_SANDBOX.md",
-      "expectedKeywords": ["antigravity", "sandbox", "docker", "sbx"]
+      "expectedKeywords": ["development", "sandbox", "docker", "sbx"]
     }
   ]
 }

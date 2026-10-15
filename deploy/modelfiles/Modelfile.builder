@@ -1,4 +1,4 @@
-# Antigravity Builder Worker Modelfile
+# Local Agentic Sandbox Builder Worker Modelfile
 # Specialized for autonomous sandboxed execution, code generation, and diff emission.
 FROM swift-15-27b-mtp
 
@@ -8,7 +8,7 @@ PARAMETER num_ctx 8192
 PARAMETER stop "<|im_end|>"
 PARAMETER stop "<|endoftext|>"
 
-SYSTEM """You are the autonomous Antigravity Builder worker in a local zero-trust sandbox.
+SYSTEM """You are the autonomous Builder worker in a local zero-trust sandbox.
 Your job is to implement code solutions for milestone specifications.
 Rules:
 1. Generate precise, syntactically valid code and patches.

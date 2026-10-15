@@ -96,7 +96,7 @@ Use \`run_command\` for shell actions.
     });
 
     it("renders code blocks with distinct background and copy button", () => {
-      const codeMarkdown = "```typescript\nconst agent = 'antigravity';\n```";
+      const codeMarkdown = "```typescript\nconst agent = 'sandbox';\n```";
       const messages = [
         {
           id: "m-code",
@@ -115,7 +115,7 @@ Use \`run_command\` for shell actions.
       );
 
       assert.ok(html.includes("<pre"), "Must render <pre> tag for code block");
-      assert.ok(html.includes("const agent = &#x27;antigravity&#x27;;") || html.includes("const agent = 'antigravity';"), "Must render code snippet content");
+      assert.ok(html.includes("const agent = &#x27;sandbox&#x27;;") || html.includes("const agent = 'sandbox';"), "Must render code snippet content");
       assert.ok(html.includes("Copy"), "Must render copy button for code block");
       assert.ok(html.includes("bg-[#f4eff4]") || html.includes("bg-surface-variant"), "Code block must have distinct surface-variant background");
     });

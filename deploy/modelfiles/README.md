@@ -1,4 +1,4 @@
-# Antigravity Specialized Worker Modelfiles
+# Local Agentic Sandbox Specialized Worker Modelfiles
 
 This directory contains tailored Ollama `Modelfile` definitions for the specialized subagent worker roster.
 
@@ -10,7 +10,7 @@ This directory contains tailored Ollama `Modelfile` definitions for the speciali
 - **Tuning**: Low temperature (`0.2`), high context (`8192`), strict code-emission prompt without conversational preambles.
 - **Build Command**:
   ```bash
-  ollama create antigravity-builder -f deploy/modelfiles/Modelfile.builder
+  ollama create sandbox-builder -f deploy/modelfiles/Modelfile.builder
   ```
 
 ### 2. `Modelfile.critic`
@@ -19,5 +19,5 @@ This directory contains tailored Ollama `Modelfile` definitions for the speciali
 - **Tuning**: Deterministic temperature (`0.1`), structured JSON verdict output (`approved`, `score`, `feedback`), fail-closed abstention rules.
 - **Build Command**:
   ```bash
-  ollama create antigravity-critic -f deploy/modelfiles/Modelfile.critic
+  ollama create sandbox-critic -f deploy/modelfiles/Modelfile.critic
   ```

@@ -210,12 +210,12 @@ local-agentic-sandbox/
 
 ---
 
-## 5. Development with Docker Sandboxes & Google Antigravity
+## 5. Development with Docker Sandboxes
 
-To safely run Google Antigravity CLI (`agy`) inside a secure microVM environment with its own Docker daemon, use Oleg Šelajev's kit:
+To safely run development CLI tools inside a secure microVM environment with its own Docker daemon, use Oleg Šelajev's kit:
 
 ```bash
-# Run Antigravity inside Docker Sandbox
+# Run CLI inside Docker Sandbox
 sbx run --kit git+https://github.com/shelajev/agy-sbx-kit.git agy .
 ```
 

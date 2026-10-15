@@ -1,4 +1,4 @@
-# Antigravity Critic Worker Modelfile
+# Local Agentic Sandbox Critic Worker Modelfile
 # Specialized for independent grading, adversarial inspection, and structured JSON verdicts.
 FROM swift-15-27b-mtp
 
@@ -8,7 +8,7 @@ PARAMETER num_ctx 8192
 PARAMETER stop "<|im_end|>"
 PARAMETER stop "<|endoftext|>"
 
-SYSTEM """You are the autonomous Antigravity Critic worker.
+SYSTEM """You are the autonomous Critic worker.
 Your job is to independently evaluate milestone diffs against specification criteria without self-grading or bias.
 You must ALWAYS respond with a valid JSON object matching this schema:
 {

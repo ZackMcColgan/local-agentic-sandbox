@@ -113,16 +113,23 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
       criticRounds: 0
     };
 
-    // 1. Critic with unreachable endpoint must ABSTAIN, never fail-open
-    const deadCritic = createCriticWorker({ ollamaUrl: "http://127.0.0.1:54321" });
-    const deadReview = await deadCritic.evaluateMilestoneDiff(milestone, {
-      diff: "+ <svg background=\"#ffffff\"></svg>",
-      filesChanged: ["docs/architecture.svg"]
-    });
+    const savedFast = process.env.FAST_GRAPH_TEST;
+    delete process.env.FAST_GRAPH_TEST;
+    try {
+      // 1. Critic with unreachable endpoint must ABSTAIN, never fail-open
+      const deadCritic = createCriticWorker({ ollamaUrl: "http://127.0.0.1:54321" });
+      const deadReview = await deadCritic.evaluateMilestoneDiff(milestone, {
+        diff: "+ <svg background=\"#ffffff\"></svg>",
+        filesChanged: ["docs/architecture.svg"]
+      });
 
-    assert.equal(deadReview.approved, false, "Critic must NEVER approve when model endpoint is unreachable");
-    assert.equal(deadReview.abstained, true, "Critic review must record abstained: true");
-    assert.ok(deadReview.feedback.some(f => f.includes("abstaining")), "Feedback must explain abstention");
+      assert.equal(deadReview.approved, false, "Critic must NEVER approve when model endpoint is unreachable");
+      assert.equal(deadReview.abstained, true, "Critic review must record abstained: true");
+      assert.ok(deadReview.feedback.some(f => f.includes("abstaining")), "Feedback must explain abstention");
+    } finally {
+      if (savedFast !== undefined) process.env.FAST_GRAPH_TEST = savedFast;
+      else delete process.env.FAST_GRAPH_TEST;
+    }
 
     // 2. Injected generator approves clean conforming diff
     const approvingCritic = createCriticWorker({

@@ -1,6 +1,6 @@
 /**
  * Phase D Behavioral Acceptance Experiments 7–12
- * Antigravity Order: Full Gambit Overnight — Phase D Tier 2 Qdrant semantic memory + skill gate + eval
+ * Local Agentic Sandbox Order: Full Gambit Overnight — Phase D Tier 2 Qdrant semantic memory + skill gate + eval
  */
 import fs from "fs";
 import path from "path";

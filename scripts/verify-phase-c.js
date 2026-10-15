@@ -1,6 +1,6 @@
 /**
  * Phase C Behavioral Acceptance Experiments 1–5
- * Antigravity Order: Full Gambit Overnight — Phase C Tier 1 user_profile.json
+ * Local Agentic Sandbox Order: Full Gambit Overnight — Phase C Tier 1 user_profile.json
  */
 import fs from "fs";
 import path from "path";
