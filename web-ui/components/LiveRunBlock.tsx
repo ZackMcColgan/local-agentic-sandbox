@@ -181,7 +181,15 @@ export function LiveRunBlock({
         {/* Elapsed Timer & Dynamic Activity */}
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400">
           <Clock className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
-          <span>Running for {formatElapsedDuration(elapsedSeconds)}</span>
+          <span>
+            {isCompleted
+              ? `Completed in ${formatElapsedDuration(elapsedSeconds)}`
+              : isPaused
+              ? `Paused at ${formatElapsedDuration(elapsedSeconds)}`
+              : isStopped
+              ? `Stopped after ${formatElapsedDuration(elapsedSeconds)}`
+              : `Running for ${formatElapsedDuration(elapsedSeconds)}`}
+          </span>
         </div>
       </div>
 
@@ -266,7 +274,7 @@ export function LiveRunBlock({
           <ThinkingPanel
             rawThought={cleanedThinking.join("\n")}
             isStreaming={isRunning}
-            defaultExpanded={true}
+            defaultExpanded={isRunning}
           />
         </div>
       )}
@@ -302,7 +310,19 @@ export function LiveRunBlock({
 
       {/* Deliverable Badge & Inline Graphic/Code Preview when Completed */}
       {isCompleted && (() => {
-        const deliverableFile = task.milestones?.flatMap(m => m.plannedFiles || [])[0] || "weather.svg";
+        const journalMatch = task.journal?.find((j) => {
+          const txt = j.message || (j as any).entry;
+          return typeof txt === "string" && txt.toLowerCase().includes("committed");
+        });
+        const journalFile = journalMatch
+          ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
+          : undefined;
+
+        const deliverableFile =
+          task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
+          task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
+          journalFile;
+        if (!deliverableFile) return null;
         const isSvg = deliverableFile.toLowerCase().endsWith(".svg");
         return (
           <div className="space-y-3 pt-1">
