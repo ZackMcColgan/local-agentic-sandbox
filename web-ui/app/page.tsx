@@ -1,12 +1,31 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Navbar } from "@/components/Navbar";
-import { SandboxGauge } from "@/components/SandboxGauge";
 import { ChatStream, ChatMessage } from "@/components/ChatStream";
+import { ThreadsSidebar } from "@/components/ThreadsSidebar";
+import { ModelBottomSheet } from "@/components/ModelBottomSheet";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { TraceWaterfall } from "@/components/TraceWaterfall";
-import { Layers, ShieldCheck, Globe, Cpu, ArrowLeft, RefreshCw } from "lucide-react";
+import { SandboxGauge } from "@/components/SandboxGauge";
+import { MorningReportView } from "@/components/MorningReportView";
+import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
+import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { Thread } from "@/lib/threads/threadStore";
+import {
+  Layers,
+  ShieldCheck,
+  Globe,
+  Cpu,
+  ArrowLeft,
+  Hammer,
+  Shield,
+  Activity,
+  Menu
+} from "lucide-react";
+import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
+import { SettingsView } from "@/components/SettingsView";
+import { BuildsView } from "@/components/BuildsView";
+import { SkillsView } from "@/components/SkillsView";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
   getInitialWelcomeMessage,
@@ -15,6 +34,13 @@ import {
 } from "@/lib/chatHistory";
 
 export default function Home() {
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<TaskManifest | null>(null);
+  const [morningReport, setMorningReport] = useState<MorningReport | null>(null);
+  const [overnightReport, setOvernightReport] = useState<OvernightMorningReport | null>(null);
+
+  // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
   const [status, setStatus] = useState({
     ollama: "INITIALIZING",
@@ -22,96 +48,59 @@ export default function Home() {
     airGapped: true
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
-  const [activeBranch, setActiveBranch] = useState<string>("agent/v2-autonomous-platform");
-  const [selectedModel, setSelectedModel] = useState<string>("gemma4:e4b");
-  const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("low");
+  const [selectedModel, setSelectedModel] = useState<string>("swift-15-27b-mtp");
+  const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("medium");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
   const [securityPosture, setSecurityPosture] = useState<any>(undefined);
-  const [activeTab, setActiveTab] = useState<"chat" | "security">("chat");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
+  const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
+  const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
+  const [deployHistory, setDeployHistory] = useState<any[]>([]);
+
+  // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage(selectedModel)
+    getInitialWelcomeMessage("swift-15-27b-mtp")
   ]);
 
-  const applyTheme = (newTheme: "dark" | "light") => {
-    try {
-      localStorage.setItem("app-theme", newTheme);
-      const isDark = newTheme === "dark";
-      if (isDark) {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-        document.documentElement.setAttribute("data-theme", "dark");
-        document.documentElement.style.colorScheme = "dark";
-        document.body.classList.add("dark");
-        document.body.classList.remove("light");
-        document.body.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-        document.documentElement.classList.add("light");
-        document.documentElement.setAttribute("data-theme", "light");
-        document.documentElement.style.colorScheme = "light";
-        document.body.classList.remove("dark");
-        document.body.classList.add("light");
-        document.body.setAttribute("data-theme", "light");
-      }
-    } catch {}
-  };
-
-  // Load theme & agent mode preferences on mount
+  // Synchronous-like hydration for theme support
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const queryTheme = urlParams.get("theme") as "dark" | "light" | null;
-      const savedTheme = queryTheme || (localStorage.getItem("app-theme") as "dark" | "light" | null) || "dark";
-      setTheme(savedTheme);
-      applyTheme(savedTheme);
+      const queryTheme = urlParams.get("theme");
+      const saved = queryTheme || localStorage.getItem("app-theme");
+      const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-      const queryTab = urlParams.get("tab") as "chat" | "security" | null;
-      if (queryTab) {
-        setActiveTab(queryTab);
+      const applyTheme = (dark: boolean) => {
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.classList.toggle("light", !dark);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        document.body.classList.toggle("dark", dark);
+        document.body.classList.toggle("light", !dark);
+        document.body.setAttribute("data-theme", dark ? "dark" : "light");
+      };
+
+      applyTheme(isDark);
+
+      if (window.matchMedia) {
+        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        const handleMediaChange = (e: MediaQueryListEvent) => {
+          if (!localStorage.getItem("app-theme")) {
+            applyTheme(e.matches);
+          }
+        };
+        mediaQuery.addEventListener("change", handleMediaChange);
+        return () => mediaQuery.removeEventListener("change", handleMediaChange);
       }
-
-      const savedMode = (localStorage.getItem("local_agent_mode") as AgentMode) || DEFAULT_AGENT_MODE;
-      setAgentMode(savedMode);
-      if (savedMode === "flash") {
-        setSelectedModel("gemma4:e4b");
-      } else if (savedMode === "pro") {
-        setSelectedModel("qwen3.8:27b-q3_k_m");
-      }
-
-      // Rehydrate chat history from localStorage
-      const savedHistory = loadChatHistory(savedMode === "pro" ? "qwen3.8:27b-q3_k_m" : "gemma4:e4b");
-      setMessages(savedHistory);
-    } catch {
-      applyTheme("dark");
-    }
+    } catch {}
   }, []);
 
-  // Persist chat history to localStorage on change
-  useEffect(() => {
-    saveChatHistory(messages);
-  }, [messages]);
 
-  const handleAgentModeChange = (newMode: AgentMode) => {
-    setAgentMode(newMode);
-    try {
-      localStorage.setItem("local_agent_mode", newMode);
-    } catch {}
-    if (newMode === "flash") {
-      setSelectedModel("gemma4:e4b");
-    } else if (newMode === "pro") {
-      setSelectedModel("qwen3.8:27b-q3_k_m");
-    } else {
-      setSelectedModel("gemma4:e4b");
-    }
-  };
-
-  const handleThemeChange = (newTheme: "dark" | "light") => {
-    setTheme(newTheme);
-    applyTheme(newTheme);
-  };
-
+  // Fetch sandbox & service status
   const fetchStatus = async () => {
     try {
       const res = await fetch("/api/sandbox-status");
@@ -141,163 +130,575 @@ export default function Home() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
+    fetchSkills();
+    fetchDeployStatus();
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchSkills();
+      fetchDeployStatus();
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchSkills = async () => {
+    try {
+      const res = await fetch("/api/skills");
+      if (res.ok) {
+        const data = await res.json();
+        setPendingSkillsCount(data.pendingCount || 0);
+      }
+    } catch {}
+  };
+
+  const fetchDeployStatus = async () => {
+    try {
+      const res = await fetch("/api/deploy");
+      if (res.ok) {
+        const data = await res.json();
+        setSelfDeployEnabled(Boolean(data.selfDeployEnabled));
+        if (Array.isArray(data.deployHistory)) {
+          setDeployHistory(data.deployHistory);
+        }
+      }
+    } catch {}
+  };
+
+  const handleToggleSelfDeploy = async () => {
+    try {
+      const targetState = !selfDeployEnabled;
+      const res = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState })
+      });
+      if (res.ok) {
+        setSelfDeployEnabled(targetState);
+      }
+    } catch {}
+  };
+
+  const handleDeployRun = async (taskId: string) => {
+    try {
+      const res = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deployBuild",
+          taskId,
+          threadId: selectedThreadId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (activeTask && activeTask.taskId === taskId) {
+          setActiveTask({
+            ...activeTask,
+            deploymentUrl: data.deploymentUrl,
+            deploymentNamespace: data.deploymentNamespace
+          });
+        }
+        await fetchThreads(false);
+      }
+    } catch (err) {
+      console.error("Failed to deploy run:", err);
+    }
+  };
+
+  // Load threads from server on initial load (Durable Threads Item 1)
+  const fetchThreads = async (selectLatest: boolean = true) => {
+    try {
+      const res = await fetch("/api/threads");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.threads)) {
+          setThreads(data.threads);
+          if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
+            const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+            const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+            const explicitThread = urlParams?.get("thread");
+            const explicitView = urlParams?.get("view") as NavView;
+            const drawerQuery = urlParams?.get("drawer");
+
+            if (drawerQuery === "open" || drawerQuery === "true") {
+              setIsDrawerOpen(true);
+            }
+
+            if (explicitView) {
+              setActiveNavView(explicitView);
+            }
+
+            if (explicitThread) {
+              const matched = data.threads.find((t: Thread) => t.id === explicitThread);
+              if (matched) setSelectedThreadId(matched.id);
+            } else if (!isMobile) {
+              const active = data.threads.find((t: Thread) => t.status === "active") || data.threads[0];
+              setSelectedThreadId(active.id);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch threads:", err);
+    }
+  };
+
+  const fetchMorningReport = async () => {
+    try {
+      const res = await fetch("/api/morning-report");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.overnightReport) setOvernightReport(data.overnightReport);
+        if (data.morningReport) setMorningReport(data.morningReport);
+      }
+    } catch (err) {
+      console.warn("Could not fetch overnight morning report:", err);
+    }
+  };
+
+  // Rehydrate active task from API on mount
+  const fetchActiveTask = async () => {
+    try {
+      const res = await fetch("/api/tasks?active=true");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.activeTask) {
+          setActiveTask(data.activeTask);
+          if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
+            const detailRes = await fetch(`/api/tasks?taskId=${data.activeTask.taskId}`);
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              if (detailData.morningReport) {
+                setMorningReport(detailData.morningReport);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not rehydrate active task on mount:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchThreads(true);
+    fetchActiveTask();
+    fetchMorningReport();
+  }, []);
+
+  useEffect(() => {
+    if (activeNavView === "morning-report") {
+      fetchMorningReport();
+    }
+  }, [activeNavView]);
+
+  // Sync messages and task whenever selectedThreadId changes
+  useEffect(() => {
+    if (!selectedThreadId) return;
+
+    const loadSelectedThread = async () => {
+      try {
+        const res = await fetch(`/api/threads/${selectedThreadId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.thread) {
+            setSelectedModel(data.thread.model || selectedModel);
+            setReasoningEffort(data.thread.reasoningEffort || reasoningEffort);
+            if (Array.isArray(data.thread.messages)) {
+              setMessages(data.thread.messages);
+            }
+          }
+          if (data.task) {
+            setActiveTask(data.task);
+          } else {
+            setActiveTask(null);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load thread detail:", err);
+      }
+    };
+
+    loadSelectedThread();
+  }, [selectedThreadId]);
+
+  // Real-time 2s polling while a task is running (Live run block updates)
+  useEffect(() => {
+    if (!activeTask || activeTask.status !== "active") return;
+
+    const pollTask = async () => {
+      try {
+        const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.task) {
+            setActiveTask(data.task);
+            if (data.task.status !== "active") {
+              fetchThreads(false);
+              if (selectedThreadId) {
+                fetch(`/api/threads/${selectedThreadId}`)
+                  .then((r) => r.json())
+                  .then((td) => {
+                    if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
+                      setMessages(td.thread.messages);
+                    }
+                  })
+                  .catch((e) => console.warn("Failed to reload completed thread messages:", e));
+              }
+            }
+          }
+          if (data.morningReport) {
+            setMorningReport(data.morningReport);
+          }
+        }
+      } catch (err) {
+        console.warn("Task poll update notice:", err);
+      }
+    };
+
+    const interval = setInterval(pollTask, 2000);
+    return () => clearInterval(interval);
+  }, [activeTask?.taskId, activeTask?.status]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const threadId = event.state?.threadId;
+      if (threadId) {
+        setSelectedThreadId(threadId);
+      } else {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const qThread = urlParams.get("thread");
+          setSelectedThreadId(qThread || null);
+        } catch {
+          setSelectedThreadId(null);
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Actions
+  const handleSelectThread = (threadId: string) => {
+    setSelectedThreadId(threadId);
+    setViewMode("unified");
+    setActiveNavView("sessions");
+    try {
+      window.history.pushState({ threadId }, "", `?thread=${encodeURIComponent(threadId)}`);
+    } catch {}
+  };
+
+  const handleBackToList = () => {
+    setSelectedThreadId(null);
+    try {
+      window.history.pushState({ threadId: null }, "", window.location.pathname);
+    } catch {}
+  };
+
+  const handleNewThread = async () => {
+    try {
+      const res = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "New thread",
+          model: selectedModel,
+          reasoningEffort
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread) {
+          setThreads((prev) => [data.thread, ...prev]);
+          setSelectedThreadId(data.thread.id);
+          setMessages([]);
+          setActiveTask(null);
+          setViewMode("unified");
+          setActiveNavView("sessions");
+          try {
+            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error("Failed to create new thread:", err);
+    }
+  };
+
+  const handleDeleteThread = async (threadId: string) => {
+    try {
+      await fetch(`/api/threads/${threadId}`, { method: "DELETE" });
+      setThreads((prev) => prev.filter((t) => t.id !== threadId));
+      if (selectedThreadId === threadId) {
+        setActiveTask(null);
+        const remaining = threads.filter((t) => t.id !== threadId);
+        setSelectedThreadId(remaining.length > 0 ? remaining[0].id : null);
+        if (remaining.length === 0) setMessages([]);
+        try {
+          window.history.pushState({ threadId: null }, "", window.location.pathname);
+        } catch {}
+      }
+    } catch (err) {
+      console.error("Failed to delete thread:", err);
+    }
+  };
+
+  // Launch a multi-milestone builder task inside the thread
+  const handleLaunchTask = async (goal: string, attachments?: any[], scope?: TaskScope) => {
+    try {
+      const res = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "launchTask",
+          goal,
+          toolchain: "node:22",
+          scope: scope || "PROJECT",
+          threadId: selectedThreadId,
+          attachments,
+          model: selectedModel,
+          reasoningEffort
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread) {
+          setThreads((prev) => {
+            const idx = prev.findIndex((t) => t.id === data.thread.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = data.thread;
+              return copy;
+            }
+            return [data.thread, ...prev];
+          });
+          setSelectedThreadId(data.thread.id);
+          setMessages(data.thread.messages || []);
+        }
+        if (data.task) {
+          setActiveTask(data.task);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to launch engineering task:", err);
+    }
+  };
+
+  // Stop Run action: stops workers, releases VRAM, honestly marks status as stopped
+  const handleStopRun = async () => {
+    if (!selectedThreadId && !activeTask) return;
+    try {
+      if (selectedThreadId) {
+        await fetch(`/api/threads/${selectedThreadId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "stop" })
+        });
+      }
+      if (activeTask) {
+        await fetch(`/api/tasks?taskId=${activeTask.taskId}`, { method: "DELETE" });
+        setActiveTask((prev) => prev ? { ...prev, status: "cancelled" } : null);
+      }
+      fetchThreads(false);
+    } catch (err) {
+      console.error("Failed to stop run:", err);
+    }
+  };
 
   const handleTracesUpdate = (newTraces: ExecutionTraceItem[]) => {
     setTraces((prev) => [...newTraces, ...prev]);
   };
 
+  const handleNavigate = (view: NavView) => {
+    setActiveNavView(view);
+    if (view === "sessions") {
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+      if (isMobile) {
+        setSelectedThreadId(null);
+      }
+    }
+  };
+
+  const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
+
   return (
-    <div
-      data-theme={theme}
-      className={`h-[100dvh] flex flex-col overflow-hidden ${
-        theme === "dark" ? "dark bg-zinc-950 text-zinc-100" : "bg-white text-slate-900"
-      } antialiased selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300 transition-colors`}
-    >
-      <Navbar
-        status={status}
-        agentMode={agentMode}
-        onAgentModeChange={handleAgentModeChange}
-        selectedModel={selectedModel}
-        onModelChange={setSelectedModel}
-        reasoningEffort={reasoningEffort}
-        onReasoningChange={setReasoningEffort}
-        installedModels={installedModels}
-        profiles={profiles}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        traceCount={traces.length}
-        theme={theme}
-        onThemeChange={handleThemeChange}
-        activeBranch={activeBranch}
+    <div className="h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans">
+      {/* Material 3 Navigation Drawer matching Mockup media_1791044464191.webp */}
+      <NavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        activeView={activeNavView}
+        onNavigate={handleNavigate}
+        onNewSession={handleNewThread}
+        pendingSkillsCount={pendingSkillsCount}
       />
 
-      <main className="flex-1 min-h-0 flex flex-col max-w-5xl w-full mx-auto p-0 sm:p-4 lg:p-6 overflow-hidden">
-        {activeTab === "chat" ? (
-          <div className="flex-1 min-h-0 flex flex-col">
-            {/* Direct Full-Screen Chat View */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <ChatStream
-                messages={messages}
-                setMessages={setMessages}
-                onTracesUpdate={handleTracesUpdate}
-                activeModel={selectedModel}
-                agentMode={agentMode}
-                reasoningEffort={reasoningEffort}
-                onViewSecurityTelemetry={() => setActiveTab("security")}
-                activeBranch={activeBranch}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-6 p-3 sm:p-0 pb-12 animate-in fade-in duration-200">
-            
-            {/* Top Bar for Security Tab */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100 tracking-tight">
-                  System Architecture & Security Telemetry
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Container isolation boundaries, zero-egress policies, and MCP hardware telemetry.
-                </p>
-              </div>
+      {/* Modal Bottom Sheet for Model & Thinking Effort */}
+      <ModelBottomSheet
+        isOpen={isModelSheetOpen}
+        onClose={() => setIsModelSheetOpen(false)}
+        selectedModel={selectedModel}
+        onModelChange={(m) => {
+          setSelectedModel(m);
+        }}
+        reasoningEffort={reasoningEffort}
+        onReasoningChange={(e) => {
+          setReasoningEffort(e);
+        }}
+        installedModels={installedModels}
+      />
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("chat")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors shadow-sm"
+      {/* Main View Router */}
+      {activeNavView === "settings" ? (
+        <SettingsView
+          onBack={() => setActiveNavView("sessions")}
+          selectedModel={selectedModel}
+          reasoningEffort={reasoningEffort}
+          onOpenModelSheet={() => setIsModelSheetOpen(true)}
+          selfDeployEnabled={selfDeployEnabled}
+          onToggleSelfDeploy={handleToggleSelfDeploy}
+          deployHistory={deployHistory}
+        />
+      ) : activeNavView === "builds" ? (
+        <BuildsView
+          onOpenDrawer={() => setIsDrawerOpen(true)}
+          activeTask={activeTask}
+          onStopTask={handleStopRun}
+          onSelectThread={handleSelectThread}
+        />
+      ) : activeNavView === "skills" ? (
+        <SkillsView
+          onOpenDrawer={() => setIsDrawerOpen(true)}
+          pendingCount={pendingSkillsCount}
+        />
+      ) : activeNavView === "morning-report" ? (
+        <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
+          <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Open menu"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+                  Morning Report
+                </h1>
+              </div>
+              <a
+                href="/morning-report"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Back to Chat</span>
-              </button>
+                Permalink (/morning-report)
+              </a>
             </div>
-
-            {/* Quick Status Chips */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-mono uppercase text-slate-400 dark:text-zinc-400">Sandbox Isolation</div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100">Air-Gapped (UID 10001)</div>
-                </div>
+            {overnightReport || morningReport ? (
+              <MorningReportView overnightReport={overnightReport} report={morningReport} />
+            ) : (
+              <div className="p-8 text-center text-slate-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-200 dark:border-zinc-800">
+                No overnight report generated yet. Reports synthesize at completion of overnight supervisor runs.
               </div>
-
-              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                  <Globe className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-mono uppercase text-slate-400 dark:text-zinc-400">Egress Scraper</div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100">SSRF Blocklist Enforced</div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                  <Cpu className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-mono uppercase text-slate-400 dark:text-zinc-400">Hardware Engine</div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100">AMD Radeon RX 9070 XT</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Security Governance Header / Gauge */}
-            <section>
-              <SandboxGauge securityPosture={securityPosture} />
-            </section>
-
-            {/* Architecture Card */}
-            <section className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 space-y-3 shadow-sm">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                <Layers className="h-4 w-4 text-cyan-500 dark:text-cyan-400" />
-                <span>Zero-Trust 3-Tier Multi-Agent Topology</span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-                Autonomous orchestrator running on{" "}
-                <code className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono font-medium border border-emerald-500/20">
-                  {selectedModel}
-                </code>{" "}
-                (<span className="text-amber-600 dark:text-amber-400 font-mono capitalize">{reasoningEffort}</span> effort),
-                dispatches tools over{" "}
-                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
-                  Model Context Protocol SSE
-                </code>. Air-gapped code executes inside a zero-trust Linux container sandbox with{" "}
-                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
-                  cap_drop: ALL
-                </code>{" "}
-                and a{" "}
-                <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-sky-600 dark:text-[#38bdf8] font-mono border border-sky-400/20 font-medium">
-                  read_only rootfs
-                </code>. Web search and documentation scraping run isolated in an egress-only container with strict SSRF filtering.
-              </p>
-              <div className="pt-2 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800">
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Network: ai-mesh (air-gapped)</span>
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Sandbox UID: 10001</span>
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Browser UID: 10002</span>
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">Attestation: SLSA Level 3</span>
-              </div>
-            </section>
-
-            {/* OpenTelemetry Distributed Tracing Waterfall */}
-            <section>
-              <TraceWaterfall />
-            </section>
-
-            {/* Execution Trace Viewer */}
-            <section>
-              <ExecutionTrace traces={traces} />
-            </section>
-
+            )}
           </div>
-        )}
-      </main>
+        </div>
+      ) : viewMode === "security" ? (
+        <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-zinc-950">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+                System Architecture &amp; Security Telemetry
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                Zero-trust container isolation and MCP hardware telemetry
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewMode("unified")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Sessions</span>
+            </button>
+          </div>
+
+          <section>
+            <SandboxGauge securityPosture={securityPosture} />
+          </section>
+
+          <section>
+            <TraceWaterfall />
+          </section>
+
+          <section>
+            <ExecutionTrace traces={traces} />
+          </section>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          {/* Sessions List: On desktop visible side-by-side; on mobile visible if no thread selected */}
+          <div
+            className={`${
+              selectedThreadId !== null ? "hidden sm:flex" : "flex"
+            } w-full sm:w-80 md:w-84 shrink-0 h-full`}
+          >
+            <ThreadsSidebar
+              threads={threads}
+              selectedThreadId={selectedThreadId}
+              activeNavView={activeNavView}
+              onSelectThread={handleSelectThread}
+              onNewThread={handleNewThread}
+              onDeleteThread={handleDeleteThread}
+              onNavigate={handleNavigate}
+              onOpenDrawer={() => setIsDrawerOpen(true)}
+            />
+          </div>
+
+          {/* Unified Thread View: Chat + Inline Live Run Blocks */}
+          <div
+            className={`${
+              selectedThreadId === null ? "hidden sm:flex" : "flex"
+            } flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950`}
+          >
+            <ChatStream
+              messages={messages}
+              setMessages={setMessages}
+              onTracesUpdate={handleTracesUpdate}
+              activeModel={selectedModel}
+              agentMode={agentMode}
+              reasoningEffort={reasoningEffort}
+              threadId={currentThread?.id}
+              threadTitle={currentThread?.title || "New session"}
+              threadStatus={currentThread?.status}
+              threadScope={currentThread?.scope}
+              activeTask={activeTask}
+              onStopTask={handleStopRun}
+              onTaskUpdated={(task, updatedThread) => {
+                if (task) setActiveTask(task);
+                if (updatedThread) {
+                  setThreads((prev) =>
+                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
+                  );
+                }
+              }}
+              onBackToList={handleBackToList}
+              onOpenModelSheet={() => setIsModelSheetOpen(true)}
+              onOpenDrawer={() => setIsDrawerOpen(true)}
+              onLaunchTask={handleLaunchTask}
+              onNewThread={handleNewThread}
+              onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
+              onDeployRun={handleDeployRun}
+              onViewSecurityTelemetry={() => setViewMode("security")}
+              placeholder="Message..."
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

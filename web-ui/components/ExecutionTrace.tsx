@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Terminal, ShieldCheck, Clock, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, Copy, Check } from "lucide-react";
+import { copyText } from "@/lib/clipboard";
 
 export interface ExecutionTraceItem {
   tool: string;
@@ -25,10 +26,12 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
     setOpenIndexes((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
-  const copyToClipboard = (text: string, index: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+  const copyToClipboard = async (text: string, index: number) => {
+    const ok = await copyText(text);
+    if (ok) {
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    }
   };
 
   if (!traces || traces.length === 0) {

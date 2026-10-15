@@ -33,6 +33,7 @@ Any time you create, modify, refactor, or adjust any frontend UI component, styl
 
 ## 3. Deployment Verification Checklist
 Before declaring any UI task complete:
+- [ ] Per-change test verification: Root `npm run test:gate` passes (<90s budget, change-aware selection, zero-coverage-is-an-error). Full suite runs in CI + overnight.
 - [ ] Code passes typechecking and production build (`npm run build` exits code 0).
 - [ ] Automated visual test run (`npm run test:ui`).
 - [ ] All 4 visual permutations inspected with `view_file` (Desktop Light, Mobile Light, Desktop Dark, Mobile Dark).

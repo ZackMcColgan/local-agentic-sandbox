@@ -13,9 +13,10 @@ import {
   Activity,
   Github,
   Sun,
-  Moon
+  Moon,
+  Hammer
 } from "lucide-react";
-import { ModelProfile, AgentMode } from "@/config/models";
+import { ModelProfile, AgentMode, isReasoningEffortSupported } from "@/config/models";
 import { ModelSelector } from "@/components/ModelSelector";
 
 interface NavbarProps {
@@ -32,8 +33,8 @@ interface NavbarProps {
   onReasoningChange: (effort: "low" | "medium" | "xhigh") => void;
   installedModels: string[];
   profiles: ModelProfile[];
-  activeTab: "chat" | "security";
-  onTabChange: (tab: "chat" | "security") => void;
+  activeTab: "chat" | "overnight" | "security";
+  onTabChange: (tab: "chat" | "overnight" | "security") => void;
   traceCount: number;
   theme: "dark" | "light";
   onThemeChange: (theme: "dark" | "light") => void;
@@ -75,7 +76,7 @@ export function Navbar({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         
         {/* Main Header Bar */}
-        <div className="h-14 flex items-center justify-between gap-1 sm:gap-4">
+        <div className="h-14 flex items-center justify-between gap-1.5 sm:gap-4 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-1">
           
           {/* Brand Logo & Title */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -103,7 +104,7 @@ export function Navbar({
             <ModelSelector mode={agentMode} onModeChange={onAgentModeChange} />
           </div>
 
-          {/* Center Tabs: Chat vs System & Security */}
+          {/* Center Tabs: Chat vs Builder (Overnight) vs System & Security */}
           <div className="flex items-center bg-slate-100 dark:bg-zinc-900 p-0.5 sm:p-1 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-inner shrink-0">
             <button
               type="button"
@@ -116,6 +117,20 @@ export function Navbar({
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span>Chat</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTabChange("overnight")}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === "overnight"
+                  ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-300 border border-slate-200 dark:border-zinc-700 shadow-sm"
+                  : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              <Hammer className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Builder</span>
+              <span className="sm:hidden">Build</span>
             </button>
 
             <button
@@ -141,50 +156,55 @@ export function Navbar({
           {/* Right Controls: Thinking Effort (Desktop), Model Selector (Desktop), Theme Toggle */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             
-            {/* Desktop Thinking / Reasoning Effort Selector */}
-            <div className="hidden md:flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5">
-              <button
-                type="button"
-                onClick={() => onReasoningChange("low")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "low"
-                    ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Fast Mode: Direct answer"
-              >
-                <Zap className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                <span>Fast</span>
-              </button>
+            {/* Reasoning Effort Selector (Desktop & Mobile) */}
+            {isReasoningEffortSupported(selectedModel) ? (
+              <div className="flex items-center rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("low")}
+                  className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "low"
+                      ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Fast Mode: Direct answer"
+                  aria-label="Fast Mode"
+                >
+                  <Zap className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+                  <span className="hidden sm:inline">Fast</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onReasoningChange("medium")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "medium"
-                    ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Balanced Mode: Standard reasoning & planning"
-              >
-                <Scale className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
-                <span>Balanced</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("medium")}
+                  className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "medium"
+                      ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Balanced Mode: Standard reasoning & planning"
+                  aria-label="Balanced Mode"
+                >
+                  <Scale className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
+                  <span className="hidden sm:inline">Balanced</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onReasoningChange("xhigh")}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  reasoningEffort === "xhigh"
-                    ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shadow-sm"
-                    : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                }`}
-                title="Deep Mode: Exhaustive chain-of-thought"
-              >
-                <Brain className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
-                <span>Deep</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => onReasoningChange("xhigh")}
+                  className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    reasoningEffort === "xhigh"
+                      ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shadow-sm"
+                      : "text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                  title="Deep Mode: Exhaustive chain-of-thought"
+                  aria-label="Deep Mode"
+                >
+                  <Brain className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
+                  <span className="hidden sm:inline">Deep</span>
+                </button>
+              </div>
+            ) : null}
 
             {/* Model Switcher Dropdown (Desktop) */}
             <div className="relative hidden lg:block">

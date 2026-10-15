@@ -4,7 +4,10 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { registerCodeRunner } from "./tools/codeRunner.js";
 import { registerAttestation } from "./tools/attestation.js";
-import { registerWorkspaceTools } from "./tools/workspaceTools.js";
+import { registerWorkspaceTools, resolveSafePath } from "./tools/workspaceTools.js";
+import fs from "fs/promises";
+import fsSync from "fs";
+import path from "path";
 
 const app = express();
 app.use(cors());
@@ -21,6 +24,109 @@ registerWorkspaceTools(mcp);
 
 // Active SSE transports keyed by sessionId
 const transports = new Map<string, SSEServerTransport>();
+
+export const ALLOWED_FILE_EXTENSIONS = new Set([
+  ".svg",
+  ".drawio",
+  ".xml",
+  ".md",
+  ".txt",
+  ".json",
+  ".html",
+  ".csv",
+  ".log",
+  ".py",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".yaml",
+  ".yml",
+  ".sql",
+  ".css",
+  ".toml"
+]);
+
+export function isAllowedFileArtifact(filePath: string): boolean {
+  const lower = filePath.toLowerCase().trim();
+  const ext = path.extname(lower);
+  return ALLOWED_FILE_EXTENSIONS.has(ext) || lower.endsWith(".drawio.xml");
+}
+
+export function getArtifactMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".svg":
+      return "image/svg+xml; charset=utf-8";
+    case ".drawio":
+    case ".xml":
+      return "application/xml; charset=utf-8";
+    case ".md":
+      return "text/markdown; charset=utf-8";
+    case ".txt":
+    case ".log":
+    case ".py":
+    case ".ts":
+    case ".tsx":
+    case ".js":
+    case ".jsx":
+    case ".mjs":
+    case ".cjs":
+    case ".sh":
+    case ".yaml":
+    case ".yml":
+    case ".sql":
+    case ".css":
+    case ".toml":
+      return "text/plain; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".csv":
+      return "text/csv; charset=utf-8";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+export async function handleFilesRequest(req: Request, res: Response) {
+  const filePath = req.query.path as string;
+  if (!filePath) {
+    return res.status(400).json({ error: "Missing required 'path' query parameter" });
+  }
+
+  if (!isAllowedFileArtifact(filePath)) {
+    return res.status(415).json({
+      error: "Unsupported media type: only allowed workspace file artifacts are permitted"
+    });
+  }
+
+  try {
+    const safePath = resolveSafePath(filePath);
+    if (!fsSync.existsSync(safePath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+    const stat = await fs.stat(safePath);
+    if (stat.isDirectory()) {
+      return res.status(403).json({ error: "Access forbidden: directory listing not permitted" });
+    }
+    if (!stat.isFile()) {
+      return res.status(400).json({ error: "Target is not a file" });
+    }
+    const content = await fs.readFile(safePath);
+    const mime = getArtifactMimeType(safePath);
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Length", stat.size.toString());
+    res.send(content);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+app.get("/files", handleFilesRequest);
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
@@ -66,11 +172,23 @@ app.post("/messages", async (req: Request, res: Response) => {
   }
 });
 
+export { app };
+
 const PORT = parseInt(process.env.PORT || "8080", 10);
 const HOST = "0.0.0.0";
 
-app.listen(PORT, HOST, () => {
-  console.log(`[MCP Server] Active and listening at http://${HOST}:${PORT}`);
-  console.log(`[MCP Server] SSE Endpoint: http://${HOST}:${PORT}/sse`);
-  console.log(`[MCP Server] Registered Tools: execute_sandboxed_python, verify_container_provenance`);
-});
+const isMainModule = Boolean(
+  typeof process !== "undefined" &&
+  process.argv?.[1] &&
+  (process.argv[1].endsWith("index.js") || process.argv[1].endsWith("index.ts")) &&
+  !process.env.NODE_TEST_CONTEXT &&
+  !process.argv[1].includes(".test.")
+);
+
+if (isMainModule) {
+  app.listen(PORT, HOST, () => {
+    console.log(`[MCP Server] Active and listening at http://${HOST}:${PORT}`);
+    console.log(`[MCP Server] SSE Endpoint: http://${HOST}:${PORT}/sse`);
+    console.log(`[MCP Server] Registered Tools: execute_sandboxed_python, verify_container_provenance`);
+  });
+}

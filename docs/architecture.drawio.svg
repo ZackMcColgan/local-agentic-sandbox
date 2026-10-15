@@ -93,9 +93,10 @@
   <text x="85" y="380" font-size="11" fill="#334155">• git_status, git_checkout, git_commit (Argv-Safe)</text>
   <text x="85" y="396" font-size="11" fill="#334155">• execute_sandboxed_python &amp; Attestation</text>
 
-  <rect x="85" y="412" width="280" height="42" rx="4" fill="#dcfce7" stroke="#059669" stroke-width="1.2" />
-  <text x="95" y="428" font-size="10" font-weight="800" fill="#047857">NetworkPolicy: mcp-runner-zero-egress</text>
-  <text x="95" y="444" font-size="10" font-weight="600" fill="#065f46">Default Deny Egress | DNS (53) | GitHub CIDRs (443)</text>
+  <rect x="85" y="412" width="280" height="48" rx="4" fill="#dcfce7" stroke="#059669" stroke-width="1.2" />
+  <text x="95" y="426" font-size="10" font-weight="800" fill="#047857">NetworkPolicy: mcp-runner-zero-egress (ai-mesh)</text>
+  <text x="95" y="440" font-size="9.5" font-weight="700" fill="#065f46">Isolated Air-Gap Network: ai-mesh (Zero Egress)</text>
+  <text x="95" y="454" font-size="9" font-weight="500" fill="#047857">Default Deny Egress | Internal Inter-Pod Routing Only</text>
 
   <!-- 2.3 Isolated Browser MCP Scraper Pod -->
   <rect x="910" y="250" width="380" height="150" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.8" filter="url(#cardShadow)" />
@@ -106,7 +107,8 @@
   <text x="925" y="332" font-size="11" fill="#334155">• search_web (DuckDuckGo Search &amp; Top Result)</text>
   <text x="925" y="348" font-size="11" fill="#334155">• fetch_webpage_markdown (HTML-to-Markdown)</text>
   <text x="925" y="364" font-size="11" fill="#334155">• SSRF Guard (Blocks 10.0.0.0/8, 192.168.0.0/16, etc.)</text>
-  <text x="925" y="382" font-size="10" font-weight="700" fill="#b45309">NetworkPolicy: Egress Allowed (Port 80/443 ONLY)</text>
+  <rect x="925" y="372" width="350" height="24" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1" />
+  <text x="935" y="388" font-size="9.5" font-weight="700" fill="#92400e">NetworkPolicy: egress-mesh (Port 80/443 Outbound Allowed)</text>
 
   <!-- 2.4 OpenTelemetry Collector & Jaeger Pod -->
   <rect x="910" y="420" width="380" height="100" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.8" filter="url(#cardShadow)" />
@@ -124,6 +126,17 @@
   <text x="85" y="556" font-size="11" fill="#334155">• Hermes Skill Loop Directory: .agent/skills/*.md (Learned self-improving agent skills persist here)</text>
   <text x="85" y="574" font-size="11" fill="#334155">• Test Execution Caches: Isolated per-run artifacts (.pytest_cache, node_modules)</text>
   <text x="85" y="596" font-size="11" font-weight="700" fill="#b45309">Host Trust Boundary: Read/Write authorized exclusively inside ./workspace; path traversal strictly rejected</text>
+
+  <!-- Network Mesh Isolation Layer -->
+  <g id="network-mesh-badges">
+    <rect x="70" y="215" width="220" height="22" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1" />
+    <circle cx="82" cy="226" r="4" fill="#10b981" />
+    <text x="92" y="230" font-size="9.5" font-weight="700" fill="#047857">Network Domain: ai-mesh (Zero-Trust)</text>
+
+    <rect x="910" y="215" width="230" height="22" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1" />
+    <circle cx="922" cy="226" r="4" fill="#f59e0b" />
+    <text x="932" y="230" font-size="9.5" font-weight="700" fill="#b45309">Egress Gateway: egress-mesh (Public)</text>
+  </g>
 
   <!-- Flow Arrows inside K8s -->
   <!-- Web UI -> MCP Runner -->

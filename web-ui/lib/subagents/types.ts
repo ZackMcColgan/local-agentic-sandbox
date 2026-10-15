@@ -1,0 +1,199 @@
+/**
+ * Core type definitions for Mode A: Overnight Builder & Subagents
+ */
+
+export type ToolchainType = "node:22" | "python:3.12" | "go" | "rust";
+
+export type TaskScope = "SNIPPET" | "SCRIPT" | "PROJECT";
+
+export type TaskComplexity = "SINGLE_ARTIFACT" | "SIMPLE_SCRIPT" | "PROJECT";
+
+export interface AssertionContract {
+  type: "file_exists" | "test_passes" | "output_contains" | "no_hardcoded_values";
+  target: string;
+  expected?: string;
+  description: string;
+}
+
+export interface EvidenceItem {
+  type: "diff" | "test" | "file";
+  ref: string;
+  excerpt: string;
+}
+
+export interface ContractAssertionResult {
+  assertion: AssertionContract;
+  passed: boolean;
+  evidence: string;
+}
+
+export interface TestCounts {
+  passed: number;
+  failed: number;
+}
+
+export interface TestSnapshot {
+  passCount: number;
+  failCount: number;
+  failingTests: string[];
+  timestamp: string;
+}
+
+export interface RevertResult {
+  reverted: boolean;
+  filesReverted: string[];
+  before: TestCounts;
+  after: TestCounts;
+  reason?: string;
+  logMessage?: string;
+}
+
+export type MilestoneStatus = "pending" | "in_progress" | "completed" | "failed" | "rejected";
+
+export interface AcceptanceCriterion {
+  id: string;
+  assertion: string;
+  command?: string;
+  fileMatch?: string;
+  expectedExitCode?: number;
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  description: string;
+  dependencies?: string[];
+  acceptanceCriteria: AcceptanceCriterion[];
+  assertions?: AssertionContract[];
+  status: MilestoneStatus;
+  builderIterations: number;
+  criticRounds: number;
+  criticNotes?: string[];
+  forcedFlaw?: boolean;
+  commitSha?: string;
+  diffSummary?: string;
+  testsPassed?: number;
+  testsFailed?: number;
+  testFile?: string;
+  plannedFiles?: string[];
+  skipCriticOnValidSyntax?: boolean;
+  taskComplexity?: TaskComplexity;
+  completedAt?: string;
+  /**
+   * Provenance: true when any output for this milestone came from the deterministic
+   * FAST_GRAPH_TEST fallback instead of a real model. Never true in production.
+   */
+  synthetic?: boolean;
+  /** Model that generated the builder output (absent when synthetic). */
+  builderModel?: string;
+  criticScore?: number;
+  criticVerdict?: "PASS" | "FAIL";
+  criticCritique?: string;
+  tokenThroughput?: { promptTokens?: number; completionTokens?: number; tokensPerSecond?: number };
+}
+
+export interface AmbiguityFlag {
+  id: string;
+  milestoneId: string;
+  question: string;
+  judgmentCall: string;
+  reasoning: string;
+  revertAction: {
+    type: "git_revert" | "re_plan";
+    target: string;
+  };
+  reviewed: boolean;
+}
+
+export interface CheckpointState {
+  checkpointId: string;
+  taskId: string;
+  milestoneId: string;
+  milestoneIndex: number;
+  gitHeadSha: string;
+  completedMilestones: string[];
+  serializedGraphState?: any;
+  timestamp: string;
+  recoveryAttempted: boolean;
+}
+
+export type TaskStatus = "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
+
+export interface TaskJournalEntry {
+  timestamp: string;
+  role: string;
+  message: string;
+  data?: any;
+}
+
+export interface TaskManifest {
+  taskId: string;
+  threadId?: string;
+  parentRunId?: string;
+  goal: string;
+  toolchain: ToolchainType;
+  scope?: TaskScope;
+  complexity?: TaskComplexity;
+  branchName: string;
+  branch?: string;
+  status: TaskStatus;
+  milestones: Milestone[];
+  currentMilestoneIndex: number;
+  checkpoints: CheckpointState[];
+  ambiguityFlags: AmbiguityFlag[];
+  journal: TaskJournalEntry[];
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  parkedReason?: string;
+  errorSummary?: string;
+  deploymentUrl?: string;
+  deploymentNamespace?: string;
+  prUrl?: string;
+  ciStatus?: {
+    state: "running" | "passed" | "failed";
+    actionsUrl?: string;
+    failingStep?: string;
+    summary?: string;
+  };
+}
+
+export interface MorningReport {
+  taskId: string;
+  goal: string;
+  status: TaskStatus;
+  branchName: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMinutes: number;
+  milestonesSummary: Array<{
+    id: string;
+    title: string;
+    status: MilestoneStatus;
+    iterations: number;
+    criticRounds: number;
+  }>;
+  testResults: {
+    total: number;
+    passed: number;
+    failed: number;
+  };
+  commits: Array<{
+    sha: string;
+    message: string;
+    timestamp: string;
+  }>;
+  ambiguityFlags: AmbiguityFlag[];
+  parkedItems: string[];
+}
+
+export type WorkerRole = "explorer" | "builder" | "critic" | "recorder";
+
+export interface WorkerState {
+  role: WorkerRole;
+  status: "idle" | "running" | "completed" | "failed" | "cancelled";
+  activeTool?: string;
+  currentItem?: string;
+  startedAt?: string;
+  completedAt?: string;
+}

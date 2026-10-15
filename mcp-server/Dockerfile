@@ -5,13 +5,19 @@ FROM node:22-alpine AS builder
 
 RUN apk add --no-cache git python3
 
-WORKDIR /app
+WORKDIR /build
 
-COPY package*.json tsconfig.json ./
-RUN npm ci
+# Copy entire monorepo structure
+COPY package*.json ./
+COPY mcp-server/package*.json ./mcp-server/
+COPY mcp-server/tsconfig.json ./mcp-server/
+COPY mcp-server/src ./mcp-server/src
+COPY mcp-server/tests ./mcp-server/tests
 
-COPY src ./src
-COPY tests ./tests
+# Install from root (honors workspace config)
+RUN npm ci --workspaces
+
+WORKDIR /build/mcp-server
 RUN npm run build
 
 # Prune dev dependencies for a lean production footprint
@@ -22,9 +28,12 @@ RUN npm prune --production
 # ==========================================
 FROM node:22-alpine AS runner
 
-# Install Python3, pytest, git, bash, and ripgrep for autonomous workspace operations
+# Upgrade Alpine packages (expat, zlib) and install runtime tools
 RUN apk update && \
+    apk upgrade --no-cache && \
     apk add --no-cache python3 py3-pip py3-pytest git bash ripgrep && \
+    npm install -g npm@latest && \
+    npm cache clean --force && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /app
@@ -39,11 +48,11 @@ RUN addgroup -g 10001 -S sandbox && \
     git config --system user.email "agent@local-sandbox.internal"
 
 # Copy build artifacts, production modules, and source/tests
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tests ./tests
+COPY --from=builder /build/mcp-server/package.json ./package.json
+COPY --from=builder /build/node_modules ./node_modules
+COPY --from=builder /build/mcp-server/dist ./dist
+COPY --from=builder /build/mcp-server/src ./src
+COPY --from=builder /build/mcp-server/tests ./tests
 
 # Ensure the app files are owned by the sandbox user and read-only
 RUN chown -R 10001:10001 /app && \

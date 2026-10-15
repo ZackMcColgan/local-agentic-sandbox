@@ -12,7 +12,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 ### The Solution
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
-1. **Local AI Inference Engine**: Self-hosted LLMs (`qwen3.8:27b-q3_k_m` and `gemma4:e4b`) served via Ollama directly over host GPU hardware (AMD Radeon RX 9070 XT 16GB VRAM, ROCm), fully air-gapped from internet egress with 24-hour VRAM keep-alive leases.
+1. **Local AI Inference Engine**: Self-hosted LLMs (`swift-15-27b-mtp`: Swift 1.5 Qwen3.8-27B Q3_K_M with Multi-Token Prediction `draft_num_predict 3`) served via Ollama directly over host GPU hardware (AMD Radeon RX 9070 XT 16GB VRAM, ROCm), and CPU-pinned embeddings (`all-minilm`, `num_gpu: 0`), fully air-gapped from internet egress with 24-hour VRAM keep-alive leases.
 2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 8 autonomous developer tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
 4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring a real-time conversational chat, segmented tri-mode model dispatcher (`[ ✨ Auto | ⚡ Flash | 🧠 Pro ]`), multimodal vision ingestion pipeline, OpenTelemetry distributed tracing waterfall, and persistent session storage.
@@ -149,7 +149,9 @@ local-agentic-sandbox/
 │   ├── architecture.drawio             # Editable Draw.io XML source diagram
 │   ├── architecture.drawio.svg         # Rendered vector SVG diagram for README/docs
 │   ├── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
-│   ├── ANTIGRAVITY_AUTONOMOUS_SPEC.md  # Autonomous pair-programming agent specification
+│   ├── FIRST_OVERNIGHT_TASK.md         # Autonomous pair-programming agent specification & first runbook
+│   ├── FLYWHEEL_SPIKE.md               # Hermes skills flywheel design & spike assessment
+│   ├── BRANCH_TRIAGE.md                # Git branch audit matrix and merge triage records
 │   └── DEVELOPMENT_SANDBOX.md          # Guide for microVM development sandboxes
 ├── scripts/
 │   ├── lan-bridge.js                   # Zero-auth LAN reverse proxy bridge (0.0.0.0:80 / :3000)
@@ -157,7 +159,8 @@ local-agentic-sandbox/
 ├── browser-mcp/
 │   ├── Dockerfile
 │   ├── package.json
-│   └── src/                            # SSRF protection, DuckDuckGo search, HTML cleaning
+│   ├── src/                            # SSRF protection, DuckDuckGo search, HTML cleaning
+│   └── tests/                          # Automated SSRF and HTML parser tests
 ├── mcp-server/
 │   ├── Dockerfile
 │   ├── package.json
@@ -168,7 +171,7 @@ local-agentic-sandbox/
 │   │       ├── codeRunner.ts           # Sandboxed Python execution & kernel attestation
 │   │       ├── attestation.ts          # Docker Scout & runtime boundary verification
 │   │       └── workspaceTools.ts       # 8 argv-safe git & filesystem tools (ReDoS guarded)
-│   └── tests/                          # 25 unit & security integration tests
+│   └── tests/                          # Unit & security integration tests
 ├── web-ui/
 │   ├── Dockerfile
 │   ├── package.json
@@ -179,24 +182,29 @@ local-agentic-sandbox/
 │   │   ├── page.tsx                    # Main portal: tabs, persistent state, live telemetry
 │   │   └── api/
 │   │       ├── chat/route.ts           # Tri-mode LLM dispatcher & 24h keep-alive lease
+│   │       ├── tasks/route.ts          # Autonomous task decomposition & lifecycle API
+│   │       ├── threads/route.ts        # Durable thread persistence & execution dispatch
 │   │       └── sandbox-status/route.ts # Live container security health probe
 │   ├── components/
 │   │   ├── ChatStream.tsx              # Interactive conversational chat interface
-│   │   ├── ModelSelector.tsx           # Segmented [ Auto | Flash | Pro ] control
+│   │   ├── ModelBottomSheet.tsx        # Segmented M3 model bottom sheet control
 │   │   ├── ExecutionTrace.tsx          # Real-time tool execution & agent steps
 │   │   ├── TraceWaterfall.tsx          # OpenTelemetry Jaeger distributed trace visualizer
 │   │   ├── SandboxGauge.tsx            # Visual security boundary posture indicator
 │   │   ├── DiffViewer.tsx              # Side-by-side git diff viewer
-│   │   └── Navbar.tsx                  # Responsive navigation header
+│   │   └── ThreadsSidebar.tsx          # Material 3 responsive sessions sidebar
 │   ├── lib/
 │   │   ├── agentEngine.ts              # Autonomous test-and-repair agent execution loop
 │   │   ├── chatHistory.ts              # Versioned localStorage persistence (v1)
 │   │   ├── fileParser.ts               # File ingestion & multimodal base64 extractor
-│   │   ├── modelDispatcher.ts          # Tri-mode complexity classifier & model router
+│   │   ├── ledger/runLedger.ts         # SQLite-backed durable run ledger & lifecycle tracking
+│   │   ├── subagents/supervisor.ts     # LangGraph supervisor, fail-closed recovery, and watchdog
+│   │   ├── subagents/workerPool.ts     # Builder & Critic worker pool with AST pre-validation
+│   │   ├── subagents/llmClient.ts      # Scoped context scaling & <think> stream parser
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 32 unit & component tests
+│   └── tests/                          # 50+ unit, component, supervisor, and lifecycle tests across monorepo
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 

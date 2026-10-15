@@ -24,27 +24,27 @@ export const AGENT_MODES: Record<AgentMode, AgentModeConfig> = {
     label: "Auto",
     badgeLabel: "Auto (Hierarchical)",
     description: "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
-    defaultModel: "gemma4:e4b"
+    defaultModel: "swift-15-27b-mtp"
   },
   flash: {
     id: "flash",
     label: "Flash",
     badgeLabel: "Flash ~80 t/s",
     description: "Ultra-fast execution and multimodal diagram ingestion via Gemma 4 E4B (~80 tok/s).",
-    defaultModel: "gemma4:e4b"
+    defaultModel: "swift-15-27b-mtp"
   },
   pro: {
     id: "pro",
     label: "Pro",
     badgeLabel: "Pro (27B)",
     description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Qwen 3.8 27B / Hermes 3.",
-    defaultModel: "qwen3.8:27b-q3_k_m"
+    defaultModel: "swift-15-27b-mtp"
   }
 };
 
 export const DEFAULT_AGENT_MODE: AgentMode = "auto";
-export const DEFAULT_PRIMARY_MODEL = "qwen3.8:27b-q3_k_m";
-export const DEFAULT_SUBAGENT_MODEL = "gemma4:e4b";
+export const DEFAULT_PRIMARY_MODEL = "swift-15-27b-mtp";
+export const DEFAULT_SUBAGENT_MODEL = "swift-15-27b-mtp";
 
 export const PRESET_MODEL_PROFILES: ModelProfile[] = [
   {
@@ -82,3 +82,16 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     description: "Nous Research Hermes 3 70B. Enterprise unconstrained agentic synthesis."
   }
 ];
+
+export function isReasoningEffortSupported(modelId?: string): boolean {
+  if (!modelId) return false;
+  const profile = PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  if (profile) return profile.supportsReasoningEffort;
+  return modelId.includes("qwen") || modelId.includes("gemma");
+}
+
+export function getModelProfile(modelId?: string): ModelProfile | undefined {
+  if (!modelId) return undefined;
+  return PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+}
+

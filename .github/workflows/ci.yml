@@ -2,9 +2,9 @@ name: CI Pipeline & Security Boundary Verification
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main","develop"] 
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main","develop" ]
 
 jobs:
   test-and-typecheck:
@@ -33,10 +33,84 @@ jobs:
         run: |
           npm test
 
+  coverage-report:
+    name: Code Coverage Report
+    runs-on: ubuntu-24.04
+    needs: test-and-typecheck
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Run Coverage
+        working-directory: web-ui
+        run: |
+          set -o pipefail
+          npx c8 --reporter=text --reporter=json-summary --reports-dir=coverage npx tsx --test 'tests/**/*.test.ts' 2>&1 | tee coverage-output.txt
+
+      - name: Build Coverage Summary
+        working-directory: web-ui
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            python3 -c "
+          import json
+          with open('coverage/coverage-summary.json') as f:
+              data = json.load(f)
+          total = data['total']
+          for key in ['lines', 'statements', 'functions', 'branches']:
+              pct = total[key]['pct']
+              print(f'{key}: {pct}%')
+            " > coverage-summary.txt
+          else
+            echo "Coverage not generated - see coverage-output.txt for vitest errors" > coverage-summary.txt
+            echo "lines: n/a" >> coverage-summary.txt
+            echo "statements: n/a" >> coverage-summary.txt
+            echo "functions: n/a" >> coverage-summary.txt
+            echo "branches: n/a" >> coverage-summary.txt
+          fi
+          cat coverage-summary.txt
+
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: web-ui/coverage/
+          retention-days: 30
+
+      - name: Comment Coverage on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUMMARY=$(cat web-ui/coverage-summary.txt)
+          BODY="## Coverage Report
+          \`\`\`
+          $SUMMARY
+          \`\`\`
+          Full HTML report available in the \`coverage-report\` artifact.
+          _Visibility only — not a merge gate._"
+          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+
   docker-build-and-scout:
     name: Container Build & Docker Scout Scan
     runs-on: ubuntu-24.04
     needs: test-and-typecheck
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -44,24 +118,33 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build MCP Server Image
         uses: docker/build-push-action@v6
         with:
-          context: ./mcp-server
+          context: .
+          file: ./mcp-server/Dockerfile
           load: true
           tags: local-agentic-sandbox/mcp-server:test
 
       - name: Build Browser MCP Image
         uses: docker/build-push-action@v6
         with:
-          context: ./browser-mcp
+          context: .
+          file: ./browser-mcp/Dockerfile
           load: true
           tags: local-agentic-sandbox/browser-mcp:test
 
       - name: Build Web UI Image
         uses: docker/build-push-action@v6
         with:
-          context: ./web-ui
+          context: .
+          file: ./web-ui/Dockerfile
           load: true
           tags: local-agentic-sandbox/web-ui:test
 

@@ -1,12 +1,12 @@
-.PHONY: all up down restart logs pull-model verify-sec clean help
+.PHONY: all up down restart logs pull-model verify-sec clean help k8s-deploy k8s-build
 
 all: help
 
 help:
 	@echo "local-agentic-sandbox - Management Commands"
 	@echo "============================================"
-	@echo "make pull-primary  Pull primary orchestrator model (qwen3.8:27b-q3_k_m)"
-	@echo "make pull-subagent Pull fast execution sub-agent model (qwen2.5-coder:7b)"
+	@echo "make pull-primary  Pull primary orchestrator model (swift-15-27b-mtp)"
+	@echo "make pull-subagent Pull fast execution sub-agent model (swift-15-27b-mtp)"
 	@echo "make pull-all      Pull both primary and sub-agent models"
 	@echo "make list-models   List locally installed Ollama models & VRAM usage"
 	@echo "make up            Build and launch all services in detached mode"
@@ -17,12 +17,14 @@ help:
 	@echo "make test          Run full test suite (mcp-server & web-ui)"
 	@echo "make test-coverage Run full test suite with code coverage reports"
 	@echo "make clean         Stop containers and remove volumes"
+	@echo "make k8s-build    Build web-ui image for Kubernetes"
+	@echo "make k8s-deploy   Build image and rollout restart K8s web-ui"
 
 pull-primary:
-	docker compose run --rm --network egress-mesh ollama ollama pull qwen3.8:27b-q3_k_m
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-15-27b-mtp
 
 pull-subagent:
-	docker compose run --rm --network egress-mesh ollama ollama pull qwen2.5-coder:7b
+	docker compose run --rm --network egress-mesh ollama ollama pull swift-15-27b-mtp
 
 pull-all: pull-primary pull-subagent
 
@@ -65,3 +67,13 @@ test-coverage:
 
 clean:
 	docker compose down -v --remove-orphans
+
+# Kubernetes deployment (Docker Desktop)
+# Builds the web-ui image locally and restarts the K8s deployment.
+# Image uses imagePullPolicy: Never, so the local build is picked up directly.
+k8s-build:
+	docker build -t local-agentic-sandbox-web-ui:v2.7-unified -f web-ui/Dockerfile .
+
+k8s-deploy: k8s-build
+	kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
+	kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s

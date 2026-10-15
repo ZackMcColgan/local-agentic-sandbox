@@ -1,16 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { exec, execFile } from "child_process";
+import { exec, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import { z } from "zod";
+import ts from "typescript";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // Determine Workspace Root: /workspace in container, or local fallback in repo root
-const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
+export const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
 
 // Helper: exec git commands using argv array (no shell interpolation) to prevent shell command injection
 async function execGit(args: string[], cwd: string = WORKSPACE_DIR) {
@@ -58,7 +59,7 @@ async function ensureWorkspaceInitialized() {
 }
 
 // Ensure safe path resolution within WORKSPACE_DIR
-function resolveSafePath(userPath: string): string {
+export function resolveSafePath(userPath: string): string {
   const normalized = path.normalize(userPath).replace(/^(\/|\\)/, "");
   const resolved = path.resolve(WORKSPACE_DIR, normalized);
   const rootResolved = path.resolve(WORKSPACE_DIR);
@@ -112,9 +113,82 @@ export function validateRegexPattern(pattern: string): { safe: boolean; reason?:
   return { safe: true };
 }
 
+// Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
+export function validateCodeAst(filePath: string, content: string): { valid: boolean; error?: string } {
+  const ext = path.extname(filePath).toLowerCase();
+
+  // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
+  if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
+    try {
+      const scriptKind =
+        ext === ".tsx" ? ts.ScriptKind.TSX :
+          ext === ".jsx" ? ts.ScriptKind.JSX :
+            ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
+              ts.ScriptKind.TS;
+
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind
+      );
+
+      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      if (diagnostics.length > 0) {
+        const first = diagnostics[0];
+        const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
+        const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
+        return {
+          valid: false,
+          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`
+        };
+      }
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, error: `AST parser failure: ${err.message}` };
+    }
+  }
+
+  // 2. Python AST parsing via Python standard library ast module
+  if (ext === ".py") {
+    // Try python3 (Unix) then python (Windows) - python3 often missing on Windows
+    const pythonCmds = ["python3", "python"];
+    let lastErr: any = null;
+    for (const cmd of pythonCmds) {
+      try {
+        execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
+          input: content,
+          encoding: "utf8",
+          timeout: 3000,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+        return { valid: true };
+      } catch (err: any) {
+        // ENOENT = command not found; 9009 / app execution alias stub on Windows = not installed
+        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
+        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
+          lastErr = err;
+          continue;
+        }
+        return {
+          valid: false,
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
+        };
+      }
+    }
+    // Neither python3 nor python found - fail open for validation (not for execution)
+    console.warn("[AST] Python not found for syntax validation, skipping Python AST check");
+    return { valid: true };
+  }
+
+  // 3. Non-code files (Markdown, JSON, SVG, drawio XML, config) pass through
+  return { valid: true };
+}
+
 export function registerWorkspaceTools(mcp: McpServer) {
   // Initialize workspace at startup
-  ensureWorkspaceInitialized().catch(() => {});
+  ensureWorkspaceInitialized().catch(() => { });
 
   // 1. workspace_get_tree
   mcp.tool(
@@ -339,6 +413,21 @@ export function registerWorkspaceTools(mcp: McpServer) {
 
       try {
         const safePath = resolveSafePath(filePath);
+
+        // Pre-write AST syntax validation (nexus-agent pattern)
+        const astCheck = validateCodeAst(filePath, content);
+        if (!astCheck.valid) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                status: "EXECUTION_ERROR",
+                error: `AST validation failed before write: ${astCheck.error}`
+              }, null, 2)
+            }]
+          };
+        }
+
         if (create_dirs) {
           const parent = path.dirname(safePath);
           await fs.mkdir(parent, { recursive: true });
