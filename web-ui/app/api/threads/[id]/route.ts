@@ -265,11 +265,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           !thread.title ||
           thread.title.toLowerCase() === "new thread" ||
           thread.title.toLowerCase() === "untitled thread" ||
-          thread.title.toLowerCase() === "new task"
+          thread.title.toLowerCase() === "new task" ||
+          thread.title.toLowerCase() === "new session"
         ) {
           const content = body.message.content || "";
           if (content.trim()) {
-            thread.title = content.trim().slice(0, 40);
+            const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
+            thread.title = content.trim().slice(0, maxLen);
           }
         }
       } else if (body.message.role === "assistant") {

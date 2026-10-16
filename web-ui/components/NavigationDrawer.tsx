@@ -59,7 +59,7 @@ export function NavigationDrawer({
         {/* Top Header: Robot Sparkle Icon + "Agent" */}
         <div className="flex items-center justify-between px-3 pb-6">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-[#6750a4]/10 dark:bg-[#d0bcff]/15 flex items-center justify-center text-[#6750a4] dark:text-[#d0bcff]">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <Bot className="h-6 w-6 stroke-[2.2]" />
             </div>
             <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
@@ -101,7 +101,7 @@ export function NavigationDrawer({
             }}
             className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-semibold text-sm transition-colors text-left ${
               activeView === "sessions" || activeView === "thread"
-                ? "bg-[#d0bcff]/70 dark:bg-[#d0bcff]/20 text-[#381e72] dark:text-[#d0bcff]"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80"
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
             }`}
           >
@@ -118,7 +118,7 @@ export function NavigationDrawer({
             }}
             className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-sm transition-colors text-left ${
               activeView === "builds"
-                ? "bg-[#d0bcff]/70 dark:bg-[#d0bcff]/20 text-[#381e72] dark:text-[#d0bcff] font-semibold"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-semibold"
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
             }`}
           >
@@ -135,7 +135,7 @@ export function NavigationDrawer({
             }}
             className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-medium text-sm transition-colors text-left ${
               activeView === "skills"
-                ? "bg-[#d0bcff]/70 dark:bg-[#d0bcff]/20 text-[#381e72] dark:text-[#d0bcff] font-semibold"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-semibold"
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
             }`}
           >
@@ -144,7 +144,7 @@ export function NavigationDrawer({
               <span>Skills</span>
             </div>
             {pendingSkillsCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-[#d0bcff] dark:bg-[#6750a4] text-[#381e72] dark:text-white font-bold text-[11px] shrink-0">
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 font-bold text-[11px] shrink-0 border border-amber-200 dark:border-amber-800">
                 {pendingSkillsCount} pending
               </span>
             )}
@@ -159,7 +159,7 @@ export function NavigationDrawer({
             }}
             className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-sm transition-colors text-left ${
               activeView === "morning-report"
-                ? "bg-[#d0bcff]/70 dark:bg-[#d0bcff]/20 text-[#381e72] dark:text-[#d0bcff] font-semibold"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-semibold"
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
             }`}
           >
@@ -176,7 +176,7 @@ export function NavigationDrawer({
             }}
             className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-sm transition-colors text-left ${
               activeView === "settings"
-                ? "bg-[#d0bcff]/70 dark:bg-[#d0bcff]/20 text-[#381e72] dark:text-[#d0bcff] font-semibold"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-semibold"
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
             }`}
           >

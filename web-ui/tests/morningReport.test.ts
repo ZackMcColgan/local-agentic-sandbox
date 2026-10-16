@@ -468,6 +468,123 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.equal(report.tasks.length, 1, `Expected 1 deduplicated task, got ${report.tasks.length}`);
     assert.equal(report.completedCount, 1, `Expected completedCount to be 1, got ${report.completedCount}`);
   });
+
+  describe("Sprint U4 — Morning Report Timezone & Filter Suite", () => {
+    it("isWithinOvernightWindow uses local hours (d.getHours()) and correctly classifies 2:04 AM local time", async () => {
+      const { isWithinOvernightWindow } = await import("../lib/subagents/morningReport.js");
+
+      // Construct a Date at 2:04 AM local time today
+      const now = new Date();
+      now.setHours(2, 4, 0, 0);
+      const isoAt2amLocal = now.toISOString();
+
+      assert.equal(
+        isWithinOvernightWindow(isoAt2amLocal, 22, 7),
+        true,
+        "Task run at 2:04 AM local time must fall inside overnight window (22:00 - 07:00 local)"
+      );
+
+      // Construct a Date at 2:00 PM local time today
+      const afternoon = new Date();
+      afternoon.setHours(14, 0, 0, 0);
+      assert.equal(
+        isWithinOvernightWindow(afternoon.toISOString(), 22, 7),
+        false,
+        "Task run at 2:00 PM local time must NOT fall inside overnight window"
+      );
+    });
+
+    it("generateOvernightMorningReport supports windowFilter: overnight, 24h, all", async () => {
+      const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+
+      const recentTask: any = {
+        taskId: "task-recent-1",
+        goal: "Recent 24h task",
+        branchName: "feat/recent",
+        toolchain: "node:22",
+        status: "completed",
+        startedAt: new Date(Date.now() - 3600000).toISOString(),
+        milestones: []
+      };
+
+      const oldTask: any = {
+        taskId: "task-old-1",
+        goal: "Old 48h task",
+        branchName: "feat/old",
+        toolchain: "node:22",
+        status: "completed",
+        startedAt: new Date(Date.now() - 172800000).toISOString(),
+        milestones: []
+      };
+
+      const report24h = generateOvernightMorningReport([recentTask, oldTask], { windowFilter: "24h" });
+      assert.equal(report24h.tasks.length, 1, "24h filter must only return tasks from last 24h");
+      assert.equal(report24h.tasks[0].taskId, "task-recent-1");
+
+      const reportAll = generateOvernightMorningReport([recentTask, oldTask], { windowFilter: "all" });
+      assert.equal(reportAll.tasks.length, 2, "all filter must return all tasks");
+    });
+
+    it("MorningReportView renders segmented window filter (Overnight | Last 24h | All Runs) defaulting to 24h if overnight has 0 entries", async () => {
+      const { MorningReportView } = await import("../components/MorningReportView.js");
+      const React = (await import("react")).default;
+      const { renderToString } = await import("react-dom/server");
+      const { Window } = await import("happy-dom");
+
+      // Daytime task run at 14:00 (0 overnight entries)
+      const daytimeDate = new Date();
+      daytimeDate.setHours(14, 0, 0, 0);
+
+      const daytimeTask: any = {
+        taskId: "task-daytime-1",
+        goal: "Daytime build task",
+        branch: "feat/daytime",
+        gitHeadSha: "1234567",
+        status: "completed",
+        startedAt: daytimeDate.toISOString(),
+        durationSeconds: 120,
+        durationFormatted: "2m 0s",
+        milestones: [],
+        artifacts: [],
+        ambiguityFlags: [],
+        testsPassed: 4,
+        testsFailed: 0
+      };
+
+      const overnightReport: any = {
+        reportId: "rep-daytime",
+        generatedAt: daytimeDate.toISOString(),
+        windowLabel: "Autonomous Run",
+        totalTasks: 1,
+        completedCount: 1,
+        parkedCount: 0,
+        failedCount: 0,
+        totalDurationSeconds: 120,
+        totalDurationFormatted: "2m 0s",
+        tasks: [daytimeTask],
+        artifactsProduced: [],
+        attentionItems: [],
+        summaryMarkdown: ""
+      };
+
+      const html = renderToString(
+        React.createElement(MorningReportView, {
+          overnightReport
+        })
+      );
+
+      const window = new Window();
+      window.document.body.innerHTML = html;
+
+      const overnightBtn = window.document.querySelector('[data-testid="filter-overnight"]');
+      const last24hBtn = window.document.querySelector('[data-testid="filter-24h"]');
+      const allRunsBtn = window.document.querySelector('[data-testid="filter-all"]');
+
+      assert.ok(overnightBtn, "Must render 'Overnight' filter button");
+      assert.ok(last24hBtn, "Must render 'Last 24h' filter button");
+      assert.ok(allRunsBtn, "Must render 'All Runs' filter button");
+    });
+  });
 });
 
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Check, AlertTriangle, ShieldCheck, ShieldAlert, History } from "lucide-react";
+import { useTheme, Theme } from "../lib/hooks/useTheme";
 
 export interface DeployHistoryItem {
   deployId: string;
@@ -48,57 +49,18 @@ export function SettingsView({
   onToggleSelfDeploy: propsOnToggleSelfDeploy,
   deployHistory = []
 }: SettingsViewProps) {
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(propsTheme || "light");
+  const { theme, setTheme } = useTheme(propsTheme);
+  const themeMode = theme;
   const [localSelfDeployEnabled, setLocalSelfDeployEnabled] = useState(propsSelfDeployEnabled ?? false);
 
   const activeModel = defaultModel || selectedModel;
   const isSelfDeployActive = propsSelfDeployEnabled !== undefined ? propsSelfDeployEnabled : localSelfDeployEnabled;
   const handleClose = onBack || onClose || (() => {});
 
-  // Load active theme preference on mount if not controlled
-  useEffect(() => {
-    if (propsTheme) {
-      setThemeMode(propsTheme);
-      return;
-    }
-    try {
-      const saved = localStorage.getItem("app-theme");
-      if (saved === "dark") {
-        setThemeMode("dark");
-      } else if (saved === "light") {
-        setThemeMode("light");
-      } else {
-        setThemeMode("system");
-      }
-    } catch {}
-  }, [propsTheme]);
-
   const handleThemeChange = (mode: "light" | "dark" | "system") => {
-    setThemeMode(mode);
+    setTheme(mode);
     if (propsOnThemeChange) {
       propsOnThemeChange(mode);
-    }
-    try {
-      const applyTheme = (dark: boolean) => {
-        document.documentElement.classList.toggle("dark", dark);
-        document.documentElement.classList.toggle("light", !dark);
-        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-        document.documentElement.style.colorScheme = dark ? "dark" : "light";
-        document.body.classList.toggle("dark", dark);
-        document.body.classList.toggle("light", !dark);
-        document.body.setAttribute("data-theme", dark ? "dark" : "light");
-      };
-
-      if (mode === "system") {
-        localStorage.removeItem("app-theme");
-        const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        applyTheme(isDark);
-      } else {
-        localStorage.setItem("app-theme", mode);
-        applyTheme(mode === "dark");
-      }
-    } catch (e) {
-      console.warn("Failed to apply theme:", e);
     }
   };
 
@@ -129,7 +91,7 @@ export function SettingsView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#f4f3f7] dark:bg-zinc-950 overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
       <div className="max-w-xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header Card: "< Settings" matching Mockup media_1791044464169.webp */}
@@ -149,7 +111,7 @@ export function SettingsView({
 
         {/* Section 1: Appearance */}
         <div>
-          <h2 className="text-lg font-semibold text-[#6750a4] dark:text-[#d0bcff] mb-3 px-1">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Appearance
           </h2>
 
@@ -159,13 +121,13 @@ export function SettingsView({
             </label>
 
             {/* Segmented Button: Light | Dark | System */}
-            <div className="grid grid-cols-3 gap-1 bg-[#edf1f7] dark:bg-zinc-800 p-1 rounded-full">
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-full">
               <button
                 type="button"
                 onClick={() => handleThemeChange("light")}
                 className={`py-2 px-3 rounded-full text-sm font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   themeMode === "light"
-                    ? "bg-[#6750a4] text-white shadow-sm"
+                    ? "bg-emerald-600 dark:bg-emerald-500 text-white shadow-sm"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                 }`}
               >
@@ -178,7 +140,7 @@ export function SettingsView({
                 onClick={() => handleThemeChange("dark")}
                 className={`py-2 px-3 rounded-full text-sm font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   themeMode === "dark"
-                    ? "bg-[#6750a4] text-white shadow-sm"
+                    ? "bg-emerald-600 dark:bg-emerald-500 text-white shadow-sm"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                 }`}
               >
@@ -191,7 +153,7 @@ export function SettingsView({
                 onClick={() => handleThemeChange("system")}
                 className={`py-2 px-3 rounded-full text-sm font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   themeMode === "system"
-                    ? "bg-[#6750a4] text-white shadow-sm"
+                    ? "bg-emerald-600 dark:bg-emerald-500 text-white shadow-sm"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                 }`}
               >
@@ -208,7 +170,7 @@ export function SettingsView({
 
         {/* Section 2: Models */}
         <div>
-          <h2 className="text-lg font-semibold text-[#6750a4] dark:text-[#d0bcff] mb-3 px-1">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Models
           </h2>
 
@@ -231,7 +193,7 @@ export function SettingsView({
 
         {/* Section 3: Self-Deploy Pipeline (Sprint 12 Phase 10) */}
         <div>
-          <h2 className="text-lg font-semibold text-[#6750a4] dark:text-[#d0bcff] mb-3 px-1">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Self-Deploy Pipeline
           </h2>
 
@@ -239,7 +201,7 @@ export function SettingsView({
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-[#6750a4] dark:text-[#d0bcff]" />
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Kill switch (SELF_DEPLOY_ENABLED)</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
@@ -251,7 +213,7 @@ export function SettingsView({
                 type="button"
                 onClick={toggleSelfDeploy}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isSelfDeployActive ? "bg-[#5b32e6]" : "bg-slate-300 dark:bg-zinc-700"
+                  isSelfDeployActive ? "bg-emerald-600 dark:bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
                 }`}
                 title="Toggle self-deploy kill switch"
               >

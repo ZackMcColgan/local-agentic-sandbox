@@ -47,4 +47,5 @@ test_*.png
 # Dynamic Agent Workspace
 workspace/
 .opencode-remote-session.json
+.agent/
 

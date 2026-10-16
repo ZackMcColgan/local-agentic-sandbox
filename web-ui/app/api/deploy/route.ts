@@ -47,9 +47,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Task '${taskId}' not found` }, { status: 404 });
       }
 
-      // Generate deployment URL and namespace if not supplied
+      // Real deployment URL and namespace via cluster / environment configuration
+      const hostAddress = process.env.DEPLOY_HOST || "127.0.0.1";
+      const deployPort = process.env.DEPLOY_PORT || "3001";
       const deploymentNamespace = dryRunNamespace || `build-${taskId.slice(0, 12).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-      const deploymentUrl = dryRunUrl || `http://192.168.50.254:${30100 + (Math.abs(taskId.split("").reduce((a: number, b: string) => a + b.charCodeAt(0), 0)) % 1000)}`;
+      const deploymentUrl = dryRunUrl || process.env.DEPLOY_URL || `http://${hostAddress}:${deployPort}`;
 
       task.deploymentUrl = deploymentUrl;
       task.deploymentNamespace = deploymentNamespace;
@@ -74,11 +76,17 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
+      const pipeline = new SelfDeployPipeline();
+      const deployHistory = pipeline.getDeployHistory();
+      const latestDeploy = deployHistory.find((d) => d.branchName === task.branchName || d.deployId === task.taskId) || deployHistory[0];
+
       return NextResponse.json({
         success: true,
         taskId,
         deploymentUrl,
-        deploymentNamespace
+        deploymentNamespace,
+        deployStatus: latestDeploy?.status || "deployed",
+        rollbackStatus: latestDeploy?.rollbackStatus || "none"
       });
     }
 

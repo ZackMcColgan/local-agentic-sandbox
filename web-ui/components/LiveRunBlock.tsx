@@ -21,7 +21,7 @@ import {
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
 import { SvgViewer } from "./SvgViewer";
-import { CodeBlock } from "./ChatStream";
+import { CodeBlock } from "./ArtifactRenderers";
 import { ThinkingPanel } from "./ThinkingPanel";
 
 interface LiveRunBlockProps {
@@ -113,18 +113,11 @@ export function LiveRunBlock({
     return "Executing milestone...";
   })();
 
-  // Dynamic Progress Calculation that MOVES smoothly
-  // Never stuck at static 25%!
+  // Honest Progress Calculation strictly from completed milestones
   const activeProgressPercent = (() => {
+    if (totalMilestones === 0) return 0;
     if (isCompleted) return 100;
-    if (isStopped || isFailed) return Math.round((completedCount / totalMilestones) * 100);
-
-    const baseMilestonePercent = Math.round((completedCount / totalMilestones) * 100);
-    const perMilestoneChunk = Math.round(100 / totalMilestones);
-
-    // Factor in elapsed time or streaming chunks to show continuous forward movement (up to 95%)
-    const streamingBoost = Math.min(Math.floor(elapsedSeconds / 3), perMilestoneChunk - 5);
-    return Math.min(Math.max(baseMilestonePercent + Math.max(streamingBoost, 10), 15), 95);
+    return Math.round((completedCount / totalMilestones) * 100);
   })();
 
   return (
@@ -132,7 +125,7 @@ export function LiveRunBlock({
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-full bg-[#3b0799] text-white flex items-center justify-center shrink-0 shadow-xs">
+          <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
             <RotateCcw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -140,13 +133,13 @@ export function LiveRunBlock({
               Live run
             </span>
             {isRunning && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#ede7fe] text-[#5b32e6] flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5b32e6] animate-pulse" />
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-200/60 dark:border-emerald-800/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Running</span>
               </span>
             )}
             {task.scope && (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 uppercase tracking-wider">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/60 uppercase tracking-wider">
                 {task.scope}
               </span>
             )}
@@ -180,7 +173,7 @@ export function LiveRunBlock({
 
         {/* Elapsed Timer & Dynamic Activity */}
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400">
-          <Clock className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+          <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
           <span>
             {isCompleted
               ? `Completed in ${formatElapsedDuration(elapsedSeconds)}`
@@ -199,7 +192,7 @@ export function LiveRunBlock({
           <strong className="font-semibold text-slate-900 dark:text-zinc-100">Started:</strong> {task.goal} ({task.milestones?.length || 1} milestone{task.milestones?.length === 1 ? "" : "s"})
         </span>
         {isRunning && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#5b32e6] dark:text-indigo-400 shrink-0">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">
             <Loader2 className="h-3 w-3 animate-spin" />
             <span>{currentActivity}</span>
           </span>
@@ -208,7 +201,7 @@ export function LiveRunBlock({
 
       {/* Milestone Checklist */}
       <div className="space-y-2.5">
-        <div className="inline-block px-2 py-0.5 rounded bg-[#f3f4f8] dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-xs">
+        <div className="inline-block px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-xs">
           Milestone checklist
         </div>
 
@@ -223,12 +216,12 @@ export function LiveRunBlock({
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     {isMilestoneCompleted ? (
-                      <div className="h-5 w-5 rounded-full bg-[#3b0799] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <div className="h-5 w-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                         <Check className="h-3.5 w-3.5 stroke-[3]" />
                       </div>
                     ) : isMilestoneActive ? (
-                      <div className="h-5 w-5 rounded-full border-2 border-[#5b32e6] flex items-center justify-center shrink-0">
-                        <span className="h-2 w-2 rounded-full bg-[#5b32e6] animate-ping" />
+                      <div className="h-5 w-5 rounded-full border-2 border-emerald-500 flex items-center justify-center shrink-0">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
                       </div>
                     ) : (
                       <div className="h-5 w-5 rounded-full border-2 border-slate-300 dark:border-zinc-700 shrink-0" />
@@ -288,7 +281,7 @@ export function LiveRunBlock({
           <div className="p-3.5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#fbfbfe] dark:bg-zinc-850/80 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Critic Verdict: {critiquedMilestone.title}</span>
               </span>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -296,7 +289,7 @@ export function LiveRunBlock({
                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                   : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
               }`}>
-                {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")} · Score {critiquedMilestone.criticScore ?? 92}/100
+                {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")}{critiquedMilestone.criticScore !== undefined && critiquedMilestone.criticScore !== null ? ` · Score ${critiquedMilestone.criticScore}/100` : ""}
               </span>
             </div>
             {critiquedMilestone.criticCritique && (
@@ -362,7 +355,7 @@ export function LiveRunBlock({
               }
 
               if (!codeSnippet) {
-                codeSnippet = `// Deliverable committed: ${deliverableFile}\nconsole.log("Hello, World!");`;
+                codeSnippet = `// Deliverable committed: ${deliverableFile}`;
               }
 
               const ext = deliverableFile.split(".").pop() || "typescript";
@@ -382,9 +375,9 @@ export function LiveRunBlock({
 
       {/* Deployed Ephemeral Build Link (Phase 5) */}
       {task.deploymentUrl && (
-        <div className="p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/70 dark:bg-indigo-950/40 flex items-center justify-between gap-2">
+        <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <ExternalLink className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+            <ExternalLink className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 truncate">
               Deployed Build {task.deploymentNamespace ? `(${task.deploymentNamespace})` : ""}
             </span>
@@ -393,7 +386,7 @@ export function LiveRunBlock({
             href={task.deploymentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3 py-1 rounded-lg bg-[#5b32e6] hover:bg-[#4a25c4] text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
           >
             <span>Open Live Preview</span>
             <ExternalLink className="h-3 w-3" />
@@ -507,7 +500,7 @@ export function LiveRunBlock({
               type="button"
               onClick={onStopRun}
               disabled={isStopping}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-[#ede7fe] hover:bg-[#e0d6fd] dark:bg-indigo-950 dark:hover:bg-indigo-900 text-[#5b32e6] dark:text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+              className="flex-1 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/70 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50 border border-rose-200 dark:border-rose-800"
             >
               <Square className="h-3.5 w-3.5 stroke-[2.5] fill-none" />
               <span>{isStopping ? "Stopping run..." : "Stop run"}</span>
@@ -523,7 +516,7 @@ export function LiveRunBlock({
             <button
               type="button"
               onClick={onResumeRun}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-[#5b32e6] hover:bg-[#4a25c4] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs"
+              className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xs"
             >
               <Play className="h-3.5 w-3.5" />
               <span>Resume run</span>
@@ -560,7 +553,7 @@ export function LiveRunBlock({
                 type="button"
                 data-testid="deploy-preview-btn"
                 onClick={() => onDeployRun(task.taskId)}
-                className="py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
+                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>Deploy Preview</span>

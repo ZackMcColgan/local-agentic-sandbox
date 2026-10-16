@@ -38,7 +38,7 @@ export function ThinkingPanel({
   defaultExpanded = true,
   className = ""
 }: ThinkingPanelProps) {
-  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
   const userToggledRef = useRef(false);
 
@@ -71,41 +71,12 @@ export function ThinkingPanel({
           timeAgo: "Now",
           narrative: rawThought.trim(),
           status: isStreaming ? "in_progress" : "complete",
-          progressPercent: isStreaming ? 85 : 100
+          progressPercent: isStreaming ? 0 : 100
         }
       ];
     }
 
-    // Default 3-phase fallback when neither explicit phases nor raw thought are provided
-    return [
-      {
-        phase: "planning",
-        title: "Planning",
-        timestamp: formattedTime,
-        timeAgo: "Just now",
-        narrative: "Broke the task into milestones. Scope evaluated. No unnecessary scaffolding.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      },
-      {
-        phase: "building",
-        title: "Building",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Generating clean deliverable markup and implementation code.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 75 : 100
-      },
-      {
-        phase: "validating",
-        title: "Validating",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Checking output compiles, adheres to constraints, and passes validation.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      }
-    ];
+    return [];
   })();
 
   const activeStepsCount = effectivePhases.length;
@@ -123,15 +94,15 @@ export function ThinkingPanel({
         aria-expanded={isExpanded}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff] shrink-0" />
+          <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 truncate">
             Worker reasoning
           </span>
           <span
             data-testid="streaming-badge"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-100/80 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/50 text-[#5b32e6] dark:text-indigo-300 shrink-0"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
           >
-            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-[#5b32e6] dark:bg-purple-400 animate-pulse" />}
+            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
             <span>
               {isStreaming ? "Streaming" : "Thought process"}
               {" · "}
@@ -171,7 +142,7 @@ export function ThinkingPanel({
                 {/* Card Title & Meta */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-[#6750a4] dark:text-[#d0bcff] border border-purple-200/50 dark:border-purple-800/40 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 flex items-center justify-center shrink-0">
                       <Icon className="h-3.5 w-3.5 stroke-[2.2]" />
                     </div>
                     <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-100 truncate">
@@ -196,8 +167,8 @@ export function ThinkingPanel({
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
                         isCompleted
-                          ? "bg-gradient-to-r from-[#6750a4] to-indigo-500"
-                          : "bg-[#6750a4]"
+                          ? "bg-emerald-600"
+                          : "bg-emerald-500"
                       }`}
                       style={{ width: `${Math.min(Math.max(phaseItem.progressPercent, 5), 100)}%` }}
                     />
@@ -205,9 +176,9 @@ export function ThinkingPanel({
 
                   <div className="flex justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500">
                     {isCompleted ? (
-                      <span className="text-[#6750a4] dark:text-[#d0bcff]">Complete</span>
+                      <span className="text-emerald-700 dark:text-emerald-400">Complete</span>
                     ) : isInProgress ? (
-                      <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">
+                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
                         In progress · {phaseItem.progressPercent}%
                       </span>
                     ) : (
@@ -221,7 +192,7 @@ export function ThinkingPanel({
 
           {/* Footer Status Pill only while isStreaming === true */}
           {isStreaming && (
-            <div className="pt-1 flex items-center gap-1.5 text-xs text-[#6750a4] dark:text-[#d0bcff] font-medium">
+            <div className="pt-1 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
               <Sparkles className="h-3.5 w-3.5 animate-spin" />
               <span>Reasoning in progress. Formulating structured execution...</span>
             </div>
