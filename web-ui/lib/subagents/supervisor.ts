@@ -40,6 +40,8 @@ export {
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
+import { executeInSandboxTier } from "../sandbox/tierRunner";
+import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 
 let sycophancyProbeExecuted = false;
 
@@ -837,19 +839,65 @@ export function createProductionStepExecutor(
         let testExitCode = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0;
         let testOutput = "";
 
-        if (options?.testRunner) {
-          try {
-            console.log(`[executor] running testRunner for milestone ${milestone.id}`);
-            const testRes = await options.testRunner(milestone, lastTargetFile, repoRoot);
-            milestone.testsPassed = testRes.passed;
-            milestone.testsFailed = testRes.failed;
-            testExitCode = testRes.exitCode;
-            testOutput = testRes.output;
-            console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}`);
-          } catch (tErr: any) {
-            console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
-            testExitCode = 1;
-            milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+        // Task 1 (Sprint A2): Default testRunner executes milestone.acceptanceCriteria commands in sandbox tier
+        const effectiveTestRunner = options?.testRunner || (async (m: Milestone, targetFile?: string, rRoot?: string) => {
+          let passed = 0;
+          let failed = 0;
+          let combinedOutput = "";
+          let finalExitCode = 0;
+
+          const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) => Boolean(c.command && c.command.trim()));
+          if (criteriaWithCmd.length === 0) {
+            return { passed: 0, failed: 0, exitCode: 0, output: "" };
+          }
+
+          for (const criterion of criteriaWithCmd) {
+            if (!criterion.command) continue;
+            try {
+              const res = await executeInSandboxTier({
+                tier: "build",
+                command: criterion.command,
+                workspaceDir: rRoot || repoRoot,
+                toolchain: m.toolchain
+              });
+              combinedOutput += `[${criterion.id}] $ ${criterion.command}\n${res.stdout}\n${res.stderr}\n`;
+              if (res.exitCode === (criterion.expectedExitCode ?? 0)) {
+                passed++;
+              } else {
+                failed++;
+                finalExitCode = res.exitCode || 1;
+              }
+            } catch (err: any) {
+              failed++;
+              finalExitCode = 1;
+              combinedOutput += `[${criterion.id}] Error: ${err.message}\n`;
+            }
+          }
+
+          return { passed, failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+        });
+
+        try {
+          console.log(`[executor] running testRunner for milestone ${milestone.id}`);
+          const testRes = await effectiveTestRunner(milestone, lastTargetFile, repoRoot);
+          milestone.testsPassed = testRes.passed;
+          milestone.testsFailed = testRes.failed;
+          testExitCode = testRes.exitCode;
+          testOutput = testRes.output;
+          console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}`);
+        } catch (tErr: any) {
+          console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
+          testExitCode = 1;
+          milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+        }
+
+        // Task 2 (Sprint A2): When testExitCode !== 0, format failure via workerCiFeedback.ts and inject into milestone.lastError & criticFeedback
+        if (testExitCode !== 0) {
+          const failingCmd = (milestone.acceptanceCriteria || []).find((c) => c.command)?.command || "test";
+          const formattedFailure = formatTestFailureForBuilder(failingCmd, testExitCode, testOutput);
+          milestone.lastError = formattedFailure;
+          if (!criticFeedback.includes(formattedFailure)) {
+            criticFeedback.push(formattedFailure);
           }
         }
 

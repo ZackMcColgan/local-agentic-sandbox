@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generatePlanSpec } from "@/lib/subagents/planner";
-import { OvernightSupervisor } from "@/lib/subagents/supervisor";
+import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { generateMorningReport, MorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 import { activeExecutionSet } from "@/lib/threads/threadStore";
@@ -114,12 +114,33 @@ export async function POST(req: Request) {
 
     supervisor.saveCheckpoint(manifest);
 
+    // Task 4 (Sprint A2): Wire POST /api/tasks to trigger asynchronous executeTaskWithRecovery when autoExecute !== false
+    const autoExecute = body.autoExecute !== false;
+    if (autoExecute) {
+      (async () => {
+        try {
+          const executor = createProductionStepExecutor();
+          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+          tasksRegistry.set(taskId, result);
+          supervisor.saveCheckpoint(result);
+        } catch (err: any) {
+          console.error(`[tasks] Task ${taskId} async execution error:`, err);
+        } finally {
+          activeExecutionSet.delete(taskId);
+        }
+      })().catch((err) => {
+        console.error(`[tasks] Background task execution failure:`, err);
+      });
+    } else {
+      activeExecutionSet.delete(taskId);
+    }
+
     return NextResponse.json(
       {
         taskId,
         manifest,
         specMarkdown,
-        status: "active"
+        status: autoExecute ? "active" : "pending"
       },
       { status: 201 }
     );

@@ -186,9 +186,15 @@ export async function POST(req: Request) {
           if (result.status === "completed") {
             const currentThread = await threadStore.getThread(activeThreadId);
             if (currentThread) {
-              const lastMilestone = result.milestones?.[result.milestones.length - 1];
-              const targetFile = lastMilestone?.plannedFiles?.[0] || "weather.svg";
-              let fileContent = "";
+              // Task 3 (Sprint A2): Collect all modified deliverables across all completed milestones without hardcoded weather.svg fallback
+              const allFiles = new Set<string>();
+              for (const m of result.milestones || []) {
+                if (m.plannedFiles && Array.isArray(m.plannedFiles)) {
+                  for (const f of m.plannedFiles) {
+                    if (f && typeof f === "string" && f.trim()) allFiles.add(f.trim());
+                  }
+                }
+              }
 
               const repoCandidates = [
                 process.env.WORKSPACE_DIR,
@@ -197,14 +203,20 @@ export async function POST(req: Request) {
                 path.resolve(process.cwd(), "..")
               ].filter(Boolean) as string[];
 
-              for (const dir of repoCandidates) {
-                const fullP = path.resolve(dir, targetFile);
-                if (fs.existsSync(fullP)) {
-                  try {
-                    fileContent = fs.readFileSync(fullP, "utf8");
-                    break;
-                  } catch {}
+              const deliverables: Array<{ file: string; content: string }> = [];
+
+              for (const targetFile of allFiles) {
+                let fileContent = "";
+                for (const dir of repoCandidates) {
+                  const fullP = path.resolve(dir, targetFile);
+                  if (fs.existsSync(fullP)) {
+                    try {
+                      fileContent = fs.readFileSync(fullP, "utf8");
+                      break;
+                    } catch {}
+                  }
                 }
+                deliverables.push({ file: targetFile, content: fileContent });
               }
 
               // Extract any thinking from the builder journal entries
@@ -213,13 +225,31 @@ export async function POST(req: Request) {
                 ?.map((j) => j.message.replace(/^Builder reasoning:\s*/, ""))
                 ?.join("\n\n");
 
-              let completionContent = `Task completed successfully! Here is the generated \`${targetFile}\`:\n\n`;
-              if (fileContent.trim()) {
-                const isSvg = targetFile.endsWith(".svg") || fileContent.includes("<svg");
-                const fenceLang = isSvg ? "xml" : path.extname(targetFile).replace(".", "") || "text";
-                completionContent += `\`\`\`${fenceLang}\n${fileContent.trim()}\n\`\`\``;
+              let completionContent = "";
+              if (deliverables.length === 0) {
+                completionContent = "Task completed successfully!";
+              } else if (deliverables.length === 1) {
+                const d = deliverables[0];
+                completionContent = `Task completed successfully! Here is the generated \`${d.file}\`:\n\n`;
+                if (d.content.trim()) {
+                  const isSvg = d.file.endsWith(".svg") || d.content.includes("<svg");
+                  const fenceLang = isSvg ? "xml" : path.extname(d.file).replace(".", "") || "text";
+                  completionContent += `\`\`\`${fenceLang}\n${d.content.trim()}\n\`\`\``;
+                } else {
+                  completionContent += `Deliverable committed as \`${d.file}\`.`;
+                }
               } else {
-                completionContent += `Deliverable committed as \`${targetFile}\`.`;
+                completionContent = `Task completed successfully! Generated ${deliverables.length} deliverables:\n\n`;
+                for (const d of deliverables) {
+                  completionContent += `### \`${d.file}\`\n`;
+                  if (d.content.trim()) {
+                    const isSvg = d.file.endsWith(".svg") || d.content.includes("<svg");
+                    const fenceLang = isSvg ? "xml" : path.extname(d.file).replace(".", "") || "text";
+                    completionContent += `\`\`\`${fenceLang}\n${d.content.trim()}\n\`\`\`\n\n`;
+                  } else {
+                    completionContent += `Deliverable committed as \`${d.file}\`.\n\n`;
+                  }
+                }
               }
 
               currentThread.status = "completed";

@@ -90,6 +90,8 @@ export interface Milestone {
   criticVerdict?: "PASS" | "FAIL";
   criticCritique?: string;
   tokenThroughput?: { promptTokens?: number; completionTokens?: number; tokensPerSecond?: number };
+  toolchain?: ToolchainType;
+  lastError?: string;
 }
 
 export interface AmbiguityFlag {

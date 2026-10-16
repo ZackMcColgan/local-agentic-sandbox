@@ -54,6 +54,15 @@ export function extractFailingTestFromCiLog(log: string): string {
   return "unknown test step";
 }
 
+/**
+ * Formats a failing acceptance test command, exit code, and last 4,000 chars of stdout/stderr
+ * for injection into Builder self-healing retry prompts.
+ */
+export function formatTestFailureForBuilder(command: string, exitCode: number, output: string): string {
+  const truncated = output.length > 4000 ? output.slice(-4000) : output;
+  return `Acceptance test command failed (exit code ${exitCode}):\n$ ${command}\n\nOutput:\n${truncated.trim()}`;
+}
+
 export class WorkerCiFeedbackLoop {
   private checkRunsFetcher: CheckRunsFetcher;
   private pollIntervalMs: number;
