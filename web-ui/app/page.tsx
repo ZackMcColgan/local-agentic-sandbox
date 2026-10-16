@@ -71,7 +71,7 @@ export default function Home() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
-      const saved = queryTheme || localStorage.getItem("app-theme");
+      const saved = queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
       const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
       const applyTheme = (dark: boolean) => {
@@ -89,7 +89,7 @@ export default function Home() {
       if (window.matchMedia) {
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
         const handleMediaChange = (e: MediaQueryListEvent) => {
-          if (!localStorage.getItem("app-theme")) {
+          if (!localStorage.getItem("theme") && !localStorage.getItem("app-theme")) {
             applyTheme(e.matches);
           }
         };

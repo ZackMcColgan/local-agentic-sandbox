@@ -69,7 +69,7 @@ export function ThreadsSidebar({
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-[#f4f3f7] dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
       {/* Top Header matching Mockup media_1791044464191.webp */}
       <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">
@@ -132,20 +132,6 @@ export function ThreadsSidebar({
                   className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                 >
                   New session
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isDark = document.documentElement.classList.contains("dark");
-                    const next = isDark ? "light" : "dark";
-                    document.documentElement.classList.toggle("dark", next === "dark");
-                    document.documentElement.classList.toggle("light", next === "light");
-                    document.documentElement.setAttribute("data-theme", next);
-                    localStorage.setItem("app-theme", next);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
-                >
-                  Toggle theme
                 </button>
               </div>
             )}
@@ -231,7 +217,7 @@ export function ThreadsSidebar({
                 }}
                 className={`group relative overflow-hidden rounded-3xl p-4 sm:p-5 transition-all cursor-pointer ${
                   isSelected
-                    ? "bg-white dark:bg-zinc-900 ring-2 ring-[#6750a4] shadow-md"
+                    ? "bg-white dark:bg-zinc-900 ring-2 ring-emerald-500 shadow-md"
                     : "bg-white dark:bg-zinc-900 hover:shadow-md shadow-xs border border-slate-100 dark:border-zinc-850"
                 }`}
               >
@@ -283,7 +269,7 @@ export function ThreadsSidebar({
                     <span
                       className={
                         thread.status === "active"
-                          ? "text-[#6750a4] dark:text-[#d0bcff] font-semibold"
+                          ? "text-emerald-600 dark:text-emerald-400 font-semibold"
                           : ""
                       }
                     >
@@ -325,7 +311,7 @@ export function ThreadsSidebar({
           aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
             activeNavView === "sessions" || activeNavView === "thread"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60"
+              ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
               : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
           }`}
           title="Sessions"
@@ -350,7 +336,7 @@ export function ThreadsSidebar({
           aria-current={activeNavView === "morning-report" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
             activeNavView === "morning-report"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
+              ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
               : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
           }`}
           title="Morning report"
@@ -365,7 +351,7 @@ export function ThreadsSidebar({
           aria-current={activeNavView === "settings" ? "page" : undefined}
           className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
             activeNavView === "settings"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
+              ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
               : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
           }`}
           title="Settings"

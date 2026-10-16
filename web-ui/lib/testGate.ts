@@ -89,16 +89,21 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("lib/threads") ||
+      p.includes("lib/hooks") ||
       p.includes("app/api/threads") ||
       p.includes("components/LiveRunBlock") ||
+      p.includes("components/ArtifactRenderers") ||
       p.includes("components/ModelBottomSheet") ||
+      p.includes("components/ModelSelector") ||
       p.includes("components/ThreadsSidebar") ||
       p.includes("components/NavigationDrawer") ||
       p.includes("components/SettingsView") ||
       p.includes("components/BuildsView") ||
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
-      p.includes("app/layout.tsx"),
+      p.includes("app/layout.tsx") ||
+      p.includes("app/globals.css") ||
+      p.includes("app/design-tokens.css"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/threadsLaunchTask.test.ts",

@@ -35,6 +35,9 @@ import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
+import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
+// CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
+export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
 import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
@@ -121,290 +124,6 @@ function fileToBase64(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
-}
-
-function highlightTokens(code: string, language?: string): React.ReactNode[] {
-  // Simple, ultra-clean zero-dependency token highlighting for key languages (typescript, javascript, python, json, xml/svg, bash)
-  const lines = code.split("\n");
-  const lang = (language || "").toLowerCase();
-
-  return lines.map((line, lineIdx) => {
-    // If language is xml / svg / html
-    if (lang === "xml" || lang === "svg" || lang === "html") {
-      const parts = line.split(/(<\/?[a-zA-Z0-9:-]+|"[^"]*"|'[^']*'|\/>|>)/g);
-      return (
-        <span key={lineIdx} className="block leading-5">
-          {parts.map((p, pIdx) => {
-            if (/^<\/?[a-zA-Z0-9:-]+$/.test(p)) {
-              return <span key={pIdx} className="text-purple-600 dark:text-purple-400 font-semibold">{p}</span>;
-            }
-            if (/^["'].*["']$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
-            }
-            if (p === ">" || p === "/>") {
-              return <span key={pIdx} className="text-slate-500 dark:text-zinc-500 font-semibold">{p}</span>;
-            }
-            return <span key={pIdx}>{p}</span>;
-          })}
-        </span>
-      );
-    }
-
-    // If language is json
-    if (lang === "json") {
-      const parts = line.split(/("[^"]*"\s*:|"[^"]*"|\b(?:true|false|null|\d+)\b)/g);
-      return (
-        <span key={lineIdx} className="block leading-5">
-          {parts.map((p, pIdx) => {
-            if (/^"[^"]*"\s*:$/.test(p)) {
-              return <span key={pIdx} className="text-indigo-600 dark:text-indigo-400 font-semibold">{p}</span>;
-            }
-            if (/^"[^"]*"$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
-            }
-            if (/^(?:true|false|null|\d+)$/.test(p)) {
-              return <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">{p}</span>;
-            }
-            return <span key={pIdx}>{p}</span>;
-          })}
-        </span>
-      );
-    }
-
-    // General typescript / javascript / python / bash keywords
-    const keywordRegex = /\b(const|let|var|function|return|import|from|export|default|class|interface|type|async|await|if|else|for|while|try|catch|def|print|self|None|True|False)\b|("[^"]*"|'[^']*'|`[^`]*`)|(\/\/.*$|#.*$)/g;
-    const tokens: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = keywordRegex.exec(line)) !== null) {
-      if (match.index > lastIndex) {
-        tokens.push(line.slice(lastIndex, match.index));
-      }
-      if (match[1]) {
-        // Keyword
-        tokens.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-semibold">{match[1]}</span>);
-      } else if (match[2]) {
-        // String literal
-        tokens.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>);
-      } else if (match[3]) {
-        // Comment
-        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-500 italic">{match[3]}</span>);
-      }
-      lastIndex = keywordRegex.lastIndex;
-    }
-    if (lastIndex < line.length) {
-      tokens.push(line.slice(lastIndex));
-    }
-
-    return (
-      <span key={lineIdx} className="block leading-5">
-        {tokens.length > 0 ? tokens : line}
-      </span>
-    );
-  });
-}
-
-export function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
-  const [copied, setCopied] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
-
-  const isSvg = isSvgCode(code, language);
-  const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
-  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "bash");
-  const lines = code.split("\n");
-  const showLineNumbers = lines.length >= 3;
-  const isLong = lines.length > 20;
-
-  const handleCopy = async () => {
-    // Copy the full raw code, never truncated
-    const ok = await copyText(code);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
-  if (isSvg) {
-    return (
-      <div className="my-3">
-        <SvgViewer
-          code={code}
-          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
-          initialTab="preview"
-          allowFullscreen={true}
-        />
-      </div>
-    );
-  }
-
-  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe
-  if (isHtml) {
-    return (
-      <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
-        <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-          <div className="flex items-center gap-2">
-            <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{filename || "index.html"}</span>
-            <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => setActiveTab("preview")}
-                className={`px-2 py-0.5 rounded ${activeTab === "preview" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("code")}
-                className={`px-2 py-0.5 rounded ${activeTab === "code" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
-              >
-                Code
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {isLong && activeTab === "code" && (
-              <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium"
-                title={isExpanded ? "Collapse code block" : "Expand code block"}
-              >
-                {isExpanded ? "Collapse" : "Expand"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
-              title="Copy code"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {activeTab === "preview" ? (
-          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
-            <iframe
-              srcDoc={code}
-              sandbox="allow-scripts"
-              className="w-full h-64 border-0 rounded-xl bg-white"
-              title="HTML Artifact Preview"
-            />
-          </div>
-        ) : (
-          <div className="relative">
-            <div
-              className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
-                !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
-              }`}
-            >
-              {showLineNumbers && (
-                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-                  {lines.map((_, i) => (
-                    <div key={i}>{i + 1}</div>
-                  ))}
-                </div>
-              )}
-              <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
-                <code>{highlightTokens(code, langDisplay)}</code>
-              </pre>
-            </div>
-            {!isExpanded && isLong && (
-              <div
-                className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
-                aria-hidden="true"
-              />
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
-      <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
-          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
-          <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{langDisplay}</span>
-          {isLong && (
-            <span className="text-[10px] text-slate-500 dark:text-zinc-500">
-              ({lines.length} lines)
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {isLong && (
-            <button
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-zinc-800/80"
-              title={isExpanded ? "Collapse code block" : "Expand code block"}
-            >
-              {isExpanded ? "Collapse" : "Expand"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
-            title="Copy code"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="relative">
-        <div
-          className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
-            !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
-          }`}
-        >
-          {showLineNumbers && (
-            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-              {lines.map((_, i) => (
-                <div key={i}>{i + 1}</div>
-              ))}
-            </div>
-          )}
-          <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
-            <code data-code={code}>{highlightTokens(code, langDisplay)}</code>
-          </pre>
-        </div>
-        {!isExpanded && isLong && (
-          <div
-            className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
-            aria-hidden="true"
-          />
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function ChatStream({
@@ -1025,11 +744,11 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-[#6750a4] dark:text-[#d0bcff] shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
-            <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{shortModelLabel}</span>
           </button>
 
@@ -1081,26 +800,6 @@ export function ChatStream({
                     Security telemetry
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      const isDark = document.documentElement.classList.contains("dark");
-                      const next = isDark ? "light" : "dark";
-                      document.documentElement.classList.toggle("dark", next === "dark");
-                      document.documentElement.classList.toggle("light", next === "light");
-                      document.documentElement.setAttribute("data-theme", next);
-                      document.documentElement.style.colorScheme = next;
-                      document.body.classList.toggle("dark", next === "dark");
-                      document.body.classList.toggle("light", next === "light");
-                      localStorage.setItem("app-theme", next);
-                    }
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl flex items-center justify-between"
-                >
-                  <span>Toggle theme</span>
-                  <span className="text-[10px] text-[#6750a4] dark:text-[#d0bcff] font-semibold">Light / Dark</span>
-                </button>
                 {onDeleteThread && (
                   <button
                     type="button"
@@ -1191,20 +890,20 @@ export function ChatStream({
                 </div>
               )}
 
-              {/* User Bubble: vibrant rounded purple pill matching Mockup media_1791044464247.webp */}
+              {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
               {isUser ? (
                 <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
-                  <div className="bg-[#6750a4] text-white rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
-                    <div className="prose prose-invert max-w-none text-sm text-white">
+                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
+                    <div className="prose dark:prose-invert max-w-none text-sm text-blue-950 dark:text-sky-100">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code: ({ children }: any) => (
-                            <code className="px-1.5 py-0.5 rounded bg-white/20 text-white font-mono text-xs">
+                            <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
                               {children}
                             </code>
                           ),
-                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-white">{children}</p>
+                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
                         }}
                       >
                         {m.content}
@@ -1281,7 +980,7 @@ export function ChatStream({
                             }
                             return (
                               <code
-                                className="px-1.5 py-0.5 rounded bg-[#f4eff4] dark:bg-[#2b2930] text-[#6750a4] dark:text-[#d0bcff] font-mono text-xs border border-slate-200 dark:border-zinc-700"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs border border-slate-200 dark:border-zinc-700"
                                 {...props}
                               >
                                 {children}
@@ -1289,17 +988,17 @@ export function ChatStream({
                             );
                           },
                           p: ({ children }: any) => (
-                            <p className="mb-3 last:mb-0 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <p className="mb-3 last:mb-0 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </p>
                           ),
                           ul: ({ children }: any) => (
-                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ul>
                           ),
                           ol: ({ children }: any) => (
-                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ol>
                           ),
@@ -1309,7 +1008,7 @@ export function ChatStream({
                             </li>
                           ),
                           blockquote: ({ children }: any) => (
-                            <blockquote className="border-l-4 border-[#6750a4] bg-[#fdf8fd]/80 dark:bg-[#1d1b20]/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
+                            <blockquote className="border-l-4 border-emerald-500 bg-slate-50/80 dark:bg-zinc-900/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
                               {children}
                             </blockquote>
                           ),
@@ -1594,7 +1293,7 @@ export function ChatStream({
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-2xl mx-auto rounded-3xl bg-[#f4f5f8] dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6]"
+          className="max-w-2xl mx-auto rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea
@@ -1619,7 +1318,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="p-1.5 rounded-full text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0"
               title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
               aria-label="Attach files"
             >
@@ -1655,7 +1354,7 @@ export function ChatStream({
                       title={tooltips[scopeOption]}
                       className={`px-2.5 py-1 rounded-full transition-all ${
                         isSelected
-                          ? "bg-white dark:bg-zinc-900 text-[#5b32e6] dark:text-indigo-300 font-semibold shadow-xs"
+                          ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
                           : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                       }`}
                     >
@@ -1680,7 +1379,7 @@ export function ChatStream({
                 <button
                   type="submit"
                   disabled={!input.trim() && attachedFiles.length === 0}
-                  className="h-9 w-9 rounded-full bg-[#6750a4] hover:bg-[#584391] text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
+                  className="h-9 w-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
                   title="Send message"
                   aria-label="Send message"
                 >

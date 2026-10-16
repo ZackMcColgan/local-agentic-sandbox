@@ -21,7 +21,7 @@ import {
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
 import { SvgViewer } from "./SvgViewer";
-import { CodeBlock } from "./ChatStream";
+import { CodeBlock } from "./ArtifactRenderers";
 import { ThinkingPanel } from "./ThinkingPanel";
 
 interface LiveRunBlockProps {
@@ -288,7 +288,7 @@ export function LiveRunBlock({
           <div className="p-3.5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#fbfbfe] dark:bg-zinc-850/80 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Critic Verdict: {critiquedMilestone.title}</span>
               </span>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${

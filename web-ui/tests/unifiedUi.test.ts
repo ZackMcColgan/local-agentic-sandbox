@@ -499,4 +499,72 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.ok(!container.innerHTML.includes("pending"), "badge hidden when zero");
     });
   });
+
+  describe("Sprint U1 — Token Foundation, useTheme, Dead Code Purge & ArtifactRenderers", () => {
+    it("Task 1: ArtifactRenderers.tsx exists and LiveRunBlock imports from it instead of ChatStream", () => {
+      const artifactPath = path.resolve(__dirname, "../components/ArtifactRenderers.tsx");
+      assert.ok(fs.existsSync(artifactPath), "ArtifactRenderers.tsx must exist");
+      const liveRunContent = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      assert.ok(
+        liveRunContent.includes('from "./ArtifactRenderers"'),
+        "LiveRunBlock must import from ./ArtifactRenderers, not ./ChatStream"
+      );
+      assert.ok(
+        !liveRunContent.includes('from "./ChatStream"'),
+        "LiveRunBlock must NOT import from ./ChatStream (breaks circular dependency)"
+      );
+    });
+
+    it("Task 2: useTheme hook exists and theme toggles are removed from ChatStream and ThreadsSidebar", () => {
+      const hookPath = path.resolve(__dirname, "../lib/hooks/useTheme.ts");
+      assert.ok(fs.existsSync(hookPath), "web-ui/lib/hooks/useTheme.ts must exist");
+
+      const chatStreamContent = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(
+        !chatStreamContent.includes("Toggle theme"),
+        "ChatStream header/menu must NOT contain 'Toggle theme' button"
+      );
+
+      const sidebarContent = fs.readFileSync(path.resolve(__dirname, "../components/ThreadsSidebar.tsx"), "utf8");
+      assert.ok(
+        !sidebarContent.includes("Toggle theme"),
+        "ThreadsSidebar header/menu must NOT contain 'Toggle theme' button"
+      );
+    });
+
+    it("Task 3: Orphaned components (Navbar.tsx, WorkerTiles.tsx, ModelSelector.tsx) are deleted", () => {
+      const compDir = path.resolve(__dirname, "../components");
+      assert.equal(fs.existsSync(path.join(compDir, "Navbar.tsx")), false, "Navbar.tsx must be deleted");
+      assert.equal(fs.existsSync(path.join(compDir, "WorkerTiles.tsx")), false, "WorkerTiles.tsx must be deleted");
+      assert.equal(fs.existsSync(path.join(compDir, "ModelSelector.tsx")), false, "ModelSelector.tsx must be deleted");
+      // DiffViewer must be kept for U2
+      assert.ok(fs.existsSync(path.join(compDir, "DiffViewer.tsx")), "DiffViewer.tsx must be kept for Sprint U2");
+    });
+
+    it("Task 4: design-tokens.css exists in app/ and is imported in globals.css, and banned purple hexes are removed", () => {
+      const tokensPath = path.resolve(__dirname, "../app/design-tokens.css");
+      assert.ok(fs.existsSync(tokensPath), "web-ui/app/design-tokens.css must exist as a committed file");
+
+      const globalsCss = fs.readFileSync(path.resolve(__dirname, "../app/globals.css"), "utf8");
+      assert.ok(
+        globalsCss.includes('@import "./design-tokens.css";') || globalsCss.includes("@import './design-tokens.css';"),
+        "globals.css must @import './design-tokens.css';"
+      );
+
+      // Check banned purple hexes across components
+      const bannedRegex = /#(6750a4|7f67be|d0bcff|17141f|1d1a24|262230|f4f3f7|f4f5f8)\b/i;
+      const compDir = path.resolve(__dirname, "../components");
+      const files = fs.readdirSync(compDir).filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"));
+      const violations: string[] = [];
+
+      for (const f of files) {
+        const content = fs.readFileSync(path.join(compDir, f), "utf8");
+        if (bannedRegex.test(content)) {
+          violations.push(f);
+        }
+      }
+
+      assert.deepEqual(violations, [], `Banned M3 purple/muddy hexes found in components: ${violations.join(", ")}`);
+    });
+  });
 });

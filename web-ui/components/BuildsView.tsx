@@ -26,7 +26,7 @@ export function BuildsView({
   ];
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#f4f3f7] dark:bg-zinc-950 overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
       <div className="max-w-3xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header matching M3 */}
@@ -56,7 +56,7 @@ export function BuildsView({
         {/* Active Build Run Section */}
         {activeTask ? (
           <div>
-            <h2 className="text-lg font-semibold text-[#6750a4] dark:text-[#d0bcff] mb-3 px-1">
+            <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
               Active Build
             </h2>
             <LiveRunBlock
@@ -80,7 +80,7 @@ export function BuildsView({
 
         {/* Pre-baked Toolchains Section */}
         <div>
-          <h2 className="text-lg font-semibold text-[#6750a4] dark:text-[#d0bcff] mb-3 px-1">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Sandbox Toolchains
           </h2>
 
