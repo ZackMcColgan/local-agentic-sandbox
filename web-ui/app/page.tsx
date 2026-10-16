@@ -79,6 +79,13 @@ export default function Home() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
+      const queryTab = urlParams.get("tab");
+      if (queryTab === "skills") setActiveNavView("skills");
+      else if (queryTab === "builds") setActiveNavView("builds");
+      else if (queryTab === "morning-report") setActiveNavView("morning-report");
+      else if (queryTab === "settings") setActiveNavView("settings");
+      else if (queryTab === "security") setViewMode("security");
+
       const saved = queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
       const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 

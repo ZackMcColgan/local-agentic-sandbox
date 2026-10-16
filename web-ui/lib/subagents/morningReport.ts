@@ -133,26 +133,8 @@ function calculateDuration(start: string, end?: string): string {
   return formatDurationSeconds(calculateDurationSeconds(start, end));
 }
 
-/**
- * Checks if a given ISO timestamp falls within the overnight window (default 10pm / 22:00 to 7am / 07:00 UTC or local).
- */
-export function isWithinOvernightWindow(
-  timestampIso: string,
-  windowStartHour: number = 22,
-  windowEndHour: number = 7
-): boolean {
-  const date = new Date(timestampIso);
-  if (Number.isNaN(date.getTime())) return false;
-  const utcHour = date.getUTCHours();
-  const localHour = date.getHours();
-
-  const inRange = (h: number) =>
-    windowStartHour > windowEndHour
-      ? h >= windowStartHour || h < windowEndHour
-      : h >= windowStartHour && h < windowEndHour;
-
-  return inRange(utcHour) || inRange(localHour);
-}
+import { isWithinOvernightWindow } from "./morningReportUtils";
+export { isWithinOvernightWindow };
 
 /**
  * Extracts produced file artifacts and builds working preview URLs for a task.
@@ -258,15 +240,23 @@ export function generateOvernightMorningReport(
   tasks: TaskManifest[],
   options?: {
     filterOvernightWindow?: boolean;
+    windowFilter?: "overnight" | "24h" | "all";
     windowStartHour?: number;
     windowEndHour?: number;
   }
 ): OvernightMorningReport {
   const startHour = options?.windowStartHour ?? 22;
   const endHour = options?.windowEndHour ?? 7;
+  const windowFilter = options?.windowFilter || (options?.filterOvernightWindow ? "overnight" : undefined);
 
   let candidateTasks = Array.isArray(tasks) ? [...tasks] : [];
-  if (options?.filterOvernightWindow) {
+  if (windowFilter === "24h") {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    candidateTasks = candidateTasks.filter((t) => {
+      const ts = new Date(t.startedAt || t.updatedAt || "").getTime();
+      return !Number.isNaN(ts) && ts >= oneDayAgo;
+    });
+  } else if (windowFilter === "overnight" || options?.filterOvernightWindow) {
     const windowFiltered = candidateTasks.filter((t) =>
       isWithinOvernightWindow(t.startedAt || t.updatedAt || new Date().toISOString(), startHour, endHour)
     );
