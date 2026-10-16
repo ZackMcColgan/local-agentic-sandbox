@@ -168,8 +168,14 @@ export async function executeInSandboxTier(
   }
 
   try {
+    const env = { ...process.env };
+    if (env.TSX_TSCONFIG_PATH && !path.isAbsolute(env.TSX_TSCONFIG_PATH)) {
+      env.TSX_TSCONFIG_PATH = path.resolve(process.cwd(), env.TSX_TSCONFIG_PATH);
+    }
+
     const { stdout, stderr } = await execAsync(command, {
       cwd: workspaceDir,
+      env,
       timeout: timeoutSeconds * 1000,
       maxBuffer: 4 * 1024 * 1024
     });

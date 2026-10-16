@@ -101,3 +101,101 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
     }
   });
 });
+
+describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest Test Runner", () => {
+  it("Planner system prompt includes command in acceptance criteria JSON schema", async () => {
+    const plannerCode = fs.readFileSync(
+      path.resolve(process.cwd(), "web-ui/lib/subagents/planner.ts"),
+      "utf8"
+    );
+    assert.match(
+      plannerCode,
+      /"command"\s*:/,
+      "Planner JSON schema must include 'command' field in acceptanceCriteria"
+    );
+  });
+
+  it("normalizeMilestone populates command from testFile when command is omitted", async () => {
+    const { normalizeMilestone } = await import("../lib/subagents/planner.js");
+    assert.equal(typeof normalizeMilestone, "function", "normalizeMilestone must be exported");
+
+    const rawMilestone = {
+      id: "M1",
+      title: "Write math functions",
+      testFile: "tests/math.test.ts",
+      acceptanceCriteria: [
+        {
+          id: "AC-1",
+          assertion: "add returns a + b"
+        }
+      ]
+    };
+
+    const normalized = normalizeMilestone(rawMilestone);
+    assert.ok(normalized.acceptanceCriteria[0].command, "command should be populated from testFile");
+    assert.match(normalized.acceptanceCriteria[0].command!, /tests\/math\.test\.ts/);
+  });
+
+  it("Supervisor testRunner does NOT report exitCode: 0 with passed > 0 when 0 tests ran", async () => {
+    const { runMilestoneTestRunner } = await import("../lib/subagents/supervisor.js");
+    assert.equal(typeof runMilestoneTestRunner, "function", "runMilestoneTestRunner helper must be exported");
+
+    const milestoneWithZeroCommands = {
+      id: "M1",
+      title: "Manual review only",
+      description: "No automated tests",
+      status: "pending" as const,
+      builderIterations: 0,
+      criticRounds: 0,
+      acceptanceCriteria: [
+        {
+          id: "AC-1",
+          assertion: "Code visually verified"
+        }
+      ]
+    };
+
+    const res = await runMilestoneTestRunner(milestoneWithZeroCommands, process.cwd());
+    assert.equal(res.testsRun, 0, "testsRun must be 0");
+    assert.notEqual(res.exitCode, 0, "exitCode must NOT be 0 when 0 tests ran (dishonest success banned)");
+  });
+
+  it("Supervisor testRunner automatically executes testFile when acceptance criteria omit command", async () => {
+    const { runMilestoneTestRunner } = await import("../lib/subagents/supervisor.js");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-test-"));
+    const testRel = "tests/pass.test.ts";
+    const fullTest = path.join(tmpDir, testRel);
+    fs.mkdirSync(path.dirname(fullTest), { recursive: true });
+    fs.writeFileSync(
+      fullTest,
+      "import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('passing test', () => assert.equal(1, 1));\n",
+      "utf8"
+    );
+
+    try {
+      const milestone = {
+        id: "M1",
+        title: "Test milestone",
+        description: "Run testFile",
+        status: "pending" as const,
+        builderIterations: 0,
+        criticRounds: 0,
+        testFile: testRel,
+        acceptanceCriteria: [
+          {
+            id: "AC-1",
+            assertion: "Passes node test"
+          }
+        ]
+      };
+
+      const res = await runMilestoneTestRunner(milestone, tmpDir);
+      assert.equal(res.testsRun, 1, "Should have executed the testFile");
+      assert.equal(res.exitCode, 0, "Passing test should exit 0");
+      assert.equal(res.passed, 1, "1 test passed");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
