@@ -85,6 +85,151 @@ export interface WorkerModelOptions {
   scope?: string;
 }
 
+export interface WorkspaceFileSymbol {
+  path: string;
+  exports: string[];
+}
+
+export interface WorkspaceRepoMap {
+  root: string;
+  files: WorkspaceFileSymbol[];
+  treeSummary: string;
+  length: number;
+  toString(): string;
+}
+
+const IGNORED_SCAN_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  ".turbo",
+  "out",
+  ".cache",
+  "tmp",
+  "temp",
+  ".gemini"
+]);
+
+export function scanWorkspaceRepoMap(
+  rootDir: string,
+  options?: { query?: string; maxFiles?: number }
+): WorkspaceRepoMap {
+  const maxFiles = options?.maxFiles ?? 500;
+  const files: WorkspaceFileSymbol[] = [];
+  const query = options?.query?.toLowerCase();
+
+  function walk(currentDir: string) {
+    if (files.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) break;
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!IGNORED_SCAN_DIRS.has(entry.name)) {
+          walk(fullPath);
+        }
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"].includes(ext)) {
+          const relPath = path.relative(rootDir, fullPath).replace(/\\/g, "/");
+          let exports: string[] = [];
+
+          try {
+            const content = fs.readFileSync(fullPath, "utf8");
+            if (ext === ".py") {
+              const defMatches = content.match(/^(?:async\s+)?def\s+([a-zA-Z_0-9]+)/gm) || [];
+              const classMatches = content.match(/^class\s+([a-zA-Z_0-9]+)/gm) || [];
+              exports = [
+                ...classMatches.map((c) => c.replace(/^class\s+/, "").trim()),
+                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim())
+              ];
+            } else {
+              const sourceFile = ts.createSourceFile(
+                entry.name,
+                content,
+                ts.ScriptTarget.Latest,
+                true,
+                ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+              );
+
+              for (const stmt of sourceFile.statements) {
+                const mods = (stmt as any).modifiers;
+                const hasExport = Array.isArray(mods) && mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
+                if (hasExport) {
+                  if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isInterfaceDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isTypeAliasDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isEnumDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isVariableStatement(stmt)) {
+                    for (const decl of stmt.declarationList.declarations) {
+                      if (decl.name && ts.isIdentifier(decl.name)) {
+                        exports.push(decl.name.text);
+                      }
+                    }
+                  }
+                } else if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+                  for (const el of stmt.exportClause.elements) {
+                    exports.push(el.name.text);
+                  }
+                }
+              }
+            }
+          } catch {
+            // best-effort symbol extraction
+          }
+
+          if (query) {
+            const matchesQuery =
+              relPath.toLowerCase().includes(query) ||
+              exports.some((e) => e.toLowerCase().includes(query));
+            if (!matchesQuery) continue;
+          }
+
+          files.push({ path: relPath, exports });
+        }
+      }
+    }
+  }
+
+  walk(rootDir);
+
+  const treeLines = files.map((f) => {
+    return f.exports.length > 0
+      ? `${f.path}: ${f.exports.join(", ")}`
+      : `${f.path}`;
+  });
+
+  const treeSummary = treeLines.join("\n");
+
+  const repoMap: WorkspaceRepoMap = {
+    root: rootDir,
+    files,
+    treeSummary,
+    length: files.length,
+    toString() {
+      return treeSummary;
+    }
+  };
+
+  return repoMap;
+}
+
 export class ExplorerWorker {
   readonly role: WorkerRole = "explorer";
   private readonly scopedTools = [
@@ -97,8 +242,11 @@ export class ExplorerWorker {
     return [...this.scopedTools];
   }
 
-  async exploreWorkspace(options: { path?: string; query?: string }): Promise<string> {
-    return `Inventory distillation for ${options.path || "workspace root"}`;
+  async exploreWorkspace(options?: { path?: string; query?: string; repoRoot?: string; maxFiles?: number }): Promise<WorkspaceRepoMap> {
+    const root = options?.path
+      ? (path.isAbsolute(options.path) ? options.path : path.resolve(options?.repoRoot || process.cwd(), options.path))
+      : (options?.repoRoot || process.cwd());
+    return scanWorkspaceRepoMap(root, options);
   }
 }
 
@@ -903,9 +1051,11 @@ export class CriticWorker {
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
 ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${diffContext?.testExitCode !== undefined ? `\nAcceptance Test Runner Status: Exit Code ${diffContext.testExitCode}` : ""}
+${diffContext?.testOutput ? `\nTest Output:\n${diffContext.testOutput.slice(-2000)}` : ""}
 
 Diff Under Review:
-${diff.slice(0, 6000)}
+${diff.slice(0, 16000)}
 
 Critically inspect the diff against each criterion. Reference actual diff lines and content in your verdict.
 If any criterion is violated, missing, or has flaws, set approved to false and explain the exact flaw in feedback.
@@ -928,7 +1078,7 @@ Respond strictly in JSON:
         keepAlive: this.keepAlive,
         signal: options?.signal,
         scope: this.scope,
-        options: { temperature: 0.1, num_predict: 512 }
+        options: { temperature: 0.1, num_predict: 2048 }
       });
       verdictText = result.text;
     } catch (err: any) {

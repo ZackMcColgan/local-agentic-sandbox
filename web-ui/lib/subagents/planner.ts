@@ -6,6 +6,7 @@ import {
   type GenerateFn
 } from "./llmClient";
 import { FlywheelSkillsStore, formatSkillsForPlannerPrompt } from "../flywheel/skillsStore";
+import type { WorkspaceRepoMap } from "./workerPool";
 
 export interface PlanSpecInput {
   taskId: string;
@@ -16,6 +17,7 @@ export interface PlanSpecInput {
   generate?: GenerateFn;
   ollamaUrl?: string;
   keepAlive?: string | number;
+  repoMap?: WorkspaceRepoMap | string;
 }
 
 export interface PlanSpec {
@@ -229,9 +231,18 @@ Respond strictly in valid JSON matching this schema:
   ]
 }`;
 
-    const prompt = retrievedPatternsContext
-      ? `${basePrompt}\n\n${retrievedPatternsContext}`
-      : basePrompt;
+    let repoMapContext = "";
+    if (input.repoMap) {
+      const formattedMap = typeof input.repoMap === "string"
+        ? input.repoMap
+        : input.repoMap.treeSummary || input.repoMap.files.map((f) => `${f.path}: ${f.exports.join(", ")}`).join("\n");
+      repoMapContext = `Workspace Repository Map (existing files & symbols):\n${formattedMap.slice(0, 10000)}\nTarget real existing files from this map when modifying existing functionality, or follow established folder structure for new deliverables. Provide executable acceptance test commands.`;
+    }
+
+    const promptParts = [basePrompt];
+    if (retrievedPatternsContext) promptParts.push(retrievedPatternsContext);
+    if (repoMapContext) promptParts.push(repoMapContext);
+    const prompt = promptParts.join("\n\n");
 
     const res = await generate({
       model: modelToUse,
@@ -519,3 +530,13 @@ export function parsePlanSpec(markdown: string): PlanSpec {
     toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)
   };
 }
+
+export const Planner = {
+  generatePlan: generatePlanSpec,
+  generatePlanSpec,
+  parsePlanSpec,
+  classifyTaskComplexity
+};
+
+export { generatePlanSpec as generatePlan };
+
