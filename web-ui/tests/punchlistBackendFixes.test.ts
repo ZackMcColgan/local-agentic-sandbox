@@ -4,10 +4,24 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
+function findRepoRoot(): string {
+  const candidates = [
+    process.cwd(),
+    path.resolve(process.cwd(), ".."),
+    path.resolve(process.cwd(), "../..")
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, "package.json")) && fs.existsSync(path.join(dir, "web-ui"))) {
+      return dir;
+    }
+  }
+  return process.cwd();
+}
+
 describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorker Surgical Patch", () => {
   it("web-ui/Dockerfile copies workspace package.json files in Stage 1", () => {
     const dockerfileContent = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/Dockerfile"),
+      path.resolve(findRepoRoot(), "web-ui/Dockerfile"),
       "utf8"
     );
     assert.match(
@@ -24,7 +38,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
 
   it("web-ui/lib/subagents/workerPool.ts has zero cross-package relative imports from ../../../mcp-server", () => {
     const workerPoolCode = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/lib/subagents/workerPool.ts"),
+      path.resolve(findRepoRoot(), "web-ui/lib/subagents/workerPool.ts"),
       "utf8"
     );
     assert.doesNotMatch(
@@ -105,7 +119,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
 describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest Test Runner", () => {
   it("Planner system prompt includes command in acceptance criteria JSON schema", async () => {
     const plannerCode = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/lib/subagents/planner.ts"),
+      path.resolve(findRepoRoot(), "web-ui/lib/subagents/planner.ts"),
       "utf8"
     );
     assert.match(
@@ -220,7 +234,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 3: B-P0-3 stripCodeFence & AST Retr
 
   it("BuilderWorker AST retry prompt instructs model to enclose code in markdown fence", async () => {
     const workerPoolCode = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/lib/subagents/workerPool.ts"),
+      path.resolve(findRepoRoot(), "web-ui/lib/subagents/workerPool.ts"),
       "utf8"
     );
     const correctionPromptMatch = workerPoolCode.match(/correctionPrompt\s*=\s*`([\s\S]*?)`/);
