@@ -323,5 +323,98 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
   });
 });
 
+describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch Merge to develop", () => {
+  it("executeDeploy rejects main or master branch deployment", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    await assert.rejects(
+      async () => {
+        await pipeline.executeDeploy({
+          branchName: "main",
+          previousSha: "sha1",
+          newSha: "sha2"
+        });
+      },
+      /strictly blocked by safety rails/i
+    );
+  });
+
+  it("executeDeploy runs git checkout develop and git merge --no-ff when branchName is feat/task-*", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const executedCommands: { file: string; args: string[] }[] = [];
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async (file: string, args: string[]) => {
+        executedCommands.push({ file, args });
+        return { exitCode: 0, stdout: "ok\n", stderr: "" };
+      },
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    const result = await pipeline.executeDeploy({
+      branchName: "feat/task-abc123456789",
+      previousSha: "sha1",
+      newSha: "sha2",
+      deploymentName: "web-ui",
+      namespace: "local-agentic-sandbox"
+    });
+
+    assert.equal(result.status, "deployed");
+
+    const checkoutCmd = executedCommands.find(
+      (c) => c.file === "git" && c.args[0] === "checkout" && c.args[1] === "develop"
+    );
+    assert.ok(checkoutCmd, "executeDeploy must run git checkout develop");
+
+    const mergeCmd = executedCommands.find(
+      (c) => c.file === "git" && c.args[0] === "merge" && c.args.includes("feat/task-abc123456789")
+    );
+    assert.ok(mergeCmd, "executeDeploy must run git merge --no-ff <branchName>");
+    assert.ok(mergeCmd.args.includes("--no-ff"), "git merge must use --no-ff flag");
+
+    const mergeIndex = executedCommands.indexOf(mergeCmd);
+    const buildIndex = executedCommands.findIndex((c) => c.file === "docker" && c.args[0] === "build");
+    assert.ok(buildIndex > mergeIndex, "git merge must happen before docker build");
+  });
+
+  it("executeDeploy throws and aborts rollout if git merge fails", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const executedCommands: { file: string; args: string[] }[] = [];
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: true,
+      commandRunner: async (file: string, args: string[]) => {
+        executedCommands.push({ file, args });
+        if (file === "git" && args[0] === "merge") {
+          return { exitCode: 1, stdout: "", stderr: "CONFLICT: Merge conflict in package.json" };
+        }
+        return { exitCode: 0, stdout: "ok\n", stderr: "" };
+      },
+      healthChecker: async () => ({ status: 200, ok: true })
+    });
+
+    await assert.rejects(
+      async () => {
+        await pipeline.executeDeploy({
+          branchName: "feat/task-conflict-123",
+          previousSha: "sha1",
+          newSha: "sha2"
+        });
+      },
+      /Git merge .* failed/i
+    );
+
+    const buildCmd = executedCommands.find((c) => c.file === "docker" && c.args[0] === "build");
+    assert.equal(buildCmd, undefined, "Docker build must not execute when git merge fails");
+  });
+});
+
+
 
 
