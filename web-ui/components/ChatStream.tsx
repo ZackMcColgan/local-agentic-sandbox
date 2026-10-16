@@ -104,6 +104,7 @@ interface ChatStreamProps {
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenDrawer?: () => void;
+  onEnsureThread?: (initialTitle: string) => Promise<string | null>;
   placeholder?: string;
 }
 
@@ -431,6 +432,7 @@ export function ChatStream({
   onSendMessage,
   onDeployRun,
   onOpenDrawer,
+  onEnsureThread,
   placeholder
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
@@ -640,6 +642,29 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
+    // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
+    const isBuilder = isBuilderPrompt(prompt);
+
+    if (isBuilder && onLaunchTask) {
+      const currentAttachments = [...attachedFiles];
+      setAttachedFiles([]);
+      setInput("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "72px";
+      }
+      setIsLoading(true);
+      setStreamStatus("Planning autonomous milestones with real Ollama model...");
+      try {
+        await onLaunchTask(prompt, currentAttachments, selectedScope);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to launch builder task");
+      } finally {
+        setIsLoading(false);
+        setStreamStatus(null);
+      }
+      return;
+    }
+
     setErrorMsg(null);
     setInput("");
     if (textareaRef.current) {
@@ -648,6 +673,11 @@ export function ChatStream({
 
     const currentAttachments = [...attachedFiles];
     setAttachedFiles([]);
+
+    let activeThreadId = threadId;
+    if (!activeThreadId && onEnsureThread) {
+      activeThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+    }
 
     const userMsgId = `user-${Date.now()}`;
     const userMessage: ChatMessage = {
@@ -667,9 +697,9 @@ export function ChatStream({
     setMessages(updatedMessages);
 
     // If inside a persistent thread, persist the user message
-    if (threadId) {
+    if (activeThreadId) {
       try {
-        fetch(`/api/threads/${threadId}`, {
+        fetch(`/api/threads/${activeThreadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -683,23 +713,6 @@ export function ChatStream({
           })
         }).catch((err) => console.warn("Failed to persist user message:", err));
       } catch {}
-    }
-
-    // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
-    const isBuilder = isBuilderPrompt(prompt);
-
-    if (isBuilder && onLaunchTask) {
-      setIsLoading(true);
-      setStreamStatus("Planning autonomous milestones with real Ollama model...");
-      try {
-        await onLaunchTask(prompt, currentAttachments, selectedScope);
-      } catch (err: any) {
-        setErrorMsg(err.message || "Failed to launch builder task");
-      } finally {
-        setIsLoading(false);
-        setStreamStatus(null);
-      }
-      return;
     }
 
     // Otherwise, dispatch to standard streaming chat path
@@ -829,9 +842,10 @@ export function ChatStream({
               const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
               const finalModel = event.model || currentModel;
 
-              if (threadId) {
+              const targetThreadId = activeThreadId || threadId;
+              if (targetThreadId) {
                 try {
-                  fetch(`/api/threads/${threadId}`, {
+                  fetch(`/api/threads/${targetThreadId}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -917,6 +931,11 @@ export function ChatStream({
     return true;
   });
 
+  // Calculate the last linked task message index so LiveRunBlock is only hosted once
+  const lastLinkedTaskMsgIndex = deduplicatedMessages
+    .map((m, i) => (m.taskId || (activeTask && i === deduplicatedMessages.length - 1)) ? i : -1)
+    .reduce((max, i) => Math.max(max, i), -1);
+
   return (
     <div
       onDragOver={handleDragOver}
@@ -984,7 +1003,7 @@ export function ChatStream({
           ) : null}
 
           <h1
-            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate"
+            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[48vw] sm:max-w-md truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -995,7 +1014,7 @@ export function ChatStream({
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
-              className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 text-xs font-semibold uppercase tracking-wider"
+              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 text-xs font-semibold uppercase tracking-wider"
               title={`Task Scope: ${threadScope || activeTask?.scope}`}
             >
               {threadScope || activeTask?.scope}
@@ -1132,7 +1151,12 @@ export function ChatStream({
           const isUser = m.role === "user";
           const isCopied = copiedMessageId === m.id;
           const isThoughtOpen = expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
-          const hasLinkedTask = m.taskId || (activeTask && idx === deduplicatedMessages.length - 1 && activeTask.status === "active");
+          const isTaskHostMessage = idx === lastLinkedTaskMsgIndex && !!activeTask;
+          const isSupersededTaskMessage = !!m.taskId && !isTaskHostMessage;
+
+          if (isSupersededTaskMessage) {
+            return null;
+          }
 
           return (
             <div
@@ -1201,8 +1225,8 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-2xl space-y-3">
-                  {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default) */}
-                  {(m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
+                  {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
+                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
                     const isStreamingThis = isLoading && idx === deduplicatedMessages.length - 1;
 
@@ -1217,20 +1241,21 @@ export function ChatStream({
                     );
                   })()}
 
-                  {/* Inline Live Run Block if this message represents a builder task */}
-                  {hasLinkedTask && activeTask && (
+                  {/* Inline Live Run Block if this message is the designated task host */}
+                  {isTaskHostMessage && activeTask && (
                     <LiveRunBlock
                       task={activeTask}
                       onStopRun={onStopTask}
                       onPauseRun={() => handleRunControlAction("pause")}
                       onResumeRun={() => handleRunControlAction("resume")}
                       onRestartRun={() => handleRunControlAction("restart")}
+                      onDeployRun={onDeployRun}
                       isStopping={isStoppingTask}
                     />
                   )}
 
-                  {/* Text Markdown Content (Suppress disconnected 'Started autonomous...' text if LiveRunBlock is rendered) */}
-                  {m.content && (!hasLinkedTask || !m.content.includes("Started autonomous engineering run.")) && (
+                  {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
+                  {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (
                     <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -1342,6 +1367,7 @@ export function ChatStream({
 
                       {/* Tool Generated SVG Visual Artifacts */}
                       {(() => {
+                        if (isSvgCode(m.content) || m.content.includes("<svg")) return null;
                         const messageSvgs = extractSvgsFromMessage(m);
                         if (messageSvgs.length === 0) return null;
                         return (
@@ -1474,7 +1500,7 @@ export function ChatStream({
         })}
 
         {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
-        {activeTask && !deduplicatedMessages.some(m => m.taskId === activeTask.taskId && m.role === 'assistant') && (
+        {activeTask && lastLinkedTaskMsgIndex === -1 && (
           <div className="w-full max-w-2xl">
             <LiveRunBlock
               task={activeTask}
@@ -1562,101 +1588,106 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Task Scope Segmented Control */}
-        <div className="max-w-2xl mx-auto mb-2 flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400">
-            <span className="font-medium text-[11px] uppercase tracking-wider text-slate-400 dark:text-zinc-500">Scope</span>
-          </div>
-          <div
-            role="radiogroup"
-            aria-label="Task Scope Selector"
-            className="inline-flex rounded-xl p-0.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-medium"
-          >
-            {(["SNIPPET", "SCRIPT", "PROJECT"] as const).map((scopeOption) => {
-              const isSelected = selectedScope === scopeOption;
-              const labels = {
-                SNIPPET: "Snippet",
-                SCRIPT: "Script",
-                PROJECT: "Project"
-              };
-              const tooltips = {
-                SNIPPET: "Single file, single milestone (no scaffolding)",
-                SCRIPT: "1-2 milestones, small utility or script",
-                PROJECT: "Full milestone decomposition & multi-file system"
-              };
-              return (
-                <button
-                  key={scopeOption}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  onClick={() => setSelectedScope(scopeOption)}
-                  title={tooltips[scopeOption]}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${
-                    isSelected
-                      ? "bg-white dark:bg-zinc-800 text-[#5b32e6] dark:text-indigo-300 font-semibold shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  {labels[scopeOption]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Input Bar Card: rounded-full pill matching Mockup 1 & 4 */}
+        {/* Unified Material 3 Two-Deck Composer Card */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-2xl mx-auto relative rounded-full bg-[#f1f3f9] dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 px-3.5 py-1.5 flex items-center gap-2 shadow-xs transition-all focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6]"
+          className="max-w-2xl mx-auto rounded-3xl bg-[#f4f5f8] dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6]"
         >
-          {/* Paperclip Button on left */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 transition-colors shrink-0"
-            title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
-          >
-            <Paperclip className="h-5 w-5 rotate-45" />
-          </button>
-
-          {/* Auto-expanding Filled Textarea */}
+          {/* Top Deck: Auto-expanding Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (e.target.style) {
+                e.target.style.height = "auto";
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+              }
+            }}
             onKeyDown={handleKeyDown}
-            rows={3}
+            rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none py-1.5 leading-relaxed min-h-[72px] max-h-[160px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[72px] max-h-[140px]"
           />
 
-          {/* Send / Stop Morphed Button */}
-          <div className="shrink-0">
-            {isGeneratingOrRunning ? (
-              /* Morph into dark stop button (■) while generating or running */
-              <button
-                type="button"
-                onClick={handleStop}
-                className="h-10 w-10 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-md active:scale-95 transition-all"
-                title="Stop generation / halt workers"
+          {/* Bottom Deck: Controls Bar */}
+          <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-200/50 dark:border-zinc-800/80">
+            {/* Paperclip Button on left */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
+              aria-label="Attach files"
+            >
+              <Paperclip className="h-4.5 w-4.5 rotate-45" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              {/* Task Scope Segmented Control */}
+              <div
+                role="radiogroup"
+                aria-label="Task Scope Selector"
+                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium"
               >
-                <Square className="h-4 w-4 fill-current stroke-none" />
-              </button>
-            ) : (
-              /* Normal purple circle send button with paper airplane */
-              <button
-                type="submit"
-                disabled={!input.trim() && attachedFiles.length === 0}
-                className="h-10 w-10 rounded-full bg-[#6750a4] hover:bg-[#584391] text-white flex items-center justify-center shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all"
-                title="Send message"
-              >
-                <Send className="h-4 w-4 text-white fill-white ml-0.5" />
-              </button>
-            )}
+                {(["SNIPPET", "SCRIPT", "PROJECT"] as const).map((scopeOption) => {
+                  const isSelected = selectedScope === scopeOption;
+                  const labels = {
+                    SNIPPET: "Snippet",
+                    SCRIPT: "Script",
+                    PROJECT: "Project"
+                  };
+                  const tooltips = {
+                    SNIPPET: "Single file, single milestone (no scaffolding)",
+                    SCRIPT: "1-2 milestones, small utility or script",
+                    PROJECT: "Full milestone decomposition & multi-file system"
+                  };
+                  return (
+                    <button
+                      key={scopeOption}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => setSelectedScope(scopeOption)}
+                      title={tooltips[scopeOption]}
+                      className={`px-2.5 py-1 rounded-full transition-all ${
+                        isSelected
+                          ? "bg-white dark:bg-zinc-900 text-[#5b32e6] dark:text-indigo-300 font-semibold shadow-xs"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                      }`}
+                    >
+                      {labels[scopeOption]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Send / Stop Morphed Button */}
+              {isGeneratingOrRunning ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
+                  title="Stop generation / halt workers"
+                  aria-label="Stop generation"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current stroke-none" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() && attachedFiles.length === 0}
+                  className="h-9 w-9 rounded-full bg-[#6750a4] hover:bg-[#584391] text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
+                  title="Send message"
+                  aria-label="Send message"
+                >
+                  <Send className="h-3.5 w-3.5 text-white fill-white ml-0.5" />
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>

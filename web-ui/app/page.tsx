@@ -521,6 +521,35 @@ export default function Home() {
     }
   };
 
+  const handleEnsureThread = async (initialTitle: string): Promise<string | null> => {
+    if (selectedThreadId) return selectedThreadId;
+    try {
+      const res = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: initialTitle || "New session",
+          model: selectedModel,
+          reasoningEffort
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread) {
+          setThreads((prev) => [data.thread, ...prev]);
+          setSelectedThreadId(data.thread.id);
+          try {
+            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+          } catch {}
+          return data.thread.id;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to auto-create thread:", err);
+    }
+    return null;
+  };
+
   const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
 
   return (
@@ -550,8 +579,69 @@ export default function Home() {
         installedModels={installedModels}
       />
 
-      {/* Main View Router */}
-      {activeNavView === "settings" ? (
+      {/* Sessions View (Permanently Mounted to preserve streams, draft state & prevent re-render jank) */}
+      <div className={`${(activeNavView === "sessions" && viewMode === "unified") ? "flex" : "hidden"} flex-1 min-h-0 overflow-hidden`}>
+        {/* Sessions List: On desktop visible side-by-side; on mobile visible if no thread selected */}
+        <div
+          className={`${
+            selectedThreadId !== null ? "hidden sm:flex" : "flex"
+          } w-full sm:w-80 md:w-84 shrink-0 h-full`}
+        >
+          <ThreadsSidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            activeNavView={activeNavView}
+            onSelectThread={handleSelectThread}
+            onNewThread={handleNewThread}
+            onDeleteThread={handleDeleteThread}
+            onNavigate={handleNavigate}
+            onOpenDrawer={() => setIsDrawerOpen(true)}
+          />
+        </div>
+
+        {/* Unified Thread View: Chat + Inline Live Run Blocks */}
+        <div
+          className={`${
+            selectedThreadId === null ? "hidden sm:flex" : "flex"
+          } flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950`}
+        >
+          <ChatStream
+            messages={messages}
+            setMessages={setMessages}
+            onTracesUpdate={handleTracesUpdate}
+            activeModel={selectedModel}
+            agentMode={agentMode}
+            reasoningEffort={reasoningEffort}
+            threadId={currentThread?.id}
+            threadTitle={currentThread?.title || "New session"}
+            threadStatus={currentThread?.status}
+            threadScope={currentThread?.scope}
+            activeTask={activeTask}
+            onStopTask={handleStopRun}
+            onTaskUpdated={(task, updatedThread) => {
+              if (task) setActiveTask(task);
+              if (updatedThread) {
+                setThreads((prev) =>
+                  prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
+                );
+              }
+            }}
+            onBackToList={handleBackToList}
+            onOpenModelSheet={() => setIsModelSheetOpen(true)}
+            onOpenDrawer={() => setIsDrawerOpen(true)}
+            onLaunchTask={handleLaunchTask}
+            onNewThread={handleNewThread}
+            onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
+            onDeployRun={handleDeployRun}
+            onEnsureThread={handleEnsureThread}
+            onViewSecurityTelemetry={() => setViewMode("security")}
+            placeholder="Message..."
+          />
+        </div>
+      </div>
+
+      {/* Alternative Navigation Views */}
+      {activeNavView === "settings" && (
         <SettingsView
           onBack={() => setActiveNavView("sessions")}
           selectedModel={selectedModel}
@@ -561,19 +651,25 @@ export default function Home() {
           onToggleSelfDeploy={handleToggleSelfDeploy}
           deployHistory={deployHistory}
         />
-      ) : activeNavView === "builds" ? (
+      )}
+
+      {activeNavView === "builds" && (
         <BuildsView
           onOpenDrawer={() => setIsDrawerOpen(true)}
           activeTask={activeTask}
           onStopTask={handleStopRun}
           onSelectThread={handleSelectThread}
         />
-      ) : activeNavView === "skills" ? (
+      )}
+
+      {activeNavView === "skills" && (
         <SkillsView
           onOpenDrawer={() => setIsDrawerOpen(true)}
           pendingCount={pendingSkillsCount}
         />
-      ) : activeNavView === "morning-report" ? (
+      )}
+
+      {activeNavView === "morning-report" && (
         <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
           <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
             <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
@@ -606,7 +702,9 @@ export default function Home() {
             )}
           </div>
         </div>
-      ) : viewMode === "security" ? (
+      )}
+
+      {viewMode === "security" && (
         <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-zinc-950">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
             <div>
@@ -638,65 +736,6 @@ export default function Home() {
           <section>
             <ExecutionTrace traces={traces} />
           </section>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* Sessions List: On desktop visible side-by-side; on mobile visible if no thread selected */}
-          <div
-            className={`${
-              selectedThreadId !== null ? "hidden sm:flex" : "flex"
-            } w-full sm:w-80 md:w-84 shrink-0 h-full`}
-          >
-            <ThreadsSidebar
-              threads={threads}
-              selectedThreadId={selectedThreadId}
-              activeNavView={activeNavView}
-              onSelectThread={handleSelectThread}
-              onNewThread={handleNewThread}
-              onDeleteThread={handleDeleteThread}
-              onNavigate={handleNavigate}
-              onOpenDrawer={() => setIsDrawerOpen(true)}
-            />
-          </div>
-
-          {/* Unified Thread View: Chat + Inline Live Run Blocks */}
-          <div
-            className={`${
-              selectedThreadId === null ? "hidden sm:flex" : "flex"
-            } flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950`}
-          >
-            <ChatStream
-              messages={messages}
-              setMessages={setMessages}
-              onTracesUpdate={handleTracesUpdate}
-              activeModel={selectedModel}
-              agentMode={agentMode}
-              reasoningEffort={reasoningEffort}
-              threadId={currentThread?.id}
-              threadTitle={currentThread?.title || "New session"}
-              threadStatus={currentThread?.status}
-              threadScope={currentThread?.scope}
-              activeTask={activeTask}
-              onStopTask={handleStopRun}
-              onTaskUpdated={(task, updatedThread) => {
-                if (task) setActiveTask(task);
-                if (updatedThread) {
-                  setThreads((prev) =>
-                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
-                  );
-                }
-              }}
-              onBackToList={handleBackToList}
-              onOpenModelSheet={() => setIsModelSheetOpen(true)}
-              onOpenDrawer={() => setIsDrawerOpen(true)}
-              onLaunchTask={handleLaunchTask}
-              onNewThread={handleNewThread}
-              onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
-              onDeployRun={handleDeployRun}
-              onViewSecurityTelemetry={() => setViewMode("security")}
-              placeholder="Message..."
-            />
-          </div>
         </div>
       )}
     </div>
