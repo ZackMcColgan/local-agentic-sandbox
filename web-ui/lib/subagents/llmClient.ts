@@ -292,13 +292,13 @@ export function stripCodeFence(raw: string): string {
   }
 
   // 3. If surrounded or containing a code block, extract the content of the block
-  const match = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```/);
+  const match = cleaned.match(/```[a-zA-Z0-9_.+-]*[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*/);
   if (match) {
     return match[1].trim();
   }
 
   // 4. Fallback for unclosed code fence
-  const openMatch = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*)$/);
+  const openMatch = cleaned.match(/```[a-zA-Z0-9_.+-]*[ \t]*\r?\n([\s\S]*)$/);
   if (openMatch) {
     return openMatch[1].trim();
   }

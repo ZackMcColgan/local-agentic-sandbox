@@ -199,3 +199,38 @@ describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest T
   });
 });
 
+describe("Flash 3.8 Backend Shakeout — Fix 3: B-P0-3 stripCodeFence & AST Retry Prompt", () => {
+  it("stripCodeFence cleanly strips fences with trailing spaces", async () => {
+    const { stripCodeFence } = await import("../lib/subagents/llmClient.js");
+    const input = "```typescript   \nconst x = 1;\n```";
+    assert.equal(stripCodeFence(input), "const x = 1;");
+  });
+
+  it("stripCodeFence strips conversational preamble and closing remarks around code fences", async () => {
+    const { stripCodeFence } = await import("../lib/subagents/llmClient.js");
+    const input = "Here is the fix:\n```typescript\nconst y = 2;\n```\nHope this helps!";
+    assert.equal(stripCodeFence(input), "const y = 2;");
+  });
+
+  it("stripCodeFence handles CRLF cleanly", async () => {
+    const { stripCodeFence } = await import("../lib/subagents/llmClient.js");
+    const input = "```\r\nconst z = 3;\r\n```";
+    assert.equal(stripCodeFence(input), "const z = 3;");
+  });
+
+  it("BuilderWorker AST retry prompt instructs model to enclose code in markdown fence", async () => {
+    const workerPoolCode = fs.readFileSync(
+      path.resolve(process.cwd(), "web-ui/lib/subagents/workerPool.ts"),
+      "utf8"
+    );
+    const correctionPromptMatch = workerPoolCode.match(/correctionPrompt\s*=\s*`([\s\S]*?)`/);
+    assert.ok(correctionPromptMatch, "correctionPrompt must be defined");
+    assert.match(
+      correctionPromptMatch[1],
+      /enclosed in a markdown code fence/,
+      "AST retry correctionPrompt must explicitly instruct the model to use a markdown code fence"
+    );
+  });
+});
+
+

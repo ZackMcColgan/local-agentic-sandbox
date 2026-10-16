@@ -736,7 +736,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
 
-Please fix the syntax error and output the complete, valid, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Please fix the syntax error and output the complete, valid file content for "${targetRelPath}" enclosed in a markdown code fence (\`\`\`typescript ... \`\`\`). Do not include conversational prose or explanation outside the fence.`;
 
         const retryResult = await generate({
           model: modelToUse,
