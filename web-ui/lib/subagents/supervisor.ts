@@ -708,6 +708,7 @@ export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
   gitOps?: WorkerGitOps;
   gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  signal?: AbortSignal;
 }
 
 export interface ProductionStepExecutorOptions {
@@ -715,6 +716,7 @@ export interface ProductionStepExecutorOptions {
   repoRoot?: string;
   model?: string;
   scope?: string;
+  signal?: AbortSignal;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
   testRunner?: (
     milestone: Milestone,
@@ -860,14 +862,14 @@ export function createProductionStepExecutor(
       const builder = createBuilderWorker({
         model: builderModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(builderModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(builderModel) : "24h",
         scope: effectiveScope
       });
 
       const critic = createCriticWorker({
         model: criticModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(criticModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(criticModel) : "24h",
         scope: effectiveScope
       });
 
@@ -896,6 +898,7 @@ export function createProductionStepExecutor(
           builderRes = await workerPool.executeJob({
             role: "builder",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await builder.executeMilestoneWork(milestone, {
                 repoRoot,
@@ -973,6 +976,7 @@ export function createProductionStepExecutor(
           const criticRes = await workerPool.executeJob({
             role: "critic",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await critic.evaluateMilestoneDiff(
                 milestone,
@@ -1079,11 +1083,24 @@ interface GlobalSupervisorState {
 }
 
 const globalSupervisorState: GlobalSupervisorState =
-  (globalThis as any).__argonSupervisorState ||
-  ((globalThis as any).__argonSupervisorState = {
+  (globalThis as any).__supervisorGlobalState ||
+  ((globalThis as any).__supervisorGlobalState = {
     pausedTasks: new Set<string>(),
     abortControllers: new Map<string, AbortController>()
   });
+
+/**
+ * Aborts an active task execution and evicts its AbortController from memory.
+ */
+export function cancelTask(taskId: string): boolean {
+  const controller = globalSupervisorState.abortControllers.get(taskId);
+  if (controller) {
+    controller.abort();
+    globalSupervisorState.abortControllers.delete(taskId);
+    return true;
+  }
+  return false;
+}
 
 /**
  * Overnight Supervisor / Watchdog
@@ -1224,6 +1241,9 @@ export class OvernightSupervisor {
       recoveryAttempted: false
     };
 
+    if (!task.checkpoints) {
+      task.checkpoints = [];
+    }
     task.checkpoints.push(checkpoint);
     task.updatedAt = new Date().toISOString();
 
@@ -1477,26 +1497,45 @@ export class OvernightSupervisor {
       }
     }
 
-    while (task.currentMilestoneIndex < task.milestones.length) {
-      if (task.status === "paused" || this.isPaused(task.taskId)) {
-        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
-        break;
-      }
-      const mIdx = task.currentMilestoneIndex;
-      const milestone = task.milestones[mIdx];
-      let attempt = 0;
-      let milestoneCompleted = false;
+    const controller = this.getAbortController(task.taskId) || new AbortController();
+    this.setAbortController(task.taskId, controller);
+    const signal = options?.signal || controller.signal;
 
-      while (!milestoneCompleted && attempt < 3) {
-        attempt++;
-        try {
-          if (executor) {
-            console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
-            const res = await executor(milestone, attempt);
-            if (task.status === "paused" || this.isPaused(task.taskId)) {
-              console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
-              break;
-            }
+    try {
+      while (task.currentMilestoneIndex < task.milestones.length) {
+        if (signal?.aborted || task.status === "cancelled" || task.status === "paused" || this.isPaused(task.taskId)) {
+          if (signal?.aborted || task.status === "cancelled") {
+            task.status = "cancelled";
+            console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`);
+            break;
+          }
+          console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+          break;
+        }
+        const mIdx = task.currentMilestoneIndex;
+        const milestone = task.milestones[mIdx];
+        let attempt = 0;
+        let milestoneCompleted = false;
+
+        while (!milestoneCompleted && attempt < 3) {
+          if (signal?.aborted || task.status === "cancelled") {
+            task.status = "cancelled";
+            break;
+          }
+          attempt++;
+          try {
+            if (executor) {
+              console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
+              const res = await executor(milestone, attempt);
+              if (signal?.aborted || task.status === "cancelled") {
+                task.status = "cancelled";
+                console.log(`[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`);
+                break;
+              }
+              if (task.status === "paused" || this.isPaused(task.taskId)) {
+                console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+                break;
+              }
             console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
             if (res.status === "completed") {
               milestone.status = "completed";
@@ -1539,7 +1578,8 @@ export class OvernightSupervisor {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
-          if (task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+          if (signal?.aborted || task.status === "cancelled" || task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+            task.status = (signal?.aborted || err.name === "AbortError") ? "cancelled" : task.status;
             console.log(`[supervisor] Task ${task.taskId} caught abort/pause during milestone ${milestone.id}. Halting.`);
             break;
           }
@@ -1566,6 +1606,12 @@ export class OvernightSupervisor {
             }
           }
         }
+      }
+
+      if (signal?.aborted || task.status === "cancelled") {
+        task.status = "cancelled";
+        console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`);
+        break;
       }
 
       if (task.status === "paused" || this.isPaused(task.taskId)) {
@@ -1596,6 +1642,12 @@ export class OvernightSupervisor {
         this.saveCheckpoint(task);
         return task;
       }
+    }
+
+    if (signal?.aborted || task.status === "cancelled") {
+      task.status = "cancelled";
+      this.saveCheckpoint(task);
+      return task;
     }
 
     if (task.status === "paused" || this.isPaused(task.taskId)) {
@@ -1693,7 +1745,10 @@ export class OvernightSupervisor {
       this.saveCheckpoint(task);
     }
     return task;
+  } finally {
+    this.deleteAbortController(task.taskId);
   }
+}
 
   /**
    * Stall detection: checks if no forward progress has been made for stallTimeoutMs.

@@ -233,4 +233,95 @@ describe("Flash 3.8 Backend Shakeout — Fix 3: B-P0-3 stripCodeFence & AST Retr
   });
 });
 
+describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & AbortController", () => {
+  it("cancelTask aborts the registered AbortController for a taskId", async () => {
+    const { cancelTask, OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    assert.equal(typeof cancelTask, "function", "cancelTask must be exported");
+
+    const supervisor = new OvernightSupervisor();
+    const taskId = "task-cancel-test-1";
+    const controller = new AbortController();
+    supervisor.setAbortController(taskId, controller);
+
+    assert.equal(controller.signal.aborted, false, "Signal should not be aborted initially");
+    const cancelled = cancelTask(taskId);
+    assert.equal(cancelled, true, "cancelTask should return true for registered task");
+    assert.equal(controller.signal.aborted, true, "Signal must be aborted after cancelTask");
+    assert.equal(supervisor.getAbortController(taskId), undefined, "Controller must be removed after cancellation");
+  });
+
+  it("executeTaskWithRecovery halts between milestone steps when signal is aborted", async () => {
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-abort-"));
+    const supervisor = new OvernightSupervisor({ checkpointDirectory: tmpDir });
+    const controller = new AbortController();
+
+    let stepsExecuted = 0;
+    const mockStepExecutor = async (m: any) => {
+      stepsExecuted++;
+      // Abort after first milestone
+      controller.abort();
+      return { status: "completed", targetFile: "file.ts", diff: "diff" };
+    };
+
+    const task: any = {
+      taskId: "task-abort-loop-test",
+      status: "active",
+      currentMilestoneIndex: 0,
+      journal: [],
+      checkpoints: [],
+      milestones: [
+        { id: "M1", title: "M1", status: "pending", builderIterations: 0, criticRounds: 0, acceptanceCriteria: [] },
+        { id: "M2", title: "M2", status: "pending", builderIterations: 0, criticRounds: 0, acceptanceCriteria: [] }
+      ]
+    };
+
+    try {
+      const res = await supervisor.executeTaskWithRecovery(task, {
+        stepExecutor: mockStepExecutor as any,
+        signal: controller.signal
+      });
+
+      assert.equal(stepsExecuted, 1, "Only first milestone should execute before abort halts loop");
+      assert.equal(res.status, "cancelled", "Task status must be marked cancelled");
+      assert.equal(res.milestones[1].status, "pending", "Second milestone must remain pending");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("createProductionStepExecutor passes abortSignal to workerPool.executeJob", async () => {
+    const { createProductionStepExecutor } = await import("../lib/subagents/supervisor.js");
+    let signalReceived: AbortSignal | undefined;
+
+    const mockWorkerPool: any = {
+      getModelForRole: () => "swift-15-27b-mtp",
+      keepAliveFor: () => "24h",
+      executeJob: async (job: any) => {
+        signalReceived = job.abortSignal;
+        return { diff: "diff", gitSha: "a".repeat(40), targetFile: "test.ts" };
+      }
+    };
+
+    const controller = new AbortController();
+    const executor = createProductionStepExecutor({
+      workerPool: mockWorkerPool,
+      signal: controller.signal
+    });
+
+    const milestone: any = {
+      id: "M1",
+      title: "M1",
+      status: "pending",
+      builderIterations: 0,
+      criticRounds: 0,
+      acceptanceCriteria: []
+    };
+
+    await executor(milestone, 1);
+    assert.equal(signalReceived, controller.signal, "createProductionStepExecutor must pass abortSignal to workerPool.executeJob");
+  });
+});
+
+
 
