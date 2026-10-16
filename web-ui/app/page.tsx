@@ -460,7 +460,12 @@ export default function Home() {
   };
 
   // Launch a multi-milestone builder task inside the thread
-  const handleLaunchTask = async (goal: string, attachments?: any[], scope?: TaskScope) => {
+  const handleLaunchTask = async (
+    goal: string,
+    attachments?: any[],
+    scope?: TaskScope,
+    autoDeployOnGreen?: boolean
+  ) => {
     try {
       const res = await fetch("/api/threads", {
         method: "POST",
@@ -473,7 +478,8 @@ export default function Home() {
           threadId: selectedThreadId,
           attachments,
           model: selectedModel,
-          reasoningEffort
+          reasoningEffort,
+          autoDeployOnGreen: Boolean(autoDeployOnGreen)
         })
       });
 
@@ -871,6 +877,7 @@ export default function Home() {
             activeTask={activeTask}
             onStopTask={handleStopRun}
             onSelectThread={handleSelectThread}
+            onDeployRun={handleDeployRun}
           />
         )}
 

@@ -163,6 +163,23 @@ export class SelfDeployPipeline {
     return [...inMemoryDeployHistory];
   }
 
+  public async executeDeploy(
+    input: SelfDeployInput & { preRollout?: boolean; skipPreRollout?: boolean }
+  ): Promise<SelfDeployRecord> {
+    const shouldRunPreRollout = input.preRollout ?? (input.skipPreRollout ? false : false);
+    if (input.preRollout === true) {
+      const gateRes = await this.commandRunner("npm", ["run", "test:gate"]);
+      if (gateRes.exitCode !== 0) {
+        throw new Error(`Pre-rollout test:gate failed: ${gateRes.stderr || gateRes.stdout}`);
+      }
+      const buildRes = await this.commandRunner("npm", ["run", "build"]);
+      if (buildRes.exitCode !== 0) {
+        throw new Error(`Pre-rollout build failed: ${buildRes.stderr || buildRes.stdout}`);
+      }
+    }
+    return this.executeSelfDeploy(input);
+  }
+
   public async executeSelfDeploy(input: SelfDeployInput): Promise<SelfDeployRecord> {
     const deployId = `dep-${Date.now()}`;
     const timestamp = new Date().toISOString();

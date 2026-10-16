@@ -6,6 +6,7 @@ import {
 } from "@/lib/deploy/selfDeploy";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
+import { TaskManifest } from "@/lib/subagents/types";
 
 export async function GET(_req: NextRequest) {
   try {
@@ -87,6 +88,84 @@ export async function POST(req: NextRequest) {
         deploymentNamespace,
         deployStatus: latestDeploy?.status || "deployed",
         rollbackStatus: latestDeploy?.rollbackStatus || "none"
+      });
+    }
+
+    if (action === "executeSelfDeploy" || action === "executeDeploy") {
+      const {
+        taskId,
+        branchName: inputBranchName,
+        previousSha: inputPrevSha,
+        newSha: inputNewSha,
+        deploymentName,
+        namespace,
+        hostAddress,
+        imageTag,
+        skipPreRollout,
+        preRollout
+      } = body;
+
+      let branchName = inputBranchName;
+      let previousSha = inputPrevSha || "develop";
+      let newSha = inputNewSha;
+
+      let task: TaskManifest | null = null;
+      let supervisor: OvernightSupervisor | null = null;
+
+      if (taskId) {
+        supervisor = new OvernightSupervisor();
+        task = await supervisor.resumeTaskFromCheckpoint(taskId);
+        if (task) {
+          branchName = branchName || task.branchName;
+          const lastMilestone = task.milestones?.[task.milestones.length - 1];
+          newSha = newSha || lastMilestone?.commitSha || "HEAD";
+        }
+      }
+
+      branchName = branchName || "feat/task-preview";
+      newSha = newSha || "HEAD";
+
+      const pipeline =
+        (globalThis as any).__mockSelfDeployPipeline ||
+        new SelfDeployPipeline(
+          body.dryRun
+            ? {
+                commandRunner: async () => ({ exitCode: 0, stdout: "ok\n", stderr: "" }),
+                healthChecker: async () => ({ status: 200, ok: true })
+              }
+            : undefined
+        );
+      const record = await pipeline.executeDeploy({
+        branchName,
+        previousSha,
+        newSha,
+        deploymentName,
+        namespace,
+        hostAddress,
+        imageTag,
+        skipPreRollout: Boolean(skipPreRollout),
+        preRollout: Boolean(preRollout)
+      });
+
+      if (task && supervisor) {
+        const host = hostAddress || process.env.DEPLOY_HOST || "127.0.0.1";
+        const port = process.env.DEPLOY_PORT || "3001";
+        const deployUrl = `http://${host}:${port}`;
+        task.deploymentUrl = deployUrl;
+        task.deploymentNamespace = namespace || "local-agentic-sandbox";
+        task.updatedAt = new Date().toISOString();
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "supervisor",
+          message: `SelfDeployPipeline executed: status=${record.status}, rollbackStatus=${record.rollbackStatus}, health=${record.healthCheckResult.status}`
+        });
+        supervisor.saveCheckpoint(task);
+      }
+
+      return NextResponse.json({
+        success: record.status === "deployed",
+        ...record,
+        record
       });
     }
 

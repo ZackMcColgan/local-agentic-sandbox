@@ -10,13 +10,15 @@ interface BuildsViewProps {
   activeTask: TaskManifest | null;
   onStopTask?: () => Promise<void> | void;
   onSelectThread: (threadId: string) => void;
+  onDeployRun?: (taskId: string) => Promise<void> | void;
 }
 
 export function BuildsView({
   onOpenDrawer,
   activeTask,
   onStopTask,
-  onSelectThread
+  onSelectThread,
+  onDeployRun
 }: BuildsViewProps) {
   const toolchains = [
     { name: "Node.js 22", tag: "node:22", status: "Active", desc: "TypeScript & Web UI toolchain" },
@@ -106,6 +108,8 @@ export function BuildsView({
               </button>
               <button
                 type="button"
+                data-testid="merge-deploy-btn"
+                onClick={() => onDeployRun && activeTask && onDeployRun(activeTask.taskId)}
                 className="py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors"
               >
                 Merge to `develop` & Deploy

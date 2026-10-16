@@ -42,6 +42,8 @@ import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
+import { WorkerGitOps } from "../git/workerGitOps";
+import { SelfDeployPipeline } from "../deploy/selfDeploy";
 
 let sycophancyProbeExecuted = false;
 
@@ -704,6 +706,8 @@ export type StepExecutor = (
 
 export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
+  gitOps?: WorkerGitOps;
+  gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 }
 
 export interface ProductionStepExecutorOptions {
@@ -1374,6 +1378,48 @@ export class OvernightSupervisor {
       throw new Error("No stepExecutor provided; refusing to fake completion.");
     }
 
+    const repoCandidates = [
+      process.env.WORKSPACE_DIR,
+      "/workspace",
+      process.cwd(),
+      path.resolve(process.cwd(), "..")
+    ].filter(Boolean) as string[];
+    let repoRoot = repoCandidates[0];
+    for (const d of repoCandidates) {
+      if (fs.existsSync(path.join(d, ".git"))) {
+        repoRoot = d;
+        break;
+      }
+    }
+
+    const gitOps =
+      options?.gitOps ||
+      new WorkerGitOps({
+        runId: task.taskId,
+        repoDir: repoRoot
+      });
+
+    const shouldRunGitOps =
+      options?.gitOps !== undefined ||
+      task.enableGitOps === true ||
+      (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")));
+
+    if (shouldRunGitOps && !task.gitOpsBranchCreated) {
+      const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
+      try {
+        await gitOps.createAndSwitchBranch(branchToUse);
+        task.gitOpsBranchCreated = true;
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: `Created and switched to isolated task branch \`${branchToUse}\``
+        });
+        console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
+      } catch (gErr: any) {
+        console.warn(`[supervisor] GitOps branch switch warning:`, gErr?.message || gErr);
+      }
+    }
+
     while (task.currentMilestoneIndex < task.milestones.length) {
       if (task.status === "paused" || this.isPaused(task.taskId)) {
         console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
@@ -1404,6 +1450,18 @@ export class OvernightSupervisor {
               if (res.builderModel) milestone.builderModel = res.builderModel;
               milestone.completedAt = new Date().toISOString();
               milestoneCompleted = true;
+
+              if (gitOps && res.targetFile) {
+                try {
+                  const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+                  const commitRes = await gitOps.stageAndCommit([res.targetFile], commitMsg);
+                  if (commitRes.commitSha) {
+                    milestone.commitSha = commitRes.commitSha;
+                  }
+                } catch (cErr: any) {
+                  console.warn(`[supervisor] GitOps milestone commit warning:`, cErr?.message || cErr);
+                }
+              }
 
               if (res.thinking) {
                 const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
@@ -1492,6 +1550,89 @@ export class OvernightSupervisor {
     if (task.currentMilestoneIndex >= task.milestones.length) {
       task.status = "completed";
       task.completedAt = new Date().toISOString();
+
+      if (shouldRunGitOps) {
+        console.log(`[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`);
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: "Running pre-merge test:gate verification (<90s budget)..."
+        });
+
+        let gateExitCode = 0;
+        let gateOut = "";
+
+        if (options?.gateRunner) {
+          try {
+            const gateRes = await options.gateRunner();
+            gateExitCode = gateRes.exitCode;
+            gateOut = gateRes.stdout || gateRes.stderr;
+          } catch (gErr: any) {
+            gateExitCode = 1;
+            gateOut = gErr?.message || String(gErr);
+          }
+        } else {
+          try {
+            const gateRes = await gitOps.runGateTest();
+            gateExitCode = gateRes.exitCode;
+            gateOut = gateRes.stdout || gateRes.stderr;
+          } catch (gateErr: any) {
+            console.error(`[supervisor] test:gate run failed:`, gateErr);
+            gateExitCode = 1;
+            gateOut = gateErr?.message || String(gateErr);
+          }
+        }
+
+        task.gatePassed = gateExitCode === 0;
+        task.gateOutput = gateOut;
+
+        if (gateExitCode === 0) {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
+          });
+
+          // Check if autoDeployOnGreen is enabled
+          if (task.autoDeployOnGreen) {
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "deploy",
+              message: "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout..."
+            });
+
+            try {
+              const pipeline = new SelfDeployPipeline();
+              const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
+              const deployRec = await pipeline.executeDeploy({
+                branchName: task.branchName,
+                previousSha: "develop",
+                newSha: lastSha,
+                skipPreRollout: true
+              });
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "deploy",
+                message: `Self-deploy finished with status: ${deployRec.status}`
+              });
+            } catch (dErr: any) {
+              console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "deploy",
+                message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`
+              });
+            }
+          }
+        } else {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`
+          });
+        }
+      }
+
       this.saveCheckpoint(task);
     }
     return task;

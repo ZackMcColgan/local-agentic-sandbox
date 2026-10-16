@@ -33,13 +33,18 @@ export async function POST(req: Request) {
       const toolchain: ToolchainType = body.toolchain || "node:22";
       const scope: TaskScope = body.scope || "PROJECT";
       const taskId = `task-${Date.now()}`;
+      const branchName = `feat/task-${taskId.slice(0, 12)}`;
+      const enableGitOps = body.enableGitOps !== false;
+      const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
       const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: body.model });
 
       const manifest: TaskManifest = {
         taskId,
         goal,
-        branchName: "feat/v2.5-overnight",
-        branch: "feat/v2.5-overnight",
+        branchName,
+        branch: branchName,
+        enableGitOps,
+        autoDeployOnGreen,
         toolchain,
         scope,
         complexity: planSpec.complexity,
@@ -273,7 +278,6 @@ export async function POST(req: Request) {
       })().catch((err) => {
         console.error(`[threads] Task ${taskId} execution failed:`, err);
       });
-
 
       return NextResponse.json({ thread, task: manifest }, { status: 201 });
     }

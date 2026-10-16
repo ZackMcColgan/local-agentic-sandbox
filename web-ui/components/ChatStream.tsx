@@ -102,7 +102,8 @@ interface ChatStreamProps {
   onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
-  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope) => Promise<void>;
+  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope, autoDeployOnGreen?: boolean) => Promise<void>;
+  defaultComposerMode?: "chat" | "build";
   onNewThread?: () => void;
   onDeleteThread?: () => void;
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
@@ -161,7 +162,8 @@ export function ChatStream({
   onToggleSidebar,
   isSidebarOpen = true,
   onToggleWorkspace,
-  isWorkspaceOpen = false
+  isWorkspaceOpen = false,
+  defaultComposerMode
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -170,7 +172,8 @@ export function ChatStream({
   const setMessages = propsSetMessages ?? setLocalMessages;
 
   // Composer Mode state (Chat | Build)
-  const [composerMode, setComposerMode] = useState<"chat" | "build">("chat");
+  const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
+  const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
   // Task Scope selection state: default is PROJECT
   const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
 
@@ -387,7 +390,7 @@ export function ChatStream({
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(cleanPrompt, currentAttachments, selectedScope);
+        await onLaunchTask(cleanPrompt, currentAttachments, selectedScope, autoDeployOnGreen);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
@@ -1405,6 +1408,20 @@ export function ChatStream({
                   Build
                 </button>
               </div>
+
+              {/* Opt-in Auto-Deploy on Green Gate Checkbox (Sprint A4 / CEO Decision 3) */}
+              {composerMode === "build" && (
+                <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-zinc-400 cursor-pointer select-none px-1">
+                  <input
+                    type="checkbox"
+                    checked={autoDeployOnGreen}
+                    onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
+                    className="rounded border-slate-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                  />
+                  <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
+                  <span className="sm:hidden">Auto-Deploy</span>
+                </label>
+              )}
 
               {/* Send / Stop Morphed Button */}
               {isGeneratingOrRunning ? (

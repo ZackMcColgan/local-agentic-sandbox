@@ -551,12 +551,12 @@ export function LiveRunBlock({
             {isCompleted && !task.deploymentUrl && onDeployRun && (
               <button
                 type="button"
-                data-testid="deploy-preview-btn"
+                data-testid="merge-rollout-btn"
                 onClick={() => onDeployRun(task.taskId)}
                 className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span>Deploy Preview</span>
+                <span>Merge to develop & Rollout</span>
               </button>
             )}
             {task.deploymentUrl && (

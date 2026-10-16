@@ -158,6 +158,11 @@ export interface TaskManifest {
     failingStep?: string;
     summary?: string;
   };
+  enableGitOps?: boolean;
+  autoDeployOnGreen?: boolean;
+  gatePassed?: boolean;
+  gateOutput?: string;
+  gitOpsBranchCreated?: boolean;
 }
 
 export interface MorningReport {
