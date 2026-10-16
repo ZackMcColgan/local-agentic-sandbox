@@ -101,6 +101,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/BuildsView") ||
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
+      p.includes("next.config") ||
       p.includes("app/layout.tsx") ||
       p.includes("app/globals.css") ||
       p.includes("app/design-tokens.css"),
@@ -397,6 +398,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
+    normalizedPath.includes(".agent") ||
     normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||

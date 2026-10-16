@@ -76,11 +76,24 @@ async function capture(url, width, height, isMobile, outputPath, delayMs = 1200)
   }
 }
 
+async function getBaseUrl() {
+  if (process.env.UI_URL) return process.env.UI_URL;
+  const candidates = ['http://127.0.0.1:3005', 'http://127.0.0.1:3001'];
+  for (const c of candidates) {
+    try {
+      const res = await fetch(c);
+      if (res.status < 500) return c;
+    } catch {}
+  }
+  return 'http://127.0.0.1:3001';
+}
+
 async function run() {
-  console.log('Capturing visual test screenshots across Desktop/Mobile and Light/Dark modes...');
+  const baseUrl = await getBaseUrl();
+  console.log(`Capturing visual test screenshots against ${baseUrl} across Desktop/Mobile and Light/Dark modes...`);
   let threadQuery = '';
   try {
-    const tRes = await fetch('http://127.0.0.1:3001/api/threads');
+    const tRes = await fetch(`${baseUrl}/api/threads`);
     if (tRes.ok) {
       const tData = await tRes.json();
       if (tData.threads && tData.threads.length > 0) {
@@ -89,16 +102,16 @@ async function run() {
     }
   } catch {}
 
-  await capture(`http://127.0.0.1:3001/?theme=light${threadQuery}`, 1280, 800, false, 'test_ui_desktop_light.png');
-  await capture(`http://127.0.0.1:3001/?theme=light${threadQuery}`, 390, 844, true, 'test_ui_mobile_light.png');
-  await capture(`http://127.0.0.1:3001/?theme=dark${threadQuery}`, 1280, 800, false, 'test_ui_desktop_dark.png');
-  await capture(`http://127.0.0.1:3001/?theme=dark${threadQuery}`, 390, 844, true, 'test_ui_mobile_dark.png');
-  await capture('http://127.0.0.1:3001/?theme=dark&tab=security', 1280, 900, false, 'test_ui_telemetry_desktop.png');
-  await capture('http://127.0.0.1:3001/?theme=light&tab=security', 390, 844, true, 'test_ui_telemetry_mobile.png');
-  await capture('http://127.0.0.1:3001/morning-report?theme=light', 1280, 900, false, 'test_ui_morning_report_desktop_light.png', 2200);
-  await capture('http://127.0.0.1:3001/morning-report?theme=light', 390, 844, true, 'test_ui_morning_report_mobile_light.png', 2200);
-  await capture('http://127.0.0.1:3001/morning-report?theme=dark', 1280, 900, false, 'test_ui_morning_report_desktop_dark.png', 2200);
-  await capture('http://127.0.0.1:3001/morning-report?theme=dark', 390, 844, true, 'test_ui_morning_report_mobile_dark.png', 2200);
+  await capture(`${baseUrl}/?theme=light${threadQuery}`, 1280, 800, false, 'test_ui_desktop_light.png');
+  await capture(`${baseUrl}/?theme=light${threadQuery}`, 390, 844, true, 'test_ui_mobile_light.png');
+  await capture(`${baseUrl}/?theme=dark${threadQuery}`, 1280, 800, false, 'test_ui_desktop_dark.png');
+  await capture(`${baseUrl}/?theme=dark${threadQuery}`, 390, 844, true, 'test_ui_mobile_dark.png');
+  await capture(`${baseUrl}/?theme=dark&tab=security`, 1280, 900, false, 'test_ui_telemetry_desktop.png');
+  await capture(`${baseUrl}/?theme=light&tab=security`, 390, 844, true, 'test_ui_telemetry_mobile.png');
+  await capture(`${baseUrl}/morning-report?theme=light`, 1280, 900, false, 'test_ui_morning_report_desktop_light.png', 2200);
+  await capture(`${baseUrl}/morning-report?theme=light`, 390, 844, true, 'test_ui_morning_report_mobile_light.png', 2200);
+  await capture(`${baseUrl}/morning-report?theme=dark`, 1280, 900, false, 'test_ui_morning_report_desktop_dark.png', 2200);
+  await capture(`${baseUrl}/morning-report?theme=dark`, 390, 844, true, 'test_ui_morning_report_mobile_dark.png', 2200);
   console.log('All visual screenshots captured successfully!');
   process.exit(0);
 }

@@ -567,4 +567,65 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.deepEqual(violations, [], `Banned M3 purple/muddy hexes found in components: ${violations.join(", ")}`);
     });
   });
+
+  describe("Sprint U2 — Labeled Navigation, Collapsible 3-Pane Workbench, DiffViewer Wiring & 840px Track", () => {
+    it("Task 1: Desktop Left Rail (82px) and Mobile Bottom Bar (58px) display explicit text labels for all 5 destinations", () => {
+      const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+      // Check for rail and bottom bar presence
+      assert.ok(
+        pageSrc.includes("app-rail") || (pageSrc.includes("82px") && pageSrc.includes("Chat")),
+        "Must render persistent desktop rail"
+      );
+      assert.ok(
+        pageSrc.includes("mobile-bottom-nav") || (pageSrc.includes("58px") && pageSrc.includes("Chat")),
+        "Must render mobile bottom navigation bar"
+      );
+      // Both must include all 5 labeled views: Chat, Builds, Morning Report/Report, Skills, Settings
+      const requiredLabels = ["Chat", "Builds", "Report", "Skills", "Settings"];
+      for (const label of requiredLabels) {
+        assert.ok(pageSrc.includes(label), `Navigation must contain explicit text label '${label}'`);
+      }
+    });
+
+    it("Task 2: Sessions and Workspace panels are collapsible independently with [◧ Sessions] and [◨ Workspace] toggles", () => {
+      const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+
+      // Check header panel toggle buttons
+      assert.ok(
+        chatStreamSrc.includes("Sessions") && (chatStreamSrc.includes("◧") || chatStreamSrc.includes("toggleSidebar")),
+        "Header must have [◧ Sessions] toggle button"
+      );
+      assert.ok(
+        chatStreamSrc.includes("Workspace") && (chatStreamSrc.includes("◨") || chatStreamSrc.includes("toggleWorkspace") || chatStreamSrc.includes("toggleInspector")),
+        "Header must have [◨ Workspace] toggle button"
+      );
+
+      // Check collapsible panel classes or state
+      assert.ok(
+        pageSrc.includes("collapsed-sidebar") || pageSrc.includes("isSidebarOpen") || pageSrc.includes("showSidebar"),
+        "Must support collapsible Sessions panel"
+      );
+      assert.ok(
+        pageSrc.includes("collapsed-inspector") || pageSrc.includes("isWorkspaceOpen") || pageSrc.includes("showWorkspace"),
+        "Must support collapsible Workspace panel"
+      );
+    });
+
+    it("Task 3: DiffViewer.tsx is wired into the Workspace inspector panel", () => {
+      const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+      assert.ok(
+        pageSrc.includes("DiffViewer"),
+        "page.tsx (or workspace panel) must import and render DiffViewer"
+      );
+    });
+
+    it("Task 4: ChatStream.tsx centers messages within an 840px max-width track", () => {
+      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(
+        chatStreamSrc.includes("max-w-[840px]") || chatStreamSrc.includes("chat-track"),
+        "ChatStream messages must be constrained to a centered 840px max-width conversation track"
+      );
+    });
+  });
 });

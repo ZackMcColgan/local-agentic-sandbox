@@ -109,6 +109,10 @@ interface ChatStreamProps {
   onOpenDrawer?: () => void;
   onEnsureThread?: (initialTitle: string) => Promise<string | null>;
   placeholder?: string;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
+  onToggleWorkspace?: () => void;
+  isWorkspaceOpen?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -152,7 +156,11 @@ export function ChatStream({
   onDeployRun,
   onOpenDrawer,
   onEnsureThread,
-  placeholder
+  placeholder,
+  onToggleSidebar,
+  isSidebarOpen = true,
+  onToggleWorkspace,
+  isWorkspaceOpen = false
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -696,10 +704,24 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup media_1791044464247.webp */}
-      <header className="px-4 py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
+      {/* Top Bar matching Mockup 01 */}
+      <header className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          {onOpenDrawer ? (
+          {onToggleSidebar ? (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={`panel-toggle-btn px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                isSidebarOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Sessions Panel"
+              aria-label="Toggle Sessions Panel"
+            >
+              <span>◧ Sessions</span>
+            </button>
+          ) : onOpenDrawer ? (
             <button
               type="button"
               onClick={onOpenDrawer}
@@ -722,7 +744,7 @@ export function ChatStream({
           ) : null}
 
           <h1
-            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[48vw] sm:max-w-md truncate"
+            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -762,6 +784,23 @@ export function ChatStream({
               aria-label="Start new session"
             >
               <Plus className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Workspace Inspector Toggle Button */}
+          {onToggleWorkspace && (
+            <button
+              type="button"
+              onClick={onToggleWorkspace}
+              className={`panel-toggle-btn px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                isWorkspaceOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Workspace Panel"
+              aria-label="Toggle Workspace Panel"
+            >
+              <span>◨ Workspace</span>
             </button>
           )}
 
@@ -830,8 +869,9 @@ export function ChatStream({
         ref={chatContainerRef}
         onScroll={handleContainerScroll}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950 relative"
+        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-zinc-950 relative"
       >
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
@@ -1229,6 +1269,7 @@ export function ChatStream({
         )}
 
         <div ref={scrollRef} />
+        </div>
       </div>
 
       {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
