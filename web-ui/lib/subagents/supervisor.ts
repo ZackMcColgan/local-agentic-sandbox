@@ -1500,11 +1500,12 @@ export class OvernightSupervisor {
     const controller = this.getAbortController(task.taskId) || new AbortController();
     this.setAbortController(task.taskId, controller);
     const signal = options?.signal || controller.signal;
+    const isAbortedOrCancelled = () => Boolean(signal?.aborted || (task.status as TaskStatus) === "cancelled");
 
     try {
       while (task.currentMilestoneIndex < task.milestones.length) {
-        if (signal?.aborted || task.status === "cancelled" || task.status === "paused" || this.isPaused(task.taskId)) {
-          if (signal?.aborted || task.status === "cancelled") {
+        if (isAbortedOrCancelled() || task.status === "paused" || this.isPaused(task.taskId)) {
+          if (isAbortedOrCancelled()) {
             task.status = "cancelled";
             console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`);
             break;
@@ -1518,7 +1519,7 @@ export class OvernightSupervisor {
         let milestoneCompleted = false;
 
         while (!milestoneCompleted && attempt < 3) {
-          if (signal?.aborted || task.status === "cancelled") {
+          if (isAbortedOrCancelled()) {
             task.status = "cancelled";
             break;
           }
@@ -1527,7 +1528,7 @@ export class OvernightSupervisor {
             if (executor) {
               console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
               const res = await executor(milestone, attempt);
-              if (signal?.aborted || task.status === "cancelled") {
+              if (isAbortedOrCancelled()) {
                 task.status = "cancelled";
                 console.log(`[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`);
                 break;
@@ -1578,8 +1579,8 @@ export class OvernightSupervisor {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
-          if (signal?.aborted || task.status === "cancelled" || task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
-            task.status = (signal?.aborted || err.name === "AbortError") ? "cancelled" : task.status;
+          if (isAbortedOrCancelled() || task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+            task.status = (isAbortedOrCancelled() || err.name === "AbortError") ? "cancelled" : task.status;
             console.log(`[supervisor] Task ${task.taskId} caught abort/pause during milestone ${milestone.id}. Halting.`);
             break;
           }
@@ -1608,7 +1609,7 @@ export class OvernightSupervisor {
         }
       }
 
-      if (signal?.aborted || task.status === "cancelled") {
+      if (isAbortedOrCancelled()) {
         task.status = "cancelled";
         console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`);
         break;
@@ -1644,7 +1645,7 @@ export class OvernightSupervisor {
       }
     }
 
-    if (signal?.aborted || task.status === "cancelled") {
+    if (isAbortedOrCancelled()) {
       task.status = "cancelled";
       this.saveCheckpoint(task);
       return task;
