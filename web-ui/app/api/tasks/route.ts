@@ -79,20 +79,25 @@ export async function POST(req: Request) {
     const taskId = `task-${Date.now()}`;
 
     // Generate SPEC.md and decomposed milestones
-    const planSpec = await generatePlanSpec({ taskId, goal, toolchain });
+    const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope: body.scope });
     const specMarkdown = planSpec.toMarkdown();
+
+    const defaultBranch = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
+    const branchName = body.branchName || defaultBranch;
 
     const manifest: TaskManifest = {
       taskId,
       goal,
-      branchName: "feat/v2.5-overnight",
-      branch: "feat/v2.5-overnight",
+      branchName,
+      branch: branchName,
       toolchain,
+      scope: body.scope,
       status: "active",
       milestones: planSpec.milestones,
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
+      autoDeployOnGreen: Boolean(body.autoDeployOnGreen),
       journal: [
         {
           timestamp: new Date().toISOString(),

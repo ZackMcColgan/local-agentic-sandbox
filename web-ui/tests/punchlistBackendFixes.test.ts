@@ -415,6 +415,49 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
   });
 });
 
+describe("Flash 3.8 Backend Shakeout — Fix 6: B-P1-3 & B-P2-1 Isolated Branch Default, autoDeployOnGreen, & Workspace File Alias", () => {
+  it("POST /api/tasks sets isolated branch name default and preserves autoDeployOnGreen", async () => {
+    const { POST } = await import("../app/api/tasks/route.js");
+    const req = new Request("http://localhost:3000/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        goal: "Test feature for isolated branch",
+        scope: "SNIPPET",
+        autoDeployOnGreen: true,
+        autoExecute: false
+      })
+    });
+
+    const res = await POST(req);
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.ok(body.taskId, "Must return taskId");
+    assert.notEqual(body.manifest.branchName, "feat/v2.5-overnight", "Must not hardcode feat/v2.5-overnight");
+    assert.match(body.manifest.branchName, /^feat\/task-/, "branchName must default to feat/task-*");
+    assert.equal(body.manifest.autoDeployOnGreen, true, "autoDeployOnGreen must be preserved on manifest");
+  });
+
+  it("GET /api/workspace/file route exists and returns 403 on path traversal", async () => {
+    const { NextRequest } = await import("next/server");
+    const { GET } = await import("../app/api/workspace/file/route.js");
+    assert.equal(typeof GET, "function", "GET handler must be exported");
+
+    const reqTraversal = new NextRequest("http://localhost:3000/api/workspace/file?path=../package.json");
+    const resTraversal = await GET(reqTraversal);
+    assert.equal(resTraversal.status, 403, "Must return 403 on path traversal");
+
+    const reqMissing = new NextRequest("http://localhost:3000/api/workspace/file");
+    const resMissing = await GET(reqMissing);
+    assert.equal(resMissing.status, 400, "Must return 400 when path is missing");
+
+    const reqValid = new NextRequest("http://localhost:3000/api/workspace/file?path=package.json");
+    const resValid = await GET(reqValid);
+    assert.equal(resValid.status, 200, "Must return 200 for valid file");
+  });
+});
+
+
 
 
 
