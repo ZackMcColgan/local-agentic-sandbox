@@ -192,16 +192,15 @@ export function ThreadsSidebar({
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
             const isSwiped = swipedThreadId === thread.id;
             const isConfirming = confirmDeleteId === thread.id;
-            const statusLabel =
-              thread.status === "active"
-                ? "Active"
-                : thread.status === "paused"
-                ? "Paused"
-                : thread.status === "stopped"
-                ? "Stopped"
-                : thread.status === "failed"
-                ? "Failed"
-                : "Completed";
+            const rawStatus = (thread.status as string) || "";
+            const statusLabel = (() => {
+              if (rawStatus === "running") return "Running";
+              if (rawStatus === "active") return "Active";
+              if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
+              if (rawStatus === "failed") return "Failed";
+              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0)) return "Completed";
+              return "New";
+            })();
 
             return (
               <div
@@ -283,9 +282,15 @@ export function ThreadsSidebar({
                     <span>•</span>
                     <span
                       className={
-                        thread.status === "active"
+                        statusLabel === "Running" || statusLabel === "Active"
                           ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                          : ""
+                          : statusLabel === "Needs Input"
+                          ? "text-amber-600 dark:text-amber-400 font-semibold"
+                          : statusLabel === "Failed"
+                          ? "text-rose-600 dark:text-rose-400 font-semibold"
+                          : statusLabel === "Completed"
+                          ? "text-slate-600 dark:text-zinc-300 font-medium"
+                          : "text-slate-400 dark:text-zinc-500"
                       }
                     >
                       {statusLabel}

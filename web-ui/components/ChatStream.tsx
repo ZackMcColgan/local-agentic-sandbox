@@ -79,6 +79,7 @@ export interface ChatMessage {
   durationMs?: number;
   taskId?: string;
   isStopped?: boolean;
+  isStreaming?: boolean;
   timestamp?: string;
 }
 
@@ -93,7 +94,7 @@ interface ChatStreamProps {
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   threadId?: string;
   threadTitle?: string;
-  threadStatus?: "active" | "paused" | "stopped" | "completed" | "failed";
+  threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
@@ -168,6 +169,8 @@ export function ChatStream({
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
 
+  // Composer Mode state (Chat | Build)
+  const [composerMode, setComposerMode] = useState<"chat" | "build">("chat");
   // Task Scope selection state: default is PROJECT
   const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
 
@@ -369,8 +372,10 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
-    // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
-    const isBuilder = isBuilderPrompt(prompt);
+    // Check if this is an engineering builder task (Build mode toggle, /build prefix, or builder verb)
+    const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
+    const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
+    const isBuilder = composerMode === "build" || isBuildPrefix || isBuilderPrompt(prompt);
 
     if (isBuilder && onLaunchTask) {
       const currentAttachments = [...attachedFiles];
@@ -382,7 +387,7 @@ export function ChatStream({
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(prompt, currentAttachments, selectedScope);
+        await onLaunchTask(cleanPrompt, currentAttachments, selectedScope);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
@@ -974,7 +979,7 @@ export function ChatStream({
                         <ThinkingPanel
                           rawThought={rawThought}
                           isStreaming={isStreamingThis}
-                          defaultExpanded={true}
+                          defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                         />
                       </div>
                     );
@@ -1367,42 +1372,38 @@ export function ChatStream({
             </button>
 
             <div className="flex items-center gap-2">
-              {/* Task Scope Segmented Control */}
+              {/* Composer Mode Toggle (Chat | Build) */}
               <div
                 role="radiogroup"
-                aria-label="Task Scope Selector"
-                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium"
+                aria-label="Composer Mode Selector"
+                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium select-none"
               >
-                {(["SNIPPET", "SCRIPT", "PROJECT"] as const).map((scopeOption) => {
-                  const isSelected = selectedScope === scopeOption;
-                  const labels = {
-                    SNIPPET: "Snippet",
-                    SCRIPT: "Script",
-                    PROJECT: "Project"
-                  };
-                  const tooltips = {
-                    SNIPPET: "Single file, single milestone (no scaffolding)",
-                    SCRIPT: "1-2 milestones, small utility or script",
-                    PROJECT: "Full milestone decomposition & multi-file system"
-                  };
-                  return (
-                    <button
-                      key={scopeOption}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => setSelectedScope(scopeOption)}
-                      title={tooltips[scopeOption]}
-                      className={`px-2.5 py-1 rounded-full transition-all ${
-                        isSelected
-                          ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
-                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                      }`}
-                    >
-                      {labels[scopeOption]}
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={composerMode === "chat"}
+                  onClick={() => setComposerMode("chat")}
+                  className={`px-3 py-1 rounded-full transition-all ${
+                    composerMode === "chat"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={composerMode === "build"}
+                  onClick={() => setComposerMode("build")}
+                  className={`px-3 py-1 rounded-full transition-all ${
+                    composerMode === "build"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Build
+                </button>
               </div>
 
               {/* Send / Stop Morphed Button */}

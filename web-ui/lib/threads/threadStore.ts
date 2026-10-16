@@ -30,7 +30,7 @@ export interface ThreadMessage {
 export interface Thread {
   id: string;
   title: string;
-  status: "active" | "paused" | "stopped" | "completed" | "failed";
+  status: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   createdAt: string;
   updatedAt: string;
   model: string;
@@ -313,16 +313,18 @@ export class ThreadStore {
       }
     }
 
-    // S4: Titles from content: retroactively title if "New thread", "New Thread", or "Untitled Thread"
+    // S4: Titles from content: retroactively title if "New thread", "New Thread", "Untitled Thread", or "New session"
     if (
       !thread.title ||
       thread.title.toLowerCase() === "new thread" ||
       thread.title.toLowerCase() === "untitled thread" ||
-      thread.title.toLowerCase() === "new task"
+      thread.title.toLowerCase() === "new task" ||
+      thread.title.toLowerCase() === "new session"
     ) {
       const firstUserMsg = thread.messages?.find((m) => m.role === "user");
       if (firstUserMsg && firstUserMsg.content && firstUserMsg.content.trim()) {
-        const derived = firstUserMsg.content.trim().slice(0, 40);
+        const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
+        const derived = firstUserMsg.content.trim().slice(0, maxLen);
         if (derived && derived !== thread.title) {
           thread.title = derived;
           changed = true;
@@ -480,6 +482,43 @@ export class ThreadStore {
           ]
         : []
     };
+
+    this.saveThread(thread);
+    return thread;
+  }
+
+  addMessage(threadId: string, message: ThreadMessage): Thread | null {
+    const filePath = this.getFilePath(threadId);
+    let thread: Thread | null = null;
+    if (fs.existsSync(filePath)) {
+      try {
+        thread = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+      } catch {}
+    }
+    if (!thread) return null;
+
+    thread.messages = thread.messages || [];
+    thread.messages.push(message);
+
+    if (message.role === "user") {
+      if (
+        !thread.title ||
+        thread.title.toLowerCase() === "new thread" ||
+        thread.title.toLowerCase() === "untitled thread" ||
+        thread.title.toLowerCase() === "new task" ||
+        thread.title.toLowerCase() === "new session"
+      ) {
+        const content = message.content || "";
+        if (content.trim()) {
+          const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
+          thread.title = content.trim().slice(0, maxLen);
+        }
+      }
+    } else if (message.role === "assistant") {
+      if (thread.status !== "active") {
+        thread.status = "completed";
+      }
+    }
 
     this.saveThread(thread);
     return thread;

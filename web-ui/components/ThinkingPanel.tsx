@@ -38,7 +38,7 @@ export function ThinkingPanel({
   defaultExpanded = true,
   className = ""
 }: ThinkingPanelProps) {
-  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
   const userToggledRef = useRef(false);
 
@@ -71,41 +71,12 @@ export function ThinkingPanel({
           timeAgo: "Now",
           narrative: rawThought.trim(),
           status: isStreaming ? "in_progress" : "complete",
-          progressPercent: isStreaming ? 85 : 100
+          progressPercent: isStreaming ? 0 : 100
         }
       ];
     }
 
-    // Default 3-phase fallback when neither explicit phases nor raw thought are provided
-    return [
-      {
-        phase: "planning",
-        title: "Planning",
-        timestamp: formattedTime,
-        timeAgo: "Just now",
-        narrative: "Broke the task into milestones. Scope evaluated. No unnecessary scaffolding.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      },
-      {
-        phase: "building",
-        title: "Building",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Generating clean deliverable markup and implementation code.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 75 : 100
-      },
-      {
-        phase: "validating",
-        title: "Validating",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Checking output compiles, adheres to constraints, and passes validation.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      }
-    ];
+    return [];
   })();
 
   const activeStepsCount = effectivePhases.length;

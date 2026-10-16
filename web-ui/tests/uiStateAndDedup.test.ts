@@ -282,4 +282,133 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
     const phaseCard = container.querySelector('[data-testid="phase-card-planning"]');
     assert.equal(phaseCard, null, "ThinkingPanel should auto-collapse when generation completes (isStreaming becomes false)");
   });
+
+  describe("Sprint U3 — Simple Chat | Build Mode Toggle, Historical Thinking Collapse & Model Deduplication", () => {
+    it("Task 1: ChatStream renders 2-button segmented toggle labeled Chat and Build", async () => {
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(ChatStream, {
+            onTracesUpdate: () => {},
+            activeModel: "swift-15-27b-mtp",
+            reasoningEffort: "medium",
+            messages: []
+          })
+        );
+      });
+      const chatBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Chat");
+      const buildBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Build");
+      assert.ok(chatBtn, "Must render 'Chat' toggle button");
+      assert.ok(buildBtn, "Must render 'Build' toggle button");
+      // Snippet / Script / Project must NOT be rendered
+      assert.ok(!container.textContent?.includes("Snippet"), "Must not render Snippet option");
+      assert.ok(!container.textContent?.includes("Script"), "Must not render Script option");
+    });
+
+    it("Task 2: ThinkingPanel defaults to collapsed when isStreaming is false and does not contain 85% fake progress", async () => {
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(ThinkingPanel, {
+            rawThought: "Thinking about the architecture...",
+            isStreaming: false,
+            defaultExpanded: false
+          })
+        );
+      });
+      // Should be collapsed by default
+      const narrative = container.querySelector('[data-testid="phase-card-planning"]');
+      assert.equal(narrative, null, "Historical thinking panel must be collapsed by default");
+      assert.ok(!container.innerHTML.includes("85%"), "Must not contain fake 85% progress indicator");
+    });
+
+    it("Task 3: threadStore auto-titles 'New session' from first user message up to 48 chars and honest status in ThreadsSidebar", async () => {
+      const threadStoreModule = await import("../lib/threads/threadStore");
+      const store = new threadStoreModule.ThreadStore();
+      const thread = store.createThread({ title: "New session" });
+      assert.equal(thread.title, "New session");
+      thread.messages.push({
+        id: "msg-1",
+        role: "user",
+        content: "Create a complete weather dashboard application in React with Tailwind CSS",
+        timestamp: new Date().toISOString()
+      });
+      store.reconcileThread(thread);
+      assert.equal(
+        thread.title,
+        "Create a complete weather dashboard application ",
+        "Must auto-title to first 48 characters of prompt"
+      );
+    });
+
+    it("Task 4: ModelBottomSheet strips :latest tags and prevents duplicate entries", async () => {
+      const modelSheetModule = await import("../components/ModelBottomSheet");
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(modelSheetModule.ModelBottomSheet, {
+            isOpen: true,
+            onClose: () => {},
+            selectedModel: "swift-15-27b-mtp",
+            installedModels: ["swift-15-27b-mtp:latest", "custom-model:latest", "custom-model"],
+            onModelChange: () => {},
+            reasoningEffort: "medium",
+            onReasoningEffortChange: () => {}
+          })
+        );
+      });
+      const html = container.innerHTML;
+      const customMatches = html.match(/custom-model/g) || [];
+      assert.ok(customMatches.length > 0, "Renders custom-model");
+      assert.ok(!html.includes("swift-15-27b-mtp:latest"), "Strips :latest from swift model");
+      assert.ok(!html.includes("custom-model:latest"), "Strips :latest from custom model");
+    });
+
+    it("Task 5: LiveRunBlock progress is computed strictly from completed milestones count and strips fake 92 and Hello World fallbacks", async () => {
+      const liveRunModule = await import("../components/LiveRunBlock");
+      root = createRoot(container);
+      const mockTask: TaskManifest = {
+        taskId: "task-live-honesty-1",
+        goal: "Honest progress test",
+        startedAt: new Date().toISOString(),
+        currentMilestoneIndex: 0,
+        milestones: [
+          {
+            id: "m1",
+            title: "First milestone",
+            description: "Test",
+            status: "completed",
+            builderIterations: 1,
+            criticRounds: 1,
+            acceptanceCriteria: []
+          },
+          {
+            id: "m2",
+            title: "Second milestone",
+            description: "Test",
+            status: "in_progress",
+            builderIterations: 1,
+            criticRounds: 0,
+            acceptanceCriteria: []
+          }
+        ],
+        journal: [],
+        artifacts: [],
+        status: "active"
+      };
+
+      await act(async () => {
+        root!.render(
+          React.createElement(liveRunModule.LiveRunBlock, {
+            task: mockTask
+          })
+        );
+      });
+
+      const html = container.innerHTML;
+      assert.ok(html.includes("50%"), "Progress must be strictly 50% (1/2 completed)");
+      assert.ok(!html.includes("Score 92/100"), "Must not contain fake 92 critic score fallback");
+      assert.ok(!html.includes('console.log("Hello, World!");'), "Must not contain fake Hello World code fallback");
+    });
+  });
 });
