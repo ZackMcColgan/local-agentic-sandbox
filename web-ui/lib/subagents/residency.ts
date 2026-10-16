@@ -45,7 +45,9 @@ export interface ResidencyPlan {
   unknownSize: string[];
 }
 
-export const PINNED_KEEP_ALIVE = "24h";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
+
+export const PINNED_KEEP_ALIVE = -1;
 export const TRANSIENT_KEEP_ALIVE = 0;
 
 export function planResidency(input: ResidencyPlanInput): ResidencyPlan {
@@ -68,7 +70,13 @@ export function planResidency(input: ResidencyPlanInput): ResidencyPlan {
   let pinnedBytes = 0;
 
   for (const model of priority) {
-    const size = input.modelSizes[model];
+    const size = input.modelSizes[model] ?? input.modelSizes[`${model}:latest`];
+    // Always pin DEFAULT_PRIMARY_MODEL (swift-15-27b-mtp) even if size lookup was skipped or unknown
+    if (model === DEFAULT_PRIMARY_MODEL || model === `${DEFAULT_PRIMARY_MODEL}:latest`) {
+      pinned.push(model);
+      pinnedBytes += (size || 0);
+      continue;
+    }
     if (size === undefined) {
       // Unknown size: never pin blindly — treat as transient so it cannot evict pinned models.
       unknownSize.push(model);
@@ -95,11 +103,11 @@ export function keepAliveFor(plan: ResidencyPlan, model: string): string | numbe
  * without evicting a pinned roster model. Transient and non-roster models go first.
  */
 export function evictionOrder(plan: ResidencyPlan, loaded: string[], incoming: string): string[] {
-  const others = loaded.filter((m) => m !== incoming);
-  const transientLoaded = others.filter((m) => plan.transient.includes(m));
-  const nonRoster = others.filter((m) => !plan.priority.includes(m));
+  const others = loaded.filter((m) => m !== incoming && m.replace(/:latest$/, "") !== incoming.replace(/:latest$/, ""));
+  const transientLoaded = others.filter((m) => plan.transient.includes(m) || plan.transient.includes(m.replace(/:latest$/, "")));
+  const nonRoster = others.filter((m) => !plan.priority.includes(m) && !plan.priority.includes(m.replace(/:latest$/, "")));
   const pinnedLoaded = others
-    .filter((m) => plan.pinned.includes(m))
+    .filter((m) => plan.pinned.includes(m) || plan.pinned.includes(m.replace(/:latest$/, "")))
     .sort((a, b) => plan.priority.indexOf(b) - plan.priority.indexOf(a));
   return [...transientLoaded, ...nonRoster, ...pinnedLoaded];
 }
@@ -109,24 +117,36 @@ export function resolveVramBudgetBytes(): number {
   return Math.round((Number.isFinite(gb) && gb > 0 ? gb : 16) * 1024 ** 3);
 }
 
-/** Reads model sizes from Ollama /api/tags (on-disk size ≈ resident weight size). */
+/** Reads model sizes from Ollama /api/tags (on-disk size ≈ resident weight size). Normalizes model names by stripping :latest. */
 export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<Record<string, number>> {
   const res = await fetchImpl(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/tags failed: HTTP ${res.status}`);
   const data: any = await res.json();
   const sizes: Record<string, number> = {};
   for (const m of data.models || []) {
-    if (m?.name && typeof m.size === "number") sizes[m.name] = m.size;
+    if (m?.name && typeof m.size === "number") {
+      sizes[m.name] = m.size;
+      const base = m.name.replace(/:latest$/, "");
+      sizes[base] = m.size;
+    }
   }
   return sizes;
 }
 
-/** Reads currently loaded models from Ollama /api/ps. */
-export async function fetchLoadedModels(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<{ name: string; sizeVram: number }[]> {
+/** Reads currently loaded models from Ollama /api/ps. Normalizes model names by stripping :latest. */
+export async function fetchLoadedModels(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<{ name: string; sizeVram: number; baseName: string }[]> {
   const res = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/ps failed: HTTP ${res.status}`);
   const data: any = await res.json();
-  return (data.models || []).map((m: any) => ({ name: m.name, sizeVram: m.size_vram ?? m.size ?? 0 }));
+  return (data.models || []).map((m: any) => {
+    const rawName = m.name || "";
+    const baseName = rawName.replace(/:latest$/, "");
+    return {
+      name: rawName,
+      baseName,
+      sizeVram: m.size_vram ?? m.size ?? 0
+    };
+  });
 }
 
 /**
@@ -141,8 +161,8 @@ export async function enforceResidency(
 ): Promise<string[]> {
   const actions: string[] = [];
   const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
-  const loadedNames = loaded.map((m) => m.name);
-  const sizeOf = (name: string) => loaded.find((m) => m.name === name)?.sizeVram || 0;
+  const loadedNames = loaded.flatMap((m) => [m.name, m.baseName]);
+  const sizeOf = (name: string) => loaded.find((m) => m.name === name || m.baseName === name)?.sizeVram || 0;
   let loadedBytes = loaded.reduce((s, m) => s + m.sizeVram, 0);
 
   // Bytes still needed for pinned models that are not loaded yet.
@@ -150,7 +170,7 @@ export async function enforceResidency(
   const neededBytes = Math.max(0, plan.pinnedBytes - pinnedLoadedBytes);
 
   // Victims: transient + non-roster models only (never a pinned model), in policy order.
-  const victims = evictionOrder(plan, loadedNames, "").filter((m) => !plan.pinned.includes(m));
+  const victims = evictionOrder(plan, loaded.map((m) => m.name), "").filter((m) => !plan.pinned.includes(m) && !plan.pinned.includes(m.replace(/:latest$/, "")));
   for (const victim of victims) {
     if (loadedBytes + neededBytes <= plan.usableBytes) break;
     await fetchImpl(`${baseUrl}/api/generate`, {

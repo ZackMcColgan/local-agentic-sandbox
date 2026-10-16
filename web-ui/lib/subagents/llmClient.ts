@@ -17,6 +17,7 @@ export interface GenerateRequest {
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
   /** Task scope driving per-request context window (e.g. SNIPPET, SCRIPT, PROJECT). */
   scope?: string;
+  reasoningEffort?: string;
 }
 
 export interface GenerateResult {
@@ -73,6 +74,27 @@ export function getContextSizeForScope(scope?: string): number {
 }
 
 /**
+ * Maps reasoning effort to thinking token budget.
+ * - fast / low: 1024 tokens
+ * - balanced / medium / default: 4096 tokens
+ * - deep / xhigh: 8192 tokens
+ */
+export function getThinkingBudget(effort?: string): number {
+  switch (effort?.toLowerCase()) {
+    case "fast":
+    case "low":
+      return 1024;
+    case "deep":
+    case "xhigh":
+      return 8192;
+    case "balanced":
+    case "medium":
+    default:
+      return 4096;
+  }
+}
+
+/**
  * Creates a GenerateFn bound to an Ollama endpoint.
  * Network errors, non-2xx responses, timeouts and empty responses all throw ModelUnavailableError.
  */
@@ -95,13 +117,17 @@ export function createOllamaGenerate(options?: {
     const taskScope = req.scope || options?.scope;
     const numCtx = getContextSizeForScope(taskScope);
 
-    // Note: Environment variable fallback: If OLLAMA_CONTEXT_LENGTH is set in the environment,
-    // the per-request num_ctx overrides it (standard Ollama API behavior).
-    // This is intentional — the application knows the task scope, whereas the environment variable does not.
+    // Decouple <think> reasoning budget from code output budget:
+    // Add thinking token budget (fast=1024, balanced=4096, deep=8192) ON TOP of requested num_predict
+    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "balanced") as string;
+    const thinkingBudget = getThinkingBudget(effort);
+    const effectiveNumPredict = requestedPredict + thinkingBudget;
+
     const requestOptions = {
       num_ctx: numCtx,
-      num_predict: 2048,
-      ...(req.options || {})
+      ...(req.options || {}),
+      num_predict: effectiveNumPredict
     };
 
     let res: Response;

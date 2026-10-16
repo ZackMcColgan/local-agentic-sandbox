@@ -6,6 +6,8 @@ import fsSync from "fs";
 import path from "path";
 import { z } from "zod";
 import ts from "typescript";
+import { workspacePatchFile } from "./patchCore.js";
+export { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -453,6 +455,43 @@ export function registerWorkspaceTools(mcp: McpServer) {
             text: JSON.stringify({
               status: "EXECUTION_ERROR",
               error: `Failed to write file ${filePath}: ${err.message}`
+            }, null, 2)
+          }]
+        };
+      }
+    }
+  );
+
+  // 4b. workspace_patch_file
+  mcp.tool(
+    "workspace_patch_file",
+    "Surgically applies search-and-replace patches to a file in /workspace. Rejects path traversal and missing targets.",
+    {
+      path: z.string().describe("File path relative to /workspace"),
+      patches: z.array(
+        z.object({
+          search: z.string().describe("Exact string to search for"),
+          replace: z.string().describe("Replacement string")
+        })
+      ).describe("Array of search-and-replace patches to apply in order")
+    },
+    async ({ path: filePath, patches }) => {
+      await ensureWorkspaceInitialized();
+      try {
+        const result = await workspacePatchFile(WORKSPACE_DIR, filePath, patches);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: `Failed to patch file ${filePath}: ${err.message}`
             }, null, 2)
           }]
         };

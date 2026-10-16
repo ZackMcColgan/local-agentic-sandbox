@@ -11,6 +11,8 @@ import {
   type GenerateFn
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
+import { workspacePatchFile, type PatchItem, type PatchFileResult } from "../../../mcp-server/src/tools/patchCore";
+export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
 export interface ModelRosterConfig {
   planner?: string;
@@ -60,6 +62,7 @@ export interface BuilderResult {
   /** Model that produced the content (undefined when synthetic). */
   model?: string;
   targetFile: string;
+  modifiedFiles?: string[];
   loadDurationMs?: number;
   thinking?: string;
   rawContent?: string;
@@ -292,6 +295,7 @@ export class BuilderWorker {
   private readonly scope?: string;
   private readonly scopedTools = [
     "workspace_write_file",
+    "workspace_patch_file",
     "workspace_run_command",
     "git_diff",
     "git_commit"
@@ -307,6 +311,23 @@ export class BuilderWorker {
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
+  }
+
+  resolveTargets(milestone: Milestone): string[] {
+    if (milestone.plannedFiles && Array.isArray(milestone.plannedFiles) && milestone.plannedFiles.length > 0) {
+      const valid = milestone.plannedFiles.filter((f) => Boolean(f && typeof f === "string" && f.trim().length > 0));
+      if (valid.length > 0) return valid;
+    }
+    return [this.resolveTarget(milestone)];
+  }
+
+  async patchFile(
+    targetRelPath: string,
+    patches: Array<PatchItem>,
+    options?: { repoRoot?: string }
+  ): Promise<PatchFileResult> {
+    const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    return await workspacePatchFile(repoRoot, targetRelPath, patches);
   }
 
   private resolveTarget(milestone: Milestone, explicit?: string): string {
@@ -340,8 +361,88 @@ export class BuilderWorker {
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
     const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
     const criticFeedback = options?.criticFeedback || [];
-    const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
+    const targets = options?.targetFile ? [options.targetFile] : this.resolveTargets(milestone);
 
+    // Multi-target sequential execution
+    if (targets.length > 1) {
+      const modifiedFiles: string[] = [];
+      const diffs: string[] = [];
+      let totalLoadDuration = 0;
+      let lastThinking: string | undefined;
+      let lastContent = "";
+      const priorFileContexts: Array<{ file: string; content: string }> = [];
+
+      for (const targetRelPath of targets) {
+        const fullPath = path.resolve(repoRoot, targetRelPath);
+        const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
+
+        let newContent: string;
+        const synthetic = !this.injectedGenerate && isFastGraphTestMode();
+        if (synthetic) {
+          newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+        } else {
+          const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+          const priorContext = priorFileContexts.length > 0
+            ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
+            : "";
+          const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+${priorContext}
+${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
+
+Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
+
+          const result = await generate({
+            model: modelToUse,
+            prompt,
+            keepAlive: this.keepAlive,
+            signal: options?.signal,
+            onThinkingChunk: options?.onThinkingChunk,
+            scope: this.scope,
+            options: { temperature: 0.2, num_predict: 8192 }
+          });
+          newContent = stripCodeFence(result.text);
+          if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+          if (result.thinking) lastThinking = result.thinking;
+        }
+
+        if (!synthetic) {
+          const astCheck = validateCodeAst(targetRelPath, newContent);
+          if (!astCheck.valid) {
+            console.warn(`[builder] AST validation warning for ${targetRelPath}: ${astCheck.error}`);
+          }
+        }
+
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, newContent, "utf8");
+
+        diffs.push(createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent));
+        modifiedFiles.push(targetRelPath);
+        priorFileContexts.push({ file: targetRelPath, content: newContent });
+        lastContent = newContent;
+      }
+
+      const gitSha = options?.gitSha || getResolvedGitSha(repoRoot);
+      return {
+        diff: diffs.join("\n\n"),
+        gitSha,
+        iterations: iteration,
+        synthetic: !this.injectedGenerate && isFastGraphTestMode(),
+        model: (!this.injectedGenerate && isFastGraphTestMode()) ? undefined : modelToUse,
+        targetFile: targets[0],
+        modifiedFiles,
+        loadDurationMs: totalLoadDuration || undefined,
+        thinking: lastThinking,
+        rawContent: lastContent
+      };
+    }
+
+    const targetRelPath = targets[0] || this.resolveTarget(milestone, options?.targetFile);
     const fullPath = path.resolve(repoRoot, targetRelPath);
     const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
 
@@ -386,7 +487,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
         scope: this.scope,
-        options: { temperature: 0.2, num_predict: 2048 }
+        options: { temperature: 0.2, num_predict: 8192 }
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
@@ -415,6 +516,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             synthetic: false,
             model: modelToUse,
             targetFile: targetRelPath,
+            modifiedFiles: [targetRelPath],
             loadDurationMs,
             stuck: true,
             errorSignature: signature,
@@ -436,7 +538,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
           keepAlive: this.keepAlive,
           signal: options?.signal,
           scope: this.scope,
-          options: { temperature: 0.2, num_predict: 2048 }
+          options: { temperature: 0.2, num_predict: 8192 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -468,6 +570,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
       synthetic,
       model: synthetic ? undefined : modelToUse,
       targetFile: targetRelPath,
+      modifiedFiles: [targetRelPath],
       loadDurationMs,
       thinking: builderThinking,
       rawContent: newContent

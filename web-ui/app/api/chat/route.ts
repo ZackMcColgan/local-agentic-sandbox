@@ -203,21 +203,9 @@ export async function POST(req: NextRequest) {
     if (!activeModel || activeModel === "auto") {
       if (mode === "flash") {
         activeModel = "gemma4:e4b";
-      } else if (mode === "pro") {
-        activeModel = DEFAULT_PRIMARY_MODEL;
       } else {
-        // mode === "auto": Execute fast triage step with OpenTelemetry span
-        const triageSpan = tracer.startSpan("router.triage", rootSpan.spanId, { model: "gemma4:e4b" });
-        const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-        const userPrompt = lastUserMsg?.content || "";
-        triageComplexityResult = await triageComplexity(userPrompt, OLLAMA_URL, "gemma4:e4b");
-        triageSpan.end("ok", { result: triageComplexityResult });
-
-        if (triageComplexityResult === "DEEP_SYNTHESIS") {
-          activeModel = DEFAULT_PRIMARY_MODEL;
-        } else {
-          activeModel = "gemma4:e4b";
-        }
+        // Zero VRAM eviction: auto and pro modes route directly to DEFAULT_PRIMARY_MODEL without gemma4:e4b triage swap
+        activeModel = DEFAULT_PRIMARY_MODEL;
       }
     }
 
@@ -340,9 +328,11 @@ CRITICAL INSTRUCTIONS:
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
             );
             const ragPromise = (async () => {
-              const semanticRes = await searchSemanticMemory(userPrompt);
-              if (!semanticRes.degraded && semanticRes.citations.length > 0) {
-                return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
+              if (process.env.OLLAMA_ALLOW_EMBEDDING_SWAP === "true") {
+                const semanticRes = await searchSemanticMemory(userPrompt);
+                if (!semanticRes.degraded && semanticRes.citations.length > 0) {
+                  return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
+                }
               }
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
@@ -472,7 +462,7 @@ CRITICAL INSTRUCTIONS:
           const ollamaPayload: any = {
             model: activeModel,
             messages: conversationMessages,
-            keep_alive: "24h",
+            keep_alive: -1,
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
