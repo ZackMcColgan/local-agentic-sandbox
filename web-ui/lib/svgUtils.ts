@@ -450,6 +450,19 @@ export function isSvgCode(code: string, language?: string): boolean {
   return false;
 }
 
+export function ensureSvgResponsiveSizing(svg: string): string {
+  if (!svg || typeof svg !== "string") return "";
+  return svg.replace(/<svg\b([^>]*)>/i, (match, attrs) => {
+    const hasViewBox = /\bviewBox\s*=/i.test(attrs);
+    const hasWidth = /\bwidth\s*=/i.test(attrs);
+    if (hasViewBox && !hasWidth) {
+      const leadingSpace = /^\s/.test(attrs) ? "" : " ";
+      return `<svg width="100%"${leadingSpace}${attrs}>`;
+    }
+    return match;
+  });
+}
+
 export function sanitizeSvg(svgString: string): string {
   if (!svgString || typeof svgString !== "string") return "";
 
@@ -496,7 +509,7 @@ export function sanitizeSvg(svgString: string): string {
         RETURN_TRUSTED_TYPE: false
       });
       if (sanitized && sanitized.trim().length > 0) {
-        return sanitized.trim();
+        return ensureSvgResponsiveSizing(sanitized.trim());
       }
     } catch (err) {
       console.warn("[sanitizeSvg] DOMPurify sanitize warning, using fallback:", err);
@@ -508,7 +521,7 @@ export function sanitizeSvg(svgString: string): string {
   cleaned = cleaned.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   cleaned = cleaned.replace(/(href|xlink:href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, "$1=\"#\"");
   cleaned = cleaned.replace(/(href|xlink:href|src)\s*=\s*(?:"data:text\/html[^"]*"|'data:text\/html[^']*')/gi, "$1=\"#\"");
-  return cleaned.trim();
+  return ensureSvgResponsiveSizing(cleaned.trim());
 }
 
 export function wrapRawSvgInMarkdown(content: string): string {

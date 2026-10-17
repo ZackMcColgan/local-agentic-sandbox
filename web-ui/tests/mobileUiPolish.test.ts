@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { formatChatErrorMessage } from "../lib/chatUtils";
+import { sanitizeSvg } from "../lib/svgUtils";
 
 test("formatChatErrorMessage handles plain text, JSON errors, and prefixed engine errors", () => {
   // 1. Plain text error
@@ -175,4 +176,56 @@ test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition fr
     "page.tsx useEffect([selectedThreadId]) must bypass loadSelectedThread when skipThreadLoadRef matches"
   );
 });
+
+test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream places tool traces above response", () => {
+  // 1. Behavioral test on sanitizeSvg
+  const svgViewBoxOnly = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><rect width="800" height="500"/></svg>';
+  const sanitizedViewBox = sanitizeSvg(svgViewBoxOnly);
+  const openingTagMatch = sanitizedViewBox.match(/<svg\b[^>]*>/i);
+  assert.ok(openingTagMatch, "Sanitized output must contain an <svg> opening tag");
+  assert.ok(
+    openingTagMatch[0].includes('width="100%"'),
+    `Opening tag for viewBox-only SVG must include width="100%", got: ${openingTagMatch[0]}`
+  );
+  assert.ok(
+    openingTagMatch[0].includes('viewBox="0 0 800 500"'),
+    "Opening tag must preserve viewBox attribute"
+  );
+
+  const svgWithExplicitWidth = '<svg width="400" height="300" viewBox="0 0 400 300"><circle cx="200" cy="150" r="50"/></svg>';
+  const sanitizedExplicit = sanitizeSvg(svgWithExplicitWidth);
+  const explicitOpeningTag = (sanitizedExplicit.match(/<svg\b[^>]*>/i) || [""])[0];
+  const widthMatches = explicitOpeningTag.match(/\bwidth\s*=/gi);
+  assert.equal(
+    widthMatches?.length,
+    1,
+    `SVG with existing width must not receive a duplicate width attribute. Tag: ${explicitOpeningTag}`
+  );
+  assert.ok(
+    explicitOpeningTag.includes('width="400"'),
+    "Existing width value must be preserved"
+  );
+
+  // 2. Structural check on SvgViewer.tsx
+  const svgViewerPath = path.resolve(__dirname, "../components/SvgViewer.tsx");
+  const svgViewerContent = fs.readFileSync(svgViewerPath, "utf-8");
+  assert.ok(
+    svgViewerContent.includes("w-full") && svgViewerContent.includes("[&>svg]:w-full"),
+    "SvgViewer preview container wrapper must include w-full and [&>svg]:w-full"
+  );
+
+  // 3. Structural check on ChatStream.tsx
+  const chatStreamPath = path.resolve(__dirname, "../components/ChatStream.tsx");
+  const chatStreamContent = fs.readFileSync(chatStreamPath, "utf-8");
+
+  const tracesIndex = chatStreamContent.indexOf("formatHumanReadableTrace");
+  const markdownIndex = chatStreamContent.indexOf("wrapRawSvgInMarkdown(m.content)");
+  assert.ok(tracesIndex !== -1, "ChatStream must contain formatHumanReadableTrace for tool traces");
+  assert.ok(markdownIndex !== -1, "ChatStream must contain wrapRawSvgInMarkdown(m.content)");
+  assert.ok(
+    tracesIndex < markdownIndex,
+    `Inline tool traces (index ${tracesIndex}) must appear before markdown content (index ${markdownIndex}) in ChatStream assistant message view`
+  );
+});
+
 

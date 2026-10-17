@@ -385,7 +385,7 @@ export function SvgViewer({
                   transformOrigin: "center center",
                   transition: "transform 0.15s ease-out"
                 }}
-                className="flex items-center justify-center max-w-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
+                className="flex items-center justify-center w-full max-w-full [&>svg]:w-full [&>svg]:max-w-[760px] [&>svg]:max-h-[520px] [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
                 dangerouslySetInnerHTML={{ __html: sanitized }}
               />
             ) : rawSvg ? (
