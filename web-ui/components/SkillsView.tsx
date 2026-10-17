@@ -173,7 +173,7 @@ export function SkillsView({
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors"
                       >
                         <FileCode className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400" />
-                        <span>◨ View SKILL.md</span>
+                        <span>View SKILL.md</span>
                       </button>
                       <button
                         type="button"
@@ -270,17 +270,21 @@ export function SkillsView({
         )}
       </div>
 
-      {/* SKILL.md Preview Modal / Drawer matching Mockup 04 */}
+      {/* SKILL.md Preview Slide-Over Drawer matching Mockup 04 */}
       {previewCandidate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60"
           role="dialog"
           aria-modal="true"
           aria-label="Skill Inspector"
         >
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => setPreviewCandidate(null)}
+          />
+          <div className="bg-white dark:bg-zinc-900 w-[420px] max-w-[92vw] h-full flex flex-col shadow-2xl border-l border-slate-200 dark:border-zinc-800 overflow-hidden animate-in slide-in-from-right duration-200">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <FileCode className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 <span className="font-bold text-base text-slate-900 dark:text-zinc-100">
@@ -291,10 +295,10 @@ export function SkillsView({
                 type="button"
                 data-testid="close-skill-preview-btn"
                 onClick={() => setPreviewCandidate(null)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors text-xs font-semibold px-2.5 py-1 flex items-center gap-1"
+                className="text-xs font-semibold px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors flex items-center gap-1"
+                title="Collapse Preview Drawer"
               >
-                <X className="h-4 w-4" />
-                <span>Hide »</span>
+                Hide »
               </button>
             </div>
 
@@ -320,7 +324,7 @@ occurrences: ${previewCandidate.occurrences}
             </div>
 
             {/* Direct Actions Footer */}
-            <div className="px-5 py-3.5 border-t border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 flex items-center justify-end gap-2.5">
+            <div className="px-5 py-3.5 border-t border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 data-testid="preview-reject-skill-btn"
@@ -343,7 +347,7 @@ occurrences: ${previewCandidate.occurrences}
                 className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                ✓ Approve
+                Approve & Promote
               </button>
             </div>
           </div>
