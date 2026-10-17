@@ -828,34 +828,58 @@ export default function Home() {
 
               {/* Inspector Body */}
               <div className="inspector-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-                {workspaceTab === "diff" && (
-                  <DiffViewer
-                    branch={currentThread?.title ? "feature/" + currentThread.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) : "feature/autonomous-task"}
-                    diff={
-                      activeTask?.milestones?.map((m) => `diff --git a/${m.plannedFiles?.[0] || "file.ts"} b/${m.plannedFiles?.[0] || "file.ts"}\n--- a/${m.plannedFiles?.[0] || "file.ts"}\n+++ b/${m.plannedFiles?.[0] || "file.ts"}\n@@ -1,3 +1,5 @@\n+${m.title}`).join("\n") ||
-                      "diff --git a/workspace/output.ts b/workspace/output.ts\n--- a/workspace/output.ts\n+++ b/workspace/output.ts\n@@ -0,0 +1,5 @@\n+// Verified in /workspace\n+export function run() { return true; }"
-                    }
-                    modifiedFiles={plannedFiles.length > 0 ? plannedFiles : (currentThread ? ["workspace/index.ts"] : ["workspace/output.ts"])}
-                  />
-                )}
+                {workspaceTab === "diff" && (() => {
+                  const taskDiff = activeTask?.milestones?.map((m) => m.diff).filter(Boolean).join("\n") || "";
+                  const activeBranch = activeTask?.branchName || (currentThread?.title ? "feature/" + currentThread.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) : "");
+                  if (!taskDiff) {
+                    return (
+                      <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
+                        No file diffs recorded for this run.
+                      </div>
+                    );
+                  }
+                  return (
+                    <DiffViewer
+                      branch={activeBranch || "feature/task-diff"}
+                      diff={taskDiff}
+                      modifiedFiles={plannedFiles.length > 0 ? plannedFiles : []}
+                    />
+                  );
+                })()}
 
-                {workspaceTab === "output" && (
-                  <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
-                    <div className="text-emerald-400 font-bold mb-2">● Active Execution Output</div>
-                    {activeTask?.milestones?.find((m) => m.status === "in_progress")?.criticCritique ||
-                      "================== 6 passed in 0.21s ==================\nEXIT CODE 0\nAll systems operational. Zero gate failures detected."}
-                  </div>
-                )}
+                {workspaceTab === "output" && (() => {
+                  const activeCritic = activeTask?.milestones?.find((m) => m.status === "in_progress")?.criticCritique;
+                  const lastCritic = activeTask?.milestones?.slice().reverse().find((m) => m.criticCritique)?.criticCritique;
+                  const testSummary = activeTask?.testSummary;
+                  const outputText = activeCritic || lastCritic || (testSummary ? `Passed: ${testSummary.passed}, Failed: ${testSummary.failed}${testSummary.durationMs ? ` (${testSummary.durationMs}ms)` : ""}` : "");
+
+                  return (
+                    <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
+                      <div className="text-emerald-400 font-bold mb-2">● Active Execution Output</div>
+                      {outputText ? (
+                        <div>{outputText}</div>
+                      ) : (
+                        <div className="text-slate-400">No test output recorded yet.</div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {workspaceTab === "files" && (
                   <div className="space-y-2 font-mono text-xs">
                     <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">Planned Deliverables</div>
-                    {(plannedFiles.length > 0 ? plannedFiles : ["workspace/csv_parser.py", "workspace/test_csv_parser.py"]).map((f, i) => (
-                      <div key={i} className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 flex items-center justify-between shadow-2xs">
-                        <span>{f}</span>
-                        <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">Verified</span>
+                    {plannedFiles.length > 0 ? (
+                      plannedFiles.map((f, i) => (
+                        <div key={i} className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 flex items-center justify-between shadow-2xs">
+                          <span>{f}</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">Planned</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
+                        No workspace files modified yet.
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>

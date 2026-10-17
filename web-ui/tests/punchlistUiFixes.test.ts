@@ -136,3 +136,65 @@ describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-
     );
   });
 });
+
+describe("Flash 3.8 Frontend Shakeout — Fix 4: UI-P0-4 & UI-P2-2 Fake Telemetry Purge & Honest Workspace Tabs", () => {
+  it("page.tsx has zero fake telemetry strings and fake file diffs", () => {
+    const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
+    const content = fs.readFileSync(pageFile, "utf8");
+
+    assert.doesNotMatch(content, /6 passed in 0\.21s/, "page.tsx must not contain fake '6 passed in 0.21s'");
+    assert.doesNotMatch(content, /Zero gate failures detected/, "page.tsx must not contain fake gate failure string");
+    assert.doesNotMatch(content, /workspace\/csv_parser\.py/, "page.tsx must not contain fake planned deliverables");
+    assert.doesNotMatch(content, /diff --git a\/workspace\/output\.ts/, "page.tsx must not contain fake output.ts diff");
+  });
+
+  it("page.tsx renders honest empty states for diff, output, and files tabs", () => {
+    const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
+    const content = fs.readFileSync(pageFile, "utf8");
+
+    assert.match(content, /No test output recorded yet/, "page.tsx must display honest empty state when no output");
+    assert.match(content, /No file diffs recorded for this run/, "page.tsx must display honest empty state when no diff");
+    assert.match(content, /No workspace files modified yet/, "page.tsx must display honest empty state when no files");
+  });
+
+  it("DiffViewer defaults to open (isOpen = true)", () => {
+    const diffViewerFile = path.resolve(findRepoRoot(), "web-ui/components/DiffViewer.tsx");
+    const content = fs.readFileSync(diffViewerFile, "utf8");
+
+    assert.match(content, /useState\(true\)/, "DiffViewer must initialize isOpen = true by default");
+  });
+});
+
+describe("Flash 3.8 Frontend Shakeout — Fix 5: UI-P1-1 Honest BuildsView Gate & Deploy Status", () => {
+  it("BuildsView has zero hardcoded fake status strings or fake branch names", () => {
+    const buildsFile = path.resolve(findRepoRoot(), "web-ui/components/BuildsView.tsx");
+    const content = fs.readFileSync(buildsFile, "utf8");
+
+    assert.doesNotMatch(content, /feat\/task-autonomy-a1/, "BuildsView must not contain hardcoded task-autonomy-a1 branch");
+    assert.doesNotMatch(content, /test:gate Green/, "BuildsView must not contain hardcoded 'test:gate Green' badge");
+    assert.doesNotMatch(content, /test:gate Passed/, "BuildsView must not contain hardcoded 'test:gate Passed' tile");
+    assert.doesNotMatch(content, /HTTP 200 Verified/, "BuildsView must not contain hardcoded 'HTTP 200 Verified' tile");
+  });
+});
+
+describe("Flash 3.8 Frontend Shakeout — Fix 6: UI-P1-2 Theme Synchronization & Key Consistency", () => {
+  it("layout.tsx and morning-report page.tsx check both app-theme and theme keys", () => {
+    const layoutFile = path.resolve(findRepoRoot(), "web-ui/app/layout.tsx");
+    const mrFile = path.resolve(findRepoRoot(), "web-ui/app/morning-report/page.tsx");
+    const layoutContent = fs.readFileSync(layoutFile, "utf8");
+    const mrContent = fs.readFileSync(mrFile, "utf8");
+
+    assert.match(
+      layoutContent,
+      /localStorage\.getItem\(['"]app-theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]theme['"]\)/,
+      "layout.tsx must check both app-theme and theme localStorage keys"
+    );
+
+    assert.match(
+      mrContent,
+      /localStorage\.getItem\(['"]app-theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]theme['"]\)/,
+      "morning-report/page.tsx must check both app-theme and theme localStorage keys"
+    );
+  });
+});
+
