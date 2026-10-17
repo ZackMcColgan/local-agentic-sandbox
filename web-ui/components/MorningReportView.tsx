@@ -170,6 +170,14 @@ export function MorningReportView({
 
   const displayTasks = filteredTasks.length > 0 ? filteredTasks : uniqueTasks;
 
+  const kpis = React.useMemo(() => {
+    const total = displayTasks.length;
+    const completed = displayTasks.filter((t) => t.status === "completed").length;
+    const parked = displayTasks.filter((t) => t.status === "parked").length;
+    const failed = displayTasks.filter((t) => t.status === "failed").length;
+    return { total, completed, parked, failed };
+  }, [displayTasks]);
+
   const handlePreviewArtifact = async (art: MorningReportArtifact) => {
     if (previewArtifact?.path === art.path) {
       setPreviewArtifact(null);
@@ -288,19 +296,19 @@ export function MorningReportView({
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
                 <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Tasks</div>
-                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{overnight.totalTasks}</div>
+                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{kpis.total}</div>
               </div>
               <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
                 <div className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Completed</div>
-                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{overnight.completedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{kpis.completed}</div>
               </div>
               <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
                 <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Parked</div>
-                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{overnight.parkedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{kpis.parked}</div>
               </div>
               <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
                 <div className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Failed</div>
-                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{overnight.failedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{kpis.failed}</div>
               </div>
             </div>
           </div>

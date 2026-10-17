@@ -198,3 +198,59 @@ describe("Flash 3.8 Frontend Shakeout — Fix 6: UI-P1-2 Theme Synchronization &
   });
 });
 
+describe("Flash 3.8 Frontend Shakeout — Fix 7: UI-P1-3 Honest Morning Report KPIs & Window Filter", () => {
+  it("MorningReportView computes KPI counts from displayTasks rather than static report top-level", () => {
+    const mrViewFile = path.resolve(findRepoRoot(), "web-ui/components/MorningReportView.tsx");
+    const content = fs.readFileSync(mrViewFile, "utf8");
+
+    // KPI total must be dynamic from displayTasks
+    assert.match(
+      content,
+      /kpis\.total|displayTasks\.length/,
+      "MorningReportView must compute Total Tasks KPI dynamically from displayTasks"
+    );
+    assert.doesNotMatch(
+      content,
+      /<div className="mt-0\.5 text-xl font-bold text-slate-900 dark:text-zinc-100">\s*\{overnight\.totalTasks\}\s*<\/div>/,
+      "MorningReportView must not display static overnight.totalTasks when windowFilter changes"
+    );
+  });
+});
+
+describe("Flash 3.8 Frontend Shakeout — Fix 8: UI-P1-5 Right-Docked Skills Preview Drawer & Clean Labels", () => {
+  it("SkillsView preview drawer is right-docked with clean labels", () => {
+    const skillsViewFile = path.resolve(findRepoRoot(), "web-ui/components/SkillsView.tsx");
+    const content = fs.readFileSync(skillsViewFile, "utf8");
+
+    assert.match(
+      content,
+      /flex justify-end/,
+      "SkillsView preview drawer container must justify-end for slide-over docking"
+    );
+    assert.match(
+      content,
+      /Approve & Promote/,
+      "SkillsView preview action button must say 'Approve & Promote'"
+    );
+    assert.doesNotMatch(
+      content,
+      /◨ View SKILL\.md/,
+      "SkillsView must not use raw Unicode glyph in view button"
+    );
+  });
+});
+
+describe("Flash 3.8 Frontend Shakeout — Fix 9: UI-P2-3 Redundant Hamburger Cleanup & Polish", () => {
+  it("ChatStream uses clean PanelLeft icon for sessions drawer toggle instead of broken unicode glyph", () => {
+    const chatStreamFile = path.resolve(findRepoRoot(), "web-ui/components/ChatStream.tsx");
+    const content = fs.readFileSync(chatStreamFile, "utf8");
+
+    assert.doesNotMatch(
+      content,
+      /◧ Sessions/,
+      "ChatStream topbar must not render broken glyph '◧ Sessions'"
+    );
+  });
+});
+
+
