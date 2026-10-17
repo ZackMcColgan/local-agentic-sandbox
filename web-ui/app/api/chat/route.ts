@@ -601,6 +601,18 @@ CRITICAL INSTRUCTIONS:
               content: clampToolOutput(JSON.stringify(result))
             });
 
+            if (
+              toolName === "workspace_write_file" &&
+              !isExecutionError &&
+              typeof toolArgs?.content === "string" &&
+              /<svg[\s>][\s\S]*?<\/svg>/i.test(toolArgs.content)
+            ) {
+              mergeSystemDirective(
+                conversationMessages,
+                "[DELIVERABLE SAVED]: You have already saved the complete SVG diagram via workspace_write_file, and the UI automatically renders it inline for the user. Now respond with a concise 2-3 sentence summary of the diagram's contents and do NOT call more tools or repeat the <svg> markup in your text response."
+              );
+            }
+
             if (isWebResearchTool(toolName, target.tier)) {
               if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
                 webBudgetNoticeAdded = true;

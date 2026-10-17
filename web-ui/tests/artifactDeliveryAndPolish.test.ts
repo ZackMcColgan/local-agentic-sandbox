@@ -6,7 +6,9 @@ import { resolveSafePath } from "../../mcp-server/src/tools/workspaceTools.js";
 import {
   extractSvgsFromMessage,
   extractCodeDeliverablesFromMessage,
-  hasCompleteInlineSvg
+  hasCompleteInlineSvg,
+  isSvgCode,
+  wrapRawSvgInMarkdown
 } from "../lib/svgUtils.js";
 
 describe("Artifact Delivery and UI Polish Suite", () => {
@@ -108,6 +110,48 @@ describe("Artifact Delivery and UI Polish Suite", () => {
       assert.equal(deliverables[0].language, "py");
       assert.equal(deliverables[0].code, "def main():\n    return 42\n");
       assert.equal(deliverables[0].url, "/api/files?path=app.py");
+    });
+
+    it("isSvgCode requires a complete <svg>...</svg> (or Draw.io XML)", () => {
+      assert.equal(
+        isSvgCode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620"><rect width="480" height="620"/></svg>', "svg"),
+        true
+      );
+      assert.equal(
+        isSvgCode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620"><line x1="333', "svg"),
+        false
+      );
+    });
+
+    it("extractSvgsFromMessage extracts the complete workspace_write_file SVG when message.content only has a truncated <svg without </svg>", () => {
+      const message = {
+        id: "msg-trunc",
+        content:
+          'Here is the card:\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620">\n  <rect width="480" height="620"/>\n  <line x1="333',
+        traces: [
+          {
+            tool: "workspace_write_file",
+            args: {
+              path: "weather-spanish-fort-al.svg",
+              content:
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620">\n  <rect width="480" height="620"/>\n  <text>66°F</text>\n</svg>'
+            }
+          }
+        ]
+      };
+
+      const svgs = extractSvgsFromMessage(message);
+      assert.equal(svgs.length, 1, "Must extract complete SVG from workspace_write_file even when inline SVG is truncated");
+      assert.ok(svgs[0].code?.includes("<text>66°F</text>"), "Must return the complete SVG containing <text>66°F</text>");
+    });
+
+    it("wrapRawSvgInMarkdown strips an unclosed/incomplete trailing ```svg fence while preserving complete fences", () => {
+      const truncated =
+        'Here is your weather card.\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620">\n  <line x1="333';
+      assert.equal(wrapRawSvgInMarkdown(truncated), "Here is your weather card.");
+
+      const complete = '```svg\n<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg>\n```';
+      assert.equal(wrapRawSvgInMarkdown(complete), complete);
     });
   });
 

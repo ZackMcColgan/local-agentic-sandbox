@@ -426,13 +426,19 @@ export function convertDrawioToSvg(xml: string): string {
 export function isSvgCode(code: string, language?: string): boolean {
   if (!code || typeof code !== "string") return false;
   const lang = (language || "").trim().toLowerCase();
-  if (lang === "svg" || lang === "drawio") return true;
-
   const trimmed = code.trim();
 
   // Draw.io XML format
   if (isDrawioXml(trimmed)) {
     return true;
+  }
+
+  if (lang === "drawio") {
+    return isDrawioXml(trimmed);
+  }
+
+  if (lang === "svg") {
+    return /<svg[\s>]/i.test(trimmed) && /<\/svg>/i.test(trimmed);
   }
 
   // Check if it's xml or html containing an <svg element
@@ -526,6 +532,10 @@ export function sanitizeSvg(svgString: string): string {
 
 export function wrapRawSvgInMarkdown(content: string): string {
   if (!content || typeof content !== "string") return "";
+
+  if (/```svg\b/i.test(content)) {
+    content = content.replace(/```svg\b[\s\S]*?(?:```|$)/gi, (block) => (/<\/svg>/i.test(block) ? block : "")).trim();
+  }
 
   // Split by code fences ```...```
   const parts = content.split(/(```[\s\S]*?```)/g);
@@ -723,7 +733,9 @@ export function extractSvgsFromMessage(message: {
       const title = finalPath ? finalPath.split(/[/\\]/).pop() || finalPath : `${trace.tool} Vector Graphic`;
       const key = finalPath || (code ? code.slice(0, 100) : `trace-${i}`);
 
-      const alreadyInContent = code && code.length > 30 && message.content.includes(code.slice(0, 50));
+      const alreadyInContent = Boolean(
+        code && code.length > 30 && hasCompleteInlineSvg(message.content) && message.content.includes(code.slice(0, 50))
+      );
 
       if (!seenKeys.has(key) && !alreadyInContent) {
         seenKeys.add(key);
