@@ -26,7 +26,9 @@ import {
   Menu,
   Plus,
   ArrowDown,
-  PanelLeft
+  PanelLeft,
+  FileCode,
+  ExternalLink
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -39,7 +41,15 @@ import { ThinkingPanel } from "./ThinkingPanel";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
-import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
+import {
+  isSvgCode,
+  isSvgFilePath,
+  resolveSvgUrl,
+  wrapRawSvgInMarkdown,
+  extractSvgsFromMessage,
+  hasCompleteInlineSvg,
+  extractCodeDeliverablesFromMessage
+} from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
@@ -1106,14 +1116,18 @@ export function ChatStream({
                       >
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
+                    </div>
+                  )}
 
-                      {/* Tool Generated SVG Visual Artifacts */}
+                  {/* Tool Generated SVG Visual Artifacts & Code Deliverables */}
+                  {!isTaskHostMessage && (
+                    <>
                       {(() => {
-                        if (isSvgCode(m.content) || m.content.includes("<svg")) return null;
+                        if (hasCompleteInlineSvg(m.content)) return null;
                         const messageSvgs = extractSvgsFromMessage(m);
                         if (messageSvgs.length === 0) return null;
                         return (
-                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose">
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
                             {messageSvgs.map((svg) => (
                               <div key={svg.id} className="space-y-1.5">
                                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
@@ -1134,7 +1148,40 @@ export function ChatStream({
                           </div>
                         );
                       })()}
-                    </div>
+
+                      {(() => {
+                        const codeDeliverables = extractCodeDeliverablesFromMessage(m);
+                        if (codeDeliverables.length === 0) return null;
+                        return (
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
+                            {codeDeliverables.map((item) => (
+                              <div key={item.id} className="space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                                  <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                                    <FileCode className="h-3.5 w-3.5" />
+                                    <span>Delivered Code File: {item.title}</span>
+                                  </span>
+                                  <a
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                  >
+                                    <span>Open Raw</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </div>
+                                <CodeBlock
+                                  language={item.language}
+                                  code={item.code}
+                                  filename={item.path}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
 
                   {/* Inline Expandable Sandbox & Telemetry Badges */}
@@ -1205,7 +1252,8 @@ export function ChatStream({
                   {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
                     <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
                       {m.traces.filter((t: any) => t.args?.path || (t.name && String(t.name).includes(".ts"))).slice(0, 3).map((t: any, cIdx) => {
-                        const pathLabel = t.args?.path || t.name || "workerPool.ts:342";
+                        const pathLabel = t.args?.path || t.name;
+                        if (!pathLabel) return null;
                         return (
                           <div
                             key={cIdx}
@@ -1215,14 +1263,25 @@ export function ChatStream({
                               <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                               <span className="font-semibold truncate">{pathLabel}</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
-                              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 shrink-0 ml-2"
-                              title="Copy path"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <a
+                                href={resolveSvgUrl(pathLabel)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                title="Open file"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
+                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                title="Copy path"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}

@@ -67,7 +67,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/svgRendering.test.ts",
       "tests/svgComponent.test.ts",
-      "tests/architectureSvgPair.test.ts"
+      "tests/architectureSvgPair.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
@@ -84,7 +85,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatPolish.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/chatContextBudget.test.ts",
-      "tests/chatActionDiscipline.test.ts"
+      "tests/chatActionDiscipline.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API

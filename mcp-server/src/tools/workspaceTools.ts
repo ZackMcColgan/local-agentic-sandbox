@@ -62,8 +62,12 @@ async function ensureWorkspaceInitialized() {
 
 // Ensure safe path resolution within WORKSPACE_DIR
 export function resolveSafePath(userPath: string): string {
-  const normalized = path.normalize(userPath).replace(/^(\/|\\)/, "");
-  const resolved = path.resolve(WORKSPACE_DIR, normalized);
+  if (userPath.includes("..")) {
+    throw new Error(`Security Violation: Path traversal outside /workspace is forbidden (${userPath})`);
+  }
+  const normalized = path.normalize(userPath).replace(/^(\/|\\)+/, "");
+  const stripped = normalized.replace(/^workspace(?:[\/\\]+|$)/i, "");
+  const resolved = path.resolve(WORKSPACE_DIR, stripped);
   const rootResolved = path.resolve(WORKSPACE_DIR);
 
   if (!resolved.startsWith(rootResolved)) {

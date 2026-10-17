@@ -578,6 +578,66 @@ export interface ExtractedSvgItem {
   isDrawio?: boolean;
 }
 
+export function hasCompleteInlineSvg(content: string): boolean {
+  return /<svg[\s>][\s\S]*?<\/svg>/i.test(content || "") || isDrawioXml(content || "");
+}
+
+export interface ExtractedCodeDeliverable {
+  id: string;
+  title: string;
+  path: string;
+  language: string;
+  code: string;
+  url: string;
+}
+
+export function extractCodeDeliverablesFromMessage(message: {
+  id: string;
+  content: string;
+  traces?: Array<{
+    tool: string;
+    args?: Record<string, any>;
+    result?: any;
+  }>;
+}): ExtractedCodeDeliverable[] {
+  const deliverables: ExtractedCodeDeliverable[] = [];
+  const seenPaths = new Set<string>();
+
+  if (!message.traces || !Array.isArray(message.traces)) {
+    return deliverables;
+  }
+
+  for (let i = 0; i < message.traces.length; i++) {
+    const trace = message.traces[i];
+    if (trace.tool === "workspace_write_file" && trace.args) {
+      const filePath = typeof trace.args.path === "string" ? trace.args.path : "";
+      const content = typeof trace.args.content === "string" ? trace.args.content : "";
+
+      if (filePath && content && !isSvgFilePath(filePath) && !isSvgCode(content)) {
+        if (seenPaths.has(filePath)) continue;
+        if (message.content && message.content.includes(content.trim().slice(0, 80))) {
+          continue;
+        }
+
+        seenPaths.add(filePath);
+        const ext = filePath.split(".").pop()?.toLowerCase() || "txt";
+        const title = filePath.split(/[/\\]/).pop() || filePath;
+
+        deliverables.push({
+          id: `${message.id}-code-${i}`,
+          title,
+          path: filePath,
+          language: ext,
+          code: content,
+          url: resolveSvgUrl(filePath)
+        });
+      }
+    }
+  }
+
+  return deliverables;
+}
+
 /**
  * Extracts all SVG and Draw.io diagrams generated or retrieved by tool traces in a chat message.
  */
@@ -601,7 +661,18 @@ export function extractSvgsFromMessage(message: {
     const trace = message.traces[i];
     const pathArg = (trace.args?.path || trace.args?.file || trace.args?.filename || "") as string;
     const contentArg = (trace.args?.content || trace.args?.code || "") as string;
-    const isPathSvg = pathArg ? isSvgFilePath(pathArg) : false;
+    let finalPath = pathArg;
+    let isPathSvg = pathArg ? isSvgFilePath(pathArg) : false;
+
+    if (!finalPath && (trace.tool === "execute_sandboxed_python" || trace.tool === "workspace_run_command")) {
+      const execStr = String(trace.args?.code || trace.args?.command || "");
+      const match = execStr.match(/["']([a-zA-Z0-9_./-]+\.svg)["']/i);
+      const isError = String(trace.result?.content?.[0]?.text || "").includes("EXECUTION_ERROR");
+      if (match && !isError) {
+        finalPath = match[1];
+        isPathSvg = true;
+      }
+    }
 
     // Check stdout / result output
     let stdoutSvg = "";
@@ -636,22 +707,22 @@ export function extractSvgsFromMessage(message: {
     }
 
     if (code || isPathSvg) {
-      const title = pathArg ? pathArg.split(/[/\\]/).pop() || pathArg : `${trace.tool} Vector Graphic`;
-      const key = pathArg || (code ? code.slice(0, 100) : `trace-${i}`);
+      const title = finalPath ? finalPath.split(/[/\\]/).pop() || finalPath : `${trace.tool} Vector Graphic`;
+      const key = finalPath || (code ? code.slice(0, 100) : `trace-${i}`);
 
       const alreadyInContent = code && code.length > 30 && message.content.includes(code.slice(0, 50));
 
       if (!seenKeys.has(key) && !alreadyInContent) {
         seenKeys.add(key);
-        if (pathArg) seenKeys.add(pathArg);
+        if (finalPath) seenKeys.add(finalPath);
         if (code) seenKeys.add(code.slice(0, 100));
 
         svgs.push({
           id: `${message.id}-trace-${i}`,
           title: title || "Vector Graphic",
           code,
-          url: pathArg ? resolveSvgUrl(pathArg) : undefined,
-          isDrawio: isDrawioXml(code || "") || (pathArg ? pathArg.includes(".drawio") : false)
+          url: finalPath ? resolveSvgUrl(finalPath) : undefined,
+          isDrawio: isDrawioXml(code || "") || (finalPath ? finalPath.includes(".drawio") : false)
         });
       }
     }
