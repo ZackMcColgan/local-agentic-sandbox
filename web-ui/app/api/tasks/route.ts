@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generatePlanSpec } from "@/lib/subagents/planner";
-import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
+import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
 import { generateMorningReport, MorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 import { activeExecutionSet } from "@/lib/threads/threadStore";
@@ -19,11 +19,8 @@ export async function POST(req: Request) {
     if (body.action === "cancel") {
       const taskId = body.taskId;
       activeExecutionSet.delete(taskId);
-      const controller = activeAbortControllers.get(taskId);
-      if (controller) {
-        controller.abort();
-        activeAbortControllers.delete(taskId);
-      }
+      cancelTask(taskId);
+      activeAbortControllers.delete(taskId);
       const task = tasksRegistry.get(taskId);
       if (task) {
         supervisor.parkTask(task, "User cancelled task");
@@ -82,20 +79,25 @@ export async function POST(req: Request) {
     const taskId = `task-${Date.now()}`;
 
     // Generate SPEC.md and decomposed milestones
-    const planSpec = await generatePlanSpec({ taskId, goal, toolchain });
+    const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope: body.scope });
     const specMarkdown = planSpec.toMarkdown();
+
+    const defaultBranch = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
+    const branchName = body.branchName || defaultBranch;
 
     const manifest: TaskManifest = {
       taskId,
       goal,
-      branchName: "feat/v2.5-overnight",
-      branch: "feat/v2.5-overnight",
+      branchName,
+      branch: branchName,
       toolchain,
+      scope: body.scope,
       status: "active",
       milestones: planSpec.milestones,
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
+      autoDeployOnGreen: Boolean(body.autoDeployOnGreen),
       journal: [
         {
           timestamp: new Date().toISOString(),
@@ -110,6 +112,7 @@ export async function POST(req: Request) {
     tasksRegistry.set(taskId, manifest);
     const abortController = new AbortController();
     activeAbortControllers.set(taskId, abortController);
+    supervisor.setAbortController(taskId, abortController);
     activeExecutionSet.add(taskId);
 
     supervisor.saveCheckpoint(manifest);
@@ -119,8 +122,8 @@ export async function POST(req: Request) {
     if (autoExecute) {
       (async () => {
         try {
-          const executor = createProductionStepExecutor();
-          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+          const executor = createProductionStepExecutor({ signal: abortController.signal });
+          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: abortController.signal });
           tasksRegistry.set(taskId, result);
           supervisor.saveCheckpoint(result);
         } catch (err: any) {
@@ -223,12 +226,9 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "taskId is required" }, { status: 400 });
   }
 
-  const controller = activeAbortControllers.get(taskId);
+  cancelTask(taskId);
   activeExecutionSet.delete(taskId);
-  if (controller) {
-    controller.abort();
-    activeAbortControllers.delete(taskId);
-  }
+  activeAbortControllers.delete(taskId);
 
   const task = tasksRegistry.get(taskId);
   if (task) {

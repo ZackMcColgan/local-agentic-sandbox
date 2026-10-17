@@ -75,6 +75,8 @@ export interface Milestone {
   diffSummary?: string;
   testsPassed?: number;
   testsFailed?: number;
+  testsRun?: number;
+  testExitCode?: number | null;
   testFile?: string;
   plannedFiles?: string[];
   skipCriticOnValidSyntax?: boolean;

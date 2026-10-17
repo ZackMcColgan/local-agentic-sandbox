@@ -11,7 +11,7 @@ import {
   type GenerateFn
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
-import { workspacePatchFile, type PatchItem, type PatchFileResult } from "../../../mcp-server/src/tools/patchCore";
+import { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore";
 export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
 export interface ModelRosterConfig {
@@ -83,6 +83,7 @@ export interface WorkerModelOptions {
   generate?: GenerateFn;
   keepAlive?: string | number;
   scope?: string;
+  workspaceRoot?: string;
 }
 
 export interface WorkspaceFileSymbol {
@@ -441,6 +442,7 @@ export class BuilderWorker {
   private readonly ollamaUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
+  private readonly workspaceRoot?: string;
   private readonly scopedTools = [
     "workspace_write_file",
     "workspace_patch_file",
@@ -455,6 +457,7 @@ export class BuilderWorker {
     this.ollamaUrl = options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
+    this.workspaceRoot = options?.workspaceRoot;
   }
 
   getScopedToolNames(): string[] {
@@ -472,9 +475,12 @@ export class BuilderWorker {
   async patchFile(
     targetRelPath: string,
     patches: Array<PatchItem>,
-    options?: { repoRoot?: string }
+    options?: { repoRoot?: string } | string
   ): Promise<PatchFileResult> {
-    const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    const repoRoot =
+      typeof options === "string"
+        ? options
+        : options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     return await workspacePatchFile(repoRoot, targetRelPath, patches);
   }
 
@@ -491,9 +497,41 @@ export class BuilderWorker {
     return target;
   }
 
+  private async tryApplySurgicalPatches(
+    rawText: string,
+    targetRelPath: string,
+    fullPath: string,
+    previousContent: string,
+    repoRoot: string
+  ): Promise<string | null> {
+    if (!previousContent || !fs.existsSync(fullPath)) return null;
+    let parsedPatches: PatchItem[] | null = null;
+    try {
+      const potentialJson = stripCodeFence(rawText).trim();
+      if (potentialJson.startsWith("{") && potentialJson.endsWith("}")) {
+        const parsed = JSON.parse(potentialJson);
+        if (parsed && Array.isArray(parsed.patches) && parsed.patches.length > 0) {
+          parsedPatches = parsed.patches;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    if (parsedPatches) {
+      try {
+        await this.patchFile(targetRelPath, parsedPatches, { repoRoot });
+        return fs.readFileSync(fullPath, "utf8");
+      } catch (patchErr: any) {
+        console.warn(`[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`);
+      }
+    }
+    return null;
+  }
+
   async executeMilestoneWork(
     milestone: Milestone,
-    options?: {
+    optionsOrIteration?: {
       repoRoot?: string;
       previousDiff?: string;
       criticFeedback?: string[];
@@ -503,9 +541,19 @@ export class BuilderWorker {
       gitSha?: string;
       signal?: AbortSignal;
       onThinkingChunk?: (chunk: string, totalThinking: string) => void;
-    }
+    } | number,
+    legacyCriticFeedback?: string[],
+    legacyRepoRoot?: string
   ): Promise<BuilderResult> {
-    const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    const options =
+      typeof optionsOrIteration === "object" && optionsOrIteration !== null
+        ? optionsOrIteration
+        : {
+            iteration: typeof optionsOrIteration === "number" ? optionsOrIteration : undefined,
+            criticFeedback: legacyCriticFeedback,
+            repoRoot: legacyRepoRoot
+          };
+    const repoRoot = options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
     const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
     const criticFeedback = options?.criticFeedback || [];
@@ -557,6 +605,11 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
           newContent = stripCodeFence(result.text);
           if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
           if (result.thinking) lastThinking = result.thinking;
+
+          const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+          if (patched !== null) {
+            newContent = patched;
+          }
         }
 
         if (!synthetic) {
@@ -640,6 +693,11 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
       builderThinking = result.thinking;
+
+      const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+      if (patched !== null) {
+        newContent = patched;
+      }
     }
 
     // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
@@ -678,7 +736,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
 
-Please fix the syntax error and output the complete, valid, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Please fix the syntax error and output the complete, valid file content for "${targetRelPath}" enclosed in a markdown code fence (\`\`\`typescript ... \`\`\`). Do not include conversational prose or explanation outside the fence.`;
 
         const retryResult = await generate({
           model: modelToUse,

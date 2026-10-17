@@ -708,6 +708,7 @@ export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
   gitOps?: WorkerGitOps;
   gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  signal?: AbortSignal;
 }
 
 export interface ProductionStepExecutorOptions {
@@ -715,12 +716,100 @@ export interface ProductionStepExecutorOptions {
   repoRoot?: string;
   model?: string;
   scope?: string;
+  signal?: AbortSignal;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
   testRunner?: (
     milestone: Milestone,
     targetFile: string,
     repoRoot: string
-  ) => Promise<{ exitCode: number; passed: number; failed: number; output: string }>;
+  ) => Promise<{ exitCode: number | null; passed: number; failed: number; testsRun?: number; output: string }>;
+}
+
+export interface MilestoneTestRunResult {
+  passed: number;
+  failed: number;
+  testsRun: number;
+  exitCode: number | null;
+  output: string;
+}
+
+/**
+ * Honest milestone acceptance criteria test runner.
+ * If no command is defined on criteria, runs milestone.testFile.
+ * If zero commands can be run, returns exitCode: null, testsRun: 0 (banning dishonest exitCode: 0 passes).
+ */
+export async function runMilestoneTestRunner(
+  m: Milestone,
+  workspaceDir?: string
+): Promise<MilestoneTestRunResult> {
+  const root = workspaceDir || process.cwd();
+  let passed = 0;
+  let failed = 0;
+  let combinedOutput = "";
+  let finalExitCode: number | null = 0;
+
+  const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) => Boolean(c.command && c.command.trim()));
+
+  if (criteriaWithCmd.length === 0) {
+    if (m.testFile) {
+      const testCmd = `npx tsx --test ${m.testFile}`;
+      try {
+        const res = await executeInSandboxTier({
+          tier: "build",
+          command: testCmd,
+          workspaceDir: root,
+          toolchain: m.toolchain
+        });
+        combinedOutput += `[${m.testFile}] $ ${testCmd}\n${res.stdout}\n${res.stderr}\n`;
+        if (res.exitCode === 0) {
+          passed++;
+          finalExitCode = 0;
+        } else {
+          failed++;
+          finalExitCode = res.exitCode || 1;
+        }
+      } catch (err: any) {
+        failed++;
+        finalExitCode = 1;
+        combinedOutput += `[${m.testFile}] Error: ${err.message}\n`;
+      }
+      return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+    }
+
+    // No automated tests configured: honest null exitCode and 0 testsRun
+    return {
+      passed: 0,
+      failed: 0,
+      testsRun: 0,
+      exitCode: null,
+      output: "No automated test commands configured for this milestone."
+    };
+  }
+
+  for (const criterion of criteriaWithCmd) {
+    if (!criterion.command) continue;
+    try {
+      const res = await executeInSandboxTier({
+        tier: "build",
+        command: criterion.command,
+        workspaceDir: root,
+        toolchain: m.toolchain
+      });
+      combinedOutput += `[${criterion.id}] $ ${criterion.command}\n${res.stdout}\n${res.stderr}\n`;
+      if (res.exitCode === (criterion.expectedExitCode ?? 0)) {
+        passed++;
+      } else {
+        failed++;
+        finalExitCode = res.exitCode || 1;
+      }
+    } catch (err: any) {
+      failed++;
+      finalExitCode = 1;
+      combinedOutput += `[${criterion.id}] Error: ${err.message}\n`;
+    }
+  }
+
+  return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
 }
 
 /**
@@ -773,14 +862,14 @@ export function createProductionStepExecutor(
       const builder = createBuilderWorker({
         model: builderModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(builderModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(builderModel) : "24h",
         scope: effectiveScope
       });
 
       const critic = createCriticWorker({
         model: criticModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(criticModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(criticModel) : "24h",
         scope: effectiveScope
       });
 
@@ -809,6 +898,7 @@ export function createProductionStepExecutor(
           builderRes = await workerPool.executeJob({
             role: "builder",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await builder.executeMilestoneWork(milestone, {
                 repoRoot,
@@ -840,45 +930,12 @@ export function createProductionStepExecutor(
           };
         }
 
-        let testExitCode = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0;
+        let testExitCode: number | null = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : null;
         let testOutput = "";
 
         // Task 1 (Sprint A2): Default testRunner executes milestone.acceptanceCriteria commands in sandbox tier
-        const effectiveTestRunner = options?.testRunner || (async (m: Milestone, targetFile?: string, rRoot?: string) => {
-          let passed = 0;
-          let failed = 0;
-          let combinedOutput = "";
-          let finalExitCode = 0;
-
-          const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) => Boolean(c.command && c.command.trim()));
-          if (criteriaWithCmd.length === 0) {
-            return { passed: 0, failed: 0, exitCode: 0, output: "" };
-          }
-
-          for (const criterion of criteriaWithCmd) {
-            if (!criterion.command) continue;
-            try {
-              const res = await executeInSandboxTier({
-                tier: "build",
-                command: criterion.command,
-                workspaceDir: rRoot || repoRoot,
-                toolchain: m.toolchain
-              });
-              combinedOutput += `[${criterion.id}] $ ${criterion.command}\n${res.stdout}\n${res.stderr}\n`;
-              if (res.exitCode === (criterion.expectedExitCode ?? 0)) {
-                passed++;
-              } else {
-                failed++;
-                finalExitCode = res.exitCode || 1;
-              }
-            } catch (err: any) {
-              failed++;
-              finalExitCode = 1;
-              combinedOutput += `[${criterion.id}] Error: ${err.message}\n`;
-            }
-          }
-
-          return { passed, failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+        const effectiveTestRunner = options?.testRunner || (async (m: Milestone, _targetFile?: string, rRoot?: string) => {
+          return await runMilestoneTestRunner(m, rRoot || repoRoot);
         });
 
         try {
@@ -886,18 +943,21 @@ export function createProductionStepExecutor(
           const testRes = await effectiveTestRunner(milestone, lastTargetFile, repoRoot);
           milestone.testsPassed = testRes.passed;
           milestone.testsFailed = testRes.failed;
+          milestone.testsRun = (testRes as any).testsRun ?? (testRes.passed + testRes.failed);
+          milestone.testExitCode = testRes.exitCode;
           testExitCode = testRes.exitCode;
           testOutput = testRes.output;
-          console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}`);
+          console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}, testsRun=${milestone.testsRun}`);
         } catch (tErr: any) {
           console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
           testExitCode = 1;
           milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+          milestone.testExitCode = 1;
         }
 
-        // Task 2 (Sprint A2): When testExitCode !== 0, format failure via workerCiFeedback.ts and inject into milestone.lastError & criticFeedback
-        if (testExitCode !== 0) {
-          const failingCmd = (milestone.acceptanceCriteria || []).find((c) => c.command)?.command || "test";
+        // Task 2 (Sprint A2): When testExitCode !== 0 and testExitCode !== null, format failure via workerCiFeedback.ts and inject into milestone.lastError & criticFeedback
+        if (testExitCode !== null && testExitCode !== 0) {
+          const failingCmd = (milestone.acceptanceCriteria || []).find((c) => c.command)?.command || (milestone.testFile ? `npx tsx --test ${milestone.testFile}` : "test");
           const formattedFailure = formatTestFailureForBuilder(failingCmd, testExitCode, testOutput);
           milestone.lastError = formattedFailure;
           if (!criticFeedback.includes(formattedFailure)) {
@@ -916,13 +976,14 @@ export function createProductionStepExecutor(
           const criticRes = await workerPool.executeJob({
             role: "critic",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await critic.evaluateMilestoneDiff(
                 milestone,
                 {
                   diff: builderRes.diff,
                   filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
-                  testExitCode,
+                  testExitCode: testExitCode ?? undefined,
                   testOutput,
                   noChangeReason: milestone.diffSummary
                 },
@@ -1022,11 +1083,24 @@ interface GlobalSupervisorState {
 }
 
 const globalSupervisorState: GlobalSupervisorState =
-  (globalThis as any).__argonSupervisorState ||
-  ((globalThis as any).__argonSupervisorState = {
+  (globalThis as any).__supervisorGlobalState ||
+  ((globalThis as any).__supervisorGlobalState = {
     pausedTasks: new Set<string>(),
     abortControllers: new Map<string, AbortController>()
   });
+
+/**
+ * Aborts an active task execution and evicts its AbortController from memory.
+ */
+export function cancelTask(taskId: string): boolean {
+  const controller = globalSupervisorState.abortControllers.get(taskId);
+  if (controller) {
+    controller.abort();
+    globalSupervisorState.abortControllers.delete(taskId);
+    return true;
+  }
+  return false;
+}
 
 /**
  * Overnight Supervisor / Watchdog
@@ -1167,6 +1241,9 @@ export class OvernightSupervisor {
       recoveryAttempted: false
     };
 
+    if (!task.checkpoints) {
+      task.checkpoints = [];
+    }
     task.checkpoints.push(checkpoint);
     task.updatedAt = new Date().toISOString();
 
@@ -1420,26 +1497,46 @@ export class OvernightSupervisor {
       }
     }
 
-    while (task.currentMilestoneIndex < task.milestones.length) {
-      if (task.status === "paused" || this.isPaused(task.taskId)) {
-        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
-        break;
-      }
-      const mIdx = task.currentMilestoneIndex;
-      const milestone = task.milestones[mIdx];
-      let attempt = 0;
-      let milestoneCompleted = false;
+    const controller = this.getAbortController(task.taskId) || new AbortController();
+    this.setAbortController(task.taskId, controller);
+    const signal = options?.signal || controller.signal;
+    const isAbortedOrCancelled = () => Boolean(signal?.aborted || (task.status as TaskStatus) === "cancelled");
 
-      while (!milestoneCompleted && attempt < 3) {
-        attempt++;
-        try {
-          if (executor) {
-            console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
-            const res = await executor(milestone, attempt);
-            if (task.status === "paused" || this.isPaused(task.taskId)) {
-              console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
-              break;
-            }
+    try {
+      while (task.currentMilestoneIndex < task.milestones.length) {
+        if (isAbortedOrCancelled() || task.status === "paused" || this.isPaused(task.taskId)) {
+          if (isAbortedOrCancelled()) {
+            task.status = "cancelled";
+            console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`);
+            break;
+          }
+          console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+          break;
+        }
+        const mIdx = task.currentMilestoneIndex;
+        const milestone = task.milestones[mIdx];
+        let attempt = 0;
+        let milestoneCompleted = false;
+
+        while (!milestoneCompleted && attempt < 3) {
+          if (isAbortedOrCancelled()) {
+            task.status = "cancelled";
+            break;
+          }
+          attempt++;
+          try {
+            if (executor) {
+              console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
+              const res = await executor(milestone, attempt);
+              if (isAbortedOrCancelled()) {
+                task.status = "cancelled";
+                console.log(`[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`);
+                break;
+              }
+              if (task.status === "paused" || this.isPaused(task.taskId)) {
+                console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+                break;
+              }
             console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
             if (res.status === "completed") {
               milestone.status = "completed";
@@ -1482,7 +1579,8 @@ export class OvernightSupervisor {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
-          if (task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+          if (isAbortedOrCancelled() || task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
+            task.status = (isAbortedOrCancelled() || err.name === "AbortError") ? "cancelled" : task.status;
             console.log(`[supervisor] Task ${task.taskId} caught abort/pause during milestone ${milestone.id}. Halting.`);
             break;
           }
@@ -1509,6 +1607,12 @@ export class OvernightSupervisor {
             }
           }
         }
+      }
+
+      if (isAbortedOrCancelled()) {
+        task.status = "cancelled";
+        console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`);
+        break;
       }
 
       if (task.status === "paused" || this.isPaused(task.taskId)) {
@@ -1539,6 +1643,12 @@ export class OvernightSupervisor {
         this.saveCheckpoint(task);
         return task;
       }
+    }
+
+    if (isAbortedOrCancelled()) {
+      task.status = "cancelled";
+      this.saveCheckpoint(task);
+      return task;
     }
 
     if (task.status === "paused" || this.isPaused(task.taskId)) {
@@ -1636,7 +1746,10 @@ export class OvernightSupervisor {
       this.saveCheckpoint(task);
     }
     return task;
+  } finally {
+    this.deleteAbortController(task.taskId);
   }
+}
 
   /**
    * Stall detection: checks if no forward progress has been made for stallTimeoutMs.

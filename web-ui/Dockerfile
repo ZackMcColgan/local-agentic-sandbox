@@ -8,6 +8,8 @@ WORKDIR /build
 # Copy entire monorepo structure
 COPY package*.json ./
 COPY web-ui/package*.json ./web-ui/
+COPY mcp-server/package*.json ./mcp-server/
+COPY browser-mcp/package*.json ./browser-mcp/
 
 # Install from root (honors workspace config)
 RUN npm ci --workspaces

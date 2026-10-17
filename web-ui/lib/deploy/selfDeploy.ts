@@ -166,13 +166,28 @@ export class SelfDeployPipeline {
   public async executeDeploy(
     input: SelfDeployInput & { preRollout?: boolean; skipPreRollout?: boolean }
   ): Promise<SelfDeployRecord> {
-    const shouldRunPreRollout = input.preRollout ?? (input.skipPreRollout ? false : false);
+    const branchLower = (input.branchName || "").toLowerCase().trim();
+    if (branchLower === "main" || branchLower === "master") {
+      throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");
+    }
+
+    if (input.branchName && (input.branchName.startsWith("feat/task-") || input.branchName.startsWith("feat/"))) {
+      const checkoutRes = await this.commandRunner("git", ["checkout", "develop"], { cwd: this.repoRoot });
+      if (checkoutRes.exitCode !== 0) {
+        throw new Error(`Git checkout develop failed: ${checkoutRes.stderr || checkoutRes.stdout}`);
+      }
+      const mergeRes = await this.commandRunner("git", ["merge", "--no-ff", input.branchName], { cwd: this.repoRoot });
+      if (mergeRes.exitCode !== 0) {
+        throw new Error(`Git merge --no-ff ${input.branchName} into develop failed: ${mergeRes.stderr || mergeRes.stdout}`);
+      }
+    }
+
     if (input.preRollout === true) {
-      const gateRes = await this.commandRunner("npm", ["run", "test:gate"]);
+      const gateRes = await this.commandRunner("npm", ["run", "test:gate"], { cwd: this.repoRoot });
       if (gateRes.exitCode !== 0) {
         throw new Error(`Pre-rollout test:gate failed: ${gateRes.stderr || gateRes.stdout}`);
       }
-      const buildRes = await this.commandRunner("npm", ["run", "build"]);
+      const buildRes = await this.commandRunner("npm", ["run", "build"], { cwd: this.repoRoot });
       if (buildRes.exitCode !== 0) {
         throw new Error(`Pre-rollout build failed: ${buildRes.stderr || buildRes.stdout}`);
       }

@@ -117,6 +117,56 @@ export function resolveSingleArtifactFile(goal: string): { filename: string; fil
 }
 
 /**
+ * Normalizes a raw milestone object, guaranteeing proper IDs, defaults,
+ * and synthesizing test commands from testFile if criteria omitted command.
+ */
+export function normalizeMilestone(m: any, idx: number = 0): Milestone {
+  const milestoneId = m.id || `M${idx + 1}`;
+  const plannedFiles = Array.isArray(m.plannedFiles) ? m.plannedFiles : [];
+  const testFile = m.testFile || plannedFiles.find((f: string) => f && (f.includes(".test.") || f.includes(".spec.") || f.startsWith("tests/")));
+
+  let acceptanceCriteria: AcceptanceCriterion[] = Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
+    ? m.acceptanceCriteria.map((ac: any, acIdx: number) => {
+        let command = ac.command;
+        if (!command && testFile) {
+          command = `npx tsx --test ${testFile}`;
+        }
+        return {
+          id: ac.id || `AC-${idx + 1}-${acIdx + 1}`,
+          assertion: ac.assertion || "Criterion met",
+          fileMatch: ac.fileMatch,
+          command
+        };
+      })
+    : [
+        {
+          id: `AC-${idx + 1}-1`,
+          assertion: "Milestone completed successfully",
+          command: testFile ? `npx tsx --test ${testFile}` : undefined
+        }
+      ];
+
+  if (testFile && !acceptanceCriteria.some((c) => Boolean(c.command))) {
+    acceptanceCriteria[0].command = `npx tsx --test ${testFile}`;
+  }
+
+  return {
+    id: milestoneId,
+    title: m.title || `Milestone ${idx + 1}`,
+    description: m.description || "",
+    status: m.status || "pending",
+    builderIterations: m.builderIterations ?? 0,
+    criticRounds: m.criticRounds ?? 0,
+    synthetic: m.synthetic ?? false,
+    plannedFiles,
+    testFile,
+    skipCriticOnValidSyntax: m.skipCriticOnValidSyntax,
+    taskComplexity: m.taskComplexity,
+    acceptanceCriteria
+  };
+}
+
+/**
  * Generates an overnight execution specification (SPEC.md)
  * defining requirements and verifiable milestones with machine-checkable criteria.
  */
@@ -201,7 +251,8 @@ Respond strictly in valid JSON matching this schema:
         {
           "id": "AC-1-1",
           "assertion": "Verifiable statement of truth",
-          "fileMatch": "path/to/script.ts"
+          "fileMatch": "path/to/script.ts",
+          "command": "npx tsx --test tests/script.test.ts"
         }
       ]
     }
@@ -224,7 +275,8 @@ Respond strictly in valid JSON matching this schema:
         {
           "id": "AC-1-1",
           "assertion": "Verifiable statement of truth",
-          "fileMatch": "path/to/file.ts"
+          "fileMatch": "path/to/file.ts",
+          "command": "npx tsx --test tests/file.test.ts"
         }
       ]
     }
@@ -256,24 +308,7 @@ Respond strictly in valid JSON matching this schema:
     if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
       // Respect SCRIPT cap of 2 milestones max
       const rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
-      milestones = rawList.map((m: any, idx: number) => ({
-        id: m.id || `M${idx + 1}`,
-        title: m.title || `Milestone ${idx + 1}`,
-        description: m.description || "",
-        status: "pending",
-        builderIterations: 0,
-        criticRounds: 0,
-        synthetic: false,
-        plannedFiles: Array.isArray(m.plannedFiles) ? m.plannedFiles : [],
-        acceptanceCriteria: Array.isArray(m.acceptanceCriteria)
-          ? m.acceptanceCriteria.map((ac: any, acIdx: number) => ({
-              id: ac.id || `AC-${idx + 1}-${acIdx + 1}`,
-              assertion: ac.assertion || "Criterion met",
-              fileMatch: ac.fileMatch,
-              command: ac.command
-            }))
-          : [{ id: `AC-${idx + 1}-1`, assertion: "Milestone completed successfully" }]
-      }));
+      milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
     }
   }
 
