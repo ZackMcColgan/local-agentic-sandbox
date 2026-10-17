@@ -18,7 +18,7 @@ import {
   shouldConsultLocalOracle,
   parseThinkingAndContent
 } from "@/lib/chatUtils";
-import { fitContextWindow } from "@/lib/contextBudget";
+import { fitContextWindow, clampToolOutput } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   loadUserProfile,
@@ -599,7 +599,7 @@ CRITICAL INSTRUCTIONS:
             conversationMessages.push({
               role: "tool",
               name: toolName,
-              content: JSON.stringify(result)
+              content: clampToolOutput(JSON.stringify(result))
             });
 
             // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model

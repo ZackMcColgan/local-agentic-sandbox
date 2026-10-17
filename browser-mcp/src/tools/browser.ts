@@ -172,8 +172,8 @@ export function registerBrowserTools(mcp: McpServer) {
           }
 
           if (bestCandidate) {
-            const truncated = bestCandidate.markdown.length > 15000
-              ? bestCandidate.markdown.substring(0, 15000) + "\n\n...[Content truncated for context window]"
+            const truncated = bestCandidate.markdown.length > 3000
+              ? bestCandidate.markdown.substring(0, 3000) + "\n\n...[Content truncated for context window]"
               : bestCandidate.markdown;
 
             topResultContent = {
@@ -255,7 +255,7 @@ export function registerBrowserTools(mcp: McpServer) {
 
         const rawHtml = await res.text();
         const markdown = htmlToMarkdown(rawHtml);
-        const truncated = markdown.length > 25000 ? markdown.substring(0, 25000) + "\n\n...[Content truncated for context window]" : markdown;
+        const truncated = markdown.length > 4000 ? markdown.substring(0, 4000) + "\n\n...[Content truncated for context window]" : markdown;
 
         return {
           content: [{

@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "fs";
+import path from "path";
 import {
   estimateTokens,
   fitContextWindow,
+  clampToolOutput,
   EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
 } from "../lib/contextBudget.js";
 
@@ -148,4 +151,64 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.ok(fittedUser.content.includes("...[truncated]"));
     });
   });
+
+  describe("Task 2 (P0): Tool Output Clamping at Route and MCP Source", () => {
+    it("clamps 25,000-char tool outputs to <= 2,000 chars ending with truncation marker", () => {
+      const raw25k = "A".repeat(25000);
+      const clamped = clampToolOutput(raw25k);
+
+      assert.ok(
+        clamped.length <= 2000,
+        `Clamped output must be <= 2,000 chars, got length ${clamped.length}`
+      );
+      assert.ok(
+        clamped.endsWith("...[truncated]"),
+        `Clamped output must end with truncation marker '...[truncated]', got: ${clamped.slice(-30)}`
+      );
+      assert.equal(clamped.length, 2000, "Should clamp exactly to 2,000 chars total length");
+
+      // Small tool output is untouched
+      const smallOutput = JSON.stringify({ status: "SUCCESS", file: "foo.txt" });
+      assert.equal(clampToolOutput(smallOutput), smallOutput);
+    });
+
+    it("verifies chat/route.ts applies clampToolOutput to tool results before pushing tool message", () => {
+      const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
+      const content = fs.readFileSync(chatRoutePath, "utf8");
+
+      assert.ok(
+        content.includes("clampToolOutput") &&
+        content.includes("role: \"tool\""),
+        "chat/route.ts must clamp tool outputs using clampToolOutput before pushing role: 'tool' message"
+      );
+    });
+
+    it("verifies browser-mcp limits: fetch_webpage_markdown ceiling is 4,000 chars and search_web ceiling is 3,000 chars", () => {
+      const browserToolPath = path.resolve(__dirname, "../../browser-mcp/src/tools/browser.ts");
+      const content = fs.readFileSync(browserToolPath, "utf8");
+
+      // fetch_webpage_markdown ceiling: 4000
+      assert.ok(
+        content.includes("markdown.length > 4000") && content.includes("markdown.substring(0, 4000)"),
+        "browser-mcp fetch_webpage_markdown ceiling must be lowered to 4,000 chars"
+      );
+
+      // search_web ceiling: 3000
+      assert.ok(
+        content.includes("bestCandidate.markdown.length > 3000") && content.includes("bestCandidate.markdown.substring(0, 3000)"),
+        "browser-mcp search_web top_result_content ceiling must be lowered to 3,000 chars"
+      );
+
+      // Older bloated thresholds (25000 / 15000) must no longer exist in browser.ts
+      assert.ok(
+        !content.includes("markdown.length > 25000"),
+        "browser-mcp must not retain old 25,000 char threshold"
+      );
+      assert.ok(
+        !content.includes("bestCandidate.markdown.length > 15000"),
+        "browser-mcp must not retain old 15,000 char threshold"
+      );
+    });
+  });
 });
+
