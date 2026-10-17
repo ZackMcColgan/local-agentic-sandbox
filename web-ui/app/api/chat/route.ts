@@ -223,7 +223,8 @@ CRITICAL INSTRUCTIONS:
 - Synthesize all tool results into a thorough, clean Markdown answer for the user.
 - WEB RESEARCH & ACTION DISCIPLINE:
   - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
-  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable (via 'workspace_write_file' or an inline \`\`\`svg / code block) or final answer. Never loop on redundant web searches.`;
+  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
+  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -279,6 +280,10 @@ CRITICAL INSTRUCTIONS:
         console.warn("[SSE sendEvent error]:", err);
       }
     };
+
+    const heartbeatInterval = setInterval(() => {
+      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {});
+    }, 10_000);
 
     // Run async orchestrator pipeline in background feeding SSE stream
     (async () => {
@@ -714,6 +719,7 @@ CRITICAL INSTRUCTIONS:
           error: err.message || "Internal orchestrator error"
         });
       } finally {
+        clearInterval(heartbeatInterval);
         for (const session of activeSessions) {
           try {
             await session.client.close();

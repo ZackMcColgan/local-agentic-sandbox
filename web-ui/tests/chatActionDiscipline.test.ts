@@ -199,5 +199,44 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         "SYSTEM_PROMPT in route.ts must contain the WEB RESEARCH & ACTION DISCIPLINE rule"
       );
     });
+
+    it("route.ts sets up 10s SSE keepalive heartbeat and instructs model to output chat SVGs directly without duplicate workspace_write_file", () => {
+      const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
+      const routeSource = fs.readFileSync(routePath, "utf8");
+
+      // 1. SSE keepalive heartbeat assertion
+      assert.ok(
+        routeSource.includes("heartbeatInterval") || routeSource.includes("setInterval"),
+        "route.ts must establish a periodic keepalive interval"
+      );
+      assert.ok(
+        routeSource.includes('type: "ping"') || routeSource.includes("type: 'ping'"),
+        "route.ts must send ping keepalive event over SSE"
+      );
+      assert.ok(
+        routeSource.includes("clearInterval"),
+        "route.ts must clear keepalive interval in finally block"
+      );
+
+      // Match interval frequency <= 15000 ms
+      const intervalMatch = routeSource.match(/setInterval\s*\([\s\S]*?,\s*(\d+(_\d+)?)\)/);
+      assert.ok(intervalMatch, "route.ts must specify numeric interval for keepalive");
+      const intervalMs = Number(intervalMatch[1].replace(/_/g, ""));
+      assert.ok(intervalMs > 0 && intervalMs <= 15000, `Keepalive interval must be <= 15000 ms, got ${intervalMs}`);
+
+      // 2. SYSTEM_PROMPT SVG action discipline instruction
+      assert.ok(
+        routeSource.includes("When asked to create, draw, or generate an SVG, diagram, or visual card in chat"),
+        "SYSTEM_PROMPT must guide chat SVG deliverable format"
+      );
+      assert.ok(
+        routeSource.includes("Do NOT call 'workspace_write_file' for chat SVGs"),
+        "SYSTEM_PROMPT must prohibit redundant workspace_write_file for chat SVGs"
+      );
+      assert.ok(
+        routeSource.includes("NEVER output the full SVG twice"),
+        "SYSTEM_PROMPT must prohibit duplicating SVG output"
+      );
+    });
   });
 });
