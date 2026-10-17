@@ -371,6 +371,14 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("scripts/verify-lan-copy"),
     tests: ["tests/clipboard.test.ts"]
   },
+  // Verification & capture scripts timeout guard (Phase 0.5)
+  {
+    match: (p) =>
+      p.includes("scripts/capture-svg-render") ||
+      p.includes("scripts/test-ui-render") ||
+      p.includes("scripts/verify-"),
+    tests: ["tests/e2eScriptTimeouts.test.ts"]
+  },
   // Architecture diagrams
   {
     match: (p) => p.includes("docs/architecture.drawio"),
@@ -420,9 +428,6 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
-    normalizedPath.startsWith("scripts/test-ui-render") ||
-    normalizedPath.startsWith("scripts/capture-svg-render") ||
-    normalizedPath.startsWith("scripts/verify-") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||

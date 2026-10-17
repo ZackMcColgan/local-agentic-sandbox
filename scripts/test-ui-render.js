@@ -4,10 +4,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+setTimeout(() => {
+  console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
+  process.exit(1);
+}, 180_000).unref();
+
 async function waitForPort(port, maxRetries = 15) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json`);
+      const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });
       if (res.ok) return await res.json();
     } catch {}
     await new Promise((r) => setTimeout(r, 400));
@@ -109,7 +114,7 @@ async function getBaseUrl() {
   const candidates = ['http://127.0.0.1:3005', 'http://127.0.0.1:3001'];
   for (const c of candidates) {
     try {
-      const res = await fetch(c);
+      const res = await fetch(c, { signal: AbortSignal.timeout(15000) });
       if (res.status < 500) return c;
     } catch {}
   }
@@ -121,7 +126,7 @@ async function run() {
   console.log(`Capturing visual test screenshots against ${baseUrl} across 3 viewports (Mobile, Desktop, Ultrawide) and Light/Dark modes...`);
   let threadQuery = '';
   try {
-    const tRes = await fetch(`${baseUrl}/api/threads`);
+    const tRes = await fetch(`${baseUrl}/api/threads`, { signal: AbortSignal.timeout(15000) });
     if (tRes.ok) {
       const tData = await tRes.json();
       if (tData.threads && tData.threads.length > 0) {
