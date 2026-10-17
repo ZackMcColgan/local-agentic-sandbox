@@ -25,7 +25,8 @@ import {
   MoreHorizontal,
   Menu,
   Plus,
-  ArrowDown
+  ArrowDown,
+  PanelLeft
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -44,12 +45,7 @@ import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 
-export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
 
-export function isBuilderPrompt(prompt: string): boolean {
-  if (!prompt || typeof prompt !== "string") return false;
-  return BUILDER_PROMPT_REGEX.test(prompt.trim());
-}
 
 
 export interface AttachedFileItem {
@@ -174,8 +170,6 @@ export function ChatStream({
   // Composer Mode state (Chat | Build)
   const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
-  // Task Scope selection state: default is PROJECT
-  const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -375,10 +369,10 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
-    // Check if this is an engineering builder task (Build mode toggle, /build prefix, or builder verb)
+    // Check if this is an engineering builder task (Build mode toggle or /build prefix)
     const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
     const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
-    const isBuilder = composerMode === "build" || isBuildPrefix || isBuilderPrompt(prompt);
+    const isBuilder = composerMode === "build" || isBuildPrefix;
 
     if (isBuilder && onLaunchTask) {
       const currentAttachments = [...attachedFiles];
@@ -390,7 +384,7 @@ export function ChatStream({
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(cleanPrompt, currentAttachments, selectedScope, autoDeployOnGreen);
+        await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
@@ -677,7 +671,7 @@ export function ChatStream({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`relative flex flex-col h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
-        isDraggingOver ? "bg-purple-50/30 dark:bg-indigo-950/20" : ""
+        isDraggingOver ? "bg-emerald-50/30 dark:bg-emerald-950/20" : ""
       }`}
     >
       {/* Hidden File Input */}
@@ -727,7 +721,8 @@ export function ChatStream({
               title="Toggle Sessions Panel"
               aria-label="Toggle Sessions Panel"
             >
-              <span>◧ Sessions</span>
+              <PanelLeft className="h-4 w-4" />
+              <span>Sessions</span>
             </button>
           ) : onOpenDrawer ? (
             <button
@@ -763,7 +758,7 @@ export function ChatStream({
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
-              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 text-xs font-semibold uppercase tracking-wider"
+              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
               title={`Task Scope: ${threadScope || activeTask?.scope}`}
             >
               {threadScope || activeTask?.scope}
@@ -883,7 +878,7 @@ export function ChatStream({
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
-              <Sparkles className="h-6 w-6 text-[#5b32e6] dark:text-indigo-400" />
+              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
               Start an autonomous session
@@ -928,7 +923,7 @@ export function ChatStream({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-medium shadow-xs">
-                          <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                          <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           <span className="max-w-[140px] truncate">{att.name}</span>
                           <span className="text-[10px] text-slate-400">({formatFileSize(att.size)})</span>
                         </div>
@@ -971,7 +966,7 @@ export function ChatStream({
                 </div>
               ) : (
                 /* Assistant Message View */
-                <div className="w-full max-w-2xl space-y-3">
+                <div className="w-full max-w-[840px] space-y-3">
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
                   {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
@@ -1217,7 +1212,7 @@ export function ChatStream({
                             className="flex items-center justify-between w-full p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-xs text-xs font-mono text-slate-800 dark:text-zinc-200"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                              <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                               <span className="font-semibold truncate">{pathLabel}</span>
                             </div>
                             <button
@@ -1248,7 +1243,7 @@ export function ChatStream({
 
         {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
         {activeTask && lastLinkedTaskMsgIndex === -1 && (
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-[840px]">
             <LiveRunBlock
               task={activeTask}
               onStopRun={onStopTask}
@@ -1264,7 +1259,7 @@ export function ChatStream({
         {/* Live Loading Indicator */}
         {isLoading && (
           <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-400 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 w-fit">
-            <Loader2 className="h-4 w-4 animate-spin text-[#5b32e6] dark:text-indigo-400" />
+            <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
             <span>{streamStatus || "Synthesizing response..."}</span>
           </div>
         )}
@@ -1289,7 +1284,7 @@ export function ChatStream({
             className="pointer-events-auto px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 text-xs font-semibold shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all"
             title="Jump to bottom"
           >
-            <ArrowDown className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+            <ArrowDown className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Jump to bottom</span>
           </button>
         </div>
@@ -1300,7 +1295,7 @@ export function ChatStream({
         
         {/* Attachment Chips above input */}
         {attachedFiles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-2xl mx-auto">
+          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
             {attachedFiles.map((att) => (
               <div
                 key={att.id}
@@ -1313,7 +1308,7 @@ export function ChatStream({
                     className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
                   />
                 ) : (
-                  <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                  <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 )}
                 <div className="flex flex-col">
                   <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
@@ -1342,7 +1337,7 @@ export function ChatStream({
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-2xl mx-auto rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
+          className="max-w-[840px] mx-auto rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea

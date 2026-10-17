@@ -80,6 +80,20 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
 
     const builderPrompt = "Build an autonomous microservice architecture diagram";
 
+    const buildBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Build"
+    );
+    if (buildBtn) {
+      await act(async () => {
+        const btnPropsKey = Object.keys(buildBtn).find((k) => k.startsWith("__reactProps"));
+        if (btnPropsKey && (buildBtn as any)[btnPropsKey]?.onClick) {
+          (buildBtn as any)[btnPropsKey].onClick({ preventDefault: () => {} });
+        } else {
+          buildBtn.click();
+        }
+      });
+    }
+
     await act(async () => {
       const textareaPropsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
       if (textareaPropsKey && (textarea as any)[textareaPropsKey]?.onChange) {

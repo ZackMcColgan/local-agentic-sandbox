@@ -19,7 +19,7 @@ export function DiffViewer({
   diagramSvg,
   className = ""
 }: DiffViewerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [showDiagram, setShowDiagram] = useState(false);
   const [copied, setCopied] = useState(false);
 
