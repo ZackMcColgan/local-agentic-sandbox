@@ -18,6 +18,7 @@ import {
   shouldConsultLocalOracle,
   parseThinkingAndContent
 } from "@/lib/chatUtils";
+import { fitContextWindow } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   loadUserProfile,
@@ -461,7 +462,7 @@ CRITICAL INSTRUCTIONS:
 
           const ollamaPayload: any = {
             model: activeModel,
-            messages: conversationMessages,
+            messages: fitContextWindow(conversationMessages),
             keep_alive: -1,
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
@@ -645,7 +646,7 @@ CRITICAL INSTRUCTIONS:
           let synthContent = "";
           for await (const chunk of streamOllamaChat(OLLAMA_URL, {
             model: activeModel,
-            messages: conversationMessages,
+            messages: fitContextWindow(conversationMessages),
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           })) {
             if (chunk.message?.content) {

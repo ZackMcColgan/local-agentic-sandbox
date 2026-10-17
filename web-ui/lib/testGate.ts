@@ -70,9 +70,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/architectureSvgPair.test.ts"
     ]
   },
-  // ChatStream, ThinkingPanel, chatUtils, and chat history components
+  // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/contextBudget"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
@@ -82,7 +82,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/unifiedUi.test.ts",
       "tests/chatPolish.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/chatContextBudget.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API
