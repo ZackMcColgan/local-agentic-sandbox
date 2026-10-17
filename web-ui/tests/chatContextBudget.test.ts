@@ -6,6 +6,8 @@ import {
   estimateTokens,
   fitContextWindow,
   clampToolOutput,
+  runChatToolLoop,
+  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
   EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
 } from "../lib/contextBudget.js";
 
@@ -207,6 +209,184 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.ok(
         !content.includes("bestCandidate.markdown.length > 15000"),
         "browser-mcp must not retain old 15,000 char threshold"
+      );
+    });
+  });
+
+  describe("Task 3 (P1): Per-Round Enforcement & Final-Round Forced Synthesis", () => {
+    it("enforces context budget <= 6000 tokens on EVERY round across multi-round tool accumulation", async () => {
+      const capturedPayloads: any[] = [];
+      const messages: any[] = [
+        { role: "system", content: "You are an autonomous AI engineering assistant." },
+        { role: "user", content: "Perform deep research across 3 search rounds." }
+      ];
+
+      let callCount = 0;
+      const mockStreamChat = async function* (payload: any) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+        callCount++;
+        if (callCount <= 2) {
+          // Model emits tool call on rounds 0 and 1
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  function: {
+                    name: "workspace_grep",
+                    arguments: JSON.stringify({ query: `search_round_${callCount}` })
+                  }
+                }
+              ]
+            }
+          };
+        } else {
+          // Model concludes with final text answer
+          yield {
+            message: {
+              content: "Here is the comprehensive synthesized research summary across all 3 rounds."
+            }
+          };
+        }
+      };
+
+      const mockExecuteTool = async (toolCall: any) => {
+        // Return a massive 25,000-char tool result to simulate heavy tool accumulation
+        return {
+          status: "SUCCESS",
+          tool: toolCall.function?.name,
+          data: "D".repeat(25000)
+        };
+      };
+
+      const result = await runChatToolLoop({
+        conversationMessages: messages,
+        ollamaTools: [{ type: "function", function: { name: "workspace_grep" } }],
+        maxToolRounds: 5,
+        streamOllamaChat: mockStreamChat,
+        executeTool: mockExecuteTool
+      });
+
+      assert.equal(capturedPayloads.length, 3, "Should have executed exactly 3 tool/synthesis rounds");
+      assert.ok(result.finalContent.includes("comprehensive synthesized research"), "Turn must conclude with text answer");
+
+      // Verify EVERY round payload was <= 6000 tokens
+      capturedPayloads.forEach((payload, idx) => {
+        const tokens = estimateTokens(payload.messages);
+        assert.ok(
+          tokens <= 6000,
+          `Round ${idx + 1} payload exceeded 6,000 token budget! Got ${tokens} tokens.`
+        );
+
+        // System prompt and user query must remain in every round payload
+        const sysMsg = payload.messages.find((m: any) => m.role === "system");
+        assert.ok(sysMsg, `Round ${idx + 1} must preserve system prompt`);
+        const userMsg = payload.messages.find((m: any) => m.role === "user");
+        assert.ok(userMsg, `Round ${idx + 1} must preserve user query`);
+      });
+    });
+
+    it("forces synthesis on the final round: omits tools from payload, appends directive, and finishes with text", async () => {
+      const capturedPayloads: any[] = [];
+      const messages: any[] = [
+        { role: "system", content: "You are an autonomous AI engineering assistant." },
+        { role: "user", content: "Keep gathering data endlessly." }
+      ];
+
+      const MAX_ROUNDS = 4;
+      let callCount = 0;
+
+      const mockStreamChat = async function* (payload: any) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+        callCount++;
+
+        // If tools are present, the model aggressively attempts more tool calls
+        if (payload.tools && payload.tools.length > 0) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  function: {
+                    name: "search_web",
+                    arguments: JSON.stringify({ query: `query_${callCount}` })
+                  }
+                }
+              ]
+            }
+          };
+        } else {
+          // On final round without tools, model produces text synthesis
+          yield {
+            message: {
+              content: "Synthesized final answer from gathered data."
+            }
+          };
+        }
+      };
+
+      const mockExecuteTool = async (toolCall: any) => {
+        return { status: "SUCCESS", result: "sample tool data" };
+      };
+
+      const result = await runChatToolLoop({
+        conversationMessages: messages,
+        ollamaTools: [{ type: "function", function: { name: "search_web" } }],
+        maxToolRounds: MAX_ROUNDS,
+        streamOllamaChat: mockStreamChat,
+        executeTool: mockExecuteTool
+      });
+
+      assert.equal(capturedPayloads.length, MAX_ROUNDS, `Should have run to MAX_ROUNDS (${MAX_ROUNDS})`);
+      assert.equal(result.roundsCompleted, MAX_ROUNDS);
+      assert.ok(result.finalContent.includes("Synthesized final answer"), "Turn must end with text answer");
+
+      // Rounds 0, 1, 2 must include tools
+      for (let i = 0; i < MAX_ROUNDS - 1; i++) {
+        assert.ok(
+          Array.isArray(capturedPayloads[i].tools) && capturedPayloads[i].tools.length > 0,
+          `Round ${i} must include tools`
+        );
+      }
+
+      // Final round (round === MAX_ROUNDS - 1) MUST omit tools
+      const finalPayload = capturedPayloads[MAX_ROUNDS - 1];
+      assert.equal(
+        finalPayload.tools,
+        undefined,
+        "Final round payload MUST omit tools so model cannot call more tools"
+      );
+
+      // Final round MUST contain the exact synthesis directive in system messages
+      const synthesisMsg = finalPayload.messages.find(
+        (m: any) => m.role === "system" && m.content === FINAL_ROUND_SYNTHESIS_DIRECTIVE
+      );
+      assert.ok(
+        synthesisMsg,
+        `Final round payload must include the synthesis directive: '${FINAL_ROUND_SYNTHESIS_DIRECTIVE}'`
+      );
+    });
+
+    it("verifies chat/route.ts contains final round forced synthesis check and omits tools", () => {
+      const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
+      const content = fs.readFileSync(chatRoutePath, "utf8");
+
+      assert.ok(
+        content.includes("round === MAX_TOOL_ROUNDS - 1") ||
+        content.includes("round >= MAX_TOOL_ROUNDS - 1"),
+        "chat/route.ts must check for final round (round === MAX_TOOL_ROUNDS - 1)"
+      );
+
+      assert.ok(
+        content.includes("FINAL_ROUND_SYNTHESIS_DIRECTIVE") ||
+        content.includes("You have gathered enough information. Synthesize your final answer now"),
+        "chat/route.ts must push final round synthesis directive"
+      );
+
+      assert.ok(
+        content.includes("round < MAX_TOOL_ROUNDS - 1") ||
+        content.includes("!isFinalRound"),
+        "chat/route.ts must omit tools from payload on final round"
       );
     });
   });

@@ -18,7 +18,11 @@ import {
   shouldConsultLocalOracle,
   parseThinkingAndContent
 } from "@/lib/chatUtils";
-import { fitContextWindow, clampToolOutput } from "@/lib/contextBudget";
+import {
+  fitContextWindow,
+  clampToolOutput,
+  FINAL_ROUND_SYNTHESIS_DIRECTIVE
+} from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   loadUserProfile,
@@ -460,6 +464,14 @@ CRITICAL INSTRUCTIONS:
             round
           });
 
+          // Final round forced synthesis: prompt model to synthesize answer and omit tools
+          if (round === MAX_TOOL_ROUNDS - 1) {
+            conversationMessages.push({
+              role: "system",
+              content: FINAL_ROUND_SYNTHESIS_DIRECTIVE
+            });
+          }
+
           const ollamaPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages),
@@ -467,7 +479,7 @@ CRITICAL INSTRUCTIONS:
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
-          if (ollamaTools.length > 0) {
+          if (ollamaTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
             ollamaPayload.tools = ollamaTools;
           }
 

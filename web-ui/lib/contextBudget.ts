@@ -5,6 +5,8 @@
  * across iterative tool rounds, forcing model context drops of system prompts and user queries.
  */
 
+import { computeModelOptions } from "./chatUtils";
+
 export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the 8192-token context window]";
 
@@ -197,3 +199,101 @@ export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): 
   const keepChars = Math.max(0, maxChars - TOOL_TRUNCATION_MARKER.length);
   return raw.slice(0, keepChars) + TOOL_TRUNCATION_MARKER;
 }
+
+export interface RunChatToolLoopOptions {
+  conversationMessages: any[];
+  activeModel?: string;
+  effectiveReasoningEffort?: "low" | "medium" | "xhigh";
+  ollamaTools?: any[];
+  maxToolRounds?: number;
+  maxContentTokens?: number;
+  streamOllamaChat: (payload: any) => AsyncIterable<{
+    message?: {
+      content?: string;
+      thinking?: string;
+      tool_calls?: any[];
+    };
+  }>;
+  executeTool: (toolCall: any) => Promise<any>;
+}
+
+/**
+ * Runs iterative chat tool rounds with per-round context window fitting,
+ * tool-output clamping, and forced final-round synthesis.
+ */
+export async function runChatToolLoop({
+  conversationMessages,
+  activeModel = "qwen3.8:27b-q3_k_m",
+  effectiveReasoningEffort = "medium",
+  ollamaTools = [],
+  maxToolRounds = 8,
+  maxContentTokens = 6000,
+  streamOllamaChat,
+  executeTool
+}: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+  let round = 0;
+  let finalContent = "";
+
+  while (round < maxToolRounds) {
+    const isFinalRound = round === maxToolRounds - 1;
+    if (isFinalRound) {
+      conversationMessages.push({
+        role: "system",
+        content: FINAL_ROUND_SYNTHESIS_DIRECTIVE
+      });
+    }
+
+    const payload: any = {
+      model: activeModel,
+      messages: fitContextWindow(conversationMessages, { maxContentTokens }),
+      keep_alive: -1,
+      options: computeModelOptions(activeModel, effectiveReasoningEffort)
+    };
+
+    if (ollamaTools.length > 0 && !isFinalRound) {
+      payload.tools = ollamaTools;
+    }
+
+    let fullRoundContent = "";
+    let toolCallsFromMessage: any[] = [];
+
+    for await (const chunk of streamOllamaChat(payload)) {
+      if (chunk.message?.content) {
+        fullRoundContent += chunk.message.content;
+      }
+      if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+        toolCallsFromMessage.push(...chunk.message.tool_calls);
+      }
+    }
+
+    if (toolCallsFromMessage.length === 0 || isFinalRound) {
+      finalContent = fullRoundContent;
+      conversationMessages.push({
+        role: "assistant",
+        content: fullRoundContent
+      });
+      round++;
+      break;
+    }
+
+    conversationMessages.push({
+      role: "assistant",
+      content: fullRoundContent,
+      tool_calls: toolCallsFromMessage
+    });
+
+    for (const toolCall of toolCallsFromMessage) {
+      const toolResult = await executeTool(toolCall);
+      conversationMessages.push({
+        role: "tool",
+        name: toolCall.function?.name || "tool",
+        content: clampToolOutput(JSON.stringify(toolResult))
+      });
+    }
+
+    round++;
+  }
+
+  return { finalContent, roundsCompleted: round };
+}
+
