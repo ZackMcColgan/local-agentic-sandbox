@@ -121,7 +121,7 @@ export function LiveRunBlock({
   })();
 
   return (
-    <div className="w-full max-w-2xl my-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-md transition-all space-y-3.5">
+    <div className="w-full max-w-[840px] my-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-md transition-all space-y-3.5">
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -241,16 +241,16 @@ export function LiveRunBlock({
                   </div>
 
                   {isMilestoneActive && (
-                    <span className="text-xs font-semibold text-[#5b32e6] dark:text-indigo-400 shrink-0">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
                       {activeProgressPercent}%
                     </span>
                   )}
                 </div>
 
                 {isMilestoneActive && (
-                  <div className="w-full h-1.5 bg-[#e9ecf4] dark:bg-zinc-800 rounded-full overflow-hidden ml-7.5">
+                  <div className="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden ml-7.5">
                     <div
-                      className="h-full bg-[#3b0799] rounded-full transition-all duration-500 ease-out"
+                      className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full transition-all duration-500 ease-out"
                       style={{ width: `${activeProgressPercent}%` }}
                     />
                   </div>
