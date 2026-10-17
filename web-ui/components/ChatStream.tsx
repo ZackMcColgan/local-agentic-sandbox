@@ -720,7 +720,8 @@ export function ChatStream({
               title="Toggle Sessions Panel"
               aria-label="Toggle Sessions Panel"
             >
-              <span>◧ Sessions</span>
+              <PanelLeft className="h-4 w-4" />
+              <span>Sessions</span>
             </button>
           ) : onOpenDrawer ? (
             <button
