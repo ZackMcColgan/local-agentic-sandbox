@@ -44,12 +44,7 @@ import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 
-export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
 
-export function isBuilderPrompt(prompt: string): boolean {
-  if (!prompt || typeof prompt !== "string") return false;
-  return BUILDER_PROMPT_REGEX.test(prompt.trim());
-}
 
 
 export interface AttachedFileItem {
@@ -174,8 +169,6 @@ export function ChatStream({
   // Composer Mode state (Chat | Build)
   const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
-  // Task Scope selection state: default is PROJECT
-  const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -375,10 +368,10 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
-    // Check if this is an engineering builder task (Build mode toggle, /build prefix, or builder verb)
+    // Check if this is an engineering builder task (Build mode toggle or /build prefix)
     const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
     const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
-    const isBuilder = composerMode === "build" || isBuildPrefix || isBuilderPrompt(prompt);
+    const isBuilder = composerMode === "build" || isBuildPrefix;
 
     if (isBuilder && onLaunchTask) {
       const currentAttachments = [...attachedFiles];
@@ -390,7 +383,7 @@ export function ChatStream({
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(cleanPrompt, currentAttachments, selectedScope, autoDeployOnGreen);
+        await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
