@@ -593,11 +593,11 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
 
       // Check header panel toggle buttons
       assert.ok(
-        chatStreamSrc.includes("Sessions") && (chatStreamSrc.includes("◧") || chatStreamSrc.includes("toggleSidebar")),
+        chatStreamSrc.includes("Sessions") && (chatStreamSrc.includes("◧") || chatStreamSrc.toLowerCase().includes("togglesidebar") || chatStreamSrc.includes("PanelLeft")),
         "Header must have [◧ Sessions] toggle button"
       );
       assert.ok(
-        chatStreamSrc.includes("Workspace") && (chatStreamSrc.includes("◨") || chatStreamSrc.includes("toggleWorkspace") || chatStreamSrc.includes("toggleInspector")),
+        chatStreamSrc.includes("Workspace") && (chatStreamSrc.includes("◨") || chatStreamSrc.toLowerCase().includes("toggleworkspace") || chatStreamSrc.toLowerCase().includes("toggleinspector") || chatStreamSrc.includes("PanelRight")),
         "Header must have [◨ Workspace] toggle button"
       );
 

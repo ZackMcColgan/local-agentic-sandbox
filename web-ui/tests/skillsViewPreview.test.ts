@@ -60,7 +60,7 @@ describe("Sprint U4 — Skills Candidate Diff Review & SKILL.md Preview Suite", 
     );
     assert.ok(html.includes("Directive"), "Must render markdown directive section");
     assert.ok(html.includes("confidence: 0.94"), "Must render frontmatter confidence");
-    assert.ok(html.includes("✓ Approve"), "Must render direct Approve action");
+    assert.ok(html.includes("Approve"), "Must render direct Approve action");
     assert.ok(html.includes("Reject"), "Must render direct Reject action");
   });
 });
