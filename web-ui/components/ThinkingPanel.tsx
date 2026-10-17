@@ -90,7 +90,7 @@ export function ThinkingPanel({
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 text-left group transition-colors hover:bg-slate-100/70 dark:hover:bg-zinc-850/60 focus:outline-none"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 text-left group transition-colors hover:bg-slate-100/70 dark:hover:bg-zinc-855/60 focus:outline-none"
         aria-expanded={isExpanded}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -104,9 +104,17 @@ export function ThinkingPanel({
           >
             {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
             <span>
-              {isStreaming ? "Streaming" : "Thought process"}
-              {" · "}
-              {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
+              {isStreaming ? (
+                <>
+                  <span className="hidden sm:inline">Streaming · </span>
+                  {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline">Thought process · </span>
+                  {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
+                </>
+              )}
             </span>
           </span>
         </div>

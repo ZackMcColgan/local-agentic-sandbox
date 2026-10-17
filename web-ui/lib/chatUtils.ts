@@ -275,3 +275,53 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
   };
 }
 
+export interface FormattedChatError {
+  summary: string;
+  details?: string;
+}
+
+/**
+ * Normalizes raw chat or engine error payloads into a clean user-facing summary
+ * and optional expandable technical details.
+ */
+export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
+  if (!rawError) {
+    return { summary: "An unknown error occurred" };
+  }
+
+  const rawStr = typeof rawError === "string" ? rawError : (rawError as any).message || String(rawError);
+  const trimmed = rawStr.trim();
+
+  // Attempt to find and parse JSON payload within the error string
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const prefix = trimmed.slice(0, jsonMatch.index).trim().replace(/:\s*$/, "");
+      let extractedMsg = "";
+
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.error === "string") {
+          extractedMsg = parsed.error;
+        } else if (parsed.error && typeof parsed.error.message === "string") {
+          extractedMsg = parsed.error.message;
+        } else if (typeof parsed.message === "string") {
+          extractedMsg = parsed.message;
+        }
+      }
+
+      if (extractedMsg) {
+        const summary = prefix ? `${prefix}: ${extractedMsg}` : extractedMsg;
+        return {
+          summary,
+          details: JSON.stringify(parsed, null, 2)
+        };
+      }
+    } catch {
+      // Fall through to plain text handling
+    }
+  }
+
+  return { summary: trimmed };
+}
+

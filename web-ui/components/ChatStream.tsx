@@ -52,7 +52,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 
 
@@ -190,6 +190,7 @@ export function ChatStream({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
+  const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   // Attached files state
@@ -251,6 +252,10 @@ export function ChatStream({
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
   };
 
+  const toggleTraces = (msgId: string) => {
+    setExpandedTraces((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
   const copyToClipboard = async (text: string, msgId: string) => {
     const ok = await copyText(text);
     if (ok) {
@@ -259,12 +264,13 @@ export function ChatStream({
     }
   };
 
-  // Auto-expanding textarea: min 3 rows (72px), grows smoothly with content, never truncates
+  // Auto-expanding textarea: min 46px on mobile, grows smoothly with content, never truncates
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       const scrollH = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.max(scrollH, 72)}px`;
+      const minH = typeof window !== "undefined" && window.innerWidth >= 640 ? 72 : 46;
+      textareaRef.current.style.height = `${Math.max(scrollH, minH)}px`;
     }
   }, [input]);
 
@@ -389,7 +395,7 @@ export function ChatStream({
       setAttachedFiles([]);
       setInput("");
       if (textareaRef.current) {
-        textareaRef.current.style.height = "72px";
+        textareaRef.current.style.height = "auto";
       }
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
@@ -407,7 +413,7 @@ export function ChatStream({
     setErrorMsg(null);
     setInput("");
     if (textareaRef.current) {
-      textareaRef.current.style.height = "72px";
+      textareaRef.current.style.height = "auto";
     }
 
     const currentAttachments = [...attachedFiles];
@@ -642,6 +648,13 @@ export function ChatStream({
     }
   };
 
+  const handleRetry = () => {
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUserMsg) return;
+    setErrorMsg(null);
+    handleSend(lastUserMsg.content);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -717,8 +730,8 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 */}
-      <header className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="px-2.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {onToggleSidebar ? (
             <button
               type="button"
@@ -732,7 +745,7 @@ export function ChatStream({
               aria-label="Toggle Sessions Panel"
             >
               <PanelLeft className="h-4 w-4" />
-              <span>Sessions</span>
+              <span className="hidden sm:inline">Sessions</span>
             </button>
           ) : onOpenDrawer ? (
             <button
@@ -757,7 +770,7 @@ export function ChatStream({
           ) : null}
 
           <h1
-            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
+            className="hidden md:block text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -813,7 +826,8 @@ export function ChatStream({
               title="Toggle Workspace Panel"
               aria-label="Toggle Workspace Panel"
             >
-              <span>◨ Workspace</span>
+              <span>◨</span>
+              <span className="hidden sm:inline">Workspace</span>
             </button>
           )}
 
@@ -1185,68 +1199,95 @@ export function ChatStream({
                   )}
 
                   {/* Inline Expandable Sandbox & Telemetry Badges */}
-                  {!isUser && m.traces && m.traces.length > 0 && (
-                    <div className="mt-2.5 space-y-2 w-full">
-                      {m.traces.map((trace, tIdx) => {
-                        const proofKey = `${m.id}-${tIdx}`;
-                        const isExpanded = !!expandedProofs[proofKey];
-                        const human = formatHumanReadableTrace(trace);
-                        const isBrowser = human.badge === "browser";
+                  {!isUser && m.traces && m.traces.length > 0 && (() => {
+                    const hasManyTraces = m.traces.length > 3;
+                    const isTracesExpanded = !!expandedTraces[m.id];
+                    const visibleTraces = hasManyTraces && !isTracesExpanded ? m.traces.slice(0, 2) : m.traces;
 
-                        return (
-                          <div
-                            key={tIdx}
-                            className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => toggleProof(proofKey)}
-                              className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                    return (
+                      <div className="mt-2.5 space-y-2 w-full">
+                        {visibleTraces.map((trace, tIdx) => {
+                          const proofKey = `${m.id}-${tIdx}`;
+                          const isExpanded = !!expandedProofs[proofKey];
+                          const human = formatHumanReadableTrace(trace);
+                          const isBrowser = human.badge === "browser";
+
+                          return (
+                            <div
+                              key={tIdx}
+                              className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
                             >
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {isBrowser ? (
-                                  <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
-                                    <Globe className="h-3.5 w-3.5" />
-                                    <span>Web</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                    <span>Sandbox</span>
-                                  </span>
-                                )}
-                                <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans">{human.title}</span>
-                                {human.duration && (
-                                  <>
-                                    <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                    <span className="text-slate-500 dark:text-zinc-400">{human.duration}</span>
-                                  </>
-                                )}
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleProof(proofKey)}
+                                className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                              >
+                                <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
+                                  {isBrowser ? (
+                                    <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold shrink-0">
+                                      <Globe className="h-3.5 w-3.5" />
+                                      <span>Web</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                      <span>Sandbox</span>
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                  <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">{human.title}</span>
+                                  {human.duration && (
+                                    <>
+                                      <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                      <span className="text-slate-500 dark:text-zinc-400 shrink-0">{human.duration}</span>
+                                    </>
+                                  )}
+                                </div>
 
-                              <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
-                                <span>{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
-                                {isExpanded ? (
-                                  <ChevronUp className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ChevronDown className="h-3.5 w-3.5" />
-                                )}
-                              </div>
-                            </button>
+                                <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-auto">
+                                  <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
+                                  <span className="hidden sm:inline">{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </div>
+                              </button>
 
-                            {isExpanded && (
-                              <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                                <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
-                                  {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
-                                </pre>
-                              </div>
+                              {isExpanded && (
+                                <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
+                                  <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                                    {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {hasManyTraces && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTraces(m.id)}
+                            className="w-full py-1.5 px-3 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            {isTracesExpanded ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5" />
+                                <span>Collapse tool steps</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                <span>Show all {m.traces.length} tool steps</span>
+                              </>
                             )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Grounded File Citation Card matching Mockup 4 */}
                   {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
@@ -1323,12 +1364,42 @@ export function ChatStream({
           </div>
         )}
 
-        {errorMsg && (
-          <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {errorMsg && (() => {
+          const formatted = formatChatErrorMessage(errorMsg);
+          return (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                  <div className="space-y-1 min-w-0">
+                    <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm leading-snug">
+                      {formatted.summary}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/80 dark:hover:bg-rose-800 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 transition-colors shrink-0 flex items-center gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Retry</span>
+                </button>
+              </div>
+
+              {formatted.details && (
+                <details className="text-xs text-rose-700 dark:text-rose-300">
+                  <summary className="cursor-pointer font-medium hover:underline select-none">
+                    Technical details
+                  </summary>
+                  <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                    {formatted.details}
+                  </pre>
+                </details>
+              )}
+            </div>
+          );
+        })()}
 
         <div ref={scrollRef} />
         </div>
@@ -1412,7 +1483,7 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[72px] max-h-[140px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
           />
 
           {/* Bottom Deck: Controls Bar */}
@@ -1421,7 +1492,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="h-9 w-9 rounded-full text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0 flex items-center justify-center"
               title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
               aria-label="Attach files"
             >

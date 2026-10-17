@@ -86,6 +86,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/chatContextBudget.test.ts",
       "tests/chatActionDiscipline.test.ts",
+      "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
