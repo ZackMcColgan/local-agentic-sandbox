@@ -144,8 +144,14 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
       "tests/semanticMemory.test.ts",
-      "tests/chatActionDiscipline.test.ts"
+      "tests/chatActionDiscipline.test.ts",
+      "tests/llmProvider.test.ts"
     ]
+  },
+  // LLM Provider abstraction
+  {
+    match: (p) => p.includes("lib/llm/"),
+    tests: ["tests/llmProvider.test.ts"]
   },
   // Tasks API route
   {
