@@ -71,6 +71,7 @@ export interface Milestone {
   criticNotes?: string[];
   forcedFlaw?: boolean;
   commitSha?: string;
+  diff?: string;
   diffSummary?: string;
   testsPassed?: number;
   testsFailed?: number;
@@ -163,6 +164,11 @@ export interface TaskManifest {
   gatePassed?: boolean;
   gateOutput?: string;
   gitOpsBranchCreated?: boolean;
+  testSummary?: {
+    passed: number;
+    failed: number;
+    durationMs?: number;
+  };
 }
 
 export interface MorningReport {
