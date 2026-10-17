@@ -323,7 +323,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/chatHistory.test.ts",
-      "tests/chatStreaming.test.ts"
+      "tests/chatStreaming.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
   // MCP server files

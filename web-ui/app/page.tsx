@@ -27,6 +27,7 @@ import {
   Settings
 } from "lucide-react";
 import { DiffViewer } from "@/components/DiffViewer";
+import { CodeBlock } from "@/components/ArtifactRenderers";
 import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
 import { SettingsView } from "@/components/SettingsView";
 import { BuildsView } from "@/components/BuildsView";
@@ -68,6 +69,27 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
+  const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
+
+  const handlePreviewWorkspaceFile = async (filePath: string) => {
+    try {
+      setIsLoadingFilePreview(true);
+      const res = await fetch(`/api/files?path=${encodeURIComponent(filePath)}&format=json`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedWorkspaceFile({ path: filePath, content: data.content || "" });
+      } else {
+        const textRes = await fetch(`/api/files?path=${encodeURIComponent(filePath)}`);
+        const text = await textRes.text();
+        setSelectedWorkspaceFile({ path: filePath, content: text });
+      }
+    } catch (err: any) {
+      console.warn("[WorkspacePreview] Failed to preview file:", err.message);
+    } finally {
+      setIsLoadingFilePreview(false);
+    }
+  };
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -775,9 +797,16 @@ export default function Home() {
               <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-zinc-950 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">Workspace</span>
-                  <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                    Verified
-                  </span>
+                  {activeTask?.status === "completed" && (
+                    <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                      Verified
+                    </span>
+                  )}
+                  {activeTask?.status === "active" && (
+                    <span className="badge badge-info text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20">
+                      Running
+                    </span>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -811,7 +840,7 @@ export default function Home() {
                       : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
                   }`}
                 >
-                  Pytest Output
+                  Test Output
                 </button>
                 <button
                   type="button"
@@ -829,7 +858,7 @@ export default function Home() {
               {/* Inspector Body */}
               <div className="inspector-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
                 {workspaceTab === "diff" && (() => {
-                  const taskDiff = activeTask?.milestones?.map((m) => m.diff).filter(Boolean).join("\n") || "";
+                  const taskDiff = activeTask?.milestones?.map((m) => m.diffSummary || m.diff).filter(Boolean).join("\n") || "";
                   const activeBranch = activeTask?.branchName || (currentThread?.title ? "feature/" + currentThread.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) : "");
                   if (!taskDiff) {
                     return (
@@ -865,23 +894,76 @@ export default function Home() {
                   );
                 })()}
 
-                {workspaceTab === "files" && (
-                  <div className="space-y-2 font-mono text-xs">
-                    <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">Planned Deliverables</div>
-                    {plannedFiles.length > 0 ? (
-                      plannedFiles.map((f, i) => (
-                        <div key={i} className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 flex items-center justify-between shadow-2xs">
-                          <span>{f}</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">Planned</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
-                        No workspace files modified yet.
+                {workspaceTab === "files" && (() => {
+                  const traceFiles: string[] = [];
+                  const activeMessages = currentThread?.messages || messages;
+                  activeMessages.forEach((m) => {
+                    m.traces?.forEach((t: any) => {
+                      if (
+                        (t.tool === "workspace_write_file" || t.tool === "workspace_patch_file") &&
+                        t.args?.path
+                      ) {
+                        traceFiles.push(t.args.path);
+                      }
+                    });
+                  });
+                  const allFiles = Array.from(new Set([...plannedFiles, ...traceFiles]));
+
+                  return (
+                    <div className="space-y-2 font-mono text-xs">
+                      <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">
+                        Planned Deliverables
                       </div>
-                    )}
-                  </div>
-                )}
+                      {allFiles.length > 0 ? (
+                        <>
+                          <div className="space-y-1.5">
+                            {allFiles.map((f, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handlePreviewWorkspaceFile(f)}
+                                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-colors shadow-2xs ${
+                                  selectedWorkspaceFile?.path === f
+                                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                    : "bg-slate-50 dark:bg-zinc-800/60 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                                }`}
+                              >
+                                <span className="truncate">{f}</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shrink-0 ml-2">
+                                  {plannedFiles.includes(f) ? "Planned" : "Created"}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          {selectedWorkspaceFile && (
+                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-zinc-800">
+                              <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1.5">
+                                <span className="font-semibold text-slate-700 dark:text-zinc-300">
+                                  Preview: {selectedWorkspaceFile.path}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedWorkspaceFile(null)}
+                                  className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                >
+                                  Close
+                                </button>
+                              </div>
+                              <CodeBlock
+                                filename={selectedWorkspaceFile.path}
+                                code={selectedWorkspaceFile.content}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
+                          No workspace files modified yet.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </aside>
           )}

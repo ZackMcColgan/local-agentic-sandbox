@@ -135,4 +135,56 @@ describe("Artifact Delivery and UI Polish Suite", () => {
       );
     });
   });
+
+  describe("Task 4: Workspace Inspector Polish in web-ui/app/page.tsx", () => {
+    const pagePath = path.resolve(__dirname, "../app/page.tsx");
+    assert.ok(fs.existsSync(pagePath), "page.tsx must exist");
+    const content = fs.readFileSync(pagePath, "utf8");
+
+    it("only shows the 'Verified' badge when activeTask.status === 'completed'", () => {
+      assert.doesNotMatch(
+        content,
+        /<div className="flex items-center gap-2">\s*<span className="font-bold text-sm[^"]*">Workspace<\/span>\s*<span className="badge badge-success[^"]*">\s*Verified\s*<\/span>/,
+        "Verified badge must not be rendered unconditionally"
+      );
+      assert.match(
+        content,
+        /activeTask\?\.status\s*===\s*["']completed["']\s*&&\s*\([\s\S]*?Verified/,
+        "Verified badge must be conditioned on activeTask?.status === 'completed'"
+      );
+    });
+
+    it("reads m.diffSummary || m.diff in Diff tab and labels output tab 'Test Output'", () => {
+      assert.match(
+        content,
+        /m\.diffSummary\s*\|\|\s*m\.diff/,
+        "Diff tab must check m.diffSummary || m.diff"
+      );
+      assert.ok(
+        content.includes("Test Output"),
+        "Output tab must be labeled 'Test Output'"
+      );
+      assert.ok(
+        !content.includes("Pytest Output"),
+        "Output tab must NOT be labeled 'Pytest Output'"
+      );
+    });
+
+    it("renders workspace files in Files tab as interactive buttons loading /api/files?path=", () => {
+      assert.match(
+        content,
+        /\/api\/files\?path=/,
+        "page.tsx must fetch /api/files?path= to preview selected workspace file"
+      );
+      assert.match(
+        content,
+        /<button[^>]*onClick=\{[^}]*handlePreviewWorkspaceFile/,
+        "Files tab must render interactive buttons that call handlePreviewWorkspaceFile"
+      );
+      assert.ok(
+        content.includes("No workspace files modified yet."),
+        "Empty state must remain intact for punchlistUiFixes compatibility"
+      );
+    });
+  });
 });
