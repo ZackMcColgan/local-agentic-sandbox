@@ -471,6 +471,61 @@ describe("Flash 3.8 Backend Shakeout — Fix 6: B-P1-3 & B-P2-1 Isolated Branch 
   });
 });
 
+describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBasePath", () => {
+  const originalEnv = { ...process.env };
+  const fallbackDir = path.join(os.tmpdir(), "local-agentic-sandbox-skills");
+
+  it("getSkillsBasePath falls back to os.tmpdir()/local-agentic-sandbox-skills when primary directory is unwritable", async () => {
+    const {
+      getSkillsBasePath,
+      recordObservedPattern,
+      loadPendingQueue,
+      approveSkillCandidate,
+      listActiveSkills
+    } = await import("../lib/subagents/skillGate.js");
+
+    try {
+      if (fs.existsSync(fallbackDir)) {
+        fs.rmSync(fallbackDir, { recursive: true, force: true });
+      }
+      // Point SKILLS_DIR to an unwritable / non-creatable path
+      const unwritablePath = process.platform === "win32"
+        ? "Z:\\nonexistent_unwritable_dir_skills\\nested"
+        : "/workspace/.agent/skills";
+      process.env.SKILLS_DIR = unwritablePath;
+
+      // Call getSkillsBasePath without customPath
+      const resolvedPath = getSkillsBasePath();
+      assert.equal(resolvedPath, fallbackDir, "Must fall back to os.tmpdir()/local-agentic-sandbox-skills when preferred path is unwritable");
+      assert.ok(fs.existsSync(resolvedPath), "Fallback directory must exist and be created");
+
+      // Verify propose -> load -> approve -> list succeeds without throwing EACCES
+      const recordRes = recordObservedPattern("test-fallback-pattern", {
+        title: "Test Fallback Skill",
+        solutionSummary: "Ensure fallback works cleanly"
+      }, { minOccurrences: 1 });
+      assert.ok(recordRes.candidate);
+
+      const queue = loadPendingQueue();
+      assert.ok(queue.candidates["test-fallback-pattern"]);
+
+      const approveRes = approveSkillCandidate("test-fallback-pattern");
+      assert.equal(approveRes.promoted, true);
+      assert.ok(approveRes.skillPath && fs.existsSync(approveRes.skillPath));
+
+      const active = listActiveSkills();
+      assert.ok(active.some((f: string) => f.includes("test-fallback-pattern")));
+    } finally {
+      process.env = { ...originalEnv };
+      try {
+        if (fs.existsSync(fallbackDir)) {
+          fs.rmSync(fallbackDir, { recursive: true, force: true });
+        }
+      } catch {}
+    }
+  });
+});
+
 
 
 
