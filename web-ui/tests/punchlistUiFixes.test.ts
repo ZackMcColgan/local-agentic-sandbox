@@ -25,7 +25,7 @@ describe("Flash 3.8 Frontend Shakeout — Fix 1: UI-P0-3 Composer Chat | Build R
     assert.doesNotMatch(
       content,
       /BUILDER_PROMPT_REGEX/,
-      "BUILDER_PROMPT_REGEX must be completely deleted from ChatStream.tsx (Anti-Shit Protocol Rule 3)"
+      "BUILDER_PROMPT_REGEX must be completely deleted from ChatStream.tsx (Explicit composer mode requirement)"
     );
     assert.doesNotMatch(
       content,

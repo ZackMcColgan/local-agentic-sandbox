@@ -44,7 +44,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
     assert.doesNotMatch(
       workerPoolCode,
       /\.\.\/\.\.\/\.\.\/mcp-server/,
-      "workerPool.ts must not use cross-package relative imports to mcp-server (Anti-Shit Protocol Rule 5)"
+      "workerPool.ts must not use cross-package relative imports to mcp-server (Zero-trust package isolation requirement)"
     );
   });
 
