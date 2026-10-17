@@ -45,6 +45,7 @@ extracted_readme.txt
 test_*.png
 
 # Dynamic Agent Workspace
-workspace/
+/workspace/
 .opencode-remote-session.json
+.agent/
 

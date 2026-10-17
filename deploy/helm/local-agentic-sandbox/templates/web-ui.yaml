@@ -45,6 +45,10 @@ spec:
               value: "http://{{ include "local-agentic-sandbox.fullname" . }}-otel-collector:{{ .Values.observability.ports.otlpHttp }}"
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
+            - name: LLM_ENGINE
+              value: {{ .Values.llmEngine | default "llamacpp" | quote }}
+            - name: LLAMACPP_BASE_URL
+              value: {{ .Values.llamacppBaseUrl | default (printf "http://%s-ollama:%v" (include "local-agentic-sandbox.fullname" .) .Values.ollama.port) | quote }}
           resources:
             {{- toYaml .Values.webUI.resources | nindent 12 }}
           readinessProbe:

@@ -109,3 +109,7 @@ observability:
     otlpHttp: 4318
     otlpGrpc: 4317
     ui: 16686
+
+llmEngine: "llamacpp"
+llamacppBaseUrl: ""
+

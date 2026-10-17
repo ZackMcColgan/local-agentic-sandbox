@@ -67,12 +67,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/svgRendering.test.ts",
       "tests/svgComponent.test.ts",
-      "tests/architectureSvgPair.test.ts"
+      "tests/architectureSvgPair.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
-  // ChatStream, ThinkingPanel, chatUtils, and chat history components
+  // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/contextBudget"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
@@ -82,23 +83,33 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/unifiedUi.test.ts",
       "tests/chatPolish.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/chatContextBudget.test.ts",
+      "tests/chatActionDiscipline.test.ts",
+      "tests/mobileUiPolish.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API
   {
     match: (p) =>
       p.includes("lib/threads") ||
+      p.includes("lib/hooks") ||
       p.includes("app/api/threads") ||
       p.includes("components/LiveRunBlock") ||
+      p.includes("components/ArtifactRenderers") ||
       p.includes("components/ModelBottomSheet") ||
+      p.includes("components/ModelSelector") ||
       p.includes("components/ThreadsSidebar") ||
       p.includes("components/NavigationDrawer") ||
       p.includes("components/SettingsView") ||
       p.includes("components/BuildsView") ||
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
-      p.includes("app/layout.tsx"),
+      p.includes("next.config") ||
+      p.includes("app/layout.tsx") ||
+      p.includes("app/globals.css") ||
+      p.includes("app/design-tokens.css"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/threadsLaunchTask.test.ts",
@@ -106,7 +117,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sessionIntegrity.test.ts",
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/skillsProposeApprove.test.ts"
     ]
   },
   {
@@ -133,18 +145,30 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
-      "tests/semanticMemory.test.ts"
+      "tests/semanticMemory.test.ts",
+      "tests/chatActionDiscipline.test.ts",
+      "tests/llmProvider.test.ts"
     ]
+  },
+  // LLM Provider abstraction
+  {
+    match: (p) => p.includes("lib/llm/"),
+    tests: ["tests/llmProvider.test.ts"]
   },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
     tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
   },
-  // Files API route
+  // Files API route & Workspace File alias
   {
-    match: (p) => p.includes("app/api/files/route"),
-    tests: ["tests/svgRendering.test.ts"]
+    match: (p) => p.includes("app/api/files/route") || p.includes("app/api/workspace/file"),
+    tests: ["tests/svgRendering.test.ts", "tests/punchlistBackendFixes.test.ts"]
+  },
+  // Patch Core surgical utility
+  {
+    match: (p) => p.includes("lib/subagents/patchCore"),
+    tests: ["tests/punchlistBackendFixes.test.ts"]
   },
   // Subagents & Supervisor
   {
@@ -168,7 +192,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/residency"),
-    tests: ["tests/workerHonesty.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/vramResidencyAndMultiFile.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
@@ -270,7 +294,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Human Skill Gates (Sprint 3)
   {
     match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
-    tests: ["tests/humanSkillGates.test.ts"]
+    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts"]
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
@@ -307,7 +331,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/chatHistory.test.ts",
-      "tests/chatStreaming.test.ts"
+      "tests/chatStreaming.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
   // MCP server files
@@ -346,6 +371,14 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("scripts/verify-lan-copy"),
     tests: ["tests/clipboard.test.ts"]
+  },
+  // Verification & capture scripts timeout guard (Phase 0.5)
+  {
+    match: (p) =>
+      p.includes("scripts/capture-svg-render") ||
+      p.includes("scripts/test-ui-render") ||
+      p.includes("scripts/verify-"),
+    tests: ["tests/e2eScriptTimeouts.test.ts"]
   },
   // Architecture diagrams
   {
@@ -392,12 +425,10 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
+    normalizedPath.includes(".agent") ||
     normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
-    normalizedPath.startsWith("scripts/test-ui-render") ||
-    normalizedPath.startsWith("scripts/capture-svg-render") ||
-    normalizedPath.startsWith("scripts/verify-") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||

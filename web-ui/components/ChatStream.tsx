@@ -25,7 +25,10 @@ import {
   MoreHorizontal,
   Menu,
   Plus,
-  ArrowDown
+  ArrowDown,
+  PanelLeft,
+  FileCode,
+  ExternalLink
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,18 +38,24 @@ import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
-import { isSvgCode, isSvgFilePath, resolveSvgUrl, wrapRawSvgInMarkdown, extractSvgsFromMessage } from "../lib/svgUtils";
+import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
+// CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
+export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
+import {
+  isSvgCode,
+  isSvgFilePath,
+  resolveSvgUrl,
+  wrapRawSvgInMarkdown,
+  extractSvgsFromMessage,
+  hasCompleteInlineSvg,
+  extractCodeDeliverablesFromMessage
+} from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 
-export const BUILDER_PROMPT_REGEX = /^(rebuild|build|implement|create|refactor|migrate|generate diagram|run regression|audit)\b/i;
 
-export function isBuilderPrompt(prompt: string): boolean {
-  if (!prompt || typeof prompt !== "string") return false;
-  return BUILDER_PROMPT_REGEX.test(prompt.trim());
-}
 
 
 export interface AttachedFileItem {
@@ -76,6 +85,7 @@ export interface ChatMessage {
   durationMs?: number;
   taskId?: string;
   isStopped?: boolean;
+  isStreaming?: boolean;
   timestamp?: string;
 }
 
@@ -90,7 +100,7 @@ interface ChatStreamProps {
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   threadId?: string;
   threadTitle?: string;
-  threadStatus?: "active" | "paused" | "stopped" | "completed" | "failed";
+  threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
@@ -98,7 +108,8 @@ interface ChatStreamProps {
   onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
-  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope) => Promise<void>;
+  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope, autoDeployOnGreen?: boolean) => Promise<void>;
+  defaultComposerMode?: "chat" | "build";
   onNewThread?: () => void;
   onDeleteThread?: () => void;
   onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
@@ -106,6 +117,10 @@ interface ChatStreamProps {
   onOpenDrawer?: () => void;
   onEnsureThread?: (initialTitle: string) => Promise<string | null>;
   placeholder?: string;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
+  onToggleWorkspace?: () => void;
+  isWorkspaceOpen?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -121,290 +136,6 @@ function fileToBase64(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
-}
-
-function highlightTokens(code: string, language?: string): React.ReactNode[] {
-  // Simple, ultra-clean zero-dependency token highlighting for key languages (typescript, javascript, python, json, xml/svg, bash)
-  const lines = code.split("\n");
-  const lang = (language || "").toLowerCase();
-
-  return lines.map((line, lineIdx) => {
-    // If language is xml / svg / html
-    if (lang === "xml" || lang === "svg" || lang === "html") {
-      const parts = line.split(/(<\/?[a-zA-Z0-9:-]+|"[^"]*"|'[^']*'|\/>|>)/g);
-      return (
-        <span key={lineIdx} className="block leading-5">
-          {parts.map((p, pIdx) => {
-            if (/^<\/?[a-zA-Z0-9:-]+$/.test(p)) {
-              return <span key={pIdx} className="text-purple-600 dark:text-purple-400 font-semibold">{p}</span>;
-            }
-            if (/^["'].*["']$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
-            }
-            if (p === ">" || p === "/>") {
-              return <span key={pIdx} className="text-slate-500 dark:text-zinc-500 font-semibold">{p}</span>;
-            }
-            return <span key={pIdx}>{p}</span>;
-          })}
-        </span>
-      );
-    }
-
-    // If language is json
-    if (lang === "json") {
-      const parts = line.split(/("[^"]*"\s*:|"[^"]*"|\b(?:true|false|null|\d+)\b)/g);
-      return (
-        <span key={lineIdx} className="block leading-5">
-          {parts.map((p, pIdx) => {
-            if (/^"[^"]*"\s*:$/.test(p)) {
-              return <span key={pIdx} className="text-indigo-600 dark:text-indigo-400 font-semibold">{p}</span>;
-            }
-            if (/^"[^"]*"$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
-            }
-            if (/^(?:true|false|null|\d+)$/.test(p)) {
-              return <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">{p}</span>;
-            }
-            return <span key={pIdx}>{p}</span>;
-          })}
-        </span>
-      );
-    }
-
-    // General typescript / javascript / python / bash keywords
-    const keywordRegex = /\b(const|let|var|function|return|import|from|export|default|class|interface|type|async|await|if|else|for|while|try|catch|def|print|self|None|True|False)\b|("[^"]*"|'[^']*'|`[^`]*`)|(\/\/.*$|#.*$)/g;
-    const tokens: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = keywordRegex.exec(line)) !== null) {
-      if (match.index > lastIndex) {
-        tokens.push(line.slice(lastIndex, match.index));
-      }
-      if (match[1]) {
-        // Keyword
-        tokens.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-semibold">{match[1]}</span>);
-      } else if (match[2]) {
-        // String literal
-        tokens.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>);
-      } else if (match[3]) {
-        // Comment
-        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-500 italic">{match[3]}</span>);
-      }
-      lastIndex = keywordRegex.lastIndex;
-    }
-    if (lastIndex < line.length) {
-      tokens.push(line.slice(lastIndex));
-    }
-
-    return (
-      <span key={lineIdx} className="block leading-5">
-        {tokens.length > 0 ? tokens : line}
-      </span>
-    );
-  });
-}
-
-export function CodeBlock({ language, code, filename }: { language?: string; code: string; filename?: string }) {
-  const [copied, setCopied] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
-
-  const isSvg = isSvgCode(code, language);
-  const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
-  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "bash");
-  const lines = code.split("\n");
-  const showLineNumbers = lines.length >= 3;
-  const isLong = lines.length > 20;
-
-  const handleCopy = async () => {
-    // Copy the full raw code, never truncated
-    const ok = await copyText(code);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
-  if (isSvg) {
-    return (
-      <div className="my-3">
-        <SvgViewer
-          code={code}
-          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
-          initialTab="preview"
-          allowFullscreen={true}
-        />
-      </div>
-    );
-  }
-
-  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe
-  if (isHtml) {
-    return (
-      <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
-        <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-          <div className="flex items-center gap-2">
-            <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{filename || "index.html"}</span>
-            <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => setActiveTab("preview")}
-                className={`px-2 py-0.5 rounded ${activeTab === "preview" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("code")}
-                className={`px-2 py-0.5 rounded ${activeTab === "code" ? "bg-white dark:bg-zinc-700 text-[#5b32e6] dark:text-indigo-300 font-bold" : "text-slate-500 dark:text-zinc-400"}`}
-              >
-                Code
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {isLong && activeTab === "code" && (
-              <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium"
-                title={isExpanded ? "Collapse code block" : "Expand code block"}
-              >
-                {isExpanded ? "Collapse" : "Expand"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
-              title="Copy code"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {activeTab === "preview" ? (
-          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
-            <iframe
-              srcDoc={code}
-              sandbox="allow-scripts"
-              className="w-full h-64 border-0 rounded-xl bg-white"
-              title="HTML Artifact Preview"
-            />
-          </div>
-        ) : (
-          <div className="relative">
-            <div
-              className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
-                !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
-              }`}
-            >
-              {showLineNumbers && (
-                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-                  {lines.map((_, i) => (
-                    <div key={i}>{i + 1}</div>
-                  ))}
-                </div>
-              )}
-              <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
-                <code>{highlightTokens(code, langDisplay)}</code>
-              </pre>
-            </div>
-            {!isExpanded && isLong && (
-              <div
-                className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
-                aria-hidden="true"
-              />
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-3 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#f4eff4] dark:bg-[#201a24] overflow-hidden shadow-xs">
-      <div className="flex items-center justify-between px-3.5 py-2 bg-[#ece6f0] dark:bg-[#2b2930] border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
-          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
-          <span className="text-[#6750a4] dark:text-[#d0bcff] font-semibold">{langDisplay}</span>
-          {isLong && (
-            <span className="text-[10px] text-slate-500 dark:text-zinc-500">
-              ({lines.length} lines)
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {isLong && (
-            <button
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="hover:text-[#1d1b20] dark:hover:text-white transition-colors text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-zinc-800/80"
-              title={isExpanded ? "Collapse code block" : "Expand code block"}
-            >
-              {isExpanded ? "Collapse" : "Expand"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 hover:text-[#1d1b20] dark:hover:text-white transition-colors"
-            title="Copy code"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="relative">
-        <div
-          className={`flex overflow-x-auto text-xs font-mono p-3.5 leading-relaxed bg-[#f8f6f9] dark:bg-[#18141c] ${
-            !isExpanded && isLong ? "max-h-[400px] overflow-y-auto" : ""
-          }`}
-        >
-          {showLineNumbers && (
-            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
-              {lines.map((_, i) => (
-                <div key={i}>{i + 1}</div>
-              ))}
-            </div>
-          )}
-          <pre className="overflow-x-auto text-[#1d1b20] dark:text-[#e6e0e9] flex-1">
-            <code data-code={code}>{highlightTokens(code, langDisplay)}</code>
-          </pre>
-        </div>
-        {!isExpanded && isLong && (
-          <div
-            className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f8f6f9] dark:from-[#18141c] to-transparent"
-            aria-hidden="true"
-          />
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function ChatStream({
@@ -433,7 +164,12 @@ export function ChatStream({
   onDeployRun,
   onOpenDrawer,
   onEnsureThread,
-  placeholder
+  placeholder,
+  onToggleSidebar,
+  isSidebarOpen = true,
+  onToggleWorkspace,
+  isWorkspaceOpen = false,
+  defaultComposerMode
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -441,8 +177,9 @@ export function ChatStream({
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
 
-  // Task Scope selection state: default is PROJECT
-  const [selectedScope, setSelectedScope] = useState<TaskScope>(initialScope);
+  // Composer Mode state (Chat | Build)
+  const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
+  const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -453,6 +190,7 @@ export function ChatStream({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
+  const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   // Attached files state
@@ -514,6 +252,10 @@ export function ChatStream({
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
   };
 
+  const toggleTraces = (msgId: string) => {
+    setExpandedTraces((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
   const copyToClipboard = async (text: string, msgId: string) => {
     const ok = await copyText(text);
     if (ok) {
@@ -522,12 +264,13 @@ export function ChatStream({
     }
   };
 
-  // Auto-expanding textarea: min 3 rows (72px), grows smoothly with content, never truncates
+  // Auto-expanding textarea: min 46px on mobile, grows smoothly with content, never truncates
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       const scrollH = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.max(scrollH, 72)}px`;
+      const minH = typeof window !== "undefined" && window.innerWidth >= 640 ? 72 : 46;
+      textareaRef.current.style.height = `${Math.max(scrollH, minH)}px`;
     }
   }, [input]);
 
@@ -642,20 +385,22 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
-    // Check if this is an engineering builder task (e.g. "Rebuild...", "Build...", "Implement...", etc.)
-    const isBuilder = isBuilderPrompt(prompt);
+    // Check if this is an engineering builder task (Build mode toggle or /build prefix)
+    const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
+    const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
+    const isBuilder = composerMode === "build" || isBuildPrefix;
 
     if (isBuilder && onLaunchTask) {
       const currentAttachments = [...attachedFiles];
       setAttachedFiles([]);
       setInput("");
       if (textareaRef.current) {
-        textareaRef.current.style.height = "72px";
+        textareaRef.current.style.height = "auto";
       }
       setIsLoading(true);
       setStreamStatus("Planning autonomous milestones with real Ollama model...");
       try {
-        await onLaunchTask(prompt, currentAttachments, selectedScope);
+        await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to launch builder task");
       } finally {
@@ -668,7 +413,7 @@ export function ChatStream({
     setErrorMsg(null);
     setInput("");
     if (textareaRef.current) {
-      textareaRef.current.style.height = "72px";
+      textareaRef.current.style.height = "auto";
     }
 
     const currentAttachments = [...attachedFiles];
@@ -776,6 +521,25 @@ export function ChatStream({
       let currentTraces: ExecutionTraceItem[] = [];
       let currentModel = activeModel;
 
+      const upsertAssistant = (
+        prev: ChatMessage[],
+        patch: (existing: ChatMessage) => ChatMessage
+      ): ChatMessage[] => {
+        const exists = prev.some((msg) => msg.id === assistantMsgId);
+        const base: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: currentModel
+        };
+        if (!exists) {
+          return [...prev, patch(base)];
+        }
+        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -799,42 +563,30 @@ export function ChatStream({
               setStreamStatus(event.status);
             } else if (event.type === "thought") {
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        thought: event.thought
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  thought: event.thought
+                }))
               );
             } else if (event.type === "token") {
               accumulatedRawContent += event.content || "";
               const parsed = parseThinkingAndContent(accumulatedRawContent);
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        content: parsed.content,
-                        thought: parsed.thought,
-                        modelUsed: currentModel
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: parsed.thought,
+                  modelUsed: currentModel
+                }))
               );
             } else if (event.type === "trace") {
               currentTraces = [...currentTraces, event.trace];
               onTracesUpdate(currentTraces);
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        traces: currentTraces
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  traces: currentTraces
+                }))
               );
             } else if (event.type === "done") {
               const durationMs = Math.round(performance.now() - startTime);
@@ -866,18 +618,14 @@ export function ChatStream({
               }
 
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        content: parsed.content,
-                        thought: finalThought,
-                        traces: event.traces || currentTraces,
-                        modelUsed: finalModel,
-                        durationMs: event.durationMs || durationMs
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: finalThought,
+                  traces: event.traces || currentTraces,
+                  modelUsed: finalModel,
+                  durationMs: event.durationMs || durationMs
+                }))
               );
             } else if (event.type === "error") {
               throw new Error(event.error || "Streaming error encountered");
@@ -901,6 +649,13 @@ export function ChatStream({
       setStreamStatus(null);
       abortControllerRef.current = null;
     }
+  };
+
+  const handleRetry = () => {
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUserMsg) return;
+    setErrorMsg(null);
+    handleSend(lastUserMsg.content);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -933,7 +688,7 @@ export function ChatStream({
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
   const lastLinkedTaskMsgIndex = deduplicatedMessages
-    .map((m, i) => (m.taskId || (activeTask && i === deduplicatedMessages.length - 1)) ? i : -1)
+    .map((m, i) => m.taskId ? i : -1)
     .reduce((max, i) => Math.max(max, i), -1);
 
   return (
@@ -942,7 +697,7 @@ export function ChatStream({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`relative flex flex-col h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
-        isDraggingOver ? "bg-purple-50/30 dark:bg-indigo-950/20" : ""
+        isDraggingOver ? "bg-emerald-50/30 dark:bg-emerald-950/20" : ""
       }`}
     >
       {/* Hidden File Input */}
@@ -977,10 +732,25 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup media_1791044464247.webp */}
-      <header className="px-4 py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {onOpenDrawer ? (
+      {/* Top Bar matching Mockup 01 */}
+      <header className="px-2.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          {onToggleSidebar ? (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={`panel-toggle-btn px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                isSidebarOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Sessions Panel"
+              aria-label="Toggle Sessions Panel"
+            >
+              <PanelLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Sessions</span>
+            </button>
+          ) : onOpenDrawer ? (
             <button
               type="button"
               onClick={onOpenDrawer}
@@ -1003,7 +773,7 @@ export function ChatStream({
           ) : null}
 
           <h1
-            className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[48vw] sm:max-w-md truncate"
+            className="hidden md:block text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -1014,7 +784,7 @@ export function ChatStream({
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
-              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-[#5b32e6] dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 text-xs font-semibold uppercase tracking-wider"
+              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
               title={`Task Scope: ${threadScope || activeTask?.scope}`}
             >
               {threadScope || activeTask?.scope}
@@ -1025,11 +795,11 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-[#6750a4] dark:text-[#d0bcff] shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
-            <Sparkles className="h-3.5 w-3.5 text-[#6750a4] dark:text-[#d0bcff]" />
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{shortModelLabel}</span>
           </button>
 
@@ -1043,6 +813,24 @@ export function ChatStream({
               aria-label="Start new session"
             >
               <Plus className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Workspace Inspector Toggle Button */}
+          {onToggleWorkspace && (
+            <button
+              type="button"
+              onClick={onToggleWorkspace}
+              className={`panel-toggle-btn px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                isWorkspaceOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Workspace Panel"
+              aria-label="Toggle Workspace Panel"
+            >
+              <span>◨</span>
+              <span className="hidden sm:inline">Workspace</span>
             </button>
           )}
 
@@ -1081,26 +869,6 @@ export function ChatStream({
                     Security telemetry
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      const isDark = document.documentElement.classList.contains("dark");
-                      const next = isDark ? "light" : "dark";
-                      document.documentElement.classList.toggle("dark", next === "dark");
-                      document.documentElement.classList.toggle("light", next === "light");
-                      document.documentElement.setAttribute("data-theme", next);
-                      document.documentElement.style.colorScheme = next;
-                      document.body.classList.toggle("dark", next === "dark");
-                      document.body.classList.toggle("light", next === "light");
-                      localStorage.setItem("app-theme", next);
-                    }
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl flex items-center justify-between"
-                >
-                  <span>Toggle theme</span>
-                  <span className="text-[10px] text-[#6750a4] dark:text-[#d0bcff] font-semibold">Light / Dark</span>
-                </button>
                 {onDeleteThread && (
                   <button
                     type="button"
@@ -1131,12 +899,13 @@ export function ChatStream({
         ref={chatContainerRef}
         onScroll={handleContainerScroll}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white dark:bg-zinc-950 relative"
+        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-zinc-950 relative"
       >
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
-              <Sparkles className="h-6 w-6 text-[#5b32e6] dark:text-indigo-400" />
+              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
               Start an autonomous session
@@ -1181,7 +950,7 @@ export function ChatStream({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-medium shadow-xs">
-                          <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400" />
+                          <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           <span className="max-w-[140px] truncate">{att.name}</span>
                           <span className="text-[10px] text-slate-400">({formatFileSize(att.size)})</span>
                         </div>
@@ -1191,20 +960,20 @@ export function ChatStream({
                 </div>
               )}
 
-              {/* User Bubble: vibrant rounded purple pill matching Mockup media_1791044464247.webp */}
+              {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
               {isUser ? (
                 <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
-                  <div className="bg-[#6750a4] text-white rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
-                    <div className="prose prose-invert max-w-none text-sm text-white">
+                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
+                    <div className="prose dark:prose-invert max-w-none text-sm text-blue-950 dark:text-sky-100">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           code: ({ children }: any) => (
-                            <code className="px-1.5 py-0.5 rounded bg-white/20 text-white font-mono text-xs">
+                            <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
                               {children}
                             </code>
                           ),
-                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-white">{children}</p>
+                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
                         }}
                       >
                         {m.content}
@@ -1224,7 +993,7 @@ export function ChatStream({
                 </div>
               ) : (
                 /* Assistant Message View */
-                <div className="w-full max-w-2xl space-y-3">
+                <div className="w-full max-w-[840px] space-y-3">
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
                   {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
@@ -1235,8 +1004,99 @@ export function ChatStream({
                         <ThinkingPanel
                           rawThought={rawThought}
                           isStreaming={isStreamingThis}
-                          defaultExpanded={true}
+                          defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                         />
+                      </div>
+                    );
+                  })()}
+
+                  {/* Inline Expandable Sandbox & Telemetry Badges */}
+                  {!isUser && m.traces && m.traces.length > 0 && (() => {
+                    const hasManyTraces = m.traces.length > 3;
+                    const isTracesExpanded = !!expandedTraces[m.id];
+                    const visibleTraces = hasManyTraces && !isTracesExpanded ? m.traces.slice(0, 2) : m.traces;
+
+                    return (
+                      <div className="mt-2.5 space-y-2 w-full">
+                        {visibleTraces.map((trace, tIdx) => {
+                          const proofKey = `${m.id}-${tIdx}`;
+                          const isExpanded = !!expandedProofs[proofKey];
+                          const human = formatHumanReadableTrace(trace);
+                          const isBrowser = human.badge === "browser";
+
+                          return (
+                            <div
+                              key={tIdx}
+                              className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => toggleProof(proofKey)}
+                                className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                              >
+                                <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
+                                  {isBrowser ? (
+                                    <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold shrink-0">
+                                      <Globe className="h-3.5 w-3.5" />
+                                      <span>Web</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                      <span>Sandbox</span>
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                  <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">{human.title}</span>
+                                  {human.duration && (
+                                    <>
+                                      <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                      <span className="text-slate-500 dark:text-zinc-400 shrink-0">{human.duration}</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-auto">
+                                  <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
+                                  <span className="hidden sm:inline">{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </div>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
+                                  <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                                    {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {hasManyTraces && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTraces(m.id)}
+                            className="w-full py-1.5 px-3 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            {isTracesExpanded ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5" />
+                                <span>Collapse tool steps</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                <span>Show all {m.traces.length} tool steps</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     );
                   })()}
@@ -1281,7 +1141,7 @@ export function ChatStream({
                             }
                             return (
                               <code
-                                className="px-1.5 py-0.5 rounded bg-[#f4eff4] dark:bg-[#2b2930] text-[#6750a4] dark:text-[#d0bcff] font-mono text-xs border border-slate-200 dark:border-zinc-700"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs border border-slate-200 dark:border-zinc-700"
                                 {...props}
                               >
                                 {children}
@@ -1289,17 +1149,17 @@ export function ChatStream({
                             );
                           },
                           p: ({ children }: any) => (
-                            <p className="mb-3 last:mb-0 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <p className="mb-3 last:mb-0 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </p>
                           ),
                           ul: ({ children }: any) => (
-                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ul>
                           ),
                           ol: ({ children }: any) => (
-                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-[#1d1b20] dark:text-[#e6e0e9]">
+                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ol>
                           ),
@@ -1309,7 +1169,7 @@ export function ChatStream({
                             </li>
                           ),
                           blockquote: ({ children }: any) => (
-                            <blockquote className="border-l-4 border-[#6750a4] bg-[#fdf8fd]/80 dark:bg-[#1d1b20]/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
+                            <blockquote className="border-l-4 border-emerald-500 bg-slate-50/80 dark:bg-zinc-900/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
                               {children}
                             </blockquote>
                           ),
@@ -1364,14 +1224,18 @@ export function ChatStream({
                       >
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
+                    </div>
+                  )}
 
-                      {/* Tool Generated SVG Visual Artifacts */}
+                  {/* Tool Generated SVG Visual Artifacts & Code Deliverables */}
+                  {!isTaskHostMessage && (
+                    <>
                       {(() => {
-                        if (isSvgCode(m.content) || m.content.includes("<svg")) return null;
+                        if (hasCompleteInlineSvg(m.content)) return null;
                         const messageSvgs = extractSvgsFromMessage(m);
                         if (messageSvgs.length === 0) return null;
                         return (
-                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose">
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
                             {messageSvgs.map((svg) => (
                               <div key={svg.id} className="space-y-1.5">
                                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
@@ -1392,95 +1256,76 @@ export function ChatStream({
                           </div>
                         );
                       })()}
-                    </div>
-                  )}
 
-                  {/* Inline Expandable Sandbox & Telemetry Badges */}
-                  {!isUser && m.traces && m.traces.length > 0 && (
-                    <div className="mt-2.5 space-y-2 w-full">
-                      {m.traces.map((trace, tIdx) => {
-                        const proofKey = `${m.id}-${tIdx}`;
-                        const isExpanded = !!expandedProofs[proofKey];
-                        const human = formatHumanReadableTrace(trace);
-                        const isBrowser = human.badge === "browser";
-
+                      {(() => {
+                        const codeDeliverables = extractCodeDeliverablesFromMessage(m);
+                        if (codeDeliverables.length === 0) return null;
                         return (
-                          <div
-                            key={tIdx}
-                            className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => toggleProof(proofKey)}
-                              className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
-                            >
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {isBrowser ? (
-                                  <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold">
-                                    <Globe className="h-3.5 w-3.5" />
-                                    <span>Web</span>
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
+                            {codeDeliverables.map((item) => (
+                              <div key={item.id} className="space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                                  <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                                    <FileCode className="h-3.5 w-3.5" />
+                                    <span>Delivered Code File: {item.title}</span>
                                   </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                    <span>Sandbox</span>
-                                  </span>
-                                )}
-                                <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans">{human.title}</span>
-                                {human.duration && (
-                                  <>
-                                    <span className="text-slate-400 dark:text-zinc-600">•</span>
-                                    <span className="text-slate-500 dark:text-zinc-400">{human.duration}</span>
-                                  </>
-                                )}
+                                  <a
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                  >
+                                    <span>Open Raw</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </div>
+                                <CodeBlock
+                                  language={item.language}
+                                  code={item.code}
+                                  filename={item.path}
+                                />
                               </div>
-
-                              <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-2">
-                                <span>{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
-                                {isExpanded ? (
-                                  <ChevronUp className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ChevronDown className="h-3.5 w-3.5" />
-                                )}
-                              </div>
-                            </button>
-
-                            {isExpanded && (
-                              <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                                <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
-                                  {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
-                                </pre>
-                              </div>
-                            )}
+                            ))}
                           </div>
                         );
-                      })}
-                    </div>
+                      })()}
+                    </>
                   )}
 
                   {/* Grounded File Citation Card matching Mockup 4 */}
                   {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
                     <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
                       {m.traces.filter((t: any) => t.args?.path || (t.name && String(t.name).includes(".ts"))).slice(0, 3).map((t: any, cIdx) => {
-                        const pathLabel = t.args?.path || t.name || "workerPool.ts:342";
+                        const pathLabel = t.args?.path || t.name;
+                        if (!pathLabel) return null;
                         return (
                           <div
                             key={cIdx}
                             className="flex items-center justify-between w-full p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-xs text-xs font-mono text-slate-800 dark:text-zinc-200"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                              <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                               <span className="font-semibold truncate">{pathLabel}</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
-                              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 shrink-0 ml-2"
-                              title="Copy path"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <a
+                                href={resolveSvgUrl(pathLabel)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                title="Open file"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
+                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                title="Copy path"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -1501,7 +1346,7 @@ export function ChatStream({
 
         {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
         {activeTask && lastLinkedTaskMsgIndex === -1 && (
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-[840px]">
             <LiveRunBlock
               task={activeTask}
               onStopRun={onStopTask}
@@ -1517,19 +1362,50 @@ export function ChatStream({
         {/* Live Loading Indicator */}
         {isLoading && (
           <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-400 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 w-fit">
-            <Loader2 className="h-4 w-4 animate-spin text-[#5b32e6] dark:text-indigo-400" />
+            <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
             <span>{streamStatus || "Synthesizing response..."}</span>
           </div>
         )}
 
-        {errorMsg && (
-          <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {errorMsg && (() => {
+          const formatted = formatChatErrorMessage(errorMsg);
+          return (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                  <div className="space-y-1 min-w-0">
+                    <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm leading-snug">
+                      {formatted.summary}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/80 dark:hover:bg-rose-800 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 transition-colors shrink-0 flex items-center gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Retry</span>
+                </button>
+              </div>
+
+              {formatted.details && (
+                <details className="text-xs text-rose-700 dark:text-rose-300">
+                  <summary className="cursor-pointer font-medium hover:underline select-none">
+                    Technical details
+                  </summary>
+                  <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                    {formatted.details}
+                  </pre>
+                </details>
+              )}
+            </div>
+          );
+        })()}
 
         <div ref={scrollRef} />
+        </div>
       </div>
 
       {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
@@ -1541,7 +1417,7 @@ export function ChatStream({
             className="pointer-events-auto px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 text-xs font-semibold shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all"
             title="Jump to bottom"
           >
-            <ArrowDown className="h-3.5 w-3.5 text-[#5b32e6] dark:text-indigo-400" />
+            <ArrowDown className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Jump to bottom</span>
           </button>
         </div>
@@ -1552,7 +1428,7 @@ export function ChatStream({
         
         {/* Attachment Chips above input */}
         {attachedFiles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-2xl mx-auto">
+          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
             {attachedFiles.map((att) => (
               <div
                 key={att.id}
@@ -1565,7 +1441,7 @@ export function ChatStream({
                     className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
                   />
                 ) : (
-                  <FileText className="h-4 w-4 text-[#5b32e6] dark:text-indigo-400 shrink-0" />
+                  <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 )}
                 <div className="flex flex-col">
                   <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
@@ -1594,7 +1470,7 @@ export function ChatStream({
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-2xl mx-auto rounded-3xl bg-[#f4f5f8] dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-[#5b32e6]/20 focus-within:border-[#5b32e6]"
+          className="max-w-[840px] mx-auto rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea
@@ -1610,7 +1486,7 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[72px] max-h-[140px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
           />
 
           {/* Bottom Deck: Controls Bar */}
@@ -1619,7 +1495,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-slate-500 hover:text-[#5b32e6] dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="h-9 w-9 rounded-full text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0 flex items-center justify-center"
               title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
               aria-label="Attach files"
             >
@@ -1627,43 +1503,53 @@ export function ChatStream({
             </button>
 
             <div className="flex items-center gap-2">
-              {/* Task Scope Segmented Control */}
+              {/* Composer Mode Toggle (Chat | Build) */}
               <div
                 role="radiogroup"
-                aria-label="Task Scope Selector"
-                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium"
+                aria-label="Composer Mode Selector"
+                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium select-none"
               >
-                {(["SNIPPET", "SCRIPT", "PROJECT"] as const).map((scopeOption) => {
-                  const isSelected = selectedScope === scopeOption;
-                  const labels = {
-                    SNIPPET: "Snippet",
-                    SCRIPT: "Script",
-                    PROJECT: "Project"
-                  };
-                  const tooltips = {
-                    SNIPPET: "Single file, single milestone (no scaffolding)",
-                    SCRIPT: "1-2 milestones, small utility or script",
-                    PROJECT: "Full milestone decomposition & multi-file system"
-                  };
-                  return (
-                    <button
-                      key={scopeOption}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => setSelectedScope(scopeOption)}
-                      title={tooltips[scopeOption]}
-                      className={`px-2.5 py-1 rounded-full transition-all ${
-                        isSelected
-                          ? "bg-white dark:bg-zinc-900 text-[#5b32e6] dark:text-indigo-300 font-semibold shadow-xs"
-                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                      }`}
-                    >
-                      {labels[scopeOption]}
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={composerMode === "chat"}
+                  onClick={() => setComposerMode("chat")}
+                  className={`px-3 py-1 rounded-full transition-all ${
+                    composerMode === "chat"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={composerMode === "build"}
+                  onClick={() => setComposerMode("build")}
+                  className={`px-3 py-1 rounded-full transition-all ${
+                    composerMode === "build"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Build
+                </button>
               </div>
+
+              {/* Opt-in Auto-Deploy on Green Gate Checkbox (Sprint A4 / CEO Decision 3) */}
+              {composerMode === "build" && (
+                <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-zinc-400 cursor-pointer select-none px-1">
+                  <input
+                    type="checkbox"
+                    checked={autoDeployOnGreen}
+                    onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
+                    className="rounded border-slate-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                  />
+                  <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
+                  <span className="sm:hidden">Auto-Deploy</span>
+                </label>
+              )}
 
               {/* Send / Stop Morphed Button */}
               {isGeneratingOrRunning ? (
@@ -1680,7 +1566,7 @@ export function ChatStream({
                 <button
                   type="submit"
                   disabled={!input.trim() && attachedFiles.length === 0}
-                  className="h-9 w-9 rounded-full bg-[#6750a4] hover:bg-[#584391] text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
+                  className="h-9 w-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
                   title="Send message"
                   aria-label="Send message"
                 >

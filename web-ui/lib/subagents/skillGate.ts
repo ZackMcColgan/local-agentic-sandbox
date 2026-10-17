@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 
 export interface SkillCandidate {
   id: string;
@@ -22,8 +23,20 @@ export interface SkillGateStore {
 
 export function getSkillsBasePath(customPath?: string): string {
   if (customPath) return customPath;
-  if (process.env.SKILLS_DIR) return path.resolve(process.env.SKILLS_DIR);
-  return path.resolve(process.cwd(), "../workspace/.agent/skills");
+
+  const preferred = process.env.SKILLS_DIR
+    ? path.resolve(process.env.SKILLS_DIR)
+    : path.resolve(process.cwd(), "../workspace/.agent/skills");
+
+  try {
+    fs.mkdirSync(preferred, { recursive: true });
+    fs.accessSync(preferred, fs.constants.W_OK);
+    return preferred;
+  } catch {
+    const fallback = path.join(os.tmpdir(), "local-agentic-sandbox-skills");
+    fs.mkdirSync(fallback, { recursive: true });
+    return fallback;
+  }
 }
 
 export function getPendingQueuePath(skillsDir?: string): string {
