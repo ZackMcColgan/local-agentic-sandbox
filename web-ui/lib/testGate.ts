@@ -83,7 +83,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/unifiedUi.test.ts",
       "tests/chatPolish.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
-      "tests/chatContextBudget.test.ts"
+      "tests/chatContextBudget.test.ts",
+      "tests/chatActionDiscipline.test.ts"
     ]
   },
   // Unified Agent UI (Material 3) components, threads store & API
@@ -140,7 +141,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
-      "tests/semanticMemory.test.ts"
+      "tests/semanticMemory.test.ts",
+      "tests/chatActionDiscipline.test.ts"
     ]
   },
   // Tasks API route

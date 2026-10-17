@@ -16,6 +16,93 @@ export const MAX_TOOL_OUTPUT_CHARS = 2000;
 export const FINAL_ROUND_SYNTHESIS_DIRECTIVE =
   "You have gathered enough information. Synthesize your final answer now using only the tool results above. Do not call more tools.";
 
+export const MAX_WEB_RESEARCH_CALLS = 3;
+
+export const WEB_RESEARCH_TOOL_NAMES = new Set(["search_web", "fetch_webpage_markdown"]);
+
+export const WEB_BUDGET_EXHAUSTED_DIRECTIVE =
+  "[ACTION DISCIPLINE]: You have reached the maximum of 3 web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.";
+
+export function isWebResearchTool(toolName: string, tier?: string): boolean {
+  return WEB_RESEARCH_TOOL_NAMES.has(toolName) || tier === "browser";
+}
+
+export function filterToolsForWebBudget(
+  ollamaTools: any[],
+  webResearchCallsUsed: number,
+  maxWebCalls: number = MAX_WEB_RESEARCH_CALLS
+): any[] {
+  if (webResearchCallsUsed < maxWebCalls) {
+    return ollamaTools;
+  }
+  return ollamaTools.filter((t) => {
+    const name = t.function?.name || t.name;
+    return !WEB_RESEARCH_TOOL_NAMES.has(name);
+  });
+}
+
+export function hasArtifactCreationIntent(userPrompt: string): { isArtifactRequest: boolean; wantsSvg: boolean } {
+  const wantsSvg =
+    /\b(svg|vector\s+diagram|vector\s+graphic|drawio|flowchart|architecture\s+diagram)\b/i.test(userPrompt) ||
+    (/\b(create|draw|generate|build|make|design|render|sketch)\b/i.test(userPrompt) &&
+      /\b(diagram|chart|visual|graphic|card|infographic|illustration)\b/i.test(userPrompt));
+
+  const isArtifactRequest =
+    wantsSvg ||
+    (/\b(create|write|generate|build|make|save|produce)\b/i.test(userPrompt) &&
+      /\b(file|script|code|module|component|html|artifact|report)\b/i.test(userPrompt));
+
+  return { isArtifactRequest, wantsSvg };
+}
+
+export function buildSynthesisDirective(userPrompt: string, isFinalRoundSystemPrompt: boolean = false): string {
+  const { isArtifactRequest, wantsSvg } = hasArtifactCreationIntent(userPrompt);
+
+  if (wantsSvg) {
+    return 'You have gathered the required information from the tool results above. Now produce the complete, self-contained, valid <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">...</svg> deliverable inside a ```svg code block using the real facts from the tool results above, followed by a brief summary. Do not invoke any more tools and do not reply with a text-only summary.';
+  }
+
+  if (isArtifactRequest) {
+    return "You have gathered the required information from the tool results above. Now produce the complete requested code or file artifact directly in a fenced code block, followed by a brief summary. Do not invoke any more tools.";
+  }
+
+  if (isFinalRoundSystemPrompt) {
+    return FINAL_ROUND_SYNTHESIS_DIRECTIVE;
+  }
+
+  return "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools.";
+}
+
+export function shouldRunPostToolSynthesis(params: {
+  userPrompt: string;
+  assistantContent: string;
+  lingeringToolCallsCount: number;
+  traces: Array<{ tool: string; args?: any; result?: any }>;
+}): boolean {
+  if ((params.traces.length > 0 && params.lingeringToolCallsCount > 0) || !params.assistantContent?.trim()) {
+    return true;
+  }
+
+  const { wantsSvg } = hasArtifactCreationIntent(params.userPrompt);
+  if (wantsSvg && params.traces.length > 0) {
+    const hasSvgContent =
+      /<svg[\s>][\s\S]*?<\/svg>/i.test(params.assistantContent) ||
+      /<mxfile|<mxGraphModel/i.test(params.assistantContent);
+
+    const hasSvgTrace = params.traces.some((t) => {
+      const p = String(t.args?.path || t.args?.file || "");
+      const c = String(t.args?.content || "");
+      return /\.(svg|drawio)(\.xml)?$/i.test(p) || c.includes("<svg");
+    });
+
+    if (!hasSvgContent && !hasSvgTrace) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Conservative token estimator: Math.ceil(text.length / 4).
  * Handles string, message object, or message arrays.

@@ -21,7 +21,13 @@ import {
 import {
   fitContextWindow,
   clampToolOutput,
-  FINAL_ROUND_SYNTHESIS_DIRECTIVE
+  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
+  MAX_WEB_RESEARCH_CALLS,
+  WEB_BUDGET_EXHAUSTED_DIRECTIVE,
+  isWebResearchTool,
+  filterToolsForWebBudget,
+  buildSynthesisDirective,
+  shouldRunPostToolSynthesis
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -256,7 +262,10 @@ CRITICAL INSTRUCTIONS:
   - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
   - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
-- Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
+- Synthesize all tool results into a thorough, clean Markdown answer for the user.
+- WEB RESEARCH & ACTION DISCIPLINE:
+  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
+  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable (via 'workspace_write_file' or an inline \`\`\`svg / code block) or final answer. Never loop on redundant web searches.`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -455,6 +464,8 @@ CRITICAL INSTRUCTIONS:
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
+        let webResearchCalls = 0;
+        let webBudgetNoticeAdded = false;
 
         let accumulatedThoughts: string[] = [];
 
@@ -468,7 +479,7 @@ CRITICAL INSTRUCTIONS:
           if (round === MAX_TOOL_ROUNDS - 1) {
             conversationMessages.push({
               role: "system",
-              content: FINAL_ROUND_SYNTHESIS_DIRECTIVE
+              content: buildSynthesisDirective(userPrompt, true)
             });
           }
 
@@ -479,8 +490,9 @@ CRITICAL INSTRUCTIONS:
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
-          if (ollamaTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
-            ollamaPayload.tools = ollamaTools;
+          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
+          if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
+            ollamaPayload.tools = roundTools;
           }
 
           let fullRoundContent = "";
@@ -539,15 +551,27 @@ CRITICAL INSTRUCTIONS:
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments;
 
-            await sendEvent({
-              type: "status",
-              status: `Executing tool ${toolName}...`
-            });
-
             const target = toolClientMap.get(toolName);
             if (!target) {
               throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
             }
+
+            if (isWebResearchTool(toolName, target.tier)) {
+              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: WEB_BUDGET_EXHAUSTED_DIRECTIVE
+                });
+                continue;
+              }
+              webResearchCalls++;
+            }
+
+            await sendEvent({
+              type: "status",
+              status: `Executing tool ${toolName}...`
+            });
 
             const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
               tool: toolName,
@@ -614,6 +638,16 @@ CRITICAL INSTRUCTIONS:
               content: clampToolOutput(JSON.stringify(result))
             });
 
+            if (isWebResearchTool(toolName, target.tier)) {
+              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+                webBudgetNoticeAdded = true;
+                conversationMessages.push({
+                  role: "system",
+                  content: WEB_BUDGET_EXHAUSTED_DIRECTIVE
+                });
+              }
+            }
+
             // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
             if (
               mode === "auto" &&
@@ -640,14 +674,21 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
-        // Post-tool synthesis safety pass if lingering tool calls or empty text:
+        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-        if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+        if (
+          shouldRunPostToolSynthesis({
+            userPrompt,
+            assistantContent: currentAssistantMessage.content || "",
+            lingeringToolCallsCount: lingeringToolCalls.length,
+            traces
+          })
+        ) {
           const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
           conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({
             role: "user",
-            content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
+            content: buildSynthesisDirective(userPrompt, false)
           });
 
           await sendEvent({
