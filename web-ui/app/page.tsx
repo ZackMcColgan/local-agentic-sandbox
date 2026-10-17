@@ -295,6 +295,9 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
     fetchThreads(true);
     fetchActiveTask();
     fetchMorningReport();
@@ -399,6 +402,9 @@ export default function Home() {
     setSelectedThreadId(threadId);
     setViewMode("unified");
     setActiveNavView("sessions");
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
     try {
       window.history.pushState({ threadId }, "", `?thread=${encodeURIComponent(threadId)}`);
     } catch {}
@@ -685,10 +691,13 @@ export default function Home() {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden relative">
-        {/* Mobile Backdrop for slide-over Workspace inspector */}
+        {/* Mobile Backdrop for slide-over Drawers (Sidebar & Inspector) */}
         <div
-          className={`mobile-backdrop ${isWorkspaceOpen ? "block md:hidden" : "hidden"} fixed inset-0 bg-black/50 z-30 backdrop-blur-xs`}
-          onClick={() => setIsWorkspaceOpen(false)}
+          className={`mobile-backdrop ${(isSidebarOpen || isWorkspaceOpen) ? "block md:hidden" : "hidden"} fixed inset-0 bg-black/60 z-40 md:hidden`}
+          onClick={() => {
+            setIsSidebarOpen(false);
+            setIsWorkspaceOpen(false);
+          }}
         />
 
         {/* 3-Pane Collapsible Workbench (Sessions View) */}
@@ -696,9 +705,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className={`app-sidebar ${
-                selectedThreadId !== null ? "hidden md:flex" : "flex"
-              } w-full md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 z-10`}
+              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -718,9 +725,7 @@ export default function Home() {
 
           {/* Center Main Stage */}
           <main
-            className={`app-main ${
-              selectedThreadId === null && isSidebarOpen ? "hidden md:flex" : "flex"
-            } flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950`}
+            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950"
           >
             <ChatStream
               messages={messages}
@@ -763,7 +768,7 @@ export default function Home() {
           {/* Right Workspace Inspector Panel */}
           {isWorkspaceOpen && (
             <aside
-              className="app-inspector absolute md:relative right-0 top-0 bottom-0 w-full md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-20 shadow-xl md:shadow-none"
+              className="app-inspector fixed md:relative right-0 top-0 bottom-0 w-[340px] max-w-[92vw] md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-2xl md:shadow-none"
               aria-label="Workspace Panel"
             >
               {/* Inspector Header */}
