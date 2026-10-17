@@ -273,4 +273,267 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       );
     });
   });
+
+  describe("Task 5: LLMProvider.chat non-streaming convenience wrapper", () => {
+    it("OllamaProvider.chat delegates to streamChat and accumulates content, thinking, and tool_calls", async () => {
+      globalThis.fetch = (async () => {
+        return createMockNdjsonResponse([
+          JSON.stringify({ message: { role: "assistant", content: "Part 1, " }, done: false }) + "\n",
+          JSON.stringify({ message: { role: "assistant", thinking: "Deep thought" }, done: false }) + "\n",
+          JSON.stringify({
+            message: {
+              role: "assistant",
+              content: "Part 2",
+              tool_calls: [{ function: { name: "test_tool", arguments: { a: 1 } } }]
+            },
+            done: true
+          }) + "\n"
+        ]);
+      }) as any;
+
+      const provider = new OllamaProvider();
+      const res = await (provider as any).chat("http://127.0.0.1:11434", {
+        messages: [{ role: "user", content: "Hi" }]
+      });
+
+      assert.equal(res.done, true);
+      assert.equal(res.message?.role, "assistant");
+      assert.equal(res.message?.content, "Part 1, Part 2");
+      assert.equal(res.message?.thinking, "Deep thought");
+      assert.equal(res.message?.tool_calls?.length, 1);
+      assert.equal(res.message?.tool_calls?.[0]?.function?.name, "test_tool");
+    });
+
+    it("LlamaCppProvider.chat delegates to streamChat and accumulates content, thinking, and tool_calls", async () => {
+      globalThis.fetch = (async () => {
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"reasoning_content":"Solving..."}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"Answer is "}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"42"}}]}\n\n',
+          'data: [DONE]\n\n'
+        ]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const res = await (provider as any).chat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "What is the answer?" }]
+      });
+
+      assert.equal(res.done, true);
+      assert.equal(res.message?.content, "Answer is 42");
+      assert.equal(res.message?.thinking, "Solving...");
+    });
+  });
+
+  describe("Task 6: LLMProvider.generate method", () => {
+    it("OllamaProvider.generate sends to /api/generate and returns GenerateResult with thinking chunks", async () => {
+      let sentUrl = "";
+      let sentBody: any = null;
+      const thinkingChunks: string[] = [];
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        sentUrl = String(url);
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockNdjsonResponse([
+          JSON.stringify({ response: "<think>Analyzing", done: false }) + "\n",
+          JSON.stringify({ response: " problem</think>Here is the fix", done: false }) + "\n",
+          JSON.stringify({ response: "!", done: true, total_duration: 50_000_000, load_duration: 10_000_000 }) + "\n"
+        ]);
+      }) as any;
+
+      const provider = new OllamaProvider();
+      const res = await (provider as any).generate({
+        model: "swift-15-27b-mtp",
+        prompt: "Fix the bug",
+        options: { num_predict: 2048 },
+        reasoningEffort: "fast",
+        onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk)
+      }, "http://127.0.0.1:11434");
+
+      assert.equal(sentUrl, "http://127.0.0.1:11434/api/generate");
+      assert.equal(sentBody.model, "swift-15-27b-mtp");
+      assert.equal(sentBody.stream, true);
+      assert.equal(sentBody.options?.num_predict, 2048 + 1024); // requested + fast thinking budget
+      assert.ok(res.text.includes("Here is the fix!"));
+      assert.ok(thinkingChunks.length > 0);
+      assert.equal(res.totalDurationMs, 50);
+      assert.equal(res.loadDurationMs, 10);
+    });
+
+    it("LlamaCppProvider.generate sends to /v1/chat/completions with n_keep, max_tokens, signal, and thinking chunks", async () => {
+      let sentUrl = "";
+      let sentBody: any = null;
+      let receivedSignal: any = null;
+      const thinkingChunks: string[] = [];
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        sentUrl = String(url);
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        receivedSignal = init?.signal;
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"reasoning_content":"Drafting solution"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"const x = 1;"}}]}\n\n',
+          'data: [DONE]\n\n'
+        ]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const abortController = new AbortController();
+      const res = await (provider as any).generate({
+        model: "qwen-27b",
+        prompt: "Write a TS constant",
+        options: { num_predict: 512, n_keep: 128 },
+        signal: abortController.signal,
+        onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk)
+      }, "http://127.0.0.1:8080");
+
+      assert.equal(sentUrl, "http://127.0.0.1:8080/v1/chat/completions");
+      assert.equal(sentBody.model, "qwen-27b");
+      assert.equal(sentBody.max_tokens, 512);
+      assert.equal(sentBody.n_keep, 128);
+      assert.ok(receivedSignal);
+      assert.equal(res.text, "const x = 1;");
+      assert.equal(res.thinking, "Drafting solution");
+      assert.deepEqual(thinkingChunks, ["Drafting solution"]);
+    });
+  });
+
+  describe("Task 7: LLMProvider.listModels", () => {
+    it("OllamaProvider.listModels queries /api/tags and returns model list", async () => {
+      let capturedUrl = "";
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = String(url);
+        return new Response(JSON.stringify({
+          models: [{ name: "swift-15-27b-mtp:latest" }, { name: "all-minilm:latest" }]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }) as any;
+
+      const provider = new OllamaProvider();
+      const models = await (provider as any).listModels("http://127.0.0.1:11434");
+      assert.equal(capturedUrl, "http://127.0.0.1:11434/api/tags");
+      assert.deepEqual(models, ["swift-15-27b-mtp:latest", "all-minilm:latest"]);
+    });
+
+    it("LlamaCppProvider.listModels queries /v1/models and returns model list", async () => {
+      let capturedUrl = "";
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = String(url);
+        return new Response(JSON.stringify({
+          data: [{ id: "qwen-27b" }, { id: "deepseek-coder" }]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const models = await (provider as any).listModels("http://127.0.0.1:8080");
+      assert.equal(capturedUrl, "http://127.0.0.1:8080/v1/models");
+      assert.deepEqual(models, ["qwen-27b", "deepseek-coder"]);
+    });
+  });
+
+  describe("Task 8: LLMProvider.healthCheck & ensureResident", () => {
+    it("OllamaProvider.healthCheck returns true on 200 and false on network failure", async () => {
+      const provider = new OllamaProvider();
+
+      globalThis.fetch = (async () => new Response("{\"version\":\"0.5.1\"}", { status: 200 })) as any;
+      const ok = await (provider as any).healthCheck("http://127.0.0.1:11434");
+      assert.equal(ok, true);
+
+      globalThis.fetch = (async () => { throw new Error("Connection refused"); }) as any;
+      const fail = await (provider as any).healthCheck("http://127.0.0.1:11434");
+      assert.equal(fail, false);
+    });
+
+    it("LlamaCppProvider.healthCheck returns true on 200 and false on network failure", async () => {
+      const provider = new LlamaCppProvider();
+
+      globalThis.fetch = (async () => new Response("{\"status\":\"ok\"}", { status: 200 })) as any;
+      const ok = await (provider as any).healthCheck("http://127.0.0.1:8080");
+      assert.equal(ok, true);
+
+      globalThis.fetch = (async () => { throw new Error("Connection refused"); }) as any;
+      const fail = await (provider as any).healthCheck("http://127.0.0.1:8080");
+      assert.equal(fail, false);
+    });
+
+    it("OllamaProvider.ensureResident posts /api/generate with keep_alive: -1", async () => {
+      let capturedBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body || "{}"));
+        return new Response("{}", { status: 200 });
+      }) as any;
+
+      const provider = new OllamaProvider();
+      const success = await (provider as any).ensureResident("swift-15-27b-mtp", "http://127.0.0.1:11434");
+      assert.equal(success, true);
+      assert.equal(capturedBody.model, "swift-15-27b-mtp");
+      assert.equal(capturedBody.keep_alive, -1);
+    });
+
+    it("LlamaCppProvider.ensureResident checks health and returns true when server is ready", async () => {
+      let capturedUrl = "";
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        capturedUrl = String(url);
+        return new Response("{\"status\":\"ok\"}", { status: 200 });
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const success = await (provider as any).ensureResident("qwen-27b", "http://127.0.0.1:8080");
+      assert.equal(success, true);
+      assert.ok(capturedUrl.includes("/health"));
+    });
+  });
+
+  describe("Task 9: Call-site integration with workerPool and residency", () => {
+    it("createOllamaGenerate delegates to LlamaCppProvider.generate when resolveLLMEngine() is llamacpp", async () => {
+      process.env.LLM_ENGINE = "llamacpp";
+      let calledUrl = "";
+      let requestBody: any = null;
+
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        calledUrl = String(url);
+        requestBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"content":"export const pi = 3.14;"}}]}\n\n',
+          'data: [DONE]\n\n'
+        ]);
+      }) as any;
+
+      const { createOllamaGenerate } = await import("../lib/subagents/llmClient.js");
+      const generate = createOllamaGenerate({ baseUrl: "http://127.0.0.1:8080" });
+      const result = await generate({
+        model: "llama-model",
+        prompt: "export pi",
+        options: { num_predict: 256 }
+      });
+
+      assert.ok(calledUrl.includes("/v1/chat/completions"));
+      assert.equal(requestBody.max_tokens, 256);
+      assert.equal(result.text, "export const pi = 3.14;");
+    });
+
+    it("enforceResidency uses LlamaCppProvider.ensureResident when resolveLLMEngine() is llamacpp", async () => {
+      process.env.LLM_ENGINE = "llamacpp";
+      let healthChecked = false;
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        if (String(url).includes("/health")) {
+          healthChecked = true;
+          return new Response("{\"status\":\"ok\"}", { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }) as any;
+
+      const { enforceResidency, planResidency } = await import("../lib/subagents/residency.js");
+      const plan = planResidency({
+        roster: { builder: "swift-15-27b-mtp" },
+        modelSizes: { "swift-15-27b-mtp": 16 * 1024 ** 3 },
+        vramBudgetBytes: 24 * 1024 ** 3
+      });
+
+      const actions = await enforceResidency(plan, "http://127.0.0.1:8080");
+      assert.ok(healthChecked, "Must check health on llamacpp endpoint during residency enforcement");
+      assert.ok(actions.some((a) => a.includes("llamacpp")), "Actions must record llamacpp provider residency");
+    });
+  });
 });
+

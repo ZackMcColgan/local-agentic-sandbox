@@ -46,6 +46,7 @@ export interface ResidencyPlan {
 }
 
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
+import { getLLMProvider, resolveLLMEngine } from "../llm/provider";
 
 export const PINNED_KEEP_ALIVE = -1;
 export const TRANSIENT_KEEP_ALIVE = 0;
@@ -159,6 +160,19 @@ export async function enforceResidency(
   baseUrl: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
+  const engine = resolveLLMEngine();
+  if (engine === "llamacpp") {
+    const provider = getLLMProvider("llamacpp");
+    const actions: string[] = [];
+    for (const model of plan.pinned) {
+      const ok = await provider.ensureResident(model, baseUrl, { fetchImpl });
+      if (ok) {
+        actions.push(`ensured resident ${model} via llamacpp provider`);
+      }
+    }
+    return actions;
+  }
+
   const actions: string[] = [];
   const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
   const loadedNames = loaded.flatMap((m) => [m.name, m.baseName]);

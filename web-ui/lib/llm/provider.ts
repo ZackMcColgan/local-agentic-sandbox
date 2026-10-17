@@ -36,9 +36,45 @@ export interface LLMChatRequest {
   [key: string]: any;
 }
 
+export interface LLMGenerateRequest {
+  model: string;
+  prompt: string;
+  format?: "json";
+  options?: Record<string, unknown>;
+  keepAlive?: string | number;
+  signal?: AbortSignal;
+  onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+  scope?: string;
+  reasoningEffort?: string;
+}
+
+export interface LLMGenerateResult {
+  text: string;
+  thinking?: string;
+  model: string;
+  loadDurationMs?: number;
+  totalDurationMs?: number;
+  [key: string]: any;
+}
+
+export interface LLMProviderOptions {
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  scope?: string;
+}
+
 export interface LLMProvider {
   engine: LLMEngine;
   streamChat(baseUrl: string, payload: LLMChatRequest): AsyncGenerator<LLMStreamChunk>;
+  chat(baseUrl: string, payload: LLMChatRequest): Promise<LLMStreamChunk>;
+  generate(
+    req: LLMGenerateRequest,
+    baseUrl?: string,
+    options?: LLMProviderOptions
+  ): Promise<LLMGenerateResult>;
+  listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]>;
+  healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean>;
+  ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean>;
 }
 
 export function resolveLLMEngine(envEngine?: string): LLMEngine {
@@ -98,6 +134,212 @@ export class OllamaProvider implements LLMProvider {
       }
     } finally {
       reader.releaseLock();
+    }
+  }
+
+  async chat(baseUrl: string, payload: LLMChatRequest): Promise<LLMStreamChunk> {
+    let accumulatedContent = "";
+    let accumulatedThinking = "";
+    const toolCalls: any[] = [];
+    let lastChunk: LLMStreamChunk | undefined;
+
+    for await (const chunk of this.streamChat(baseUrl, payload)) {
+      lastChunk = chunk;
+      if (chunk.message?.content) accumulatedContent += chunk.message.content;
+      if (chunk.message?.thinking) accumulatedThinking += chunk.message.thinking;
+      if (Array.isArray(chunk.message?.tool_calls)) toolCalls.push(...chunk.message.tool_calls);
+    }
+
+    return {
+      ...lastChunk,
+      message: {
+        role: "assistant",
+        content: accumulatedContent,
+        ...(accumulatedThinking ? { thinking: accumulatedThinking } : {}),
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+      },
+      done: true
+    };
+  }
+
+  async generate(
+    req: LLMGenerateRequest,
+    baseUrl?: string,
+    options?: LLMProviderOptions
+  ): Promise<LLMGenerateResult> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 900_000;
+    const endpoint = `${effectiveBase}/api/generate`;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
+
+    const taskScope = req.scope || options?.scope;
+    const numCtx = taskScope?.toUpperCase() === "PROJECT" ? 8192 : 4096;
+    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "balanced") as string;
+    let thinkingBudget = 4096;
+    if (effort === "fast" || effort === "low") thinkingBudget = 1024;
+    else if (effort === "deep" || effort === "xhigh") thinkingBudget = 8192;
+    const effectiveNumPredict = requestedPredict + thinkingBudget;
+
+    const requestOptions = {
+      num_ctx: numCtx,
+      ...(req.options || {}),
+      num_predict: effectiveNumPredict
+    };
+
+    let res: Response;
+    try {
+      res = await fetchImpl(endpoint, {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: req.model,
+          prompt: req.prompt,
+          stream: true,
+          ...(req.format ? { format: req.format } : {}),
+          ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
+          options: requestOptions
+        })
+      });
+    } catch (err: any) {
+      throw new Error(`Model "${req.model}" unavailable at ${endpoint}: ${err?.message || String(err)}`);
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Model "${req.model}" unavailable at ${endpoint}: HTTP ${res.status} ${errText.slice(0, 200)}`);
+    }
+
+    let accumulatedText = "";
+    let thinkingText = "";
+    let insideThinking = false;
+    let loadDurationMs = 0;
+    let totalDurationMs = 0;
+
+    if (res.body && typeof (res.body as any).getReader === "function") {
+      const reader = (res.body as any).getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+              if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+              if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+              const part = chunk.response || "";
+              accumulatedText += part;
+
+              if (part.includes("<think>")) insideThinking = true;
+              if (insideThinking && !part.includes("</think>")) {
+                thinkingText += part;
+                req.onThinkingChunk?.(part, thinkingText);
+              } else if (insideThinking && part.includes("</think>")) {
+                const [beforeClosing] = part.split("</think>");
+                thinkingText += beforeClosing || "";
+                insideThinking = false;
+                if (beforeClosing) req.onThinkingChunk?.(beforeClosing, thinkingText);
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (buffer.trim()) {
+          try {
+            const chunk = JSON.parse(buffer);
+            if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+            if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+            const part = chunk.response || "";
+            accumulatedText += part;
+          } catch (_) {
+            accumulatedText += buffer;
+          }
+        }
+      } finally {
+        reader.releaseLock?.();
+      }
+    } else {
+      const rawText = await res.text();
+      const lines = rawText.split("\n").filter((l) => l.trim().length > 0);
+      for (const line of lines) {
+        try {
+          const chunk = JSON.parse(line);
+          accumulatedText += chunk.response || "";
+          if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
+          if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+        } catch {
+          accumulatedText += line;
+        }
+      }
+    }
+
+    const text = accumulatedText.trim();
+    if (!text) {
+      throw new Error(`Model "${req.model}" unavailable at ${endpoint}: empty response`);
+    }
+
+    return {
+      text,
+      thinking: thinkingText.trim() || undefined,
+      model: req.model,
+      loadDurationMs,
+      totalDurationMs
+    };
+  }
+
+  async listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 5000;
+    const res = await fetchImpl(`${effectiveBase}/api/tags`, {
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (!res.ok) {
+      throw new Error(`Ollama listModels failed: HTTP ${res.status}`);
+    }
+    const data: any = await res.json();
+    return (data.models || []).map((m: any) => m.name || "").filter(Boolean);
+  }
+
+  async healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 5000;
+    try {
+      const res = await fetchImpl(`${effectiveBase}/api/version`, {
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 30_000;
+    try {
+      const res = await fetchImpl(`${effectiveBase}/api/generate`, {
+        method: "POST",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, keep_alive: -1 })
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   }
 }
@@ -283,6 +525,219 @@ export class LlamaCppProvider implements LLMProvider {
       }
     } finally {
       reader.releaseLock();
+    }
+  }
+
+  async chat(baseUrl: string, payload: LLMChatRequest): Promise<LLMStreamChunk> {
+    let accumulatedContent = "";
+    let accumulatedThinking = "";
+    const toolCalls: any[] = [];
+    let lastChunk: LLMStreamChunk | undefined;
+
+    for await (const chunk of this.streamChat(baseUrl, payload)) {
+      lastChunk = chunk;
+      if (chunk.message?.content) accumulatedContent += chunk.message.content;
+      if (chunk.message?.thinking) accumulatedThinking += chunk.message.thinking;
+      if (Array.isArray(chunk.message?.tool_calls)) toolCalls.push(...chunk.message.tool_calls);
+    }
+
+    return {
+      ...lastChunk,
+      message: {
+        role: "assistant",
+        content: accumulatedContent,
+        ...(accumulatedThinking ? { thinking: accumulatedThinking } : {}),
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+      },
+      done: true
+    };
+  }
+
+  async generate(
+    req: LLMGenerateRequest,
+    baseUrl?: string,
+    options?: LLMProviderOptions
+  ): Promise<LLMGenerateResult> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const targetUrl = `${effectiveBase}/v1/chat/completions`;
+    const timeoutMs = options?.timeoutMs || 900_000;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
+
+    // Prompt-prefix protection: compute n_keep so llama-server never evicts prompt context
+    let nKeep: number | undefined = typeof req.options?.n_keep === "number" ? req.options.n_keep : undefined;
+    if (nKeep === undefined && req.prompt) {
+      const tokens = estimateTokens(req.prompt.slice(0, 500));
+      nKeep = Math.min(2048, Math.max(64, tokens));
+    }
+
+    const maxTokens = (req.options?.num_predict as number) ?? (req.options?.max_tokens as number) ?? 2048;
+
+    const requestBody: Record<string, any> = {
+      model: req.model,
+      messages: [{ role: "user", content: req.prompt }],
+      stream: true,
+      max_tokens: maxTokens
+    };
+
+    if (nKeep !== undefined) {
+      requestBody.n_keep = nKeep;
+    }
+    if (req.options?.temperature !== undefined) {
+      requestBody.temperature = req.options.temperature;
+    }
+
+    const startTime = Date.now();
+    let res: Response;
+    try {
+      res = await fetchImpl(targetUrl, {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (err: any) {
+      throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: HTTP ${res.status} ${errText.slice(0, 200)}`);
+    }
+
+    let accumulatedText = "";
+    let thinkingText = "";
+    let insideThinking = false;
+
+    if (res.body && typeof (res.body as any).getReader === "function") {
+      const reader = (res.body as any).getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+            const dataStr = trimmed.replace(/^data:\s*/, "");
+            if (dataStr === "[DONE]") break;
+
+            let parsed: any;
+            try {
+              parsed = JSON.parse(dataStr);
+            } catch {
+              continue;
+            }
+
+            const choice = parsed.choices?.[0];
+            if (!choice) continue;
+
+            const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
+            if (reasoning) {
+              thinkingText += reasoning;
+              req.onThinkingChunk?.(reasoning, thinkingText);
+            }
+
+            const content = choice.delta?.content;
+            if (content) {
+              accumulatedText += content;
+              if (content.includes("<think>")) insideThinking = true;
+              if (insideThinking && !content.includes("</think>")) {
+                thinkingText += content;
+                req.onThinkingChunk?.(content, thinkingText);
+              } else if (insideThinking && content.includes("</think>")) {
+                const [beforeClosing] = content.split("</think>");
+                thinkingText += beforeClosing || "";
+                insideThinking = false;
+                if (beforeClosing) req.onThinkingChunk?.(beforeClosing, thinkingText);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock?.();
+      }
+    } else {
+      const rawText = await res.text();
+      const lines = rawText.split("\n").filter((l) => l.trim().startsWith("data:"));
+      for (const line of lines) {
+        const dataStr = line.replace(/^data:\s*/, "").trim();
+        if (dataStr === "[DONE]") break;
+        try {
+          const parsed = JSON.parse(dataStr);
+          const choice = parsed.choices?.[0];
+          if (choice) {
+            const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
+            if (reasoning) {
+              thinkingText += reasoning;
+              req.onThinkingChunk?.(reasoning, thinkingText);
+            }
+            const content = choice.delta?.content;
+            if (content) accumulatedText += content;
+          }
+        } catch {}
+      }
+    }
+
+    const text = accumulatedText.trim();
+    if (!text) {
+      throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: empty response`);
+    }
+
+    return {
+      text,
+      thinking: thinkingText.trim() || undefined,
+      model: req.model,
+      totalDurationMs: Date.now() - startTime
+    };
+  }
+
+  async listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 5000;
+    const res = await fetchImpl(`${effectiveBase}/v1/models`, {
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (!res.ok) {
+      throw new Error(`llama.cpp listModels failed: HTTP ${res.status}`);
+    }
+    const data: any = await res.json();
+    return (data.data || []).map((m: any) => m.id || m.name || "").filter(Boolean);
+  }
+
+  async healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 5000;
+    try {
+      const res = await fetchImpl(`${effectiveBase}/health`, {
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+    const fetchImpl = options?.fetchImpl || globalThis.fetch;
+    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const timeoutMs = options?.timeoutMs || 15000;
+    try {
+      const res = await fetchImpl(`${effectiveBase}/health`, {
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   }
 }

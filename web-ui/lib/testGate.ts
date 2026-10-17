@@ -191,7 +191,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/residency"),
-    tests: ["tests/workerHonesty.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/vramResidencyAndMultiFile.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),

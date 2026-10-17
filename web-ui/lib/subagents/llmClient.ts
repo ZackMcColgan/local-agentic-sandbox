@@ -94,6 +94,8 @@ export function getThinkingBudget(effort?: string): number {
   }
 }
 
+import { getLLMProvider, resolveLLMEngine } from "../llm/provider";
+
 /**
  * Creates a GenerateFn bound to an Ollama endpoint.
  * Network errors, non-2xx responses, timeouts and empty responses all throw ModelUnavailableError.
@@ -104,6 +106,26 @@ export function createOllamaGenerate(options?: {
   fetchImpl?: typeof fetch;
   scope?: string;
 }): GenerateFn {
+  const engine = resolveLLMEngine();
+  if (engine === "llamacpp") {
+    const provider = getLLMProvider("llamacpp");
+    return async (req: GenerateRequest): Promise<GenerateResult> => {
+      try {
+        return await provider.generate(req, options?.baseUrl, {
+          timeoutMs: options?.timeoutMs,
+          fetchImpl: options?.fetchImpl,
+          scope: options?.scope || req.scope
+        });
+      } catch (err: any) {
+        throw new ModelUnavailableError(
+          req.model,
+          options?.baseUrl || process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080",
+          err?.message || String(err)
+        );
+      }
+    };
+  }
+
   const baseUrl = resolveOllamaBaseUrl(options?.baseUrl);
   const timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
   const fetchImpl = options?.fetchImpl || fetch;
