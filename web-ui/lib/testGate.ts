@@ -116,7 +116,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sessionIntegrity.test.ts",
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/skillsProposeApprove.test.ts"
     ]
   },
   {
@@ -292,7 +293,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Human Skill Gates (Sprint 3)
   {
     match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
-    tests: ["tests/humanSkillGates.test.ts"]
+    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts"]
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
