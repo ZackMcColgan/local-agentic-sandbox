@@ -142,8 +142,41 @@ export function estimateTokens(input: any): number {
   return Math.ceil(String(input).length / 4);
 }
 
+/**
+ * Merges a system directive into messages[0] if it is a system message,
+ * or inserts a system message at index 0 if not present.
+ * Guarantees role === "system" never appears at index > 0.
+ */
+export function mergeSystemDirective<T extends { role?: string; content?: any }>(
+  messages: T[],
+  directive: string
+): T[] {
+  if (!directive || !directive.trim()) {
+    return messages;
+  }
+  const trimmed = directive.trim();
+
+  if (messages.length > 0 && messages[0]?.role === "system") {
+    const existing = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    if (!existing.includes(trimmed)) {
+      messages[0] = {
+        ...messages[0],
+        content: existing ? `${existing}\n\n${trimmed}` : trimmed
+      };
+    }
+  } else {
+    messages.unshift({
+      role: "system",
+      content: trimmed
+    } as unknown as T);
+  }
+
+  return messages;
+}
+
 export interface FitContextOptions {
   maxContentTokens?: number;
+  tools?: any[];
 }
 
 /**
@@ -163,10 +196,45 @@ export function fitContextWindow(
     return [];
   }
 
-  const maxTokens = options?.maxContentTokens ?? 6000;
+  // 1. Enforce invariant: role === "system" ONLY exists at index 0.
+  // Consolidate any stray system messages at index > 0 into index 0.
+  let consolidatedSystemContent = "";
+  const hasLeadingSystem = messages[0]?.role === "system";
+  if (hasLeadingSystem) {
+    consolidatedSystemContent = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+  }
 
-  // Clone messages so canonical history is never mutated
-  const working: any[] = messages.map((m) => ({ ...m }));
+  const nonSystemMessages: any[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (i === 0 && hasLeadingSystem) {
+      continue;
+    }
+    if (m?.role === "system") {
+      const extra = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
+      if (extra.trim() && !consolidatedSystemContent.includes(extra.trim())) {
+        consolidatedSystemContent = consolidatedSystemContent ? `${consolidatedSystemContent}\n\n${extra.trim()}` : extra.trim();
+      }
+    } else {
+      nonSystemMessages.push({ ...m });
+    }
+  }
+
+  const working: any[] = [];
+  if (hasLeadingSystem || consolidatedSystemContent) {
+    working.push({
+      role: "system",
+      content: consolidatedSystemContent
+    });
+  }
+  working.push(...nonSystemMessages);
+
+  // 2. Budget reservation for tool schemas
+  let maxTokens = options?.maxContentTokens ?? 6000;
+  if (options?.tools && Array.isArray(options.tools) && options.tools.length > 0) {
+    const toolSchemaTokens = Math.min(2500, estimateTokens(JSON.stringify(options.tools)));
+    maxTokens = Math.max(2000, maxTokens - toolSchemaTokens);
+  }
 
   if (estimateTokens(working) <= maxTokens) {
     return working;
@@ -324,15 +392,15 @@ export async function runChatToolLoop({
   while (round < maxToolRounds) {
     const isFinalRound = round === maxToolRounds - 1;
     if (isFinalRound) {
-      conversationMessages.push({
-        role: "system",
-        content: FINAL_ROUND_SYNTHESIS_DIRECTIVE
-      });
+      mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
 
     const payload: any = {
       model: activeModel,
-      messages: fitContextWindow(conversationMessages, { maxContentTokens }),
+      messages: fitContextWindow(conversationMessages, {
+        maxContentTokens,
+        tools: isFinalRound ? undefined : ollamaTools
+      }),
       keep_alive: -1,
       options: computeModelOptions(activeModel, effectiveReasoningEffort)
     };

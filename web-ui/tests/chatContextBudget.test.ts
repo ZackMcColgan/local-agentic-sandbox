@@ -357,14 +357,16 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         "Final round payload MUST omit tools so model cannot call more tools"
       );
 
-      // Final round MUST contain the exact synthesis directive in system messages
-      const synthesisMsg = finalPayload.messages.find(
-        (m: any) => m.role === "system" && m.content === FINAL_ROUND_SYNTHESIS_DIRECTIVE
-      );
+      // Final round MUST contain the synthesis directive in system message at index 0
+      const synthesisMsg = finalPayload.messages[0];
+      assert.equal(synthesisMsg?.role, "system");
       assert.ok(
-        synthesisMsg,
-        `Final round payload must include the synthesis directive: '${FINAL_ROUND_SYNTHESIS_DIRECTIVE}'`
+        synthesisMsg?.content.includes(FINAL_ROUND_SYNTHESIS_DIRECTIVE),
+        `Final round payload must include the synthesis directive in system message`
       );
+      // Invariant: zero system messages at index > 0
+      const midSystem = finalPayload.messages.filter((m: any, idx: number) => idx > 0 && m.role === "system");
+      assert.equal(midSystem.length, 0, "Final round payload must have zero system messages at index > 0");
     });
 
     it("verifies chat/route.ts contains final round forced synthesis check and omits tools", () => {
@@ -379,8 +381,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       assert.ok(
         content.includes("FINAL_ROUND_SYNTHESIS_DIRECTIVE") ||
+        content.includes("buildSynthesisDirective") ||
         content.includes("You have gathered enough information. Synthesize your final answer now"),
-        "chat/route.ts must push final round synthesis directive"
+        "chat/route.ts must handle final round synthesis directive"
       );
 
       assert.ok(
@@ -390,5 +393,158 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
     });
   });
+
+  describe("Task 3: Jinja 500 Elimination & System Message Invariant", () => {
+    it("mergeSystemDirective never places a system message at index > 0", async () => {
+      const { mergeSystemDirective, WEB_BUDGET_EXHAUSTED_DIRECTIVE } = await import("../lib/contextBudget.js") as any;
+      assert.ok(typeof mergeSystemDirective === "function", "mergeSystemDirective must be exported");
+
+      const messages = [
+        { role: "system", content: "Base system instructions." },
+        { role: "user", content: "What is the weather?" },
+        { role: "tool", content: "Sunny 75F" }
+      ];
+
+      mergeSystemDirective(messages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
+
+      assert.equal(messages[0].role, "system");
+      assert.ok(messages[0].content.includes("Base system instructions."));
+      assert.ok(messages[0].content.includes(WEB_BUDGET_EXHAUSTED_DIRECTIVE));
+
+      const trailingSystem = messages.filter((m, idx) => idx > 0 && m.role === "system");
+      assert.equal(trailingSystem.length, 0, "No system messages allowed at index > 0");
+    });
+
+    it("mergeSystemDirective inserts at index 0 when no leading system message exists", async () => {
+      const { mergeSystemDirective } = await import("../lib/contextBudget.js") as any;
+
+      const messages = [
+        { role: "user", content: "Hello" }
+      ];
+
+      mergeSystemDirective(messages, "Directive A");
+
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0].role, "system");
+      assert.equal(messages[0].content, "Directive A");
+      assert.equal(messages[1].role, "user");
+    });
+
+    it("mergeSystemDirective does not duplicate directive when called multiple times with same text", async () => {
+      const { mergeSystemDirective } = await import("../lib/contextBudget.js") as any;
+
+      const messages = [
+        { role: "system", content: "Initial prompt" }
+      ];
+
+      mergeSystemDirective(messages, "Unique Directive");
+      mergeSystemDirective(messages, "Unique Directive");
+
+      const occurrences = (messages[0].content.match(/Unique Directive/g) || []).length;
+      assert.equal(occurrences, 1, "Directive must not be duplicated in system prompt");
+    });
+
+    it("fitContextWindow consolidates stray mid-array system messages into index 0", async () => {
+      const strayMessages = [
+        { role: "system", content: "Initial prompt" },
+        { role: "user", content: "Question" },
+        { role: "assistant", content: "Working..." },
+        { role: "system", content: "Mid-array directive 1" },
+        { role: "tool", content: "Tool output" },
+        { role: "system", content: "Mid-array directive 2" }
+      ];
+
+      const fitted = fitContextWindow(strayMessages);
+
+      assert.equal(fitted[0].role, "system");
+      assert.ok(fitted[0].content.includes("Initial prompt"));
+      assert.ok(fitted[0].content.includes("Mid-array directive 1"));
+      assert.ok(fitted[0].content.includes("Mid-array directive 2"));
+
+      const nonIndex0System = fitted.filter((m, idx) => idx > 0 && m.role === "system");
+      assert.equal(nonIndex0System.length, 0, "fitContextWindow must eliminate all system messages at index > 0");
+    });
+
+    it("fitContextWindow reserves tool schema token budget when tools option is provided", () => {
+      // 10 mock tools totaling ~2,000 tokens
+      const mockTools = Array.from({ length: 10 }, (_, i) => ({
+        type: "function",
+        function: {
+          name: `mock_tool_${i}`,
+          description: `Description for mock tool ${i} with extended schema details to simulate real MCP definitions.`,
+          parameters: {
+            type: "object",
+            properties: {
+              param1: { type: "string", description: "First parameter description" },
+              param2: { type: "number", description: "Second parameter description" },
+              param3: { type: "boolean", description: "Third parameter description" }
+            },
+            required: ["param1"]
+          }
+        }
+      }));
+
+      // Generate messages that fit within 6,000 tokens without tools
+      const messages = [
+        { role: "system", content: "System header" },
+        { role: "user", content: "User question" },
+        { role: "tool", name: "tool_1", content: "x".repeat(18000) } // ~4,500 tokens
+      ];
+
+      // Without tools: 4,500 tokens fits in default 6,000 maxContentTokens
+      const fittedWithoutTools = fitContextWindow(messages, { maxContentTokens: 6000 });
+      const toolMsgWithout = fittedWithoutTools.find((m) => m.role === "tool");
+      assert.ok(!toolMsgWithout?.content.includes(EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER));
+
+      // With tools: tools schema takes ~1,500-2,000 tokens, so available message budget must shrink
+      const fittedWithTools = fitContextWindow(messages, { maxContentTokens: 6000, tools: mockTools } as any);
+      const totalFittedTokens = estimateTokens(fittedWithTools);
+      const toolSchemaTokens = estimateTokens(JSON.stringify(mockTools));
+
+      assert.ok(
+        totalFittedTokens + toolSchemaTokens <= 6000,
+        `Messages (${totalFittedTokens}) + Tools (${toolSchemaTokens}) must not exceed 6,000 budget`
+      );
+    });
+
+    it("estimateTokens includes tool_calls on assistant messages", () => {
+      const msgWithoutCalls = {
+        role: "assistant",
+        content: "Here is the call:"
+      };
+      const msgWithCalls = {
+        role: "assistant",
+        content: "Here is the call:",
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "workspace_write_file",
+              arguments: JSON.stringify({ path: "test.ts", content: "const x = 1;" })
+            }
+          }
+        ]
+      };
+
+      const tokensWithout = estimateTokens(msgWithoutCalls);
+      const tokensWith = estimateTokens(msgWithCalls);
+
+      assert.ok(tokensWith > tokensWithout + 20, "estimateTokens must account for assistant tool_calls JSON");
+    });
+
+    it("verifies web-ui/app/api/chat/route.ts has ZERO .push({ role: 'system' occurrences", () => {
+      const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
+      const content = fs.readFileSync(chatRoutePath, "utf8");
+
+      const matches = content.match(/\.push\(\s*\{\s*role:\s*["']system["']/g);
+      assert.equal(
+        matches,
+        null,
+        `route.ts must not push system messages directly mid-array, found: ${matches?.length} matches`
+      );
+    });
+  });
 });
+
 

@@ -27,7 +27,8 @@ import {
   isWebResearchTool,
   filterToolsForWebBudget,
   buildSynthesisDirective,
-  shouldRunPostToolSynthesis
+  shouldRunPostToolSynthesis,
+  mergeSystemDirective
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -434,20 +435,20 @@ CRITICAL INSTRUCTIONS:
 
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
           if (round === MAX_TOOL_ROUNDS - 1) {
-            conversationMessages.push({
-              role: "system",
-              content: buildSynthesisDirective(userPrompt, true)
-            });
+            mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
           }
+
+          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
 
           const ollamaPayload: any = {
             model: activeModel,
-            messages: fitContextWindow(conversationMessages),
+            messages: fitContextWindow(conversationMessages, {
+              tools: round === MAX_TOOL_ROUNDS - 1 ? undefined : roundTools
+            }),
             keep_alive: -1,
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
-          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
             ollamaPayload.tools = roundTools;
           }
@@ -598,10 +599,7 @@ CRITICAL INSTRUCTIONS:
             if (isWebResearchTool(toolName, target.tier)) {
               if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
                 webBudgetNoticeAdded = true;
-                conversationMessages.push({
-                  role: "system",
-                  content: WEB_BUDGET_EXHAUSTED_DIRECTIVE
-                });
+                mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
               }
             }
 
@@ -623,10 +621,10 @@ CRITICAL INSTRUCTIONS:
                 model: activeModel,
                 reasoning_effort: effectiveReasoningEffort
               });
-              conversationMessages.push({
-                role: "system",
-                content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
-              });
+              mergeSystemDirective(
+                conversationMessages,
+                "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+              );
             }
           }
         }
