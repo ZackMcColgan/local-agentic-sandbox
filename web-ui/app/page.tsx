@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ChatStream, ChatMessage } from "@/components/ChatStream";
 import { ThreadsSidebar } from "@/components/ThreadsSidebar";
 import { ModelBottomSheet } from "@/components/ModelBottomSheet";
@@ -71,6 +71,7 @@ export default function Home() {
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
+  const skipThreadLoadRef = useRef<string | null>(null);
 
   const handlePreviewWorkspaceFile = async (filePath: string) => {
     try {
@@ -299,7 +300,9 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         if (data.activeTask) {
-          setActiveTask(data.activeTask);
+          if (!selectedThreadId && data.activeTask.status === "active") {
+            setActiveTask(data.activeTask);
+          }
           if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
             const detailRes = await fetch(`/api/tasks?taskId=${data.activeTask.taskId}`);
             if (detailRes.ok) {
@@ -334,6 +337,11 @@ export default function Home() {
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
     if (!selectedThreadId) return;
+
+    if (skipThreadLoadRef.current === selectedThreadId) {
+      skipThreadLoadRef.current = null;
+      return;
+    }
 
     const loadSelectedThread = async () => {
       try {
@@ -585,6 +593,8 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         if (data.thread) {
+          skipThreadLoadRef.current = data.thread.id;
+          setActiveTask(null);
           setThreads((prev) => [data.thread, ...prev]);
           setSelectedThreadId(data.thread.id);
           try {

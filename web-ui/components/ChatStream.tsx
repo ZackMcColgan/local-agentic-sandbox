@@ -521,6 +521,25 @@ export function ChatStream({
       let currentTraces: ExecutionTraceItem[] = [];
       let currentModel = activeModel;
 
+      const upsertAssistant = (
+        prev: ChatMessage[],
+        patch: (existing: ChatMessage) => ChatMessage
+      ): ChatMessage[] => {
+        const exists = prev.some((msg) => msg.id === assistantMsgId);
+        const base: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: currentModel
+        };
+        if (!exists) {
+          return [...prev, patch(base)];
+        }
+        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -544,42 +563,30 @@ export function ChatStream({
               setStreamStatus(event.status);
             } else if (event.type === "thought") {
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        thought: event.thought
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  thought: event.thought
+                }))
               );
             } else if (event.type === "token") {
               accumulatedRawContent += event.content || "";
               const parsed = parseThinkingAndContent(accumulatedRawContent);
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        content: parsed.content,
-                        thought: parsed.thought,
-                        modelUsed: currentModel
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: parsed.thought,
+                  modelUsed: currentModel
+                }))
               );
             } else if (event.type === "trace") {
               currentTraces = [...currentTraces, event.trace];
               onTracesUpdate(currentTraces);
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        traces: currentTraces
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  traces: currentTraces
+                }))
               );
             } else if (event.type === "done") {
               const durationMs = Math.round(performance.now() - startTime);
@@ -611,18 +618,14 @@ export function ChatStream({
               }
 
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? {
-                        ...msg,
-                        content: parsed.content,
-                        thought: finalThought,
-                        traces: event.traces || currentTraces,
-                        modelUsed: finalModel,
-                        durationMs: event.durationMs || durationMs
-                      }
-                    : msg
-                )
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: finalThought,
+                  traces: event.traces || currentTraces,
+                  modelUsed: finalModel,
+                  durationMs: event.durationMs || durationMs
+                }))
               );
             } else if (event.type === "error") {
               throw new Error(event.error || "Streaming error encountered");
@@ -685,7 +688,7 @@ export function ChatStream({
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
   const lastLinkedTaskMsgIndex = deduplicatedMessages
-    .map((m, i) => (m.taskId || (activeTask && i === deduplicatedMessages.length - 1)) ? i : -1)
+    .map((m, i) => m.taskId ? i : -1)
     .reduce((max, i) => Math.max(max, i), -1);
 
   return (

@@ -130,3 +130,49 @@ test("SvgViewer.tsx implements mobile-safe flex-wrap toolbar", () => {
     "SvgViewer header toolbar must support flex-wrap and responsive padding"
   );
 });
+
+test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition from clobbering in-flight assistant stream", () => {
+  const chatStreamPath = path.resolve(__dirname, "../components/ChatStream.tsx");
+  const chatStreamContent = fs.readFileSync(chatStreamPath, "utf-8");
+
+  // 1. ChatStream defines/uses upsertAssistant (or prev.some(msg => msg.id === assistantMsgId)) for in-flight resilience
+  assert.ok(
+    chatStreamContent.includes("upsertAssistant") &&
+    (chatStreamContent.includes("exists") || chatStreamContent.includes("prev.some")),
+    "ChatStream upsertAssistant must verify existence and re-insert assistant message if wiped"
+  );
+
+  // 2. ChatStream does NOT unconditionally treat activeTask && i === deduplicatedMessages.length - 1 as lastLinkedTaskMsgIndex
+  assert.ok(
+    !chatStreamContent.includes("activeTask && i === deduplicatedMessages.length - 1"),
+    "ChatStream must not unconditionally mark the last message of any thread as a task host"
+  );
+  assert.ok(
+    chatStreamContent.includes("lastLinkedTaskMsgIndex = deduplicatedMessages") &&
+    chatStreamContent.includes("m.taskId ? i : -1"),
+    "ChatStream lastLinkedTaskMsgIndex must only map messages with explicit m.taskId"
+  );
+
+  // 3. page.tsx tracks auto-created threads using skipThreadLoadRef and resets activeTask on thread creation
+  const pagePath = path.resolve(__dirname, "../app/page.tsx");
+  const pageContent = fs.readFileSync(pagePath, "utf-8");
+
+  assert.ok(
+    pageContent.includes("skipThreadLoadRef"),
+    "page.tsx must define skipThreadLoadRef to prevent concurrent thread loads from wiping in-flight streams"
+  );
+  assert.ok(
+    pageContent.includes("skipThreadLoadRef.current = data.thread.id") ||
+    pageContent.includes("skipThreadLoadRef.current = "),
+    "page.tsx handleEnsureThread must set skipThreadLoadRef when creating a thread"
+  );
+  assert.ok(
+    pageContent.includes("setActiveTask(null)") && pageContent.includes("handleEnsureThread"),
+    "page.tsx handleEnsureThread must reset activeTask to null"
+  );
+  assert.ok(
+    pageContent.includes("skipThreadLoadRef.current === selectedThreadId"),
+    "page.tsx useEffect([selectedThreadId]) must bypass loadSelectedThread when skipThreadLoadRef matches"
+  );
+});
+
