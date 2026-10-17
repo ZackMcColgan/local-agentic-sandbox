@@ -58,6 +58,10 @@ spec:
               value: "swift-15-27b-mtp"
             - name: SUBAGENT_MODEL
               value: "swift-15-27b-mtp"
+            - name: LLM_ENGINE
+              value: "llamacpp"
+            - name: LLAMACPP_BASE_URL
+              value: "http://ollama-service:11434"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
           securityContext:

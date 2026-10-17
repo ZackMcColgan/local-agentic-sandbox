@@ -344,6 +344,81 @@ export class OllamaProvider implements LLMProvider {
   }
 }
 
+/**
+ * Normalizes conversation messages for OpenAI-compatible engines (/v1/chat/completions):
+ * 1. Consolidates any stray role === "system" at index > 0 into index 0.
+ * 2. Normalizes assistant tool_calls: ensures id, type: "function", and arguments as JSON string.
+ * 3. Assigns matching tool_call_id to subsequent role === "tool" messages.
+ */
+export function normalizeOpenAIMessages(messages: any[]): any[] {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  // 1. Consolidate stray system messages into index 0
+  let consolidatedSystem = "";
+  const hasLeadingSystem = messages[0]?.role === "system";
+  if (hasLeadingSystem) {
+    consolidatedSystem = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+  }
+
+  const nonSystem: any[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (i === 0 && hasLeadingSystem) continue;
+    if (m?.role === "system") {
+      const extra = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
+      if (extra.trim() && !consolidatedSystem.includes(extra.trim())) {
+        consolidatedSystem = consolidatedSystem ? `${consolidatedSystem}\n\n${extra.trim()}` : extra.trim();
+      }
+    } else {
+      nonSystem.push(m);
+    }
+  }
+
+  const reordered: any[] = [];
+  if (hasLeadingSystem || consolidatedSystem) {
+    reordered.push({ role: "system", content: consolidatedSystem });
+  }
+  reordered.push(...nonSystem);
+
+  // 2. Track tool calls and assign IDs
+  const pendingToolCallIds: string[] = [];
+  return reordered.map((msg, msgIdx) => {
+    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+      pendingToolCallIds.length = 0; // reset for this assistant turn
+      const normalizedCalls = msg.tool_calls.map((tc: any, tcIdx: number) => {
+        const id = tc.id || `call_${msgIdx}_${tcIdx}`;
+        pendingToolCallIds.push(id);
+        const rawArgs = tc.function?.arguments;
+        const argsStr = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs ?? {});
+        return {
+          id,
+          type: "function",
+          function: {
+            name: tc.function?.name || "unknown",
+            arguments: argsStr
+          }
+        };
+      });
+      return {
+        ...msg,
+        content: msg.content ?? "",
+        tool_calls: normalizedCalls
+      };
+    }
+
+    if (msg?.role === "tool") {
+      const matchedId = msg.tool_call_id || pendingToolCallIds.shift() || `call_${msgIdx}_0`;
+      return {
+        ...msg,
+        tool_call_id: matchedId,
+        content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content ?? "")
+      };
+    }
+
+    return msg;
+  });
+}
+
 export class LlamaCppProvider implements LLMProvider {
   engine: LLMEngine = "llamacpp";
 
@@ -361,7 +436,7 @@ export class LlamaCppProvider implements LLMProvider {
 
     const requestBody: Record<string, any> = {
       stream: true,
-      messages: payload.messages
+      messages: normalizeOpenAIMessages(payload.messages || [])
     };
 
     if (payload.model) {
@@ -380,11 +455,30 @@ export class LlamaCppProvider implements LLMProvider {
       requestBody.max_tokens = payload.options.num_predict;
     }
 
-    const res = await fetch(targetUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
-    });
+    let res: Response;
+    try {
+      res = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (err: any) {
+      const cleanBase = (baseUrl || "").replace(/\/$/, "");
+      if (effectiveBase !== cleanBase && cleanBase) {
+        const fallbackUrl = `${cleanBase}/v1/chat/completions`;
+        try {
+          res = await fetch(fallbackUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody)
+          });
+        } catch {
+          throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+        }
+      } else {
+        throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+      }
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -576,7 +670,7 @@ export class LlamaCppProvider implements LLMProvider {
 
     const requestBody: Record<string, any> = {
       model: req.model,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: normalizeOpenAIMessages([{ role: "user", content: req.prompt }]),
       stream: true,
       max_tokens: maxTokens
     };
@@ -598,7 +692,22 @@ export class LlamaCppProvider implements LLMProvider {
         body: JSON.stringify(requestBody)
       });
     } catch (err: any) {
-      throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+      const cleanBase = (baseUrl || "").replace(/\/$/, "");
+      if (effectiveBase !== cleanBase && cleanBase) {
+        const fallbackUrl = `${cleanBase}/v1/chat/completions`;
+        try {
+          res = await fetchImpl(fallbackUrl, {
+            method: "POST",
+            signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody)
+          });
+        } catch {
+          throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+        }
+      } else {
+        throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+      }
     }
 
     if (!res.ok) {

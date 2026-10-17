@@ -535,5 +535,170 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(actions.some((a) => a.includes("llamacpp")), "Actions must record llamacpp provider residency");
     });
   });
+
+  describe("Task 10: Multi-Turn OpenAI Tool Message Normalization & K8s Manifests", () => {
+    it("normalizeOpenAIMessages formats assistant tool_calls and tool messages correctly", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+      assert.ok(typeof normalizeOpenAIMessages === "function", "normalizeOpenAIMessages must be exported");
+
+      const inputMessages = [
+        { role: "system", content: "You are an assistant." },
+        { role: "user", content: "Search weather" },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              function: {
+                name: "search_web",
+                arguments: { query: "weather" }
+              }
+            }
+          ]
+        },
+        {
+          role: "tool",
+          name: "search_web",
+          content: "72F and sunny"
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+
+      assert.equal(normalized.length, 4);
+      // Assistant message normalization
+      const assistantMsg = normalized[2];
+      assert.equal(assistantMsg.role, "assistant");
+      assert.ok(Array.isArray(assistantMsg.tool_calls));
+      assert.equal(assistantMsg.tool_calls.length, 1);
+      const tc = assistantMsg.tool_calls[0];
+      assert.equal(tc.type, "function");
+      assert.ok(tc.id, "Tool call must have an ID");
+      assert.equal(typeof tc.function.arguments, "string");
+      assert.deepEqual(JSON.parse(tc.function.arguments), { query: "weather" });
+
+      // Tool message normalization
+      const toolMsg = normalized[3];
+      assert.equal(toolMsg.role, "tool");
+      assert.equal(toolMsg.tool_call_id, tc.id, "Tool message must have tool_call_id matching preceding assistant tool_call");
+      assert.equal(toolMsg.content, "72F and sunny");
+    });
+
+    it("normalizeOpenAIMessages consolidates stray system messages at index > 0 into index 0", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const strayMessages = [
+        { role: "system", content: "Initial system prompt" },
+        { role: "user", content: "Hello" },
+        { role: "system", content: "Mid-array directive" },
+        { role: "user", content: "Next prompt" }
+      ];
+
+      const normalized = normalizeOpenAIMessages(strayMessages);
+
+      assert.equal(normalized[0].role, "system");
+      assert.ok(normalized[0].content.includes("Initial system prompt"));
+      assert.ok(normalized[0].content.includes("Mid-array directive"));
+
+      const midSystem = normalized.filter((m: any, idx: number) => idx > 0 && m.role === "system");
+      assert.equal(midSystem.length, 0, "No mid-array system messages allowed after normalization");
+    });
+
+    it("LlamaCppProvider.streamChat normalizes messages before sending to /v1/chat/completions", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(['data: [DONE]\n\n']);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const round2Messages = [
+        { role: "system", content: "Base system" },
+        { role: "user", content: "Find files" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              function: {
+                name: "workspace_read_file",
+                arguments: { path: "README.md" }
+              }
+            }
+          ]
+        },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          content: "# README"
+        }
+      ];
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: round2Messages })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      const assistantMsg = sentBody.messages[2];
+      assert.equal(assistantMsg.tool_calls[0].type, "function");
+      assert.equal(typeof assistantMsg.tool_calls[0].function.arguments, "string");
+      assert.equal(sentBody.messages[3].tool_call_id, assistantMsg.tool_calls[0].id);
+    });
+
+    it("LlamaCppProvider streamChat retries against baseUrl if llamacppBaseUrl fails with connection error", async () => {
+      process.env.LLAMACPP_BASE_URL = "http://bad-host:11435";
+      const attemptedUrls: string[] = [];
+
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        attemptedUrls.push(String(url));
+        if (String(url).includes("bad-host")) {
+          throw new Error("fetch failed (ECONNREFUSED)");
+        }
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"content":"Recovered!"}}]}\n\n',
+          'data: [DONE]\n\n'
+        ]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const chunks: any[] = [];
+      for await (const chunk of provider.streamChat("http://ollama-service:11434", { messages: [] })) {
+        chunks.push(chunk);
+      }
+
+      assert.ok(attemptedUrls.some((u) => u.includes("bad-host:11435")), "Must first attempt LLAMACPP_BASE_URL");
+      assert.ok(attemptedUrls.some((u) => u.includes("ollama-service:11434")), "Must fall back to baseUrl");
+      assert.equal(chunks.some((c) => c.message?.content === "Recovered!"), true);
+    });
+
+    it("LlamaCppProvider throws error with engine identifier (llama.cpp engine returned)", async () => {
+      globalThis.fetch = (async () => {
+        return new Response("Internal Server Error", { status: 500 });
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      await assert.rejects(
+        async () => {
+          for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: [] })) {}
+        },
+        (err: Error) => {
+          return err.message.includes("llama.cpp engine returned 500");
+        }
+      );
+    });
+
+    it("deploy/k8s/web-ui.yaml sets LLM_ENGINE to llamacpp", () => {
+      const k8sManifestPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
+      const content = fs.readFileSync(k8sManifestPath, "utf8");
+
+      assert.ok(
+        content.includes('name: LLM_ENGINE') && content.includes('value: "llamacpp"'),
+        "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp"
+      );
+      assert.ok(
+        content.includes('name: LLAMACPP_BASE_URL'),
+        "deploy/k8s/web-ui.yaml must set LLAMACPP_BASE_URL"
+      );
+    });
+  });
 });
+
 
