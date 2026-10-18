@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
-import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
+import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest } from "@/lib/subagents/types";
 import { unloadAllModels } from "@/lib/subagents/residency";
@@ -17,10 +17,14 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
   let lastThinkingUpdate = 0;
   let lastRecordedLength = 0;
 
+  const controller = new AbortController();
+  supervisor.setAbortController(taskId, controller);
+
   const executor = createProductionStepExecutor({
     workerPool: new WorkerPool({ scope }),
     model: "swift-15-27b-mtp",
     scope,
+    signal: controller.signal,
     onThinkingChunk: (_chunk: string, totalThinking: string) => {
       if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
         return;
@@ -61,7 +65,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
   (async () => {
     try {
       console.log(`[threads/[id]] executing task ${taskId} with recovery`);
-      const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+      const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: controller.signal });
       console.log(`[threads/[id]] task ${taskId} finished with status: ${result.status}`);
 
       if (result.status === "completed") {
@@ -157,10 +161,11 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     const body = await req.json();
 
-    // 1. Action: Stop Run
-    if (body.action === "stop") {
+    // 1. Action: Stop / Cancel Run
+    if (body.action === "stop" || body.action === "cancel") {
       thread.status = "stopped";
       if (thread.taskId) {
+        cancelTask(thread.taskId);
         activeExecutionSet.delete(thread.taskId);
         const task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
         if (task) {
@@ -265,11 +270,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           !thread.title ||
           thread.title.toLowerCase() === "new thread" ||
           thread.title.toLowerCase() === "untitled thread" ||
-          thread.title.toLowerCase() === "new task"
+          thread.title.toLowerCase() === "new task" ||
+          thread.title.toLowerCase() === "new session"
         ) {
           const content = body.message.content || "";
           if (content.trim()) {
-            thread.title = content.trim().slice(0, 40);
+            const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
+            thread.title = content.trim().slice(0, maxLen);
           }
         }
       } else if (body.message.role === "assistant") {
@@ -291,6 +298,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    const thread = await threadStore.getThread(id);
+    if (thread?.taskId) {
+      cancelTask(thread.taskId);
+    }
     const ok = await threadStore.deleteThread(id);
     return NextResponse.json({ success: ok });
   } catch (err: any) {

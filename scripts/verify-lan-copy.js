@@ -1,9 +1,14 @@
 const { exec } = require('child_process');
 
+setTimeout(() => {
+  console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
+  process.exit(1);
+}, 180_000).unref();
+
 async function waitForPort(port, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json`);
+      const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });
       if (res.ok) return await res.json();
     } catch {}
     await new Promise((r) => setTimeout(r, 400));

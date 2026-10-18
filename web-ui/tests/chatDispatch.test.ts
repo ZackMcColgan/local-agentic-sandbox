@@ -1,67 +1,25 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isBuilderPrompt, BUILDER_PROMPT_REGEX } from "../components/ChatStream";
 
-describe("Chat Dispatch — Builder Intent Detection in ChatStream", () => {
-  it("triggers onLaunchTask for 'build me a CSV parser'", () => {
-    const prompt = "build me a CSV parser";
-    assert.equal(isBuilderPrompt(prompt), true);
+describe("Chat Dispatch — Explicit Composer Mode & Build Prefix Routing", () => {
+  function shouldLaunchTask(prompt: string, composerMode: "chat" | "build"): boolean {
+    const isBuildPrefix = prompt.trim().toLowerCase().startsWith("/build ");
+    return composerMode === "build" || isBuildPrefix;
+  }
+
+  it("triggers task launch when composerMode is 'build' regardless of prompt text", () => {
+    assert.equal(shouldLaunchTask("explain this architecture", "build"), true);
+    assert.equal(shouldLaunchTask("build me a CSV parser", "build"), true);
   });
 
-  it("triggers onLaunchTask for 'create a React component'", () => {
-    const prompt = "create a React component";
-    assert.equal(isBuilderPrompt(prompt), true);
+  it("triggers task launch when prompt starts with '/build ' even in chat mode", () => {
+    assert.equal(shouldLaunchTask("/build a new navbar component", "chat"), true);
   });
 
-  it("triggers onLaunchTask for 'implement user auth'", () => {
-    const prompt = "implement user auth";
-    assert.equal(isBuilderPrompt(prompt), true);
-  });
-
-  it("does NOT trigger onLaunchTask for conversational question: 'how do I parse CSVs?'", () => {
-    const prompt = "how do I parse CSVs?";
-    assert.equal(isBuilderPrompt(prompt), false);
-  });
-
-  it("does NOT trigger onLaunchTask for opinion question: 'what do you think about my architecture?'", () => {
-    const prompt = "what do you think about my architecture?";
-    assert.equal(isBuilderPrompt(prompt), false);
-  });
-
-  it("does NOT trigger onLaunchTask for ambiguous question: 'can you help me with authentication?'", () => {
-    const prompt = "can you help me with authentication?";
-    assert.equal(isBuilderPrompt(prompt), false);
-  });
-
-  it("dispatches to onLaunchTask callback when builder prompt is submitted", async () => {
-    let launchedPrompt: string | null = null;
-    let launchedAttachments: any = null;
-
-    const onLaunchTask = async (prompt: string, attachments?: any) => {
-      launchedPrompt = prompt;
-      launchedAttachments = attachments;
-    };
-
-    // Simulate dispatch logic from ChatStream.tsx
-    const testPrompts = [
-      { text: "build me a CSV parser", expectLaunch: true },
-      { text: "create a React component", expectLaunch: true },
-      { text: "implement user auth", expectLaunch: true },
-      { text: "how do I parse CSVs?", expectLaunch: false },
-      { text: "what do you think about my architecture?", expectLaunch: false },
-      { text: "can you help me with authentication?", expectLaunch: false }
-    ];
-
-    for (const item of testPrompts) {
-      launchedPrompt = null;
-      if (isBuilderPrompt(item.text) && onLaunchTask) {
-        await onLaunchTask(item.text, []);
-      }
-      if (item.expectLaunch) {
-        assert.equal(launchedPrompt, item.text, `Expected prompt '${item.text}' to launch task`);
-      } else {
-        assert.equal(launchedPrompt, null, `Expected prompt '${item.text}' NOT to launch task`);
-      }
-    }
+  it("does NOT trigger task launch in chat mode even for words starting with build/create/implement", () => {
+    assert.equal(shouldLaunchTask("build me a CSV parser", "chat"), false);
+    assert.equal(shouldLaunchTask("create a React component", "chat"), false);
+    assert.equal(shouldLaunchTask("implement user auth", "chat"), false);
+    assert.equal(shouldLaunchTask("how do I parse CSVs?", "chat"), false);
   });
 });

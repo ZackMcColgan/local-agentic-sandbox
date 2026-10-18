@@ -18,6 +18,18 @@ import {
   shouldConsultLocalOracle,
   parseThinkingAndContent
 } from "@/lib/chatUtils";
+import {
+  fitContextWindow,
+  clampToolOutput,
+  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
+  MAX_WEB_RESEARCH_CALLS,
+  WEB_BUDGET_EXHAUSTED_DIRECTIVE,
+  isWebResearchTool,
+  filterToolsForWebBudget,
+  buildSynthesisDirective,
+  shouldRunPostToolSynthesis,
+  mergeSystemDirective
+} from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   loadUserProfile,
@@ -26,6 +38,7 @@ import {
   recordProfileEntry
 } from "@/lib/memory/profile";
 import { searchSemanticMemory } from "@/lib/memory/semanticMemory";
+import { getLLMProvider } from "@/lib/llm/provider";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -116,55 +129,11 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
 }
 
 /**
- * Async generator for streaming NDJSON chunks from Ollama /api/chat
+ * Unified streaming generator delegating to the resolved LLMProvider (Ollama or llama.cpp)
  */
 async function* streamOllamaChat(ollamaUrl: string, payload: any) {
-  const res = await fetch(`${ollamaUrl}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...payload, stream: true })
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Ollama engine returned ${res.status}: ${errText}`);
-  }
-
-  if (!res.body) {
-    throw new Error("Ollama returned empty response body");
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const json = JSON.parse(trimmed);
-          yield json;
-        } catch (err) {
-          console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
-        }
-      }
-    }
-
-    if (buffer.trim()) {
-      try {
-        yield JSON.parse(buffer.trim());
-      } catch {}
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  const provider = getLLMProvider();
+  yield* provider.streamChat(ollamaUrl, payload);
 }
 
 export async function POST(req: NextRequest) {
@@ -203,21 +172,9 @@ export async function POST(req: NextRequest) {
     if (!activeModel || activeModel === "auto") {
       if (mode === "flash") {
         activeModel = "gemma4:e4b";
-      } else if (mode === "pro") {
-        activeModel = DEFAULT_PRIMARY_MODEL;
       } else {
-        // mode === "auto": Execute fast triage step with OpenTelemetry span
-        const triageSpan = tracer.startSpan("router.triage", rootSpan.spanId, { model: "gemma4:e4b" });
-        const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-        const userPrompt = lastUserMsg?.content || "";
-        triageComplexityResult = await triageComplexity(userPrompt, OLLAMA_URL, "gemma4:e4b");
-        triageSpan.end("ok", { result: triageComplexityResult });
-
-        if (triageComplexityResult === "DEEP_SYNTHESIS") {
-          activeModel = DEFAULT_PRIMARY_MODEL;
-        } else {
-          activeModel = "gemma4:e4b";
-        }
+        // Zero VRAM eviction: auto and pro modes route directly to DEFAULT_PRIMARY_MODEL without gemma4:e4b triage swap
+        activeModel = DEFAULT_PRIMARY_MODEL;
       }
     }
 
@@ -263,7 +220,11 @@ CRITICAL INSTRUCTIONS:
   - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
   - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
 - When asked to execute or test code, run the appropriate test command or sandbox runner.
-- Synthesize all tool results into a thorough, clean Markdown answer for the user.`;
+- Synthesize all tool results into a thorough, clean Markdown answer for the user.
+- WEB RESEARCH & ACTION DISCIPLINE:
+  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
+  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
+  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -320,6 +281,10 @@ CRITICAL INSTRUCTIONS:
       }
     };
 
+    const heartbeatInterval = setInterval(() => {
+      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {});
+    }, 10_000);
+
     // Run async orchestrator pipeline in background feeding SSE stream
     (async () => {
       const traces: TraceItem[] = [];
@@ -340,9 +305,11 @@ CRITICAL INSTRUCTIONS:
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
             );
             const ragPromise = (async () => {
-              const semanticRes = await searchSemanticMemory(userPrompt);
-              if (!semanticRes.degraded && semanticRes.citations.length > 0) {
-                return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
+              if (process.env.OLLAMA_ALLOW_EMBEDDING_SWAP === "true") {
+                const semanticRes = await searchSemanticMemory(userPrompt);
+                if (!semanticRes.degraded && semanticRes.citations.length > 0) {
+                  return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
+                }
               }
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
@@ -460,6 +427,8 @@ CRITICAL INSTRUCTIONS:
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
+        let webResearchCalls = 0;
+        let webBudgetNoticeAdded = false;
 
         let accumulatedThoughts: string[] = [];
 
@@ -469,15 +438,24 @@ CRITICAL INSTRUCTIONS:
             round
           });
 
+          // Final round forced synthesis: prompt model to synthesize answer and omit tools
+          if (round === MAX_TOOL_ROUNDS - 1) {
+            mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
+          }
+
+          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
+
           const ollamaPayload: any = {
             model: activeModel,
-            messages: conversationMessages,
-            keep_alive: "24h",
+            messages: fitContextWindow(conversationMessages, {
+              tools: round === MAX_TOOL_ROUNDS - 1 ? undefined : roundTools
+            }),
+            keep_alive: -1,
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           };
 
-          if (ollamaTools.length > 0) {
-            ollamaPayload.tools = ollamaTools;
+          if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
+            ollamaPayload.tools = roundTools;
           }
 
           let fullRoundContent = "";
@@ -536,15 +514,27 @@ CRITICAL INSTRUCTIONS:
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments;
 
-            await sendEvent({
-              type: "status",
-              status: `Executing tool ${toolName}...`
-            });
-
             const target = toolClientMap.get(toolName);
             if (!target) {
               throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
             }
+
+            if (isWebResearchTool(toolName, target.tier)) {
+              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: WEB_BUDGET_EXHAUSTED_DIRECTIVE
+                });
+                continue;
+              }
+              webResearchCalls++;
+            }
+
+            await sendEvent({
+              type: "status",
+              status: `Executing tool ${toolName}...`
+            });
 
             const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
               tool: toolName,
@@ -608,8 +598,27 @@ CRITICAL INSTRUCTIONS:
             conversationMessages.push({
               role: "tool",
               name: toolName,
-              content: JSON.stringify(result)
+              content: clampToolOutput(JSON.stringify(result))
             });
+
+            if (
+              toolName === "workspace_write_file" &&
+              !isExecutionError &&
+              typeof toolArgs?.content === "string" &&
+              /<svg[\s>][\s\S]*?<\/svg>/i.test(toolArgs.content)
+            ) {
+              mergeSystemDirective(
+                conversationMessages,
+                "[DELIVERABLE SAVED]: You have already saved the complete SVG diagram via workspace_write_file, and the UI automatically renders it inline for the user. Now respond with a concise 2-3 sentence summary of the diagram's contents and do NOT call more tools or repeat the <svg> markup in your text response."
+              );
+            }
+
+            if (isWebResearchTool(toolName, target.tier)) {
+              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+                webBudgetNoticeAdded = true;
+                mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
+              }
+            }
 
             // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
             if (
@@ -629,22 +638,29 @@ CRITICAL INSTRUCTIONS:
                 model: activeModel,
                 reasoning_effort: effectiveReasoningEffort
               });
-              conversationMessages.push({
-                role: "system",
-                content: "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
-              });
+              mergeSystemDirective(
+                conversationMessages,
+                "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+              );
             }
           }
         }
 
-        // Post-tool synthesis safety pass if lingering tool calls or empty text:
+        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-        if ((traces.length > 0 && lingeringToolCalls.length > 0) || !currentAssistantMessage.content?.trim()) {
+        if (
+          shouldRunPostToolSynthesis({
+            userPrompt,
+            assistantContent: currentAssistantMessage.content || "",
+            lingeringToolCallsCount: lingeringToolCalls.length,
+            traces
+          })
+        ) {
           const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
           conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({
             role: "user",
-            content: "Now synthesize all the tool results above into a complete, clear, direct Markdown answer for the user. Do not invoke any more tools."
+            content: buildSynthesisDirective(userPrompt, false)
           });
 
           await sendEvent({
@@ -655,7 +671,7 @@ CRITICAL INSTRUCTIONS:
           let synthContent = "";
           for await (const chunk of streamOllamaChat(OLLAMA_URL, {
             model: activeModel,
-            messages: conversationMessages,
+            messages: fitContextWindow(conversationMessages),
             options: computeModelOptions(activeModel, effectiveReasoningEffort)
           })) {
             if (chunk.message?.content) {
@@ -715,6 +731,7 @@ CRITICAL INSTRUCTIONS:
           error: err.message || "Internal orchestrator error"
         });
       } finally {
+        clearInterval(heartbeatInterval);
         for (const session of activeSessions) {
           try {
             await session.client.close();

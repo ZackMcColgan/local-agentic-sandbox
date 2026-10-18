@@ -18,14 +18,15 @@ import {
   Eye,
   Sparkles
 } from "lucide-react";
-import {
+import type {
   MorningReport,
   OvernightMorningReport,
   MorningReportArtifact,
   OvernightTaskEntry,
   MorningReportMilestone
 } from "@/lib/subagents/morningReport";
-import { AmbiguityFlag } from "@/lib/subagents/types";
+import { isWithinOvernightWindow } from "@/lib/subagents/morningReportUtils";
+import type { AmbiguityFlag } from "@/lib/subagents/types";
 
 interface MorningReportViewProps {
   report?: MorningReport | null;
@@ -143,6 +144,40 @@ export function MorningReportView({
     return list;
   }, [overnight?.tasks]);
 
+  // Segmented window filter: Overnight | Last 24h | All Runs (defaults to "24h" if overnight has 0 entries)
+  const [windowFilter, setWindowFilter] = useState<"overnight" | "24h" | "all">(() => {
+    const overnightEntries = (uniqueTasks || []).filter((t) =>
+      isWithinOvernightWindow(t.startedAt || new Date().toISOString())
+    );
+    return overnightEntries.length === 0 && (uniqueTasks || []).length > 0 ? "24h" : "overnight";
+  });
+
+  const filteredTasks = React.useMemo(() => {
+    if (windowFilter === "all") return uniqueTasks;
+    const now = Date.now();
+    if (windowFilter === "24h") {
+      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+      return uniqueTasks.filter((t) => {
+        const ts = new Date(t.startedAt || "").getTime();
+        return !Number.isNaN(ts) && ts >= oneDayAgo;
+      });
+    }
+    // "overnight"
+    return uniqueTasks.filter((t) =>
+      isWithinOvernightWindow(t.startedAt || new Date().toISOString())
+    );
+  }, [uniqueTasks, windowFilter]);
+
+  const displayTasks = filteredTasks.length > 0 ? filteredTasks : uniqueTasks;
+
+  const kpis = React.useMemo(() => {
+    const total = displayTasks.length;
+    const completed = displayTasks.filter((t) => t.status === "completed").length;
+    const parked = displayTasks.filter((t) => t.status === "parked").length;
+    const failed = displayTasks.filter((t) => t.status === "failed").length;
+    return { total, completed, parked, failed };
+  }, [displayTasks]);
+
   const handlePreviewArtifact = async (art: MorningReportArtifact) => {
     if (previewArtifact?.path === art.path) {
       setPreviewArtifact(null);
@@ -212,28 +247,68 @@ export function MorningReportView({
                   Overnight Autonomous Summary
                 </h2>
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400">
-                <Clock className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Total Time Spent: <strong className="text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</strong></span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-200/80 dark:border-zinc-700">
+                  <button
+                    type="button"
+                    data-testid="filter-overnight"
+                    onClick={() => setWindowFilter("overnight")}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "overnight"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    Overnight
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="filter-24h"
+                    onClick={() => setWindowFilter("24h")}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "24h"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    Last 24h
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="filter-all"
+                    onClick={() => setWindowFilter("all")}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "all"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    All Runs
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Total Time Spent: <strong className="text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</strong></span>
+                </div>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
                 <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Tasks</div>
-                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{overnight.totalTasks}</div>
+                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{kpis.total}</div>
               </div>
               <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
                 <div className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Completed</div>
-                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{overnight.completedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{kpis.completed}</div>
               </div>
               <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
                 <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Parked</div>
-                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{overnight.parkedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{kpis.parked}</div>
               </div>
               <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
                 <div className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Failed</div>
-                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{overnight.failedCount}</div>
+                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{kpis.failed}</div>
               </div>
             </div>
           </div>
@@ -391,17 +466,17 @@ export function MorningReportView({
                   What Ran (Overnight Task Log)
                 </h3>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-                  {uniqueTasks.length} task{uniqueTasks.length === 1 ? "" : "s"}
+                  {displayTasks.length} task{displayTasks.length === 1 ? "" : "s"}
                 </span>
               </div>
 
-              {uniqueTasks.length === 0 ? (
+              {displayTasks.length === 0 ? (
                 <div className="p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 text-center">
                   No tasks have executed in this window yet.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {uniqueTasks.map((t) => {
+                  {displayTasks.map((t) => {
                     const isComp = t.status === "completed";
                     const isPark = t.status === "parked";
                     const isFail = t.status === "failed";

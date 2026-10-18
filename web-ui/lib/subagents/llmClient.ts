@@ -17,6 +17,7 @@ export interface GenerateRequest {
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
   /** Task scope driving per-request context window (e.g. SNIPPET, SCRIPT, PROJECT). */
   scope?: string;
+  reasoningEffort?: string;
 }
 
 export interface GenerateResult {
@@ -73,6 +74,29 @@ export function getContextSizeForScope(scope?: string): number {
 }
 
 /**
+ * Maps reasoning effort to thinking token budget.
+ * - fast / low: 1024 tokens
+ * - balanced / medium / default: 4096 tokens
+ * - deep / xhigh: 8192 tokens
+ */
+export function getThinkingBudget(effort?: string): number {
+  switch (effort?.toLowerCase()) {
+    case "fast":
+    case "low":
+      return 1024;
+    case "deep":
+    case "xhigh":
+      return 8192;
+    case "balanced":
+    case "medium":
+    default:
+      return 4096;
+  }
+}
+
+import { getLLMProvider, resolveLLMEngine } from "../llm/provider";
+
+/**
  * Creates a GenerateFn bound to an Ollama endpoint.
  * Network errors, non-2xx responses, timeouts and empty responses all throw ModelUnavailableError.
  */
@@ -82,6 +106,26 @@ export function createOllamaGenerate(options?: {
   fetchImpl?: typeof fetch;
   scope?: string;
 }): GenerateFn {
+  const engine = resolveLLMEngine();
+  if (engine === "llamacpp") {
+    const provider = getLLMProvider("llamacpp");
+    return async (req: GenerateRequest): Promise<GenerateResult> => {
+      try {
+        return await provider.generate(req, options?.baseUrl, {
+          timeoutMs: options?.timeoutMs,
+          fetchImpl: options?.fetchImpl,
+          scope: options?.scope || req.scope
+        });
+      } catch (err: any) {
+        throw new ModelUnavailableError(
+          req.model,
+          options?.baseUrl || process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080",
+          err?.message || String(err)
+        );
+      }
+    };
+  }
+
   const baseUrl = resolveOllamaBaseUrl(options?.baseUrl);
   const timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
   const fetchImpl = options?.fetchImpl || fetch;
@@ -95,13 +139,17 @@ export function createOllamaGenerate(options?: {
     const taskScope = req.scope || options?.scope;
     const numCtx = getContextSizeForScope(taskScope);
 
-    // Note: Environment variable fallback: If OLLAMA_CONTEXT_LENGTH is set in the environment,
-    // the per-request num_ctx overrides it (standard Ollama API behavior).
-    // This is intentional — the application knows the task scope, whereas the environment variable does not.
+    // Decouple <think> reasoning budget from code output budget:
+    // Add thinking token budget (fast=1024, balanced=4096, deep=8192) ON TOP of requested num_predict
+    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "balanced") as string;
+    const thinkingBudget = getThinkingBudget(effort);
+    const effectiveNumPredict = requestedPredict + thinkingBudget;
+
     const requestOptions = {
       num_ctx: numCtx,
-      num_predict: 2048,
-      ...(req.options || {})
+      ...(req.options || {}),
+      num_predict: effectiveNumPredict
     };
 
     let res: Response;
@@ -266,13 +314,13 @@ export function stripCodeFence(raw: string): string {
   }
 
   // 3. If surrounded or containing a code block, extract the content of the block
-  const match = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*?)\r?\n```/);
+  const match = cleaned.match(/```[a-zA-Z0-9_.+-]*[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*/);
   if (match) {
     return match[1].trim();
   }
 
   // 4. Fallback for unclosed code fence
-  const openMatch = cleaned.match(/```[a-zA-Z0-9_.+-]*\r?\n([\s\S]*)$/);
+  const openMatch = cleaned.match(/```[a-zA-Z0-9_.+-]*[ \t]*\r?\n([\s\S]*)$/);
   if (openMatch) {
     return openMatch[1].trim();
   }

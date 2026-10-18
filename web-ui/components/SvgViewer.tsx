@@ -172,7 +172,7 @@ export function SvgViewer({
       }`}
     >
       {/* 1. Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
         {/* Left: Title & Metadata Badge */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 truncate">
@@ -385,7 +385,7 @@ export function SvgViewer({
                   transformOrigin: "center center",
                   transition: "transform 0.15s ease-out"
                 }}
-                className="flex items-center justify-center max-w-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
+                className="flex items-center justify-center w-full max-w-full [&>svg]:w-full [&>svg]:max-w-[760px] [&>svg]:max-h-[520px] [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
                 dangerouslySetInnerHTML={{ __html: sanitized }}
               />
             ) : rawSvg ? (

@@ -11,6 +11,8 @@ import {
   type GenerateFn
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
+import { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore";
+export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
 export interface ModelRosterConfig {
   planner?: string;
@@ -60,6 +62,7 @@ export interface BuilderResult {
   /** Model that produced the content (undefined when synthetic). */
   model?: string;
   targetFile: string;
+  modifiedFiles?: string[];
   loadDurationMs?: number;
   thinking?: string;
   rawContent?: string;
@@ -80,6 +83,152 @@ export interface WorkerModelOptions {
   generate?: GenerateFn;
   keepAlive?: string | number;
   scope?: string;
+  workspaceRoot?: string;
+}
+
+export interface WorkspaceFileSymbol {
+  path: string;
+  exports: string[];
+}
+
+export interface WorkspaceRepoMap {
+  root: string;
+  files: WorkspaceFileSymbol[];
+  treeSummary: string;
+  length: number;
+  toString(): string;
+}
+
+const IGNORED_SCAN_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  ".turbo",
+  "out",
+  ".cache",
+  "tmp",
+  "temp",
+  ".gemini"
+]);
+
+export function scanWorkspaceRepoMap(
+  rootDir: string,
+  options?: { query?: string; maxFiles?: number }
+): WorkspaceRepoMap {
+  const maxFiles = options?.maxFiles ?? 500;
+  const files: WorkspaceFileSymbol[] = [];
+  const query = options?.query?.toLowerCase();
+
+  function walk(currentDir: string) {
+    if (files.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) break;
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!IGNORED_SCAN_DIRS.has(entry.name)) {
+          walk(fullPath);
+        }
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"].includes(ext)) {
+          const relPath = path.relative(rootDir, fullPath).replace(/\\/g, "/");
+          let exports: string[] = [];
+
+          try {
+            const content = fs.readFileSync(fullPath, "utf8");
+            if (ext === ".py") {
+              const defMatches = content.match(/^(?:async\s+)?def\s+([a-zA-Z_0-9]+)/gm) || [];
+              const classMatches = content.match(/^class\s+([a-zA-Z_0-9]+)/gm) || [];
+              exports = [
+                ...classMatches.map((c) => c.replace(/^class\s+/, "").trim()),
+                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim())
+              ];
+            } else {
+              const sourceFile = ts.createSourceFile(
+                entry.name,
+                content,
+                ts.ScriptTarget.Latest,
+                true,
+                ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+              );
+
+              for (const stmt of sourceFile.statements) {
+                const mods = (stmt as any).modifiers;
+                const hasExport = Array.isArray(mods) && mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
+                if (hasExport) {
+                  if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isInterfaceDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isTypeAliasDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isEnumDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isVariableStatement(stmt)) {
+                    for (const decl of stmt.declarationList.declarations) {
+                      if (decl.name && ts.isIdentifier(decl.name)) {
+                        exports.push(decl.name.text);
+                      }
+                    }
+                  }
+                } else if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+                  for (const el of stmt.exportClause.elements) {
+                    exports.push(el.name.text);
+                  }
+                }
+              }
+            }
+          } catch {
+            // best-effort symbol extraction
+          }
+
+          if (query) {
+            const matchesQuery =
+              relPath.toLowerCase().includes(query) ||
+              exports.some((e) => e.toLowerCase().includes(query));
+            if (!matchesQuery) continue;
+          }
+
+          files.push({ path: relPath, exports });
+        }
+      }
+    }
+  }
+
+  walk(rootDir);
+
+  const treeLines = files.map((f) => {
+    return f.exports.length > 0
+      ? `${f.path}: ${f.exports.join(", ")}`
+      : `${f.path}`;
+  });
+
+  const treeSummary = treeLines.join("\n");
+
+  const repoMap: WorkspaceRepoMap = {
+    root: rootDir,
+    files,
+    treeSummary,
+    length: files.length,
+    toString() {
+      return treeSummary;
+    }
+  };
+
+  return repoMap;
 }
 
 export class ExplorerWorker {
@@ -94,8 +243,11 @@ export class ExplorerWorker {
     return [...this.scopedTools];
   }
 
-  async exploreWorkspace(options: { path?: string; query?: string }): Promise<string> {
-    return `Inventory distillation for ${options.path || "workspace root"}`;
+  async exploreWorkspace(options?: { path?: string; query?: string; repoRoot?: string; maxFiles?: number }): Promise<WorkspaceRepoMap> {
+    const root = options?.path
+      ? (path.isAbsolute(options.path) ? options.path : path.resolve(options?.repoRoot || process.cwd(), options.path))
+      : (options?.repoRoot || process.cwd());
+    return scanWorkspaceRepoMap(root, options);
   }
 }
 
@@ -290,8 +442,10 @@ export class BuilderWorker {
   private readonly ollamaUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
+  private readonly workspaceRoot?: string;
   private readonly scopedTools = [
     "workspace_write_file",
+    "workspace_patch_file",
     "workspace_run_command",
     "git_diff",
     "git_commit"
@@ -303,10 +457,31 @@ export class BuilderWorker {
     this.ollamaUrl = options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
+    this.workspaceRoot = options?.workspaceRoot;
   }
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
+  }
+
+  resolveTargets(milestone: Milestone): string[] {
+    if (milestone.plannedFiles && Array.isArray(milestone.plannedFiles) && milestone.plannedFiles.length > 0) {
+      const valid = milestone.plannedFiles.filter((f) => Boolean(f && typeof f === "string" && f.trim().length > 0));
+      if (valid.length > 0) return valid;
+    }
+    return [this.resolveTarget(milestone)];
+  }
+
+  async patchFile(
+    targetRelPath: string,
+    patches: Array<PatchItem>,
+    options?: { repoRoot?: string } | string
+  ): Promise<PatchFileResult> {
+    const repoRoot =
+      typeof options === "string"
+        ? options
+        : options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    return await workspacePatchFile(repoRoot, targetRelPath, patches);
   }
 
   private resolveTarget(milestone: Milestone, explicit?: string): string {
@@ -322,9 +497,41 @@ export class BuilderWorker {
     return target;
   }
 
+  private async tryApplySurgicalPatches(
+    rawText: string,
+    targetRelPath: string,
+    fullPath: string,
+    previousContent: string,
+    repoRoot: string
+  ): Promise<string | null> {
+    if (!previousContent || !fs.existsSync(fullPath)) return null;
+    let parsedPatches: PatchItem[] | null = null;
+    try {
+      const potentialJson = stripCodeFence(rawText).trim();
+      if (potentialJson.startsWith("{") && potentialJson.endsWith("}")) {
+        const parsed = JSON.parse(potentialJson);
+        if (parsed && Array.isArray(parsed.patches) && parsed.patches.length > 0) {
+          parsedPatches = parsed.patches;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    if (parsedPatches) {
+      try {
+        await this.patchFile(targetRelPath, parsedPatches, { repoRoot });
+        return fs.readFileSync(fullPath, "utf8");
+      } catch (patchErr: any) {
+        console.warn(`[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`);
+      }
+    }
+    return null;
+  }
+
   async executeMilestoneWork(
     milestone: Milestone,
-    options?: {
+    optionsOrIteration?: {
       repoRoot?: string;
       previousDiff?: string;
       criticFeedback?: string[];
@@ -334,14 +541,109 @@ export class BuilderWorker {
       gitSha?: string;
       signal?: AbortSignal;
       onThinkingChunk?: (chunk: string, totalThinking: string) => void;
-    }
+    } | number,
+    legacyCriticFeedback?: string[],
+    legacyRepoRoot?: string
   ): Promise<BuilderResult> {
-    const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    const options =
+      typeof optionsOrIteration === "object" && optionsOrIteration !== null
+        ? optionsOrIteration
+        : {
+            iteration: typeof optionsOrIteration === "number" ? optionsOrIteration : undefined,
+            criticFeedback: legacyCriticFeedback,
+            repoRoot: legacyRepoRoot
+          };
+    const repoRoot = options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
     const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
     const criticFeedback = options?.criticFeedback || [];
-    const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
+    const targets = options?.targetFile ? [options.targetFile] : this.resolveTargets(milestone);
 
+    // Multi-target sequential execution
+    if (targets.length > 1) {
+      const modifiedFiles: string[] = [];
+      const diffs: string[] = [];
+      let totalLoadDuration = 0;
+      let lastThinking: string | undefined;
+      let lastContent = "";
+      const priorFileContexts: Array<{ file: string; content: string }> = [];
+
+      for (const targetRelPath of targets) {
+        const fullPath = path.resolve(repoRoot, targetRelPath);
+        const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
+
+        let newContent: string;
+        const synthetic = !this.injectedGenerate && isFastGraphTestMode();
+        if (synthetic) {
+          newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+        } else {
+          const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+          const priorContext = priorFileContexts.length > 0
+            ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
+            : "";
+          const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+${priorContext}
+${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
+
+Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
+
+          const result = await generate({
+            model: modelToUse,
+            prompt,
+            keepAlive: this.keepAlive,
+            signal: options?.signal,
+            onThinkingChunk: options?.onThinkingChunk,
+            scope: this.scope,
+            options: { temperature: 0.2, num_predict: 8192 }
+          });
+          newContent = stripCodeFence(result.text);
+          if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+          if (result.thinking) lastThinking = result.thinking;
+
+          const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+          if (patched !== null) {
+            newContent = patched;
+          }
+        }
+
+        if (!synthetic) {
+          const astCheck = validateCodeAst(targetRelPath, newContent);
+          if (!astCheck.valid) {
+            console.warn(`[builder] AST validation warning for ${targetRelPath}: ${astCheck.error}`);
+          }
+        }
+
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, newContent, "utf8");
+
+        diffs.push(createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent));
+        modifiedFiles.push(targetRelPath);
+        priorFileContexts.push({ file: targetRelPath, content: newContent });
+        lastContent = newContent;
+      }
+
+      const gitSha = options?.gitSha || getResolvedGitSha(repoRoot);
+      return {
+        diff: diffs.join("\n\n"),
+        gitSha,
+        iterations: iteration,
+        synthetic: !this.injectedGenerate && isFastGraphTestMode(),
+        model: (!this.injectedGenerate && isFastGraphTestMode()) ? undefined : modelToUse,
+        targetFile: targets[0],
+        modifiedFiles,
+        loadDurationMs: totalLoadDuration || undefined,
+        thinking: lastThinking,
+        rawContent: lastContent
+      };
+    }
+
+    const targetRelPath = targets[0] || this.resolveTarget(milestone, options?.targetFile);
     const fullPath = path.resolve(repoRoot, targetRelPath);
     const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
 
@@ -386,11 +688,16 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
         scope: this.scope,
-        options: { temperature: 0.2, num_predict: 2048 }
+        options: { temperature: 0.2, num_predict: 8192 }
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
       builderThinking = result.thinking;
+
+      const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+      if (patched !== null) {
+        newContent = patched;
+      }
     }
 
     // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
@@ -415,6 +722,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             synthetic: false,
             model: modelToUse,
             targetFile: targetRelPath,
+            modifiedFiles: [targetRelPath],
             loadDurationMs,
             stuck: true,
             errorSignature: signature,
@@ -428,7 +736,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
 
-Please fix the syntax error and output the complete, valid, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Please fix the syntax error and output the complete, valid file content for "${targetRelPath}" enclosed in a markdown code fence (\`\`\`typescript ... \`\`\`). Do not include conversational prose or explanation outside the fence.`;
 
         const retryResult = await generate({
           model: modelToUse,
@@ -436,7 +744,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
           keepAlive: this.keepAlive,
           signal: options?.signal,
           scope: this.scope,
-          options: { temperature: 0.2, num_predict: 2048 }
+          options: { temperature: 0.2, num_predict: 8192 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -468,6 +776,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
       synthetic,
       model: synthetic ? undefined : modelToUse,
       targetFile: targetRelPath,
+      modifiedFiles: [targetRelPath],
       loadDurationMs,
       thinking: builderThinking,
       rawContent: newContent
@@ -800,9 +1109,11 @@ export class CriticWorker {
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
 ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${diffContext?.testExitCode !== undefined ? `\nAcceptance Test Runner Status: Exit Code ${diffContext.testExitCode}` : ""}
+${diffContext?.testOutput ? `\nTest Output:\n${diffContext.testOutput.slice(-2000)}` : ""}
 
 Diff Under Review:
-${diff.slice(0, 6000)}
+${diff.slice(0, 16000)}
 
 Critically inspect the diff against each criterion. Reference actual diff lines and content in your verdict.
 If any criterion is violated, missing, or has flaws, set approved to false and explain the exact flaw in feedback.
@@ -825,7 +1136,7 @@ Respond strictly in JSON:
         keepAlive: this.keepAlive,
         signal: options?.signal,
         scope: this.scope,
-        options: { temperature: 0.1, num_predict: 512 }
+        options: { temperature: 0.1, num_predict: 2048 }
       });
       verdictText = result.text;
     } catch (err: any) {

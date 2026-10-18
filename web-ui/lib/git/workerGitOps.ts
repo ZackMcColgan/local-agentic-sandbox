@@ -68,9 +68,9 @@ export class WorkerGitOps {
     if (PROTECTED_BRANCHES.has(normalized.toLowerCase())) {
       throw new Error(`Cannot push directly to protected branch: ${normalized}`);
     }
-    if (!/^(feature|fix|chore|docs|refactor|test)\/[a-zA-Z0-9._-]+$/i.test(normalized)) {
+    if (!/^(feat|feature|fix|chore|docs|refactor|test)\/[a-zA-Z0-9._-]+$/i.test(normalized)) {
       throw new Error(
-        `Invalid worker branch name '${normalized}'. Must follow feature/<slug> or fix/<slug> convention.`
+        `Invalid worker branch name '${normalized}'. Must follow feat/<slug>, feature/<slug> or fix/<slug> convention.`
       );
     }
   }
@@ -110,6 +110,22 @@ export class WorkerGitOps {
     };
   }
 
+  public async runGateTest(): Promise<{
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+    passed: boolean;
+  }> {
+    const res = await this.commandRunner("npm", ["run", "test:gate"]);
+    this.recordAudit("npm run test:gate", res);
+    return {
+      exitCode: res.exitCode,
+      stdout: res.stdout,
+      stderr: res.stderr,
+      passed: res.exitCode === 0
+    };
+  }
+
   public async stageAndCommit(
     files: string[],
     commitMessage: string
@@ -120,6 +136,16 @@ export class WorkerGitOps {
   }> {
     if (!commitMessage || !commitMessage.trim()) {
       throw new Error("Commit message is required");
+    }
+
+    if (this.currentBranch && PROTECTED_BRANCHES.has(this.currentBranch.toLowerCase())) {
+      throw new Error(`WorkerGitOps cannot commit directly to protected branch: ${this.currentBranch}`);
+    }
+
+    const currentBranchRes = await this.commandRunner("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const activeBranch = currentBranchRes.stdout.trim().toLowerCase();
+    if (activeBranch && PROTECTED_BRANCHES.has(activeBranch)) {
+      throw new Error(`WorkerGitOps cannot commit directly to protected branch: ${activeBranch}`);
     }
 
     const addArgs = files.length > 0 ? ["add", ...files] : ["add", "-A"];

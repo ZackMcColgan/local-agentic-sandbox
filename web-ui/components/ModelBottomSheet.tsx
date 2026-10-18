@@ -10,7 +10,8 @@ interface ModelBottomSheetProps {
   selectedModel: string;
   onModelChange: (model: string) => void;
   reasoningEffort: "low" | "medium" | "xhigh";
-  onReasoningChange: (effort: "low" | "medium" | "xhigh") => void;
+  onReasoningChange?: (effort: "low" | "medium" | "xhigh") => void;
+  onReasoningEffortChange?: (effort: "low" | "medium" | "xhigh") => void;
   installedModels?: string[];
 }
 
@@ -21,9 +22,15 @@ export function ModelBottomSheet({
   onModelChange,
   reasoningEffort,
   onReasoningChange,
+  onReasoningEffortChange,
   installedModels = []
 }: ModelBottomSheetProps) {
   if (!isOpen) return null;
+
+  const handleReasoningChange = (effort: "low" | "medium" | "xhigh") => {
+    if (onReasoningChange) onReasoningChange(effort);
+    if (onReasoningEffortChange) onReasoningEffortChange(effort);
+  };
 
   const reasoningSupported = isReasoningEffortSupported(selectedModel);
 
@@ -54,9 +61,10 @@ export function ModelBottomSheet({
     }
   ];
 
-  // If there are other installed models, add them dynamically
-  for (const m of installedModels) {
-    if (!modelsList.some((item) => item.id === m || item.displayName === m)) {
+  // If there are other installed models, normalize by stripping :latest and deduplicate
+  for (const raw of installedModels) {
+    const m = raw.replace(/:latest$/, "");
+    if (!modelsList.some((item) => item.id === m || item.id === raw || item.displayName === m || item.displayName === raw)) {
       modelsList.push({
         id: m,
         displayName: m,
@@ -67,7 +75,13 @@ export function ModelBottomSheet({
   }
 
   const isModelSelected = (id: string, displayName: string) => {
-    return selectedModel === id || selectedModel === displayName;
+    const normSelected = selectedModel.replace(/:latest$/, "");
+    return (
+      normSelected === id ||
+      normSelected === displayName ||
+      selectedModel === id ||
+      selectedModel === displayName
+    );
   };
 
   return (
@@ -76,7 +90,7 @@ export function ModelBottomSheet({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 animate-in slide-in-from-bottom duration-250 flex flex-col gap-5 max-h-[90vh] overflow-y-auto"
+        className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 animate-in slide-in-from-bottom duration-250 flex flex-col gap-4 max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
@@ -96,13 +110,13 @@ export function ModelBottomSheet({
           </button>
         </div>
 
-        {/* Model section */}
-        <div className="space-y-2.5">
+        {/* Scrollable Model section */}
+        <div className="flex-1 min-h-0 space-y-2">
           <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
             Model
           </span>
 
-          <div className="space-y-2">
+          <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
             {modelsList.map((item) => {
               const selected = isModelSelected(item.id, item.displayName);
               return (
@@ -112,7 +126,7 @@ export function ModelBottomSheet({
                   onClick={() => onModelChange(item.id)}
                   className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all text-left ${
                     selected
-                      ? "bg-[#f3efff] dark:bg-indigo-950/50 border-2 border-[#5b32e6]/50 dark:border-indigo-500/50 shadow-sm"
+                      ? "bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 shadow-sm"
                       : "bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
                   }`}
                 >
@@ -120,7 +134,7 @@ export function ModelBottomSheet({
                     <div
                       className={`p-2.5 rounded-full flex items-center justify-center ${
                         selected
-                          ? "bg-[#e5d9ff] dark:bg-indigo-900/60 text-[#5b32e6] dark:text-indigo-300"
+                          ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
                           : "bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
                       }`}
                     >
@@ -137,7 +151,7 @@ export function ModelBottomSheet({
                   </div>
 
                   {selected && (
-                    <div className="h-6 w-6 rounded-full bg-[#5b32e6] text-white flex items-center justify-center shadow-sm">
+                    <div className="h-6 w-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
                       <Check className="h-4 w-4 stroke-[3]" />
                     </div>
                   )}
@@ -147,8 +161,8 @@ export function ModelBottomSheet({
           </div>
         </div>
 
-        {/* Thinking effort section */}
-        <div className="space-y-2.5">
+        {/* Pinned Sticky Footer: Thinking effort & Done button */}
+        <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-3 shrink-0">
           <div className="flex items-center justify-between">
             <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
               Thinking effort
@@ -169,10 +183,10 @@ export function ModelBottomSheet({
             <button
               type="button"
               disabled={!reasoningSupported}
-              onClick={() => onReasoningChange("low")}
+              onClick={() => handleReasoningChange("low")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "low"
-                  ? "bg-[#5b32e6] text-white shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
               }`}
             >
@@ -184,10 +198,10 @@ export function ModelBottomSheet({
             <button
               type="button"
               disabled={!reasoningSupported}
-              onClick={() => onReasoningChange("medium")}
+              onClick={() => handleReasoningChange("medium")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "medium"
-                  ? "bg-[#5b32e6] text-white shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
               }`}
             >
@@ -201,10 +215,10 @@ export function ModelBottomSheet({
             <button
               type="button"
               disabled={!reasoningSupported}
-              onClick={() => onReasoningChange("xhigh")}
+              onClick={() => handleReasoningChange("xhigh")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "xhigh"
-                  ? "bg-[#5b32e6] text-white shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
               }`}
             >
@@ -216,16 +230,16 @@ export function ModelBottomSheet({
           <p className="text-xs text-slate-500 dark:text-zinc-400 pl-1">
             {effortDescriptions[reasoningEffort]}
           </p>
-        </div>
 
-        {/* Done button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-2 w-full py-3.5 px-6 rounded-full bg-[#5b32e6] hover:bg-[#4d28cc] text-white font-semibold text-sm shadow-md transition-all"
-        >
-          Done
-        </button>
+          {/* Done button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3.5 px-6 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md transition-all"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

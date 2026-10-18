@@ -28,6 +28,8 @@ interface ThreadsSidebarProps {
   onDeleteThread?: (threadId: string) => void;
   onNavigate?: (view: NavView) => void;
   onOpenDrawer?: () => void;
+  onCollapse?: () => void;
+  hideDock?: boolean;
 }
 
 export function ThreadsSidebar({
@@ -38,7 +40,9 @@ export function ThreadsSidebar({
   onNewThread,
   onDeleteThread,
   onNavigate,
-  onOpenDrawer
+  onOpenDrawer,
+  onCollapse,
+  hideDock = false
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -69,7 +73,7 @@ export function ThreadsSidebar({
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-[#f4f3f7] dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
       {/* Top Header matching Mockup media_1791044464191.webp */}
       <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">
@@ -90,6 +94,17 @@ export function ThreadsSidebar({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="panel-toggle-btn text-[11.5px] font-semibold px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
+              title="Collapse Sessions Panel"
+            >
+              « Hide
+            </button>
+          )}
+
           {/* Search Toggle Button */}
           <button
             type="button"
@@ -132,20 +147,6 @@ export function ThreadsSidebar({
                   className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                 >
                   New session
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isDark = document.documentElement.classList.contains("dark");
-                    const next = isDark ? "light" : "dark";
-                    document.documentElement.classList.toggle("dark", next === "dark");
-                    document.documentElement.classList.toggle("light", next === "light");
-                    document.documentElement.setAttribute("data-theme", next);
-                    localStorage.setItem("app-theme", next);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
-                >
-                  Toggle theme
                 </button>
               </div>
             )}
@@ -191,16 +192,15 @@ export function ThreadsSidebar({
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
             const isSwiped = swipedThreadId === thread.id;
             const isConfirming = confirmDeleteId === thread.id;
-            const statusLabel =
-              thread.status === "active"
-                ? "Active"
-                : thread.status === "paused"
-                ? "Paused"
-                : thread.status === "stopped"
-                ? "Stopped"
-                : thread.status === "failed"
-                ? "Failed"
-                : "Completed";
+            const rawStatus = (thread.status as string) || "";
+            const statusLabel = (() => {
+              if (rawStatus === "running") return "Running";
+              if (rawStatus === "active") return "Active";
+              if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
+              if (rawStatus === "failed") return "Failed";
+              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0)) return "Completed";
+              return "New";
+            })();
 
             return (
               <div
@@ -231,7 +231,7 @@ export function ThreadsSidebar({
                 }}
                 className={`group relative overflow-hidden rounded-3xl p-4 sm:p-5 transition-all cursor-pointer ${
                   isSelected
-                    ? "bg-white dark:bg-zinc-900 ring-2 ring-[#6750a4] shadow-md"
+                    ? "bg-white dark:bg-zinc-900 ring-2 ring-emerald-500 shadow-md"
                     : "bg-white dark:bg-zinc-900 hover:shadow-md shadow-xs border border-slate-100 dark:border-zinc-850"
                 }`}
               >
@@ -282,9 +282,15 @@ export function ThreadsSidebar({
                     <span>•</span>
                     <span
                       className={
-                        thread.status === "active"
-                          ? "text-[#6750a4] dark:text-[#d0bcff] font-semibold"
-                          : ""
+                        statusLabel === "Running" || statusLabel === "Active"
+                          ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                          : statusLabel === "Needs Input"
+                          ? "text-amber-600 dark:text-amber-400 font-semibold"
+                          : statusLabel === "Failed"
+                          ? "text-rose-600 dark:text-rose-400 font-semibold"
+                          : statusLabel === "Completed"
+                          ? "text-slate-600 dark:text-zinc-300 font-medium"
+                          : "text-slate-400 dark:text-zinc-500"
                       }
                     >
                       {statusLabel}
@@ -317,63 +323,64 @@ export function ThreadsSidebar({
         )}
       </div>
 
-      {/* Persistent Desktop Navigation Dock (S7) */}
-      <div className="p-2.5 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 flex items-center justify-around gap-1 shrink-0">
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("sessions") : undefined}
-          aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
-            activeNavView === "sessions" || activeNavView === "thread"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Sessions"
-        >
-          <List className="h-4 w-4" />
-          <span>Sessions</span>
-        </button>
+      {!hideDock && (
+        <div className="p-2.5 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 flex items-center justify-around gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("sessions") : undefined)}
+            aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
+              activeNavView === "sessions" || activeNavView === "thread"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Sessions"
+          >
+            <List className="h-4 w-4" />
+            <span>Sessions</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={onNewThread}
-          className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-          title="New session"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New</span>
-        </button>
+          <button
+            type="button"
+            onClick={onNewThread}
+            className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            title="New session"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("morning-report") : undefined}
-          aria-current={activeNavView === "morning-report" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
-            activeNavView === "morning-report"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Morning report"
-        >
-          <FileText className="h-4 w-4" />
-          <span>Report</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("morning-report") : undefined)}
+            aria-current={activeNavView === "morning-report" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+              activeNavView === "morning-report"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Morning report"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Report</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("settings") : undefined}
-          aria-current={activeNavView === "settings" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
-            activeNavView === "settings"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Settings"
-        >
-          <Settings className="h-4 w-4" />
-          <span>Settings</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("settings") : undefined)}
+            aria-current={activeNavView === "settings" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+              activeNavView === "settings"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+            <span>Settings</span>
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

@@ -71,9 +71,12 @@ export interface Milestone {
   criticNotes?: string[];
   forcedFlaw?: boolean;
   commitSha?: string;
+  diff?: string;
   diffSummary?: string;
   testsPassed?: number;
   testsFailed?: number;
+  testsRun?: number;
+  testExitCode?: number | null;
   testFile?: string;
   plannedFiles?: string[];
   skipCriticOnValidSyntax?: boolean;
@@ -90,6 +93,8 @@ export interface Milestone {
   criticVerdict?: "PASS" | "FAIL";
   criticCritique?: string;
   tokenThroughput?: { promptTokens?: number; completionTokens?: number; tokensPerSecond?: number };
+  toolchain?: ToolchainType;
+  lastError?: string;
 }
 
 export interface AmbiguityFlag {
@@ -155,6 +160,16 @@ export interface TaskManifest {
     actionsUrl?: string;
     failingStep?: string;
     summary?: string;
+  };
+  enableGitOps?: boolean;
+  autoDeployOnGreen?: boolean;
+  gatePassed?: boolean;
+  gateOutput?: string;
+  gitOpsBranchCreated?: boolean;
+  testSummary?: {
+    passed: number;
+    failed: number;
+    durationMs?: number;
   };
 }
 
