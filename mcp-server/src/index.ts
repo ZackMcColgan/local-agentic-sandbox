@@ -12,18 +12,19 @@ import path from "path";
 const app = express();
 app.use(cors());
 
-const mcp = new McpServer({
-  name: "local-agentic-sandbox-tools",
-  version: "2.0.0"
-});
+export function createMcpServer(): McpServer {
+  const mcp = new McpServer({
+    name: "local-agentic-sandbox-tools",
+    version: "2.0.0"
+  });
+  registerCodeRunner(mcp);
+  registerAttestation(mcp);
+  registerWorkspaceTools(mcp);
+  return mcp;
+}
 
-// Register MCP tools
-registerCodeRunner(mcp);
-registerAttestation(mcp);
-registerWorkspaceTools(mcp);
-
-// Active SSE transports keyed by sessionId
-const transports = new Map<string, SSEServerTransport>();
+// Active SSE sessions keyed by sessionId
+const sessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
 
 export const ALLOWED_FILE_EXTENSIONS = new Set([
   ".svg",
@@ -139,20 +140,24 @@ app.get("/health", (_req: Request, res: Response) => {
       rootfs: "READ_ONLY",
       capabilities: "DROPPED_ALL"
     },
-    active_sessions: transports.size
+    active_sessions: sessions.size
   });
 });
 
 app.get("/sse", async (req: Request, res: Response) => {
   try {
+    const server = createMcpServer();
     const transport = new SSEServerTransport("/messages", res);
-    transports.set(transport.sessionId, transport);
+    sessions.set(transport.sessionId, { server, transport });
 
-    req.on("close", () => {
-      transports.delete(transport.sessionId);
+    req.on("close", async () => {
+      sessions.delete(transport.sessionId);
+      try {
+        await server.close();
+      } catch {}
     });
 
-    await mcp.connect(transport);
+    await server.connect(transport);
   } catch (error) {
     console.error("Failed to establish SSE transport:", error);
     if (!res.headersSent) {
@@ -163,10 +168,10 @@ app.get("/sse", async (req: Request, res: Response) => {
 
 app.post("/messages", async (req: Request, res: Response) => {
   const sessionId = req.query.sessionId as string;
-  const transport = (sessionId && transports.get(sessionId)) || Array.from(transports.values())[0];
+  const session = (sessionId && sessions.get(sessionId)) || Array.from(sessions.values())[0];
 
-  if (transport) {
-    await transport.handlePostMessage(req, res);
+  if (session) {
+    await session.transport.handlePostMessage(req, res);
   } else {
     res.status(400).send("Session not initialized or expired");
   }

@@ -7,15 +7,16 @@ import { registerBrowserTools } from "./tools/browser.js";
 const app = express();
 app.use(cors());
 
-const mcp = new McpServer({
-  name: "browser-mcp-service",
-  version: "1.0.0"
-});
+export function createBrowserMcpServer(): McpServer {
+  const mcp = new McpServer({
+    name: "browser-mcp-service",
+    version: "1.0.0"
+  });
+  registerBrowserTools(mcp);
+  return mcp;
+}
 
-// Register browser tools
-registerBrowserTools(mcp);
-
-const transports = new Map<string, SSEServerTransport>();
+const sessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
@@ -28,20 +29,24 @@ app.get("/health", (_req: Request, res: Response) => {
       ssrf_protection: "ACTIVE",
       workspace_access: "NONE"
     },
-    active_sessions: transports.size
+    active_sessions: sessions.size
   });
 });
 
 app.get("/sse", async (req: Request, res: Response) => {
   try {
+    const server = createBrowserMcpServer();
     const transport = new SSEServerTransport("/messages", res);
-    transports.set(transport.sessionId, transport);
+    sessions.set(transport.sessionId, { server, transport });
 
-    req.on("close", () => {
-      transports.delete(transport.sessionId);
+    req.on("close", async () => {
+      sessions.delete(transport.sessionId);
+      try {
+        await server.close();
+      } catch {}
     });
 
-    await mcp.connect(transport);
+    await server.connect(transport);
   } catch (error) {
     console.error("Failed to establish SSE transport in browser-mcp:", error);
     if (!res.headersSent) {
@@ -52,10 +57,10 @@ app.get("/sse", async (req: Request, res: Response) => {
 
 app.post("/messages", async (req: Request, res: Response) => {
   const sessionId = req.query.sessionId as string;
-  const transport = (sessionId && transports.get(sessionId)) || Array.from(transports.values())[0];
+  const session = (sessionId && sessions.get(sessionId)) || Array.from(sessions.values())[0];
 
-  if (transport) {
-    await transport.handlePostMessage(req, res);
+  if (session) {
+    await session.transport.handlePostMessage(req, res);
   } else {
     res.status(400).send("Session not initialized or expired");
   }

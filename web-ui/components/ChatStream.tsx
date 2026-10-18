@@ -784,6 +784,24 @@ export function ChatStream({
             </button>
           ) : null}
 
+          {/* Workspace Inspector Toggle Button - visible on both mobile and desktop */}
+          {onToggleWorkspace && (
+            <button
+              type="button"
+              onClick={onToggleWorkspace}
+              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
+                isWorkspaceOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Workspace Panel"
+              aria-label="Toggle Workspace Panel"
+            >
+              <span className="text-sm">◨</span>
+              <span className="hidden sm:inline">Workspace</span>
+            </button>
+          )}
+
           <h1
             className="hidden md:block text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
             title={threadTitle || "New session"}
@@ -828,24 +846,6 @@ export function ChatStream({
               aria-label="Start new session"
             >
               <Plus className="h-5 w-5" />
-            </button>
-          )}
-
-          {/* Workspace Inspector Toggle Button */}
-          {onToggleWorkspace && (
-            <button
-              type="button"
-              onClick={onToggleWorkspace}
-              className={`panel-toggle-btn hidden sm:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
-                isWorkspaceOpen
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
-              }`}
-              title="Toggle Workspace Panel"
-              aria-label="Toggle Workspace Panel"
-            >
-              <span className="text-sm">◨</span>
-              <span className="hidden sm:inline">Workspace</span>
             </button>
           )}
 

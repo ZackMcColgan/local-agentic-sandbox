@@ -60,6 +60,139 @@ export const KNOWN_ONE_LINERS: Record<string, string> = {
   docker_scout_policy_gate: "Evaluate container CVE vulnerabilities against policy."
 };
 
+export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
+  search_web: {
+    name: "search_web",
+    description: "Search internet with DuckDuckGo; returns clean markdown.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query text to execute" }
+      },
+      required: ["query"]
+    }
+  },
+  fetch_webpage_markdown: {
+    name: "fetch_webpage_markdown",
+    description: "Fetch public URL and convert content to clean markdown.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Fully qualified public HTTP/HTTPS URL" }
+      },
+      required: ["url"]
+    }
+  },
+  workspace_get_tree: {
+    name: "workspace_get_tree",
+    description: "Retrieve directory tree excluding node_modules and .git.",
+    parameters: {
+      type: "object",
+      properties: {
+        max_depth: { type: "number", description: "Maximum directory depth" }
+      }
+    }
+  },
+  workspace_grep: {
+    name: "workspace_grep",
+    description: "Fast regex/substring search across codebase.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Search pattern" }
+      },
+      required: ["pattern"]
+    }
+  },
+  workspace_read_file: {
+    name: "workspace_read_file",
+    description: "Read file with line numbers.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path" }
+      },
+      required: ["path"]
+    }
+  },
+  workspace_write_file: {
+    name: "workspace_write_file",
+    description: "Atomically write code, Markdown, or SVG files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path" },
+        content: { type: "string", description: "File content" }
+      },
+      required: ["path", "content"]
+    }
+  },
+  workspace_run_command: {
+    name: "workspace_run_command",
+    description: "Execute test/build commands in sandbox container.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "Shell command" }
+      },
+      required: ["command"]
+    }
+  },
+  git_status: {
+    name: "git_status",
+    description: "Inspect git branch status and unstaged changes.",
+    parameters: { type: "object" }
+  },
+  git_diff: {
+    name: "git_diff",
+    description: "Inspect branch unified diff.",
+    parameters: { type: "object" }
+  },
+  git_checkout_branch: {
+    name: "git_checkout_branch",
+    description: "Create or switch git branch.",
+    parameters: {
+      type: "object",
+      properties: {
+        branch: { type: "string", description: "Branch name" }
+      },
+      required: ["branch"]
+    }
+  },
+  git_commit: {
+    name: "git_commit",
+    description: "Commit staged modifications with semantic message.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "Commit message" }
+      },
+      required: ["message"]
+    }
+  },
+  execute_sandboxed_python: {
+    name: "execute_sandboxed_python",
+    description: "Run Python code inside isolated sandbox container.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Python code" }
+      },
+      required: ["code"]
+    }
+  },
+  verify_container_provenance: {
+    name: "verify_container_provenance",
+    description: "Inspect container security boundaries and SLSA attestations.",
+    parameters: { type: "object" }
+  },
+  docker_scout_policy_gate: {
+    name: "docker_scout_policy_gate",
+    description: "Evaluate container CVE vulnerabilities against policy.",
+    parameters: { type: "object" }
+  }
+};
+
 /**
  * Trims verbose descriptions into a clean, sharp one-liner <= 120 chars.
  */
@@ -79,8 +212,9 @@ export function toOneLiner(description?: string): string {
  */
 export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; function?: ToolFunctionSpec }>): any[] {
   const layer1: any[] = [DESCRIBE_TOOL_SCHEMA];
+  const listToIterate = tools.length > 0 ? tools : Object.keys(KNOWN_ONE_LINERS).map(name => ({ name }));
 
-  for (const t of tools) {
+  for (const t of listToIterate) {
     let name = "";
     let description = "";
 
@@ -149,14 +283,19 @@ export function describeTool(
   }
 
   const spec = registry instanceof Map ? registry.get(toolName) : registry[toolName];
-  if (!spec) {
-    const available = registry instanceof Map ? Array.from(registry.keys()) : Object.keys(registry);
-    return {
-      error: `Unknown tool '${toolName}'. Available tools: ${available.join(", ")}`
-    };
+  if (spec) {
+    return { tool: spec };
   }
 
-  return { tool: spec };
+  if (DEFAULT_TOOL_SCHEMAS[toolName]) {
+    return { tool: DEFAULT_TOOL_SCHEMAS[toolName] };
+  }
+
+  const available = registry instanceof Map ? Array.from(registry.keys()) : Object.keys(registry);
+  const displayList = available.length > 0 ? available : Object.keys(KNOWN_ONE_LINERS);
+  return {
+    error: `Unknown tool '${toolName}'. Available tools: ${displayList.join(", ")}`
+  };
 }
 
 /**

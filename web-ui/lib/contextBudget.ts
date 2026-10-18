@@ -334,6 +334,11 @@ export function fitContextWindow(
     if (idx === 0 && arr[0]?.role === "system") {
       return true;
     }
+    // Protect the original user query (first user message) so intent & prompt are never lost
+    const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+    if (idx === firstUserIdx && firstUserIdx !== -1) {
+      return true;
+    }
     let lastUserIdx = -1;
     for (let j = arr.length - 1; j >= 0; j--) {
       if (arr[j]?.role === "user") {
