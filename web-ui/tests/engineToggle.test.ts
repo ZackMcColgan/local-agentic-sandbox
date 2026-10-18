@@ -107,4 +107,25 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       );
     });
   });
+
+  describe("ModelBottomSheet Engine Management & AppShell Mobile Classes", () => {
+    const modelSheetFile = fs.readFileSync(path.join(componentsDir, "ModelBottomSheet.tsx"), "utf-8");
+    const pageFile = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8");
+
+    it("EngineStatusPill provides Stop button when running and posts action: stop", () => {
+      assert.ok(pillFile.includes("Stop"), "EngineStatusPill must contain Stop button");
+      assert.ok(pillFile.includes('action: "stop"'), "EngineStatusPill must post action: stop");
+    });
+
+    it("ModelBottomSheet provides Engine Management card with toggle", () => {
+      assert.ok(modelSheetFile.includes("Standalone llama.cpp Engine"), "Must contain engine label");
+      assert.ok(modelSheetFile.includes("Turn Off"), "Must contain Turn Off button");
+      assert.ok(modelSheetFile.includes('/api/engine'), "Must call /api/engine");
+    });
+
+    it("page.tsx applies mobile-sidebar-open and mobile-inspector-open to app-shell", () => {
+      assert.ok(pageFile.includes("mobile-sidebar-open"), "app-shell must include mobile-sidebar-open class");
+      assert.ok(pageFile.includes("mobile-inspector-open"), "app-shell must include mobile-inspector-open class");
+    });
+  });
 });

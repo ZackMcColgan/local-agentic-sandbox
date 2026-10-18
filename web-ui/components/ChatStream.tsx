@@ -810,12 +810,12 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[36px] sm:min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="max-w-[120px] truncate">{shortModelLabel}</span>
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="max-w-[70px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button */}
@@ -823,7 +823,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onNewThread}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              className="hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="Start new session"
               aria-label="Start new session"
             >
@@ -836,7 +836,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onToggleWorkspace}
-              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
+              className={`panel-toggle-btn hidden sm:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isWorkspaceOpen
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                   : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
@@ -866,6 +866,15 @@ export function ChatStream({
                 className="absolute right-0 mt-1 w-52 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
                 onClick={() => setShowOverflowMenu(false)}
               >
+                {onOpenModelSheet && (
+                  <button
+                    type="button"
+                    onClick={onOpenModelSheet}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
+                  >
+                    Engine & model settings
+                  </button>
+                )}
                 {onNewThread && (
                   <button
                     type="button"

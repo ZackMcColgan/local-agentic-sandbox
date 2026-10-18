@@ -619,7 +619,7 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${!isSidebarOpen ? "collapsed-sidebar" : ""} ${!isWorkspaceOpen ? "collapsed-inspector" : ""}`}>
+    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isOpen={isDrawerOpen}
@@ -743,7 +743,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none"
+              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
