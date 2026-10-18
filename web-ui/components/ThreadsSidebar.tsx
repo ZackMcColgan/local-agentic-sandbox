@@ -81,7 +81,7 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="p-1.5 -ml-1 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
@@ -98,7 +98,7 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={onCollapse}
-              className="panel-toggle-btn text-[11.5px] font-semibold px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
+              className="panel-toggle-btn min-h-[44px] min-w-[44px] flex items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
               title="Collapse Sessions Panel"
             >
               « Hide
@@ -109,8 +109,9 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={() => setIsSearchOpen(!isSearchOpen)}
-            className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title="Search sessions"
+            aria-label="Search sessions"
           >
             <Search className="h-5 w-5" />
           </button>
@@ -119,8 +120,9 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={onNewThread}
-            className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title="New session"
+            aria-label="New session"
           >
             <Plus className="h-5 w-5" />
           </button>
@@ -130,8 +132,9 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={() => setShowOverflow(!showOverflow)}
-              className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Sessions menu"
+              aria-label="Sessions menu"
             >
               <MoreHorizontal className="h-5 w-5" />
             </button>

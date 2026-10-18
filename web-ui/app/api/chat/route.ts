@@ -31,7 +31,8 @@ import {
   mergeSystemDirective,
   hasArtifactCreationIntent,
   resolveRoundModelOptions,
-  OUTPUT_HEADROOM_THINKING_DIRECTIVE
+  OUTPUT_HEADROOM_THINKING_DIRECTIVE,
+  isLiveRealTimeIntent
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -221,7 +222,12 @@ CRITICAL INSTRUCTIONS:
 - WEB RESEARCH & ACTION DISCIPLINE:
   - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
   - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
-  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.`;
+  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.
+- GROUNDING & HONESTY RULE:
+  - Never state, claim, or imply you checked real-time data (weather, live prices, news, web pages) unless you executed a 'search_web' or 'fetch_webpage_markdown' tool call in this turn.
+  - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
+- REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
+  - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -420,6 +426,7 @@ CRITICAL INSTRUCTIONS:
         let consecutiveFailures = 0;
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
+        let groundingEnforced = false;
 
         let accumulatedThoughts: string[] = [];
 
@@ -494,6 +501,20 @@ CRITICAL INSTRUCTIONS:
 
           const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
           if (!toolCalls || toolCalls.length === 0) {
+            if (
+              isLiveRealTimeIntent(userPrompt) &&
+              webResearchCalls === 0 &&
+              round < MAX_TOOL_ROUNDS - 1 &&
+              !groundingEnforced
+            ) {
+              groundingEnforced = true;
+              mergeSystemDirective(
+                conversationMessages,
+                "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now."
+              );
+              round++;
+              continue;
+            }
             break;
           }
 

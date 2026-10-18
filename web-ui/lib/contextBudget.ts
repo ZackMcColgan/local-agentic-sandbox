@@ -175,6 +175,33 @@ export function mergeSystemDirective<T extends { role?: string; content?: any }>
 }
 
 export const ARTIFACT_OUTPUT_HEADROOM_TOKENS = 3000;
+export const ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB = 4000;
+
+export function isLiveRealTimeIntent(userPrompt: string): boolean {
+  if (!userPrompt || typeof userPrompt !== "string") return false;
+  const p = userPrompt.toLowerCase();
+  return (
+    /\b(weather|forecast|temperature|humidity|precipitation|wind\s+speed)\b/i.test(p) ||
+    /\b(current\s+(price|stock|crypto|rate|news|version|status))\b/i.test(p) ||
+    /\b(today('?s)?\s+(news|headlines|weather|forecast))\b/i.test(p) ||
+    /\b(breaking\s+news|live\s+updates|latest\s+news)\b/i.test(p)
+  );
+}
+
+export function hasWebResearchResults(messages: any[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some((m) => {
+    if (m?.role === "tool" && (m?.name === "search_web" || m?.name === "fetch_webpage_markdown")) {
+      return true;
+    }
+    if (m?.tool_calls && Array.isArray(m.tool_calls)) {
+      return m.tool_calls.some((tc: any) =>
+        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name)
+      );
+    }
+    return false;
+  });
+}
 
 export const OUTPUT_HEADROOM_THINKING_DIRECTIVE =
   "[OUTPUT HEADROOM]: Keep <think> reasoning under 2 sentences so the full context window remains available for the complete deliverable.";
@@ -281,8 +308,11 @@ export function fitContextWindow(
     maxTokens = Math.max(2000, maxTokens - toolSchemaTokens);
   }
 
-  if (isArtifact || options?.reserveOutputTokens !== undefined) {
-    const headroom = options?.reserveOutputTokens ?? ARTIFACT_OUTPUT_HEADROOM_TOKENS;
+  const hasWebResults = hasWebResearchResults(working);
+  if (isArtifact || options?.reserveOutputTokens !== undefined || hasWebResults) {
+    const headroom =
+      options?.reserveOutputTokens ??
+      (hasWebResults ? ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB : ARTIFACT_OUTPUT_HEADROOM_TOKENS);
     const artifactCeiling = 8192 - headroom - rawToolTokens;
     maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
@@ -454,6 +484,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
 
   let round = 0;
   let finalContent = "";
+  let hasExecutedWebSearch = false;
   const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
   const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
@@ -501,6 +532,20 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     }
 
     if (toolCallsFromMessage.length === 0 || isFinalRound) {
+      if (
+        !isFinalRound &&
+        isLiveRealTimeIntent(userPrompt) &&
+        !hasExecutedWebSearch &&
+        round < maxToolRounds - 1
+      ) {
+        hasExecutedWebSearch = true;
+        mergeSystemDirective(
+          conversationMessages,
+          "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Invoke 'search_web' now."
+        );
+        round++;
+        continue;
+      }
       finalContent = fullRoundContent;
       conversationMessages.push({
         role: "assistant",

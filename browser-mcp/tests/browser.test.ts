@@ -70,6 +70,32 @@ describe("Browser MCP Toolchain Suite", () => {
       assert.ok(markdown.includes("* Item 1"));
       assert.ok(markdown.includes("* Item 2"));
     });
+
+    it("strips boilerplate layout elements (nav, header, footer, aside, cookie banners)", () => {
+      const pageWithBoilerplate = `
+        <html>
+          <body>
+            <header><div class="menu">Top Navigation Links</div></header>
+            <nav><ul><li>Home</li><li>About</li></ul></nav>
+            <aside>Related Links and ads</aside>
+            <div class="cookie-banner">Accept all cookies</div>
+            <main>
+              <h1>Substantive Article</h1>
+              <p>Current temperature is 72 degrees Fahrenheit with clear skies.</p>
+            </main>
+            <footer>Copyright 2026 Enterprise Inc. Privacy Policy.</footer>
+          </body>
+        </html>
+      `;
+      const markdown = htmlToMarkdown(pageWithBoilerplate);
+      assert.ok(!markdown.includes("Top Navigation Links"), "Header must be stripped");
+      assert.ok(!markdown.includes("Home"), "Nav must be stripped");
+      assert.ok(!markdown.includes("Related Links and ads"), "Aside must be stripped");
+      assert.ok(!markdown.includes("Accept all cookies"), "Cookie banner must be stripped");
+      assert.ok(!markdown.includes("Copyright 2026"), "Footer must be stripped");
+      assert.ok(markdown.includes("Substantive Article"));
+      assert.ok(markdown.includes("Current temperature is 72 degrees Fahrenheit"));
+    });
   });
 
   describe("Content Quality Evaluator", () => {

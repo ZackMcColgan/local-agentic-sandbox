@@ -86,6 +86,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/chatContextBudget.test.ts",
       "tests/chatActionDiscipline.test.ts",
+      "tests/chatScrollFollow.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
       "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
@@ -118,7 +120,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
-      "tests/skillsProposeApprove.test.ts"
+      "tests/skillsProposeApprove.test.ts",
+      "tests/mobileHeaderNav.test.ts"
     ]
   },
   {
@@ -145,6 +148,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
       "tests/chatActionDiscipline.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
       "tests/llmProvider.test.ts"
     ]
   },

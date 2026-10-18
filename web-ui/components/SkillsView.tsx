@@ -109,7 +109,7 @@ export function SkillsView({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
             >
               <Menu className="h-6 w-6" />
@@ -120,7 +120,7 @@ export function SkillsView({
           </div>
           {pending.length > 0 && (
             <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-400">
-              {pending.length} Pending Review
+              {pending.length} <span className="hidden sm:inline">Pending Review</span><span className="sm:hidden">Pending</span>
             </span>
           )}
         </div>
