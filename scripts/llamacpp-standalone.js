@@ -111,7 +111,10 @@ function stopAnyOllamaProcesses(logFn = console.log) {
 
 function handleControlRequest(req, res, state, options = {}) {
   const token = req.headers["x-control-token"];
-  const expectedToken = options.controlToken || process.env.LLM_SUPERVISOR_TOKEN;
+  const expectedToken =
+    options.controlToken ||
+    process.env.LLM_SUPERVISOR_TOKEN ||
+    "local-sandbox-token-2026";
   if (!token || (expectedToken && token !== expectedToken)) {
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Unauthorized", status: "unauthorized" }));
@@ -267,7 +270,7 @@ function startStandaloneSupervisor(options = {}) {
   const controlToken =
     options.controlToken ||
     process.env.LLM_SUPERVISOR_TOKEN ||
-    crypto.randomUUID();
+    "local-sandbox-token-2026";
   writeLog(`[llama-standalone] Control token: ${controlToken}`);
 
   const binaryPath = options.binaryPath || DEFAULT_BINARY_PATH;

@@ -66,6 +66,8 @@ spec:
               value: "llamacpp"
             - name: LLAMACPP_BASE_URL
               value: "http://llm-service:11434"
+            - name: LLM_SUPERVISOR_TOKEN
+              value: "local-sandbox-token-2026"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
           securityContext:

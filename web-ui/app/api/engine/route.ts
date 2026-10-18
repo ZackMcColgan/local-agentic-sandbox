@@ -13,7 +13,7 @@ function getSupervisorUrl(): string {
 }
 
 function getSupervisorToken(): string {
-  return process.env.LLM_SUPERVISOR_TOKEN || "";
+  return process.env.LLM_SUPERVISOR_TOKEN || "local-sandbox-token-2026";
 }
 
 export async function GET() {
