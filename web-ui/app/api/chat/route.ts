@@ -36,6 +36,13 @@ import {
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
+  DESCRIBE_TOOL_NAME,
+  buildLayer1Tools,
+  buildToolRegistry,
+  describeTool
+} from "@/lib/progressiveTools";
+import { compactConversationHistory } from "@/lib/conversationCompaction";
+import {
   loadUserProfile,
   formatProfileForContext,
   extractDurablePreferences,
@@ -179,49 +186,32 @@ export async function POST(req: NextRequest) {
     // Resolve honest effective reasoning effort
     let effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
 
-    const SYSTEM_PROMPT = `You are an intelligent autonomous AI engineering platform running on local hardware with Model Context Protocol (MCP) tool integration, workspace automation, and native multimodal support.
+    const SYSTEM_PROMPT = `Autonomous AI engineering platform on local hardware with MCP tool integration, workspace automation, and multimodal support.
 
-You have access to two distinct tool tiers:
-1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
-   - 'search_web': Search the internet using DuckDuckGo. Automatically fetches and attaches clean markdown for the most informative top result in 'top_result_content'. Use this whenever the user asks about real-time information, latest documentation, weather forecasts, external packages, or general web lookups.
-   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation, inspect web pages, or scrape articles.
-
-2. Air-Gapped Code Sandbox, Workspace & Git Operations (Tier: Sandbox / AI Mesh):
-   - 'workspace_get_tree': Retrieve repository directory tree skipping node_modules and .git.
-   - 'workspace_grep': Fast regex/substring search across codebase.
-   - 'workspace_read_file': Read files with line numbers.
-   - 'workspace_write_file': Atomically write code, Markdown documentation, and SVG vector diagrams (.svg).
-   - 'workspace_run_command': Execute commands (pytest, npm test, cargo, bash) and inspect exit codes & stderr.
-   - 'git_status' & 'git_diff': Inspect branch status, unstaged changes, and unified diffs.
-   - 'git_checkout_branch': Create or switch to an autonomous branch (e.g. agent/feat-xyz).
-   - 'git_commit': Commit staged modifications with semantic messages.
-   - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs).
-   - 'verify_container_provenance': Inspect runtime container security boundaries and SLSA attestations.
-   - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
+TOOL TIERS:
+1. Browser / Egress:
+   - 'search_web': DuckDuckGo search returning markdown summaries. Use for live data, documentation, weather, packages.
+   - 'fetch_webpage_markdown': Scrape public URL into markdown.
+2. Sandbox / Git:
+   - 'workspace_get_tree', 'workspace_grep', 'workspace_read_file', 'workspace_write_file', 'workspace_run_command'.
+   - 'git_status', 'git_diff', 'git_checkout_branch', 'git_commit'.
+   - 'execute_sandboxed_python', 'verify_container_provenance', 'docker_scout_policy_gate'.
+3. Tool Discovery:
+   - 'describe_tool': Inspect full JSON schema and parameters for any tool on demand.
 
 CRITICAL INSTRUCTIONS:
-- TOOL INVOCATION LATENCY & EFFICIENCY:
-  - When a query requires tools, invoke the tool call IMMEDIATELY as your first action.
-  - DO NOT output extensive conversational filler before calling a tool.
-  - Trigger the tool directly so execution starts in the sandbox without delay.
-  - Synthesize and reason over the facts AFTER tool results are returned.
+- TOOL LATENCY: Invoke tools immediately as your first action without conversational filler. Reason over facts after results return.
 - VECTOR DIAGRAMS & ARCHITECTURE DRAWINGS:
-  - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, prefer pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes and crisp high-contrast styling. Standard Draw.io XML (<mxfile> / <mxGraphModel>) is also fully supported and rendered interactively by the frontend viewer.
-  - When saving diagrams via 'workspace_write_file', use '.svg' or '.drawio' as appropriate.
-  - Both raw SVG code and Draw.io XML code blocks render as interactive vector graphics directly within the chat UI.
+  - Prefer self-contained SVG (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) in \`\`\`svg blocks. Draw.io XML (<mxfile> / <mxGraphModel>) in \`\`\`xml blocks. Render directly in chat.
 - ZERO-DEFLECTION POLICY FOR IN-CHAT RENDERING:
   - In-chat vector graphic and diagram rendering is a core product promise.
   - You MUST NEVER tell the user "rendering fails on your side", "the SVG viewer has not caught it", "paste into an external viewer", or tell them to use diagrams.net externally.
   - If a diagram does not render as expected, debug it, fix the markup, format the code block properly (\`\`\`svg or \`\`\`xml), or adjust the SVG/XML structure directly. Never deflect to external tools or blame the user's browser.
 - LOCAL CODEBASE ORACLE & GROUNDING:
-  - The system automatically consults local repository source files and documentation.
-  - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
-  - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
-- When asked to execute or test code, run the appropriate test command or sandbox runner.
-- Synthesize all tool results into a thorough, clean Markdown answer for the user.
+  - Ground answers in provided context and cite file:line (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`). For general knowledge, answer naturally without fabricating citations.
+- CODE EXECUTION: Run test commands with 'workspace_run_command' or run Python via 'execute_sandboxed_python'.
 - WEB RESEARCH & ACTION DISCIPLINE:
-  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
-  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
+  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn. As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
   - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.
 - GROUNDING & HONESTY RULE:
   - Never state, claim, or imply you checked real-time data (weather, live prices, news, web pages) unless you executed a 'search_web' or 'fetch_webpage_markdown' tool call in this turn.
@@ -363,14 +353,8 @@ CRITICAL INSTRUCTIONS:
           ...(browserSession?.tools || [])
         ];
 
-        const llmTools = allTools.map((t) => ({
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description || "",
-            parameters: t.inputSchema || {}
-          }
-        }));
+        const toolRegistry = buildToolRegistry(allTools);
+        const llmTools = buildLayer1Tools(allTools);
 
         const conversationMessages = [...messages];
         if (conversationMessages.length > 0) {
@@ -433,6 +417,12 @@ CRITICAL INSTRUCTIONS:
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (round < MAX_TOOL_ROUNDS) {
+          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
+          if (compaction.compacted) {
+            conversationMessages.length = 0;
+            conversationMessages.push(...compaction.messages);
+          }
+
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
             model: activeModel,
             round
@@ -538,6 +528,29 @@ CRITICAL INSTRUCTIONS:
               typeof toolCall.function.arguments === "string"
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments;
+
+            if (toolName === DESCRIBE_TOOL_NAME) {
+              const targetTool = toolArgs.tool_name || toolArgs.name;
+              const toolDesc = describeTool(targetTool, toolRegistry);
+              conversationMessages.push({
+                role: "tool",
+                name: DESCRIBE_TOOL_NAME,
+                content: JSON.stringify(toolDesc)
+              });
+              await sendEvent({
+                type: "trace",
+                trace: {
+                  tool: DESCRIBE_TOOL_NAME,
+                  args: toolArgs,
+                  result: toolDesc,
+                  durationMs: 1,
+                  timestamp: new Date().toISOString(),
+                  model: activeModel,
+                  tier: "workspace"
+                }
+              });
+              continue;
+            }
 
             const target = toolClientMap.get(toolName);
             if (!target) {

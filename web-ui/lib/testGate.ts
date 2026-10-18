@@ -138,9 +138,9 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/subagents/skillGate"),
     tests: ["tests/skillGate.test.ts"]
   },
-  // Chat API route
+  // Chat API route and progressive tools
   {
-    match: (p) => p.includes("app/api/chat/route"),
+    match: (p) => p.includes("app/api/chat/route") || p.includes("lib/progressiveTools") || p.includes("lib/conversationCompaction"),
     tests: [
       "tests/chatStreaming.test.ts",
       "tests/toolParser.test.ts",
@@ -149,6 +149,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/userProfile.test.ts",
       "tests/chatActionDiscipline.test.ts",
       "tests/agentGroundingAndHeadroom.test.ts",
+      "tests/progressiveToolDisclosure.test.ts",
+      "tests/conversationCompaction.test.ts",
       "tests/llmProvider.test.ts"
     ]
   },

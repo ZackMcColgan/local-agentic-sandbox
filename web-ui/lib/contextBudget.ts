@@ -6,6 +6,9 @@
  */
 
 import { computeModelOptions } from "./chatUtils";
+import { compactConversationHistory } from "./conversationCompaction";
+
+export { compactConversationHistory } from "./conversationCompaction";
 
 export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the 8192-token context window]";
@@ -233,6 +236,7 @@ export interface FitContextOptions {
   tools?: any[];
   isArtifactTurn?: boolean;
   reserveOutputTokens?: number;
+  compactHistory?: boolean;
 }
 
 /**
@@ -252,17 +256,21 @@ export function fitContextWindow(
     return [];
   }
 
+  const source = options?.compactHistory
+    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? 6000 }).messages
+    : messages;
+
   // 1. Enforce invariant: role === "system" ONLY exists at index 0.
   // Consolidate any stray system messages at index > 0 into index 0.
   let consolidatedSystemContent = "";
-  const hasLeadingSystem = messages[0]?.role === "system";
+  const hasLeadingSystem = source[0]?.role === "system";
   if (hasLeadingSystem) {
-    consolidatedSystemContent = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    consolidatedSystemContent = typeof source[0].content === "string" ? source[0].content : JSON.stringify(source[0].content || "");
   }
 
   const nonSystemMessages: any[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
+  for (let i = 0; i < source.length; i++) {
+    const m = source[i];
     if (i === 0 && hasLeadingSystem) {
       continue;
     }
@@ -490,6 +498,14 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
   while (round < maxToolRounds) {
+    const compaction = compactConversationHistory(conversationMessages, {
+      maxContentTokens
+    });
+    if (compaction.compacted) {
+      conversationMessages.length = 0;
+      conversationMessages.push(...compaction.messages);
+    }
+
     const isFinalRound = round === maxToolRounds - 1;
     if (isFinalRound) {
       mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
