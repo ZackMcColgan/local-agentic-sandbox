@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PRESET_MODEL_PROFILES, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getLLMProvider } from "@/lib/llm/provider";
 
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
 const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
@@ -8,18 +9,15 @@ const ACTIVE_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 export async function GET() {
   const timestamp = new Date().toISOString();
 
-  // 1. Discover Ollama Engine Health and Installed Models
+  // 1. Discover Inference Engine Health and Installed Models via LLMProvider
   let ollamaStatus = "OFFLINE";
   let availableModels: string[] = [];
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, {
-      method: "GET",
-      signal: AbortSignal.timeout(2500)
-    });
-    if (res.ok) {
+    const provider = getLLMProvider();
+    const isHealthy = await provider.healthCheck(OLLAMA_URL, { timeoutMs: 2500 });
+    if (isHealthy) {
       ollamaStatus = "HEALTHY";
-      const data = await res.json();
-      availableModels = (data.models || []).map((m: any) => m.name);
+      availableModels = await provider.listModels(OLLAMA_URL, { timeoutMs: 2500 });
     }
   } catch {
     ollamaStatus = "UNREACHABLE";

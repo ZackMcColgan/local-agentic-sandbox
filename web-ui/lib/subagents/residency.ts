@@ -118,8 +118,21 @@ export function resolveVramBudgetBytes(): number {
   return Math.round((Number.isFinite(gb) && gb > 0 ? gb : 16) * 1024 ** 3);
 }
 
-/** Reads model sizes from Ollama /api/tags (on-disk size ≈ resident weight size). Normalizes model names by stripping :latest. */
+/** Reads model sizes from Ollama /api/tags or LlamaCpp /v1/models. Normalizes model names by stripping :latest. */
 export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<Record<string, number>> {
+  if (resolveLLMEngine() === "llamacpp") {
+    const models = await getLLMProvider("llamacpp").listModels(baseUrl, { fetchImpl });
+    const sizes: Record<string, number> = {};
+    const defaultSizeBytes = 14 * 1024 ** 3;
+    for (const name of models) {
+      if (name) {
+        sizes[name] = defaultSizeBytes;
+        const base = name.replace(/:latest$/, "");
+        sizes[base] = defaultSizeBytes;
+      }
+    }
+    return sizes;
+  }
   const res = await fetchImpl(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/tags failed: HTTP ${res.status}`);
   const data: any = await res.json();
@@ -134,8 +147,17 @@ export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch =
   return sizes;
 }
 
-/** Reads currently loaded models from Ollama /api/ps. Normalizes model names by stripping :latest. */
+/** Reads currently loaded models from Ollama /api/ps or LlamaCpp /v1/models. Normalizes model names by stripping :latest. */
 export async function fetchLoadedModels(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<{ name: string; sizeVram: number; baseName: string }[]> {
+  if (resolveLLMEngine() === "llamacpp") {
+    const models = await getLLMProvider("llamacpp").listModels(baseUrl, { fetchImpl });
+    const defaultSizeBytes = 14 * 1024 ** 3;
+    return models.map((rawName) => ({
+      name: rawName,
+      baseName: rawName.replace(/:latest$/, ""),
+      sizeVram: defaultSizeBytes
+    }));
+  }
   const res = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/ps failed: HTTP ${res.status}`);
   const data: any = await res.json();
@@ -221,11 +243,15 @@ export async function enforceResidency(
 /**
  * Immediately unloads all models currently resident in Ollama VRAM.
  * Sends POST /api/generate with keep_alive: 0 for every loaded model.
+ * When LLM_ENGINE=llamacpp, standalone llama-server keeps its GGUF permanently resident, so this is a safe no-op.
  */
 export async function unloadAllModels(
   baseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
+  if (resolveLLMEngine() === "llamacpp") {
+    return [];
+  }
   const unloaded: string[] = [];
   try {
     const loaded = await fetchLoadedModels(baseUrl, fetchImpl);

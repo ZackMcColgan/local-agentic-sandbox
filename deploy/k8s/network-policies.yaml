@@ -97,10 +97,12 @@ spec:
           port: 4318
         - protocol: TCP
           port: 4317
-    # Allow communication to host ollama (or in-cluster ollama)
+    # Allow communication to host inference engine (standalone llama-server / ollama-service)
     - ports:
         - protocol: TCP
           port: 11434
+        - protocol: TCP
+          port: 11435
     # Allow communication to Qdrant vector database (Oracle memory)
     - to:
         - podSelector:

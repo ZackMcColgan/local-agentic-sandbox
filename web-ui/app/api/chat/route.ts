@@ -83,41 +83,32 @@ async function triageComplexity(
   triageModel: string = DEFAULT_SUBAGENT_MODEL
 ): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
   try {
-    const res = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: triageModel,
-        messages: [
-          {
-            role: "system",
-            content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
+    const data = await getLLMProvider().chat(ollamaBaseUrl, {
+      model: triageModel,
+      messages: [
+        {
+          role: "system",
+          content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
 SIMPLE_EXECUTION: file navigation, git branch operations, running tests/commands, inspecting logs, small bug fixes, direct tool calls.
 DEEP_SYNTHESIS: novel system architecture, complex algorithm design, full module refactoring, difficult multi-step planning.
 Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "reasoning": "brief explanation"}`
-          },
-          {
-            role: "user",
-            content: userQuery
-          }
-        ],
-        format: "json",
-        stream: false,
-        keep_alive: "24h",
-        options: {
-          temperature: 0.1,
-          num_ctx: 2048,
-          num_predict: 128
+        },
+        {
+          role: "user",
+          content: userQuery
         }
-      })
+      ],
+      format: "json",
+      keep_alive: "24h",
+      options: {
+        temperature: 0.1,
+        num_ctx: 2048,
+        num_predict: 128
+      }
     });
 
-    if (!res.ok) {
-      return "SIMPLE_EXECUTION";
-    }
-
-    const data = await res.json();
-    const parsed = JSON.parse(data.message?.content || "{}");
+    const rawContent = (data.message?.content || "{}").replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+    const parsed = JSON.parse(rawContent || "{}");
     if (parsed.complexity === "DEEP_SYNTHESIS") {
       return "DEEP_SYNTHESIS";
     }
