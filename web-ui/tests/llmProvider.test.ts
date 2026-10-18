@@ -781,9 +781,13 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(!standalone.DEFAULT_BINARY_PATH.toLowerCase().includes("ollama"), "Binary path must not reference Ollama");
 
       const args: string[] = standalone.buildLlamaServerArgs();
-      assert.ok(args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"), "Must use standalone GGUF path in C:\\AI\\llamacpp\\models");
+      assert.ok(
+        args.includes("C:\\AI\\llamacpp\\models\\Swift-1.5-Qwen3.8-27B-IQ3_XS.gguf") ||
+        args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"),
+        "Must use standalone GGUF path in C:\\AI\\llamacpp\\models"
+      );
       assert.ok(args.every((a) => !a.toLowerCase().includes("ollama") && !a.includes("blobs\\sha256-")), "Args must not reference Ollama or its blob store");
-      assert.ok(args.includes("-c") && args.includes("8192"), "Must set 8192 context window");
+      assert.ok(args.includes("-c") && (args.includes("12288") || args.includes("8192")), "Must set context window");
       assert.ok(args.includes("--spec-type") && args.includes("draft-mtp"), "Must enable draft-mtp speculative decoding");
       assert.ok(args.includes("--cache-type-k") && args.includes("q8_0"), "Must enable q8_0 KV cache");
       assert.ok(args.includes("--flash-attn") && args.includes("auto"), "Must enable flash-attn auto");

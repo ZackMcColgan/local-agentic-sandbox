@@ -24,10 +24,10 @@ const { spawn, execSync } = require("child_process");
 const DEFAULT_BINARY_PATH =
   process.env.LLAMACPP_BINARY_PATH || "C:\\AI\\llamacpp\\bin\\llama-server.exe";
 const DEFAULT_MODEL_PATH =
-  process.env.LLAMACPP_MODEL_PATH || "C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf";
+  process.env.LLAMACPP_MODEL_PATH || "C:\\AI\\llamacpp\\models\\Swift-1.5-Qwen3.8-27B-IQ3_XS.gguf";
 const DEFAULT_MMPROJ_PATH =
   process.env.LLAMACPP_MMPROJ_PATH || "C:\\AI\\llamacpp\\models\\swift-15-27b-mtp-mmproj.gguf";
-const DEFAULT_MODEL_ALIAS = process.env.LLAMACPP_MODEL_ALIAS || "swift-15-27b-mtp";
+const DEFAULT_MODEL_ALIAS = process.env.LLAMACPP_MODEL_ALIAS || "Swift-1.5-Qwen3.8-27B-IQ3_XS";
 const DEFAULT_BACKEND_PORT = Number(process.env.LLAMACPP_BACKEND_PORT || 11435);
 const DEFAULT_BRIDGE_PORT = Number(process.env.LLAMACPP_BRIDGE_PORT || 11434);
 const DEFAULT_CONTROL_PORT = Number(process.env.LLAMACPP_CONTROL_PORT || 11435);
@@ -295,9 +295,11 @@ function startStandaloneSupervisor(options = {}) {
   const spawnServer = () => {
     if (shuttingDown || state.status === "stopped") return;
     state.status = "starting";
+    state.model = options.alias || DEFAULT_MODEL_ALIAS;
     stopAnyOllamaProcesses(() => {});
-    writeLog(`[llama-standalone] Spawning official standalone llama-server: ${binaryPath} ${args.join(" ")}`);
-    childProc = spawn(binaryPath, args, {
+    const serverArgs = buildLlamaServerArgs(options);
+    writeLog(`[llama-standalone] Spawning official standalone llama-server: ${binaryPath} ${serverArgs.join(" ")}`);
+    childProc = spawn(binaryPath, serverArgs, {
       env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true

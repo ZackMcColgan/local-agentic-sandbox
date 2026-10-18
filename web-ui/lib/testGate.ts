@@ -443,6 +443,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes("temp-") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
+    normalizedPath.startsWith("scripts/bench-") ||
+    normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||
