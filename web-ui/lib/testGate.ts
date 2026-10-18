@@ -48,7 +48,7 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   // Direct test file changed: run itself
   {
-    match: (p) => /tests\/[^/]+\.test\.ts$/.test(p),
+    match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
     tests: [] // handled dynamically
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
@@ -121,7 +121,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/taskControls.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/skillsProposeApprove.test.ts",
-      "tests/mobileHeaderNav.test.ts"
+      "tests/mobileHeaderNav.test.ts",
+      "tests/engineToggle.test.ts"
     ]
   },
   {
@@ -154,14 +155,20 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/llmProvider.test.ts"
     ]
   },
-  // LLM Provider abstraction & standalone supervisor
+  // LLM Provider abstraction, standalone supervisor & engine control
   {
     match: (p) =>
       p.includes("lib/llm/") ||
       p.includes("lib/agentEngine") ||
       p.includes("scripts/llamacpp-standalone") ||
+      p.includes("app/api/engine") ||
+      p.includes("components/EngineStatusPill") ||
       p.includes("app/api/sandbox-status/route"),
-    tests: ["tests/llmProvider.test.ts"]
+    tests: [
+      "tests/llmProvider.test.ts",
+      "tests/engineRoute.test.ts",
+      "tests/engineToggle.test.ts"
+    ]
   },
   // Tasks API route
   {
@@ -467,7 +474,7 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
     }
 
     // Direct test file changed
-    if (/tests\/[^/]+\.test\.ts$/.test(normalized)) {
+    if (/tests\/[^/]+\.test\.(ts|js)$/.test(normalized)) {
       const testFile = normalized.startsWith("web-ui/")
         ? normalized.replace(/^web-ui\//, "")
         : normalized;
@@ -507,7 +514,7 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
 
   try {
     // 1. Uncommitted working tree files (unstaged + staged)
-    const statusOut = execSync("git status --porcelain", { cwd: root, encoding: "utf8" });
+    const statusOut = execSync("git status --porcelain -uall", { cwd: root, encoding: "utf8" });
     for (const rawLine of statusOut.split("\n")) {
       if (!rawLine || rawLine.length < 3) continue;
       // In git status --porcelain: index 0 and 1 are status, index 2 is space, path is index 3+

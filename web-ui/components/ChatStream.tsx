@@ -34,10 +34,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "../lib/clipboard";
-import { DiffViewer } from "./DiffViewer";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
+import { EngineStatusPill } from "./EngineStatusPill";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
@@ -802,6 +802,9 @@ export function ChatStream({
               {threadScope || activeTask?.scope}
             </span>
           )}
+
+          {/* Engine Status Pill */}
+          <EngineStatusPill onOpenSettings={onOpenModelSheet} />
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button

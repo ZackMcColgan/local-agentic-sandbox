@@ -103,7 +103,7 @@ export default function Home() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
-      const queryTab = urlParams.get("tab");
+      const queryTab = urlParams.get("tab") || urlParams.get("view");
       if (queryTab === "skills") setActiveNavView("skills");
       else if (queryTab === "builds") setActiveNavView("builds");
       else if (queryTab === "morning-report") setActiveNavView("morning-report");
@@ -260,7 +260,7 @@ export default function Home() {
             const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
             const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");
-            const explicitView = urlParams?.get("view") as NavView;
+            const explicitView = (urlParams?.get("view") || urlParams?.get("tab")) as NavView;
             const drawerQuery = urlParams?.get("drawer");
 
             if (drawerQuery === "open" || drawerQuery === "true") {

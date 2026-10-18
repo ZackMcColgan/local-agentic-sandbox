@@ -774,9 +774,20 @@ CRITICAL INSTRUCTIONS:
           } catch {}
         }
         console.error("[Agent Orchestrator Streaming Error]:", err);
+        const errMsg = String(err?.message || "");
+        const isEngineStopped =
+          errMsg.includes("engine_stopped") ||
+          errMsg.includes("LLM engine is stopped") ||
+          errMsg.includes("ECONNREFUSED") ||
+          err?.statusCode === 503;
+
+        const friendlyMessage = isEngineStopped
+          ? "LLM engine is stopped. Start it from Settings or the status bar."
+          : (err.message || "Internal orchestrator error");
+
         await sendEvent({
           type: "error",
-          error: err.message || "Internal orchestrator error"
+          error: friendlyMessage
         });
       } finally {
         clearInterval(heartbeatInterval);
@@ -806,12 +817,24 @@ CRITICAL INSTRUCTIONS:
       } catch {}
     }
     console.error("[Agent Orchestrator Setup Error]:", err);
+    const errMsg = String(err?.message || "");
+    const isEngineStopped =
+      errMsg.includes("engine_stopped") ||
+      errMsg.includes("LLM engine is stopped") ||
+      errMsg.includes("ECONNREFUSED") ||
+      err?.statusCode === 503;
+
+    const friendlyMessage = isEngineStopped
+      ? "LLM engine is stopped. Start it from Settings or the status bar."
+      : (err.message || "Internal orchestrator error");
+
     return NextResponse.json(
       {
-        error: err.message || "Internal orchestrator error",
+        error: friendlyMessage,
+        type: isEngineStopped ? "engine_stopped" : undefined,
         traces: []
       },
-      { status: 500 }
+      { status: isEngineStopped ? 503 : 500 }
     );
   }
 }
