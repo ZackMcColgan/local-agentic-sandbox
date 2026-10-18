@@ -88,7 +88,9 @@ function buildLlamaServerArgs(config = {}) {
 }
 
 function buildLlamaServerEnv(baseEnv = process.env, config = {}) {
-  const binDir = path.dirname(config.binaryPath || DEFAULT_BINARY_PATH);
+  const binary = config.binaryPath || DEFAULT_BINARY_PATH;
+  const dirnameFn = binary.includes("\\") && path.win32 ? path.win32.dirname : path.dirname;
+  const binDir = dirnameFn(binary);
   const existingPath = baseEnv.PATH || baseEnv.Path || "";
   return {
     ...baseEnv,
