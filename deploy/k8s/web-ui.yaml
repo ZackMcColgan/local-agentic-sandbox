@@ -13,13 +13,13 @@ spec:
     matchLabels:
       app: web-ui
       app.kubernetes.io/part-of: local-agentic-sandbox
-      app.kubernetes.io/version: "1.0.0"
+      app.kubernetes.io/version: "2.0.0"
   template:
     metadata:
       labels:
         app: web-ui
         app.kubernetes.io/part-of: local-agentic-sandbox
-        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/version: "2.0.0"
         tier: frontend
     spec:
       securityContext:
@@ -40,10 +40,14 @@ spec:
               value: "production"
             - name: PORT
               value: "3000"
+            - name: LLM_BASE_URL
+              value: "http://llm-service:11434"
+            - name: LLM_HOST
+              value: "http://llm-service:11434"
             - name: OLLAMA_BASE_URL
-              value: "http://ollama-service:11434"
+              value: "http://llm-service:11434"
             - name: OLLAMA_HOST
-              value: "http://ollama-service:11434"
+              value: "http://llm-service:11434"
             - name: MCP_SERVER_URL
               value: "http://mcp-runner:8080/sse"
             - name: BROWSER_MCP_URL
@@ -61,7 +65,9 @@ spec:
             - name: LLM_ENGINE
               value: "llamacpp"
             - name: LLAMACPP_BASE_URL
-              value: "http://ollama-service:11434"
+              value: "http://llm-service:11434"
+            - name: LLM_SUPERVISOR_TOKEN
+              value: "local-sandbox-token-2026"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
           securityContext:

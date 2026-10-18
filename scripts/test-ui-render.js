@@ -155,6 +155,12 @@ async function run() {
   await capture(`${baseUrl}/?theme=dark&tab=security`, 1440, 900, false, 'test_ui_telemetry_desktop.png');
   await capture(`${baseUrl}/?theme=light&tab=security`, 390, 844, true, 'test_ui_telemetry_mobile.png');
 
+  // Settings Views (Light & Dark)
+  await capture(`${baseUrl}/?theme=light&tab=settings`, 1440, 900, false, 'test_ui_settings_desktop_light.png');
+  await capture(`${baseUrl}/?theme=dark&tab=settings`, 1440, 900, false, 'test_ui_settings_desktop_dark.png');
+  await capture(`${baseUrl}/?theme=light&tab=settings`, 390, 844, true, 'test_ui_settings_mobile_light.png');
+  await capture(`${baseUrl}/?theme=dark&tab=settings`, 390, 844, true, 'test_ui_settings_mobile_dark.png');
+
   // Morning Report Views
   await capture(`${baseUrl}/morning-report?theme=light`, 1440, 900, false, 'test_ui_morning_report_desktop_light.png', 2200);
   await capture(`${baseUrl}/morning-report?theme=light`, 390, 844, true, 'test_ui_morning_report_mobile_light.png', 2200);

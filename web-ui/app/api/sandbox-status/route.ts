@@ -1,28 +1,27 @@
 import { NextResponse } from "next/server";
 import { PRESET_MODEL_PROFILES, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getLLMProvider } from "@/lib/llm/provider";
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://ollama:11434";
+const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://llm-service:11434";
+const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
 const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
 const ACTIVE_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
 export async function GET() {
   const timestamp = new Date().toISOString();
 
-  // 1. Discover Ollama Engine Health and Installed Models
-  let ollamaStatus = "OFFLINE";
+  // 1. Discover Inference Engine Health and Installed Models via LLMProvider
+  let llmStatus = "OFFLINE";
   let availableModels: string[] = [];
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, {
-      method: "GET",
-      signal: AbortSignal.timeout(2500)
-    });
-    if (res.ok) {
-      ollamaStatus = "HEALTHY";
-      const data = await res.json();
-      availableModels = (data.models || []).map((m: any) => m.name);
+    const provider = getLLMProvider();
+    const isHealthy = await provider.healthCheck(LLM_BASE_URL, { timeoutMs: 2500 });
+    if (isHealthy) {
+      llmStatus = "HEALTHY";
+      availableModels = await provider.listModels(LLM_BASE_URL, { timeoutMs: 2500 });
     }
   } catch {
-    ollamaStatus = "UNREACHABLE";
+    llmStatus = "UNREACHABLE";
   }
 
   // 2. Check MCP Server Health
@@ -40,6 +39,14 @@ export async function GET() {
     mcpStatus = "UNREACHABLE";
   }
 
+  const llmInfo = {
+    status: llmStatus,
+    url: LLM_BASE_URL,
+    target_model: ACTIVE_MODEL,
+    installed_models: availableModels,
+    profiles: PRESET_MODEL_PROFILES
+  };
+
   return NextResponse.json({
     timestamp,
     cluster: {
@@ -48,13 +55,8 @@ export async function GET() {
       egress_policy: "BLOCKED"
     },
     services: {
-      ollama: {
-        status: ollamaStatus,
-        url: OLLAMA_URL,
-        target_model: ACTIVE_MODEL,
-        installed_models: availableModels,
-        profiles: PRESET_MODEL_PROFILES
-      },
+      llm: llmInfo,
+      ollama: llmInfo,
       mcp_server: {
         status: mcpStatus,
         url: `${MCP_BASE}/sse`,

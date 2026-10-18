@@ -28,19 +28,30 @@ import {
   filterToolsForWebBudget,
   buildSynthesisDirective,
   shouldRunPostToolSynthesis,
-  mergeSystemDirective
+  mergeSystemDirective,
+  hasArtifactCreationIntent,
+  resolveRoundModelOptions,
+  OUTPUT_HEADROOM_THINKING_DIRECTIVE,
+  isLiveRealTimeIntent
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
+import {
+  DESCRIBE_TOOL_NAME,
+  buildLayer1Tools,
+  buildToolRegistry,
+  describeTool
+} from "@/lib/progressiveTools";
+import { compactConversationHistory } from "@/lib/conversationCompaction";
 import {
   loadUserProfile,
   formatProfileForContext,
   extractDurablePreferences,
   recordProfileEntry
 } from "@/lib/memory/profile";
-import { searchSemanticMemory } from "@/lib/memory/semanticMemory";
 import { getLLMProvider } from "@/lib/llm/provider";
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
@@ -79,45 +90,36 @@ async function connectMcpClient(url: string, name: string) {
  */
 async function triageComplexity(
   userQuery: string,
-  ollamaBaseUrl: string,
+  llmBaseUrl: string,
   triageModel: string = DEFAULT_SUBAGENT_MODEL
 ): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
   try {
-    const res = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: triageModel,
-        messages: [
-          {
-            role: "system",
-            content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
+    const data = await getLLMProvider().chat(llmBaseUrl, {
+      model: triageModel,
+      messages: [
+        {
+          role: "system",
+          content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
 SIMPLE_EXECUTION: file navigation, git branch operations, running tests/commands, inspecting logs, small bug fixes, direct tool calls.
 DEEP_SYNTHESIS: novel system architecture, complex algorithm design, full module refactoring, difficult multi-step planning.
 Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "reasoning": "brief explanation"}`
-          },
-          {
-            role: "user",
-            content: userQuery
-          }
-        ],
-        format: "json",
-        stream: false,
-        keep_alive: "24h",
-        options: {
-          temperature: 0.1,
-          num_ctx: 2048,
-          num_predict: 128
+        },
+        {
+          role: "user",
+          content: userQuery
         }
-      })
+      ],
+      format: "json",
+      keep_alive: "24h",
+      options: {
+        temperature: 0.1,
+        num_ctx: 2048,
+        num_predict: 128
+      }
     });
 
-    if (!res.ok) {
-      return "SIMPLE_EXECUTION";
-    }
-
-    const data = await res.json();
-    const parsed = JSON.parse(data.message?.content || "{}");
+    const rawContent = (data.message?.content || "{}").replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+    const parsed = JSON.parse(rawContent || "{}");
     if (parsed.complexity === "DEEP_SYNTHESIS") {
       return "DEEP_SYNTHESIS";
     }
@@ -131,10 +133,13 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
 /**
  * Unified streaming generator delegating to the resolved LLMProvider (Ollama or llama.cpp)
  */
-async function* streamOllamaChat(ollamaUrl: string, payload: any) {
+async function* streamLlmChat(llmBaseUrl: string, payload: any) {
   const provider = getLLMProvider();
-  yield* provider.streamChat(ollamaUrl, payload);
+  yield* provider.streamChat(llmBaseUrl, payload);
 }
+
+// Backward-compat alias
+const streamOllamaChat = streamLlmChat;
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
@@ -181,50 +186,38 @@ export async function POST(req: NextRequest) {
     // Resolve honest effective reasoning effort
     let effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
 
-    const SYSTEM_PROMPT = `You are an intelligent autonomous AI engineering platform running on local hardware with Model Context Protocol (MCP) tool integration, workspace automation, and native multimodal support.
+    const SYSTEM_PROMPT = `Autonomous AI engineering platform on local hardware with MCP tool integration, workspace automation, and multimodal support.
 
-You have access to two distinct tool tiers:
-1. Web Search & Documentation Scraper (Tier: Browser / Egress Mesh):
-   - 'search_web': Search the internet using DuckDuckGo. Automatically fetches and attaches clean markdown for the most informative top result in 'top_result_content'. Use this whenever the user asks about real-time information, latest documentation, weather forecasts, external packages, or general web lookups.
-   - 'fetch_webpage_markdown': Fetch any public URL and convert its content into clean markdown. Use this to read documentation, inspect web pages, or scrape articles.
-
-2. Air-Gapped Code Sandbox, Workspace & Git Operations (Tier: Sandbox / AI Mesh):
-   - 'workspace_get_tree': Retrieve repository directory tree skipping node_modules and .git.
-   - 'workspace_grep': Fast regex/substring search across codebase.
-   - 'workspace_read_file': Read files with line numbers.
-   - 'workspace_write_file': Atomically write code, Markdown documentation, and SVG vector diagrams (.svg).
-   - 'workspace_run_command': Execute commands (pytest, npm test, cargo, bash) and inspect exit codes & stderr.
-   - 'git_status' & 'git_diff': Inspect branch status, unstaged changes, and unified diffs.
-   - 'git_checkout_branch': Create or switch to an autonomous branch (e.g. agent/feat-xyz).
-   - 'git_commit': Commit staged modifications with semantic messages.
-   - 'execute_sandboxed_python': Run Python code and test assertions inside a zero-trust, unprivileged Linux container sandbox (cap_drop ALL, read-only rootfs).
-   - 'verify_container_provenance': Inspect runtime container security boundaries and SLSA attestations.
-   - 'docker_scout_policy_gate': Evaluate container CVE vulnerabilities against security policies.
+TOOL TIERS:
+1. Browser / Egress:
+   - 'search_web': DuckDuckGo search returning markdown summaries. Use for live data, documentation, weather, packages.
+   - 'fetch_webpage_markdown': Scrape public URL into markdown.
+2. Sandbox / Git:
+   - 'workspace_get_tree', 'workspace_grep', 'workspace_read_file', 'workspace_write_file', 'workspace_run_command'.
+   - 'git_status', 'git_diff', 'git_checkout_branch', 'git_commit'.
+   - 'execute_sandboxed_python', 'verify_container_provenance', 'docker_scout_policy_gate'.
+3. Tool Discovery:
+   - 'describe_tool': Inspect full JSON schema and parameters for any tool on demand.
 
 CRITICAL INSTRUCTIONS:
-- TOOL INVOCATION LATENCY & EFFICIENCY:
-  - When a query requires tools, invoke the tool call IMMEDIATELY as your first action.
-  - DO NOT output extensive conversational filler before calling a tool.
-  - Trigger the tool directly so execution starts in the sandbox without delay.
-  - Synthesize and reason over the facts AFTER tool results are returned.
+- TOOL LATENCY: Invoke tools immediately as your first action without conversational filler. Reason over facts after results return.
 - VECTOR DIAGRAMS & ARCHITECTURE DRAWINGS:
-  - When asked to draw, design, or provide architecture diagrams, flowcharts, schemas, or vector graphics, prefer pure, self-contained SVG markup (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) with explicit shapes and crisp high-contrast styling. Standard Draw.io XML (<mxfile> / <mxGraphModel>) is also fully supported and rendered interactively by the frontend viewer.
-  - When saving diagrams via 'workspace_write_file', use '.svg' or '.drawio' as appropriate.
-  - Both raw SVG code and Draw.io XML code blocks render as interactive vector graphics directly within the chat UI.
+  - Prefer self-contained SVG (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) in \`\`\`svg blocks. Draw.io XML (<mxfile> / <mxGraphModel>) in \`\`\`xml blocks. Render directly in chat.
 - ZERO-DEFLECTION POLICY FOR IN-CHAT RENDERING:
   - In-chat vector graphic and diagram rendering is a core product promise.
   - You MUST NEVER tell the user "rendering fails on your side", "the SVG viewer has not caught it", "paste into an external viewer", or tell them to use diagrams.net externally.
   - If a diagram does not render as expected, debug it, fix the markup, format the code block properly (\`\`\`svg or \`\`\`xml), or adjust the SVG/XML structure directly. Never deflect to external tools or blame the user's browser.
 - LOCAL CODEBASE ORACLE & GROUNDING:
-  - The system automatically consults local repository source files and documentation.
-  - When local repository context is provided in the prompt context below, ground your answer in those files and cite the file path and line numbers explicitly (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`).
-  - When no local repository context is provided or the user query is a general knowledge question (e.g. creative writing, haikus, general knowledge, standard facts), answer directly and naturally from your general knowledge. NEVER fabricate imaginary file:line citations when no local context applies.
-- When asked to execute or test code, run the appropriate test command or sandbox runner.
-- Synthesize all tool results into a thorough, clean Markdown answer for the user.
+  - Ground answers in provided context and cite file:line (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`). For general knowledge, answer naturally without fabricating citations.
+- CODE EXECUTION: Run test commands with 'workspace_run_command' or run Python via 'execute_sandboxed_python'.
 - WEB RESEARCH & ACTION DISCIPLINE:
-  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn.
-  - As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
-  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.`;
+  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn. As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
+  - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.
+- GROUNDING & HONESTY RULE:
+  - Never state, claim, or imply you checked real-time data (weather, live prices, news, web pages) unless you executed a 'search_web' or 'fetch_webpage_markdown' tool call in this turn.
+  - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
+- REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
+  - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -248,7 +241,7 @@ CRITICAL INSTRUCTIONS:
           try {
             const archSpec = await extractArchitectureSpec(
               { name: parsed.name, base64: parsed.rawBase64, type: parsed.type },
-              OLLAMA_URL,
+              LLM_BASE_URL,
               "gemma4:e4b"
             );
             docContexts.push(
@@ -305,12 +298,6 @@ CRITICAL INSTRUCTIONS:
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
             );
             const ragPromise = (async () => {
-              if (process.env.OLLAMA_ALLOW_EMBEDDING_SWAP === "true") {
-                const semanticRes = await searchSemanticMemory(userPrompt);
-                if (!semanticRes.degraded && semanticRes.citations.length > 0) {
-                  return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
-                }
-              }
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
                 contextSnippet: oracleResult.contextSnippet || "",
@@ -324,7 +311,7 @@ CRITICAL INSTRUCTIONS:
               oracleCitations = lookupResult.citations;
             }
           } catch (err: any) {
-            console.warn("[ChatRoute] Semantic memory retrieval warning:", err.message);
+            console.warn("[ChatRoute] Oracle codebase retrieval warning:", err.message);
           }
         }
 
@@ -366,14 +353,8 @@ CRITICAL INSTRUCTIONS:
           ...(browserSession?.tools || [])
         ];
 
-        const ollamaTools = allTools.map((t) => ({
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description || "",
-            parameters: t.inputSchema || {}
-          }
-        }));
+        const toolRegistry = buildToolRegistry(allTools);
+        const llmTools = buildLayer1Tools(allTools);
 
         const conversationMessages = [...messages];
         if (conversationMessages.length > 0) {
@@ -429,40 +410,60 @@ CRITICAL INSTRUCTIONS:
         let consecutiveFailures = 0;
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
+        let groundingEnforced = false;
 
         let accumulatedThoughts: string[] = [];
 
+        const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
+
         while (round < MAX_TOOL_ROUNDS) {
+          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
+          if (compaction.compacted) {
+            conversationMessages.length = 0;
+            conversationMessages.push(...compaction.messages);
+          }
+
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
             model: activeModel,
             round
           });
 
+          const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
-          if (round === MAX_TOOL_ROUNDS - 1) {
+          if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
           }
+          if (isArtifactRequest && (isFinalRound || traces.length > 0)) {
+            mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+          }
 
-          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
+          const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
 
-          const ollamaPayload: any = {
+          const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
-              tools: round === MAX_TOOL_ROUNDS - 1 ? undefined : roundTools
+              tools: isFinalRound ? undefined : roundTools,
+              isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+            options: resolveRoundModelOptions({
+              model: activeModel,
+              requestedEffort: effectiveReasoningEffort,
+              userPrompt,
+              isSynthesisOrFinalRound: isFinalRound,
+              hasCompletedToolCalls: traces.length > 0
+            })
           };
 
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
-            ollamaPayload.tools = roundTools;
+            llmPayload.tools = roundTools;
           }
 
           let fullRoundContent = "";
           let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
-          for await (const chunk of streamOllamaChat(OLLAMA_URL, ollamaPayload)) {
+          for await (const chunk of streamLlmChat(LLM_BASE_URL, llmPayload)) {
             if (chunk.message?.thinking) {
               roundThinking += chunk.message.thinking;
               await sendEvent({ type: "thought", thought: roundThinking });
@@ -490,6 +491,20 @@ CRITICAL INSTRUCTIONS:
 
           const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
           if (!toolCalls || toolCalls.length === 0) {
+            if (
+              isLiveRealTimeIntent(userPrompt) &&
+              webResearchCalls === 0 &&
+              round < MAX_TOOL_ROUNDS - 1 &&
+              !groundingEnforced
+            ) {
+              groundingEnforced = true;
+              mergeSystemDirective(
+                conversationMessages,
+                "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now."
+              );
+              round++;
+              continue;
+            }
             break;
           }
 
@@ -513,6 +528,29 @@ CRITICAL INSTRUCTIONS:
               typeof toolCall.function.arguments === "string"
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments;
+
+            if (toolName === DESCRIBE_TOOL_NAME) {
+              const targetTool = toolArgs.tool_name || toolArgs.name;
+              const toolDesc = describeTool(targetTool, toolRegistry);
+              conversationMessages.push({
+                role: "tool",
+                name: DESCRIBE_TOOL_NAME,
+                content: JSON.stringify(toolDesc)
+              });
+              await sendEvent({
+                type: "trace",
+                trace: {
+                  tool: DESCRIBE_TOOL_NAME,
+                  args: toolArgs,
+                  result: toolDesc,
+                  durationMs: 1,
+                  timestamp: new Date().toISOString(),
+                  model: activeModel,
+                  tier: "workspace"
+                }
+              });
+              continue;
+            }
 
             const target = toolClientMap.get(toolName);
             if (!target) {
@@ -668,11 +706,21 @@ CRITICAL INSTRUCTIONS:
             status: "Synthesizing final answer..."
           });
 
+          if (isArtifactRequest) {
+            mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+          }
+
           let synthContent = "";
-          for await (const chunk of streamOllamaChat(OLLAMA_URL, {
+          for await (const chunk of streamLlmChat(LLM_BASE_URL, {
             model: activeModel,
-            messages: fitContextWindow(conversationMessages),
-            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+            messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
+            options: resolveRoundModelOptions({
+              model: activeModel,
+              requestedEffort: effectiveReasoningEffort,
+              userPrompt,
+              isSynthesisOrFinalRound: true,
+              hasCompletedToolCalls: traces.length > 0
+            })
           })) {
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
@@ -726,9 +774,20 @@ CRITICAL INSTRUCTIONS:
           } catch {}
         }
         console.error("[Agent Orchestrator Streaming Error]:", err);
+        const errMsg = String(err?.message || "");
+        const isEngineStopped =
+          errMsg.includes("engine_stopped") ||
+          errMsg.includes("LLM engine is stopped") ||
+          errMsg.includes("ECONNREFUSED") ||
+          err?.statusCode === 503;
+
+        const friendlyMessage = isEngineStopped
+          ? "LLM engine is stopped. Start it from Settings or the status bar."
+          : (err.message || "Internal orchestrator error");
+
         await sendEvent({
           type: "error",
-          error: err.message || "Internal orchestrator error"
+          error: friendlyMessage
         });
       } finally {
         clearInterval(heartbeatInterval);
@@ -758,12 +817,24 @@ CRITICAL INSTRUCTIONS:
       } catch {}
     }
     console.error("[Agent Orchestrator Setup Error]:", err);
+    const errMsg = String(err?.message || "");
+    const isEngineStopped =
+      errMsg.includes("engine_stopped") ||
+      errMsg.includes("LLM engine is stopped") ||
+      errMsg.includes("ECONNREFUSED") ||
+      err?.statusCode === 503;
+
+    const friendlyMessage = isEngineStopped
+      ? "LLM engine is stopped. Start it from Settings or the status bar."
+      : (err.message || "Internal orchestrator error");
+
     return NextResponse.json(
       {
-        error: err.message || "Internal orchestrator error",
+        error: friendlyMessage,
+        type: isEngineStopped ? "engine_stopped" : undefined,
         traces: []
       },
-      { status: 500 }
+      { status: isEngineStopped ? 503 : 500 }
     );
   }
 }

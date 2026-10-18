@@ -43,13 +43,21 @@ export class ModelUnavailableError extends Error {
   }
 }
 
-export function resolveOllamaBaseUrl(explicit?: string): string {
-  let url = explicit || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || "http://127.0.0.1:11434";
+export function resolveLlmBaseUrl(explicit?: string): string {
+  let url =
+    explicit ||
+    process.env.LLM_BASE_URL ||
+    process.env.LLM_HOST ||
+    process.env.OLLAMA_BASE_URL ||
+    process.env.OLLAMA_HOST ||
+    "http://127.0.0.1:11434";
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = `http://${url}`;
   }
   return url;
 }
+
+export const resolveOllamaBaseUrl = resolveLlmBaseUrl;
 
 export function resolveWorkerTimeoutMs(explicit?: number): number {
   if (explicit && explicit > 0) return explicit;
@@ -97,10 +105,10 @@ export function getThinkingBudget(effort?: string): number {
 import { getLLMProvider, resolveLLMEngine } from "../llm/provider";
 
 /**
- * Creates a GenerateFn bound to an Ollama endpoint.
+ * Creates a GenerateFn bound to an LLM endpoint.
  * Network errors, non-2xx responses, timeouts and empty responses all throw ModelUnavailableError.
  */
-export function createOllamaGenerate(options?: {
+export function createLlmGenerate(options?: {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -295,6 +303,8 @@ export function createOllamaGenerate(options?: {
     };
   };
 }
+
+export const createOllamaGenerate = createLlmGenerate;
 
 /** True only when the test-only deterministic graph mode is explicitly enabled. */
 export function isFastGraphTestMode(): boolean {

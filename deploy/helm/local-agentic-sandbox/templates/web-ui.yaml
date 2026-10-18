@@ -33,8 +33,10 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
-            - name: PORT
-              value: "{{ .Values.webUI.service.port }}"
+            - name: LLM_HOST
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-ollama:{{ .Values.ollama.port }}"
+            - name: LLM_BASE_URL
+              value: "http://{{ include "local-agentic-sandbox.fullname" . }}-ollama:{{ .Values.ollama.port }}"
             - name: OLLAMA_HOST
               value: "http://{{ include "local-agentic-sandbox.fullname" . }}-ollama:{{ .Values.ollama.port }}"
             - name: MCP_SERVER_URL

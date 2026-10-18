@@ -9,7 +9,7 @@ resources:
   - mcp-runner.yaml
   - browser-mcp.yaml
   - web-ui.yaml
-  - ollama-service.yaml
+  - llm-service.yaml
   - network-policies.yaml
   - observability.yaml
   - builder-tier.yaml

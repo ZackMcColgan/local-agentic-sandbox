@@ -660,12 +660,12 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
 
       const provider = new LlamaCppProvider();
       const chunks: any[] = [];
-      for await (const chunk of provider.streamChat("http://ollama-service:11434", { messages: [] })) {
+      for await (const chunk of provider.streamChat("http://llm-service:11434", { messages: [] })) {
         chunks.push(chunk);
       }
 
       assert.ok(attemptedUrls.some((u) => u.includes("bad-host:11435")), "Must first attempt LLAMACPP_BASE_URL");
-      assert.ok(attemptedUrls.some((u) => u.includes("ollama-service:11434")), "Must fall back to baseUrl");
+      assert.ok(attemptedUrls.some((u) => u.includes("llm-service:11434") || u.includes("ollama-service:11434")), "Must fall back to baseUrl");
       assert.equal(chunks.some((c) => c.message?.content === "Recovered!"), true);
     });
 
@@ -699,6 +699,103 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       );
     });
   });
+
+  describe("Task 11: Zero Remaining Ollama Touchpoints & Standalone llama-server Supervisor", () => {
+    it("web-ui/app/api/chat/route.ts triageComplexity uses getLLMProvider().chat instead of raw /api/chat", () => {
+      const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
+      const content = fs.readFileSync(routePath, "utf8");
+      assert.ok(
+        !content.includes("/api/chat"),
+        "web-ui/app/api/chat/route.ts must not contain raw /api/chat calls"
+      );
+      assert.ok(
+        content.includes("getLLMProvider().chat("),
+        "triageComplexity must delegate to getLLMProvider().chat"
+      );
+    });
+
+    it("web-ui/app/api/sandbox-status/route.ts uses getLLMProvider().healthCheck and listModels instead of /api/tags", () => {
+      const statusRoutePath = path.resolve(__dirname, "../app/api/sandbox-status/route.ts");
+      const content = fs.readFileSync(statusRoutePath, "utf8");
+      assert.ok(
+        !content.includes("/api/tags"),
+        "web-ui/app/api/sandbox-status/route.ts must not call /api/tags directly"
+      );
+      assert.ok(
+        content.includes("getLLMProvider") && content.includes("healthCheck") && content.includes("listModels"),
+        "sandbox-status route must use getLLMProvider().healthCheck and listModels"
+      );
+    });
+
+    it("web-ui/lib/visionProcessor.ts uses getLLMProvider().chat instead of raw /api/chat", () => {
+      const visionPath = path.resolve(__dirname, "../lib/visionProcessor.ts");
+      const content = fs.readFileSync(visionPath, "utf8");
+      assert.ok(
+        !content.includes("/api/chat"),
+        "web-ui/lib/visionProcessor.ts must not contain raw /api/chat calls"
+      );
+      assert.ok(
+        content.includes("getLLMProvider().chat("),
+        "extractArchitectureSpec must delegate to getLLMProvider().chat"
+      );
+    });
+
+    it("residency helpers (fetchModelSizes, fetchLoadedModels, unloadAllModels) avoid /api/tags and /api/ps when LLM_ENGINE=llamacpp", async () => {
+      process.env.LLM_ENGINE = "llamacpp";
+      const calledUrls: string[] = [];
+      const mockFetch = (async (url: string | URL | Request) => {
+        calledUrls.push(String(url));
+        if (String(url).includes("/v1/models")) {
+          return new Response(JSON.stringify({ data: [{ id: "swift-15-27b-mtp" }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        throw new Error(`Unexpected Ollama endpoint called in llamacpp mode: ${url}`);
+      }) as any;
+
+      const { fetchModelSizes, fetchLoadedModels, unloadAllModels } = await import("../lib/subagents/residency.js");
+      const sizes = await fetchModelSizes("http://127.0.0.1:11434", mockFetch);
+      assert.ok(sizes["swift-15-27b-mtp"] > 0, "fetchModelSizes must return model size estimate in llamacpp mode");
+
+      const loaded = await fetchLoadedModels("http://127.0.0.1:11434", mockFetch);
+      assert.equal(loaded.length, 1);
+      assert.equal(loaded[0].name, "swift-15-27b-mtp");
+
+      const unloaded = await unloadAllModels("http://127.0.0.1:11434", mockFetch);
+      assert.deepEqual(unloaded, [], "unloadAllModels must be a safe no-op in llamacpp mode");
+      assert.ok(
+        calledUrls.every((u) => !u.includes("/api/tags") && !u.includes("/api/ps") && !u.includes("/api/generate")),
+        "Must never call /api/tags, /api/ps, or /api/generate when LLM_ENGINE=llamacpp"
+      );
+    });
+
+    it("scripts/llamacpp-standalone.js exports buildLlamaServerArgs and buildLlamaServerEnv using official C:\\AI\\llamacpp install with zero Ollama paths", () => {
+      const scriptPath = path.resolve(__dirname, "../../scripts/llamacpp-standalone.js");
+      assert.ok(fs.existsSync(scriptPath), "scripts/llamacpp-standalone.js must exist");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const standalone = require(scriptPath);
+      assert.equal(typeof standalone.buildLlamaServerArgs, "function");
+      assert.equal(typeof standalone.buildLlamaServerEnv, "function");
+      assert.equal(standalone.DEFAULT_BINARY_PATH, "C:\\AI\\llamacpp\\bin\\llama-server.exe");
+      assert.ok(!standalone.DEFAULT_BINARY_PATH.toLowerCase().includes("ollama"), "Binary path must not reference Ollama");
+
+      const args: string[] = standalone.buildLlamaServerArgs();
+      assert.ok(args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"), "Must use standalone GGUF path in C:\\AI\\llamacpp\\models");
+      assert.ok(args.every((a) => !a.toLowerCase().includes("ollama") && !a.includes("blobs\\sha256-")), "Args must not reference Ollama or its blob store");
+      assert.ok(args.includes("-c") && args.includes("8192"), "Must set 8192 context window");
+      assert.ok(args.includes("--spec-type") && args.includes("draft-mtp"), "Must enable draft-mtp speculative decoding");
+      assert.ok(args.includes("--cache-type-k") && args.includes("q8_0"), "Must enable q8_0 KV cache");
+      assert.ok(args.includes("--flash-attn") && args.includes("auto"), "Must enable flash-attn auto");
+      assert.ok(args.includes("--context-shift"), "Must enable context-shift");
+
+      const env = standalone.buildLlamaServerEnv({ PATH: "C:\\Windows\\System32" });
+      assert.ok(String(env.PATH).includes("C:\\AI\\llamacpp\\bin"), "Must prepend C:\\AI\\llamacpp\\bin to PATH");
+      assert.ok(!String(env.PATH).toLowerCase().includes("ollama"), "Env PATH must not inject Ollama directories");
+    });
+  });
 });
+
+
 
 

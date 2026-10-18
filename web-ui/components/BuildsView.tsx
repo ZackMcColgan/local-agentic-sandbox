@@ -37,7 +37,7 @@ export function BuildsView({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
             >
               <Menu className="h-6 w-6" />
@@ -50,7 +50,7 @@ export function BuildsView({
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Build Tier Ready
+              <span className="hidden sm:inline">Build Tier </span>Ready
             </span>
           </div>
         </div>

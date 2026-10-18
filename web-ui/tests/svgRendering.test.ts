@@ -161,7 +161,7 @@ describe("SVG Rendering & Sanitization Suite", () => {
       "otel-collector Jaeger Tracing",
       "workspace-pvc Persistent Volum",
       "HOST INFERENCE BOUNDARY",
-      "ollama-service",
+      "llm-service",
       "Primary Orchestrator",
       "Inference /api/chat"
     ];

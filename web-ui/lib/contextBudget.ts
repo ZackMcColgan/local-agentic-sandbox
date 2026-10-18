@@ -6,6 +6,9 @@
  */
 
 import { computeModelOptions } from "./chatUtils";
+import { compactConversationHistory } from "./conversationCompaction";
+
+export { compactConversationHistory } from "./conversationCompaction";
 
 export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the 8192-token context window]";
@@ -28,14 +31,14 @@ export function isWebResearchTool(toolName: string, tier?: string): boolean {
 }
 
 export function filterToolsForWebBudget(
-  ollamaTools: any[],
+  llmTools: any[],
   webResearchCallsUsed: number,
   maxWebCalls: number = MAX_WEB_RESEARCH_CALLS
 ): any[] {
   if (webResearchCallsUsed < maxWebCalls) {
-    return ollamaTools;
+    return llmTools;
   }
-  return ollamaTools.filter((t) => {
+  return llmTools.filter((t) => {
     const name = t.function?.name || t.name;
     return !WEB_RESEARCH_TOOL_NAMES.has(name);
   });
@@ -174,9 +177,66 @@ export function mergeSystemDirective<T extends { role?: string; content?: any }>
   return messages;
 }
 
+export const ARTIFACT_OUTPUT_HEADROOM_TOKENS = 3000;
+export const ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB = 4000;
+
+export function isLiveRealTimeIntent(userPrompt: string): boolean {
+  if (!userPrompt || typeof userPrompt !== "string") return false;
+  const p = userPrompt.toLowerCase();
+  return (
+    /\b(weather|forecast|temperature|humidity|precipitation|wind\s+speed)\b/i.test(p) ||
+    /\b(current\s+(price|stock|crypto|rate|news|version|status))\b/i.test(p) ||
+    /\b(today('?s)?\s+(news|headlines|weather|forecast))\b/i.test(p) ||
+    /\b(breaking\s+news|live\s+updates|latest\s+news)\b/i.test(p)
+  );
+}
+
+export function hasWebResearchResults(messages: any[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some((m) => {
+    if (m?.role === "tool" && (m?.name === "search_web" || m?.name === "fetch_webpage_markdown")) {
+      return true;
+    }
+    if (m?.tool_calls && Array.isArray(m.tool_calls)) {
+      return m.tool_calls.some((tc: any) =>
+        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name)
+      );
+    }
+    return false;
+  });
+}
+
+export const OUTPUT_HEADROOM_THINKING_DIRECTIVE =
+  "[OUTPUT HEADROOM]: Keep <think> reasoning under 2 sentences so the full context window remains available for the complete deliverable.";
+
+export function resolveRoundModelOptions(params: {
+  model: string;
+  requestedEffort?: "low" | "medium" | "xhigh";
+  userPrompt: string;
+  isSynthesisOrFinalRound: boolean;
+  hasCompletedToolCalls: boolean;
+}): { num_ctx: number; num_predict?: number; temperature: number } {
+  const { isArtifactRequest } = hasArtifactCreationIntent(params.userPrompt || "");
+  const shouldUseFastSynthesis =
+    isArtifactRequest && (params.isSynthesisOrFinalRound || params.hasCompletedToolCalls);
+  const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
+  const baseOpts = computeModelOptions(params.model, effectiveEffort);
+  const result: { num_ctx: number; num_predict?: number; temperature: number } = {
+    num_ctx: baseOpts.num_ctx,
+    temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5)
+  };
+  if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
+    result.num_predict = baseOpts.num_predict;
+  }
+  return result;
+}
+
 export interface FitContextOptions {
   maxContentTokens?: number;
   tools?: any[];
+  isArtifactTurn?: boolean;
+  reserveOutputTokens?: number;
+  compactHistory?: boolean;
 }
 
 /**
@@ -196,17 +256,21 @@ export function fitContextWindow(
     return [];
   }
 
+  const source = options?.compactHistory
+    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? 6000 }).messages
+    : messages;
+
   // 1. Enforce invariant: role === "system" ONLY exists at index 0.
   // Consolidate any stray system messages at index > 0 into index 0.
   let consolidatedSystemContent = "";
-  const hasLeadingSystem = messages[0]?.role === "system";
+  const hasLeadingSystem = source[0]?.role === "system";
   if (hasLeadingSystem) {
-    consolidatedSystemContent = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    consolidatedSystemContent = typeof source[0].content === "string" ? source[0].content : JSON.stringify(source[0].content || "");
   }
 
   const nonSystemMessages: any[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
+  for (let i = 0; i < source.length; i++) {
+    const m = source[i];
     if (i === 0 && hasLeadingSystem) {
       continue;
     }
@@ -229,11 +293,36 @@ export function fitContextWindow(
   }
   working.push(...nonSystemMessages);
 
-  // 2. Budget reservation for tool schemas
+  // Detect whether this turn is an artifact-creation request
+  let lastUserContent = "";
+  for (let j = working.length - 1; j >= 0; j--) {
+    if (working[j]?.role === "user" && typeof working[j]?.content === "string") {
+      lastUserContent = working[j].content;
+      break;
+    }
+  }
+  const isArtifact =
+    options?.isArtifactTurn ?? hasArtifactCreationIntent(lastUserContent).isArtifactRequest;
+
+  // 2. Budget reservation for tool schemas and artifact output headroom
   let maxTokens = options?.maxContentTokens ?? 6000;
-  if (options?.tools && Array.isArray(options.tools) && options.tools.length > 0) {
-    const toolSchemaTokens = Math.min(2500, estimateTokens(JSON.stringify(options.tools)));
+  const rawToolTokens =
+    options?.tools && Array.isArray(options.tools) && options.tools.length > 0
+      ? estimateTokens(JSON.stringify(options.tools))
+      : 0;
+  const toolSchemaTokens = Math.min(2500, rawToolTokens);
+
+  if (toolSchemaTokens > 0) {
     maxTokens = Math.max(2000, maxTokens - toolSchemaTokens);
+  }
+
+  const hasWebResults = hasWebResearchResults(working);
+  if (isArtifact || options?.reserveOutputTokens !== undefined || hasWebResults) {
+    const headroom =
+      options?.reserveOutputTokens ??
+      (hasWebResults ? ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB : ARTIFACT_OUTPUT_HEADROOM_TOKENS);
+    const artifactCeiling = 8192 - headroom - rawToolTokens;
+    maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
 
   if (estimateTokens(working) <= maxTokens) {
@@ -243,6 +332,11 @@ export function fitContextWindow(
   // Identify protected indices
   const isProtected = (idx: number, arr: any[]): boolean => {
     if (idx === 0 && arr[0]?.role === "system") {
+      return true;
+    }
+    // Protect the original user query (first user message) so intent & prompt are never lost
+    const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+    if (idx === firstUserIdx && firstUserIdx !== -1) {
       return true;
     }
     let lastUserIdx = -1;
@@ -359,10 +453,20 @@ export interface RunChatToolLoopOptions {
   conversationMessages: any[];
   activeModel?: string;
   effectiveReasoningEffort?: "low" | "medium" | "xhigh";
+  llmTools?: any[];
+  /** @deprecated backward-compat alias */
   ollamaTools?: any[];
   maxToolRounds?: number;
   maxContentTokens?: number;
-  streamOllamaChat: (payload: any) => AsyncIterable<{
+  streamLlmChat?: (payload: any) => AsyncIterable<{
+    message?: {
+      content?: string;
+      thinking?: string;
+      tool_calls?: any[];
+    };
+  }>;
+  /** @deprecated backward-compat alias */
+  streamOllamaChat?: (payload: any) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
@@ -376,43 +480,70 @@ export interface RunChatToolLoopOptions {
  * Runs iterative chat tool rounds with per-round context window fitting,
  * tool-output clamping, and forced final-round synthesis.
  */
-export async function runChatToolLoop({
-  conversationMessages,
-  activeModel = "qwen3.8:27b-q3_k_m",
-  effectiveReasoningEffort = "medium",
-  ollamaTools = [],
-  maxToolRounds = 8,
-  maxContentTokens = 6000,
-  streamOllamaChat,
-  executeTool
-}: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+  const {
+    conversationMessages,
+    activeModel = "qwen3.8:27b-q3_k_m",
+    effectiveReasoningEffort = "medium",
+    maxToolRounds = 8,
+    maxContentTokens = 6000,
+    executeTool
+  } = options;
+  const llmTools = options.llmTools || options.ollamaTools || [];
+  const streamChatFn = options.streamLlmChat || options.streamOllamaChat;
+  if (!streamChatFn) {
+    throw new Error("runChatToolLoop requires streamLlmChat");
+  }
+
   let round = 0;
   let finalContent = "";
+  let hasExecutedWebSearch = false;
+  const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
+  const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
+  const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
   while (round < maxToolRounds) {
+    const compaction = compactConversationHistory(conversationMessages, {
+      maxContentTokens
+    });
+    if (compaction.compacted) {
+      conversationMessages.length = 0;
+      conversationMessages.push(...compaction.messages);
+    }
+
     const isFinalRound = round === maxToolRounds - 1;
     if (isFinalRound) {
       mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
+    }
+    if (isArtifactRequest && (isFinalRound || round > 0)) {
+      mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
     const payload: any = {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
-        tools: isFinalRound ? undefined : ollamaTools
+        tools: isFinalRound ? undefined : llmTools,
+        isArtifactTurn: isArtifactRequest
       }),
       keep_alive: -1,
-      options: computeModelOptions(activeModel, effectiveReasoningEffort)
+      options: resolveRoundModelOptions({
+        model: activeModel,
+        requestedEffort: effectiveReasoningEffort,
+        userPrompt,
+        isSynthesisOrFinalRound: isFinalRound,
+        hasCompletedToolCalls: round > 0
+      })
     };
 
-    if (ollamaTools.length > 0 && !isFinalRound) {
-      payload.tools = ollamaTools;
+    if (llmTools.length > 0 && !isFinalRound) {
+      payload.tools = llmTools;
     }
 
     let fullRoundContent = "";
     let toolCallsFromMessage: any[] = [];
 
-    for await (const chunk of streamOllamaChat(payload)) {
+    for await (const chunk of streamChatFn(payload)) {
       if (chunk.message?.content) {
         fullRoundContent += chunk.message.content;
       }
@@ -422,6 +553,20 @@ export async function runChatToolLoop({
     }
 
     if (toolCallsFromMessage.length === 0 || isFinalRound) {
+      if (
+        !isFinalRound &&
+        isLiveRealTimeIntent(userPrompt) &&
+        !hasExecutedWebSearch &&
+        round < maxToolRounds - 1
+      ) {
+        hasExecutedWebSearch = true;
+        mergeSystemDirective(
+          conversationMessages,
+          "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Invoke 'search_web' now."
+        );
+        round++;
+        continue;
+      }
       finalContent = fullRoundContent;
       conversationMessages.push({
         role: "assistant",

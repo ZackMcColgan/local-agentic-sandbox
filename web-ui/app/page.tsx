@@ -49,6 +49,7 @@ export default function Home() {
   // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
   const [status, setStatus] = useState({
+    llm: "INITIALIZING",
     ollama: "INITIALIZING",
     mcp: "INITIALIZING",
     airGapped: true
@@ -102,7 +103,7 @@ export default function Home() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
-      const queryTab = urlParams.get("tab");
+      const queryTab = urlParams.get("tab") || urlParams.get("view");
       if (queryTab === "skills") setActiveNavView("skills");
       else if (queryTab === "builds") setActiveNavView("builds");
       else if (queryTab === "morning-report") setActiveNavView("morning-report");
@@ -144,21 +145,26 @@ export default function Home() {
       const res = await fetch("/api/sandbox-status");
       if (res.ok) {
         const data = await res.json();
+        const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
+        const llmModels = data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
+        const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
         setStatus({
-          ollama: data.services?.ollama?.status || "OFFLINE",
+          llm: llmStatus,
+          ollama: llmStatus,
           mcp: data.services?.mcp_server?.status || "OFFLINE",
           airGapped: true
         });
-        if (data.services?.ollama?.installed_models) {
-          setInstalledModels(data.services.ollama.installed_models);
+        if (llmModels) {
+          setInstalledModels(llmModels);
         }
-        if (data.services?.ollama?.profiles) {
-          setProfiles(data.services.ollama.profiles);
+        if (llmProfiles) {
+          setProfiles(llmProfiles);
         }
         setSecurityPosture(data.security_posture);
       }
     } catch {
       setStatus({
+        llm: "UNREACHABLE",
         ollama: "UNREACHABLE",
         mcp: "UNREACHABLE",
         airGapped: true
@@ -254,7 +260,7 @@ export default function Home() {
             const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
             const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");
-            const explicitView = urlParams?.get("view") as NavView;
+            const explicitView = (urlParams?.get("view") || urlParams?.get("tab")) as NavView;
             const drawerQuery = urlParams?.get("drawer");
 
             if (drawerQuery === "open" || drawerQuery === "true") {
@@ -613,7 +619,7 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${!isSidebarOpen ? "collapsed-sidebar" : ""} ${!isWorkspaceOpen ? "collapsed-inspector" : ""}`}>
+    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isOpen={isDrawerOpen}
@@ -737,7 +743,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none"
+              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar

@@ -1,6 +1,6 @@
 /**
  * Vision Processor for Multimodal Diagram Ingestion
- * Uses gemma4:e4b via Ollama vision API to extract system architecture,
+ * Uses gemma4:e4b via LLM vision API to extract system architecture,
  * component boundaries, network protocol endpoints, and database schemas.
  */
 
@@ -38,46 +38,36 @@ Extract and synthesize a standardized, implementation-ready Markdown architectur
 
 Structure your output cleanly in Markdown with tables, bullet points, and code blocks.`;
 
+import { getLLMProvider } from "./llm/provider";
+
 export async function extractArchitectureSpec(
   diagram: DiagramInput,
-  ollamaBaseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  llmBaseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
   visionModel: string = "gemma4:e4b"
 ): Promise<ExtractedArchitectureSpec> {
   const startTime = Date.now();
   console.log(`[VisionProcessor] Ingesting diagram '${diagram.name}' via ${visionModel}...`);
 
   try {
-    const res = await fetch(`${ollamaBaseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: visionModel,
-        messages: [
-          {
-            role: "system",
-            content: VISION_SYSTEM_PROMPT
-          },
-          {
-            role: "user",
-            content: `Analyze this architecture diagram / draw.io export named '${diagram.name}' and generate the standardized Markdown architecture specification.`,
-            images: [diagram.base64]
-          }
-        ],
-        stream: false,
-        options: {
-          temperature: 0.2,
-          num_ctx: 16384,
-          num_predict: 4096
+    const data = await getLLMProvider().chat(llmBaseUrl, {
+      model: visionModel,
+      messages: [
+        {
+          role: "system",
+          content: VISION_SYSTEM_PROMPT
+        },
+        {
+          role: "user",
+          content: `Analyze this architecture diagram / draw.io export named '${diagram.name}' and generate the standardized Markdown architecture specification.`,
+          images: [diagram.base64]
         }
-      })
+      ],
+      options: {
+        temperature: 0.2,
+        num_ctx: 8192
+      }
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Ollama vision request failed (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
     const markdownSpec = data.message?.content || "[No spec extracted from diagram]";
 
     console.log(

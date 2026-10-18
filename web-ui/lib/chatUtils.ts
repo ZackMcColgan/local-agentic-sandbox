@@ -25,7 +25,7 @@ export function resolveEffectiveReasoningEffort(
 }
 
 /**
- * Computes options for Ollama model request based on model architecture and reasoning effort.
+ * Computes options for local LLM model request based on model architecture and reasoning effort.
  */
 export function computeModelOptions(
   modelToUse: string,

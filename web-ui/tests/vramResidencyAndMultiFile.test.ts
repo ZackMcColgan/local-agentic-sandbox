@@ -174,13 +174,13 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       // Verify keep_alive: -1 on chat payload
       assert.ok(
         content.includes("keep_alive: -1"),
-        "chat/route.ts must send keep_alive: -1 in ollamaPayload"
+        "chat/route.ts must send keep_alive: -1 in llmPayload"
       );
 
-      // Verify semantic memory embedding swap guard
+      // Verify searchOracleCodebase is called directly without embedding swap
       assert.ok(
-        content.includes('process.env.OLLAMA_ALLOW_EMBEDDING_SWAP === "true"'),
-        "chat/route.ts must guard searchSemanticMemory so all-minilm does not evict primary model"
+        content.includes("searchOracleCodebase(userPrompt)"),
+        "chat/route.ts must wire searchOracleCodebase directly without dead embedding swap"
       );
     });
   });

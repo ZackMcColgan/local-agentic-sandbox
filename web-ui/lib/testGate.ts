@@ -48,7 +48,7 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   // Direct test file changed: run itself
   {
-    match: (p) => /tests\/[^/]+\.test\.ts$/.test(p),
+    match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
     tests: [] // handled dynamically
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
@@ -86,6 +86,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/chatContextBudget.test.ts",
       "tests/chatActionDiscipline.test.ts",
+      "tests/chatScrollFollow.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
       "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
@@ -118,42 +120,55 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
-      "tests/skillsProposeApprove.test.ts"
+      "tests/skillsProposeApprove.test.ts",
+      "tests/mobileHeaderNav.test.ts",
+      "tests/engineToggle.test.ts"
     ]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
-  // Memory profile, durable facts & semantic memory
+  // Memory profile & durable facts
   {
     match: (p) => p.includes("lib/memory"),
-    tests: ["tests/userProfile.test.ts", "tests/semanticMemory.test.ts"]
+    tests: ["tests/userProfile.test.ts"]
   },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
-  // Chat API route
+  // Chat API route and progressive tools
   {
-    match: (p) => p.includes("app/api/chat/route"),
+    match: (p) => p.includes("app/api/chat/route") || p.includes("lib/progressiveTools") || p.includes("lib/conversationCompaction"),
     tests: [
       "tests/chatStreaming.test.ts",
-      "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
-      "tests/semanticMemory.test.ts",
       "tests/chatActionDiscipline.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
+      "tests/progressiveToolDisclosure.test.ts",
+      "tests/conversationCompaction.test.ts",
       "tests/llmProvider.test.ts"
     ]
   },
-  // LLM Provider abstraction
+  // LLM Provider abstraction, standalone supervisor & engine control
   {
-    match: (p) => p.includes("lib/llm/"),
-    tests: ["tests/llmProvider.test.ts"]
+    match: (p) =>
+      p.includes("lib/llm/") ||
+      p.includes("lib/agentEngine") ||
+      p.includes("scripts/llamacpp-standalone") ||
+      p.includes("app/api/engine") ||
+      p.includes("components/EngineStatusPill") ||
+      p.includes("app/api/sandbox-status/route"),
+    tests: [
+      "tests/llmProvider.test.ts",
+      "tests/engineRoute.test.ts",
+      "tests/engineToggle.test.ts"
+    ]
   },
   // Tasks API route
   {
@@ -232,7 +247,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Models config & modelfiles
   {
     match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
-    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts", "tests/agentEngine.test.ts"]
+    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts"]
   },
   // Makefile deployment configuration
   {
@@ -362,7 +377,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/ingest-docs") ||
       p.includes("scripts/verify-phase-d") ||
       p.includes("eval/"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
   {
     match: (p) => p.includes("scripts/verify-phase-c"),
@@ -392,7 +407,6 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.endsWith("package.json") || p.endsWith("tsconfig.json"),
     tests: [
-      "tests/agentEngine.test.ts",
       "tests/tasksApi.test.ts",
       "tests/supervisor.test.ts"
     ]
@@ -460,7 +474,7 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
     }
 
     // Direct test file changed
-    if (/tests\/[^/]+\.test\.ts$/.test(normalized)) {
+    if (/tests\/[^/]+\.test\.(ts|js)$/.test(normalized)) {
       const testFile = normalized.startsWith("web-ui/")
         ? normalized.replace(/^web-ui\//, "")
         : normalized;
@@ -500,7 +514,7 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
 
   try {
     // 1. Uncommitted working tree files (unstaged + staged)
-    const statusOut = execSync("git status --porcelain", { cwd: root, encoding: "utf8" });
+    const statusOut = execSync("git status --porcelain -uall", { cwd: root, encoding: "utf8" });
     for (const rawLine of statusOut.split("\n")) {
       if (!rawLine || rawLine.length < 3) continue;
       // In git status --porcelain: index 0 and 1 are status, index 2 is space, path is index 3+

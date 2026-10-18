@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Bot, Cpu, Check, Zap, Brain, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Bot, Cpu, Check, Zap, Brain, X, Power } from "lucide-react";
 import { isReasoningEffortSupported } from "@/config/models";
 
 interface ModelBottomSheetProps {
@@ -25,6 +25,41 @@ export function ModelBottomSheet({
   onReasoningEffortChange,
   installedModels = []
 }: ModelBottomSheetProps) {
+  const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
+  const [engineLoading, setEngineLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/engine", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (mounted && d.status) setEngineStatus(d.status);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
+
+  const handleToggleEngine = async () => {
+    const action = engineStatus === "running" ? "stop" : "start";
+    setEngineLoading(true);
+    setEngineStatus(action === "stop" ? "stopped" : "starting");
+    try {
+      const res = await fetch("/api/engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.status) setEngineStatus(data.status);
+    } catch {
+      // ignore
+    } finally {
+      setEngineLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleReasoningChange = (effort: "low" | "medium" | "xhigh") => {
@@ -68,7 +103,7 @@ export function ModelBottomSheet({
       modelsList.push({
         id: m,
         displayName: m,
-        subtext: "Installed Ollama model",
+        subtext: "Installed LLM model",
         icon: "cpu"
       });
     }
@@ -230,6 +265,32 @@ export function ModelBottomSheet({
           <p className="text-xs text-slate-500 dark:text-zinc-400 pl-1">
             {effortDescriptions[reasoningEffort]}
           </p>
+
+          {/* Engine Management Card */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700 flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">Standalone llama.cpp Engine</span>
+              </div>
+              <span className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                {engineStatus === "running" ? "Running · 16 GB VRAM · swift-15-27b-mtp" : "Stopped · 0 MB VRAM"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleEngine}
+              disabled={engineLoading}
+              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+                engineStatus === "running"
+                  ? "bg-rose-600 hover:bg-rose-700 active:scale-95"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+              }`}
+            >
+              <Power className="h-3.5 w-3.5" />
+              <span>{engineLoading ? "Updating..." : engineStatus === "running" ? "Turn Off" : "Start Engine"}</span>
+            </button>
+          </div>
 
           {/* Done button */}
           <button
