@@ -28,7 +28,10 @@ import {
   filterToolsForWebBudget,
   buildSynthesisDirective,
   shouldRunPostToolSynthesis,
-  mergeSystemDirective
+  mergeSystemDirective,
+  hasArtifactCreationIntent,
+  resolveRoundModelOptions,
+  OUTPUT_HEADROOM_THINKING_DIRECTIVE
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -423,15 +426,21 @@ CRITICAL INSTRUCTIONS:
 
         let accumulatedThoughts: string[] = [];
 
+        const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
+
         while (round < MAX_TOOL_ROUNDS) {
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
             model: activeModel,
             round
           });
 
+          const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
-          if (round === MAX_TOOL_ROUNDS - 1) {
+          if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
+          }
+          if (isArtifactRequest && (isFinalRound || traces.length > 0)) {
+            mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
           }
 
           const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
@@ -439,10 +448,17 @@ CRITICAL INSTRUCTIONS:
           const ollamaPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
-              tools: round === MAX_TOOL_ROUNDS - 1 ? undefined : roundTools
+              tools: isFinalRound ? undefined : roundTools,
+              isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+            options: resolveRoundModelOptions({
+              model: activeModel,
+              requestedEffort: effectiveReasoningEffort,
+              userPrompt,
+              isSynthesisOrFinalRound: isFinalRound,
+              hasCompletedToolCalls: traces.length > 0
+            })
           };
 
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
@@ -659,11 +675,21 @@ CRITICAL INSTRUCTIONS:
             status: "Synthesizing final answer..."
           });
 
+          if (isArtifactRequest) {
+            mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+          }
+
           let synthContent = "";
           for await (const chunk of streamOllamaChat(OLLAMA_URL, {
             model: activeModel,
-            messages: fitContextWindow(conversationMessages),
-            options: computeModelOptions(activeModel, effectiveReasoningEffort)
+            messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
+            options: resolveRoundModelOptions({
+              model: activeModel,
+              requestedEffort: effectiveReasoningEffort,
+              userPrompt,
+              isSynthesisOrFinalRound: true,
+              hasCompletedToolCalls: traces.length > 0
+            })
           })) {
             if (chunk.message?.content) {
               synthContent += chunk.message.content;

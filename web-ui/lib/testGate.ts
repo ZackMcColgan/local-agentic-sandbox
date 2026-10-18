@@ -150,9 +150,12 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/llmProvider.test.ts"
     ]
   },
-  // LLM Provider abstraction
+  // LLM Provider abstraction & standalone supervisor
   {
-    match: (p) => p.includes("lib/llm/"),
+    match: (p) =>
+      p.includes("lib/llm/") ||
+      p.includes("scripts/llamacpp-standalone") ||
+      p.includes("app/api/sandbox-status/route"),
     tests: ["tests/llmProvider.test.ts"]
   },
   // Tasks API route

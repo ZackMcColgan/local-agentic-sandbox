@@ -174,9 +174,38 @@ export function mergeSystemDirective<T extends { role?: string; content?: any }>
   return messages;
 }
 
+export const ARTIFACT_OUTPUT_HEADROOM_TOKENS = 3000;
+
+export const OUTPUT_HEADROOM_THINKING_DIRECTIVE =
+  "[OUTPUT HEADROOM]: Keep <think> reasoning under 2 sentences so the full context window remains available for the complete deliverable.";
+
+export function resolveRoundModelOptions(params: {
+  model: string;
+  requestedEffort?: "low" | "medium" | "xhigh";
+  userPrompt: string;
+  isSynthesisOrFinalRound: boolean;
+  hasCompletedToolCalls: boolean;
+}): { num_ctx: number; num_predict?: number; temperature: number } {
+  const { isArtifactRequest } = hasArtifactCreationIntent(params.userPrompt || "");
+  const shouldUseFastSynthesis =
+    isArtifactRequest && (params.isSynthesisOrFinalRound || params.hasCompletedToolCalls);
+  const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
+  const baseOpts = computeModelOptions(params.model, effectiveEffort);
+  const result: { num_ctx: number; num_predict?: number; temperature: number } = {
+    num_ctx: baseOpts.num_ctx,
+    temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5)
+  };
+  if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
+    result.num_predict = baseOpts.num_predict;
+  }
+  return result;
+}
+
 export interface FitContextOptions {
   maxContentTokens?: number;
   tools?: any[];
+  isArtifactTurn?: boolean;
+  reserveOutputTokens?: number;
 }
 
 /**
@@ -229,11 +258,33 @@ export function fitContextWindow(
   }
   working.push(...nonSystemMessages);
 
-  // 2. Budget reservation for tool schemas
+  // Detect whether this turn is an artifact-creation request
+  let lastUserContent = "";
+  for (let j = working.length - 1; j >= 0; j--) {
+    if (working[j]?.role === "user" && typeof working[j]?.content === "string") {
+      lastUserContent = working[j].content;
+      break;
+    }
+  }
+  const isArtifact =
+    options?.isArtifactTurn ?? hasArtifactCreationIntent(lastUserContent).isArtifactRequest;
+
+  // 2. Budget reservation for tool schemas and artifact output headroom
   let maxTokens = options?.maxContentTokens ?? 6000;
-  if (options?.tools && Array.isArray(options.tools) && options.tools.length > 0) {
-    const toolSchemaTokens = Math.min(2500, estimateTokens(JSON.stringify(options.tools)));
+  const rawToolTokens =
+    options?.tools && Array.isArray(options.tools) && options.tools.length > 0
+      ? estimateTokens(JSON.stringify(options.tools))
+      : 0;
+  const toolSchemaTokens = Math.min(2500, rawToolTokens);
+
+  if (toolSchemaTokens > 0) {
     maxTokens = Math.max(2000, maxTokens - toolSchemaTokens);
+  }
+
+  if (isArtifact || options?.reserveOutputTokens !== undefined) {
+    const headroom = options?.reserveOutputTokens ?? ARTIFACT_OUTPUT_HEADROOM_TOKENS;
+    const artifactCeiling = 8192 - headroom - rawToolTokens;
+    maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
 
   if (estimateTokens(working) <= maxTokens) {
@@ -388,21 +439,34 @@ export async function runChatToolLoop({
 }: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
   let round = 0;
   let finalContent = "";
+  const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
+  const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
+  const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
   while (round < maxToolRounds) {
     const isFinalRound = round === maxToolRounds - 1;
     if (isFinalRound) {
       mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
+    if (isArtifactRequest && (isFinalRound || round > 0)) {
+      mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+    }
 
     const payload: any = {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
-        tools: isFinalRound ? undefined : ollamaTools
+        tools: isFinalRound ? undefined : ollamaTools,
+        isArtifactTurn: isArtifactRequest
       }),
       keep_alive: -1,
-      options: computeModelOptions(activeModel, effectiveReasoningEffort)
+      options: resolveRoundModelOptions({
+        model: activeModel,
+        requestedEffort: effectiveReasoningEffort,
+        userPrompt,
+        isSynthesisOrFinalRound: isFinalRound,
+        hasCompletedToolCalls: round > 0
+      })
     };
 
     if (ollamaTools.length > 0 && !isFinalRound) {

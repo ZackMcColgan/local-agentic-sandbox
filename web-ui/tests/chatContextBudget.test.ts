@@ -545,6 +545,163 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
     });
   });
+
+  describe("Task 4 (WS-B): Artifact Output Headroom Reservation & Fast Synthesis Reasoning", () => {
+    it("reserves >= 3,000 tokens of output headroom in an 8,192-token context window on artifact turns", async () => {
+      const { ARTIFACT_OUTPUT_HEADROOM_TOKENS } = await import("../lib/contextBudget.js") as any;
+      assert.equal(ARTIFACT_OUTPUT_HEADROOM_TOKENS, 3000);
+
+      const mockTools = Array.from({ length: 8 }, (_, i) => ({
+        type: "function",
+        function: {
+          name: `tool_${i}`,
+          description: "x".repeat(600),
+          parameters: { type: "object", properties: { q: { type: "string" } } }
+        }
+      }));
+      const toolTokens = estimateTokens(JSON.stringify(mockTools));
+
+      const messages = [
+        { role: "system", content: "You are an autonomous assistant. " + "S".repeat(1200) },
+        { role: "user", content: "Create an SVG architecture diagram of the cluster" },
+        { role: "tool", name: "tool_0", content: "A".repeat(12000) },
+        { role: "tool", name: "tool_1", content: "B".repeat(12000) }
+      ];
+
+      const fitted = fitContextWindow(messages, {
+        isArtifactTurn: true,
+        tools: mockTools
+      } as any);
+
+      const inputTokens = estimateTokens(fitted);
+      assert.ok(
+        inputTokens + toolTokens <= 8192 - 3000,
+        `Expected inputTokens (${inputTokens}) + toolTokens (${toolTokens}) <= 5192 so >= 3000 output headroom remains`
+      );
+      assert.equal(fitted[0].role, "system");
+      const lastUser = [...fitted].reverse().find((m) => m.role === "user");
+      assert.equal(lastUser?.content, "Create an SVG architecture diagram of the cluster");
+    });
+
+    it("resolveRoundModelOptions drops effort to 'low' and omits num_predict on artifact synthesis/post-tool rounds", async () => {
+      const { resolveRoundModelOptions } = await import("../lib/contextBudget.js") as any;
+      assert.equal(typeof resolveRoundModelOptions, "function");
+
+      const opts = resolveRoundModelOptions({
+        model: "swift-15-27b-mtp",
+        requestedEffort: "xhigh",
+        userPrompt: "Create a svg of the weather in Spanish Fort AL",
+        isSynthesisOrFinalRound: false,
+        hasCompletedToolCalls: true
+      });
+
+      assert.equal(opts.temperature, 0.2, "Should drop to low effort (temperature 0.2) after tool calls on artifact turn");
+      assert.equal(opts.num_predict, undefined, "Must omit num_predict so LlamaCppProvider does not cap max_tokens");
+    });
+
+    it("constrained-context artifact completion regression: delivers complete untruncated <svg>...</svg> when tool outputs exceed 10,000 chars", async () => {
+      const { extractSvgsFromMessage } = await import("../lib/svgUtils.js");
+      const completeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><rect width="800" height="500" fill="#0f172a"/><text x="40" y="80" fill="#38bdf8">Spanish Fort, AL — 78°F Sunny</text></svg>`;
+
+      const conversationMessages: any[] = [
+        { role: "system", content: "System instructions for artifact creation." },
+        { role: "user", content: "Create an SVG weather card for Spanish Fort AL" }
+      ];
+
+      const capturedPayloads: any[] = [];
+      const traces: any[] = [];
+      let roundIdx = 0;
+
+      const mockStreamChat = async function* (payload: any) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+        roundIdx++;
+        if (roundIdx === 1) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  function: {
+                    name: "search_web",
+                    arguments: JSON.stringify({ query: "Spanish Fort AL weather" })
+                  }
+                }
+              ]
+            }
+          };
+        } else if (roundIdx === 2) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  function: {
+                    name: "workspace_write_file",
+                    arguments: JSON.stringify({ path: "spanish-fort-weather.svg", content: completeSvg })
+                  }
+                }
+              ]
+            }
+          };
+        } else {
+          yield {
+            message: {
+              content: "Saved the complete Spanish Fort AL weather SVG diagram."
+            }
+          };
+        }
+      };
+
+      const mockExecuteTool = async (toolCall: any) => {
+        const name = toolCall.function?.name;
+        const args = typeof toolCall.function?.arguments === "string"
+          ? JSON.parse(toolCall.function.arguments)
+          : toolCall.function?.arguments;
+        const result = name === "search_web"
+          ? { status: "SUCCESS", raw_markdown: "W".repeat(12000) }
+          : { status: "SUCCESS", path: args.path };
+        traces.push({ tool: name, args, result });
+        return result;
+      };
+
+      const loopRes = await runChatToolLoop({
+        conversationMessages,
+        activeModel: "swift-15-27b-mtp",
+        effectiveReasoningEffort: "xhigh",
+        ollamaTools: [
+          { type: "function", function: { name: "search_web" } },
+          { type: "function", function: { name: "workspace_write_file" } }
+        ],
+        maxToolRounds: 5,
+        streamOllamaChat: mockStreamChat,
+        executeTool: mockExecuteTool
+      });
+
+      // Verify output headroom was preserved on every round
+      for (const p of capturedPayloads) {
+        const msgTokens = estimateTokens(p.messages);
+        const tTokens = p.tools ? estimateTokens(JSON.stringify(p.tools)) : 0;
+        assert.ok(
+          msgTokens + tTokens <= 8192 - 3000,
+          `Round payload tokens (${msgTokens + tTokens}) must leave >= 3000 tokens of headroom in 8192 window`
+        );
+      }
+
+      // Round 2+ (after tool calls completed on artifact turn) must omit num_predict and use fast effort
+      assert.equal(capturedPayloads[1].options.num_predict, undefined);
+      assert.equal(capturedPayloads[1].options.temperature, 0.2);
+
+      const extracted = extractSvgsFromMessage({
+        id: "msg-1",
+        content: loopRes.finalContent,
+        traces
+      });
+      assert.equal(extracted.length, 1, "Must extract exactly 1 complete SVG artifact");
+      assert.ok(extracted[0].code?.startsWith("<svg") && extracted[0].code?.endsWith("</svg>"), "SVG must be complete and untruncated");
+      assert.ok(extracted[0].code?.includes("Spanish Fort, AL — 78°F Sunny"));
+    });
+  });
 });
+
 
 
