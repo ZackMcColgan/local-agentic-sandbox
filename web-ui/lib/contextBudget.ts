@@ -28,14 +28,14 @@ export function isWebResearchTool(toolName: string, tier?: string): boolean {
 }
 
 export function filterToolsForWebBudget(
-  ollamaTools: any[],
+  llmTools: any[],
   webResearchCallsUsed: number,
   maxWebCalls: number = MAX_WEB_RESEARCH_CALLS
 ): any[] {
   if (webResearchCallsUsed < maxWebCalls) {
-    return ollamaTools;
+    return llmTools;
   }
-  return ollamaTools.filter((t) => {
+  return llmTools.filter((t) => {
     const name = t.function?.name || t.name;
     return !WEB_RESEARCH_TOOL_NAMES.has(name);
   });
@@ -410,10 +410,20 @@ export interface RunChatToolLoopOptions {
   conversationMessages: any[];
   activeModel?: string;
   effectiveReasoningEffort?: "low" | "medium" | "xhigh";
+  llmTools?: any[];
+  /** @deprecated backward-compat alias */
   ollamaTools?: any[];
   maxToolRounds?: number;
   maxContentTokens?: number;
-  streamOllamaChat: (payload: any) => AsyncIterable<{
+  streamLlmChat?: (payload: any) => AsyncIterable<{
+    message?: {
+      content?: string;
+      thinking?: string;
+      tool_calls?: any[];
+    };
+  }>;
+  /** @deprecated backward-compat alias */
+  streamOllamaChat?: (payload: any) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
@@ -427,16 +437,21 @@ export interface RunChatToolLoopOptions {
  * Runs iterative chat tool rounds with per-round context window fitting,
  * tool-output clamping, and forced final-round synthesis.
  */
-export async function runChatToolLoop({
-  conversationMessages,
-  activeModel = "qwen3.8:27b-q3_k_m",
-  effectiveReasoningEffort = "medium",
-  ollamaTools = [],
-  maxToolRounds = 8,
-  maxContentTokens = 6000,
-  streamOllamaChat,
-  executeTool
-}: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+  const {
+    conversationMessages,
+    activeModel = "qwen3.8:27b-q3_k_m",
+    effectiveReasoningEffort = "medium",
+    maxToolRounds = 8,
+    maxContentTokens = 6000,
+    executeTool
+  } = options;
+  const llmTools = options.llmTools || options.ollamaTools || [];
+  const streamChatFn = options.streamLlmChat || options.streamOllamaChat;
+  if (!streamChatFn) {
+    throw new Error("runChatToolLoop requires streamLlmChat");
+  }
+
   let round = 0;
   let finalContent = "";
   const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
@@ -456,7 +471,7 @@ export async function runChatToolLoop({
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
-        tools: isFinalRound ? undefined : ollamaTools,
+        tools: isFinalRound ? undefined : llmTools,
         isArtifactTurn: isArtifactRequest
       }),
       keep_alive: -1,
@@ -469,14 +484,14 @@ export async function runChatToolLoop({
       })
     };
 
-    if (ollamaTools.length > 0 && !isFinalRound) {
-      payload.tools = ollamaTools;
+    if (llmTools.length > 0 && !isFinalRound) {
+      payload.tools = llmTools;
     }
 
     let fullRoundContent = "";
     let toolCallsFromMessage: any[] = [];
 
-    for await (const chunk of streamOllamaChat(payload)) {
+    for await (const chunk of streamChatFn(payload)) {
       if (chunk.message?.content) {
         fullRoundContent += chunk.message.content;
       }

@@ -331,7 +331,7 @@ Respond strictly in valid JSON matching this schema:
       acceptanceCriteria: [
         {
           id: "AC-1-1",
-          assertion: "Topology catalog contains mcp-runner, browser-mcp, web-ui, otel-collector, and ollama-service boundaries",
+          assertion: "Topology catalog contains mcp-runner, browser-mcp, web-ui, otel-collector, and llm-service boundaries",
           fileMatch: "deploy/topology-catalog.json"
         },
         {

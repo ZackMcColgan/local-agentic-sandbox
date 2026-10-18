@@ -261,9 +261,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       const result = await runChatToolLoop({
         conversationMessages: messages,
-        ollamaTools: [{ type: "function", function: { name: "workspace_grep" } }],
+        llmTools: [{ type: "function", function: { name: "workspace_grep" } }],
         maxToolRounds: 5,
-        streamOllamaChat: mockStreamChat,
+        streamLlmChat: mockStreamChat,
         executeTool: mockExecuteTool
       });
 
@@ -331,9 +331,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       const result = await runChatToolLoop({
         conversationMessages: messages,
-        ollamaTools: [{ type: "function", function: { name: "search_web" } }],
+        llmTools: [{ type: "function", function: { name: "search_web" } }],
         maxToolRounds: MAX_ROUNDS,
-        streamOllamaChat: mockStreamChat,
+        streamLlmChat: mockStreamChat,
         executeTool: mockExecuteTool
       });
 
@@ -668,12 +668,12 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         conversationMessages,
         activeModel: "swift-15-27b-mtp",
         effectiveReasoningEffort: "xhigh",
-        ollamaTools: [
+        llmTools: [
           { type: "function", function: { name: "search_web" } },
           { type: "function", function: { name: "workspace_write_file" } }
         ],
         maxToolRounds: 5,
-        streamOllamaChat: mockStreamChat,
+        streamLlmChat: mockStreamChat,
         executeTool: mockExecuteTool
       });
 

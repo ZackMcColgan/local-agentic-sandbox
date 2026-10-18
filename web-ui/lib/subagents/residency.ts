@@ -246,7 +246,7 @@ export async function enforceResidency(
  * When LLM_ENGINE=llamacpp, standalone llama-server keeps its GGUF permanently resident, so this is a safe no-op.
  */
 export async function unloadAllModels(
-  baseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  baseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
   if (resolveLLMEngine() === "llamacpp") {
@@ -264,7 +264,7 @@ export async function unloadAllModels(
       unloaded.push(m.name);
     }
   } catch (err: any) {
-    console.warn("Notice: could not unload models from Ollama:", err.message);
+    console.warn("Notice: could not unload models from LLM:", err.message);
   }
   return unloaded;
 }

@@ -40,10 +40,10 @@ import {
   extractDurablePreferences,
   recordProfileEntry
 } from "@/lib/memory/profile";
-import { searchSemanticMemory } from "@/lib/memory/semanticMemory";
 import { getLLMProvider } from "@/lib/llm/provider";
 
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
@@ -82,11 +82,11 @@ async function connectMcpClient(url: string, name: string) {
  */
 async function triageComplexity(
   userQuery: string,
-  ollamaBaseUrl: string,
+  llmBaseUrl: string,
   triageModel: string = DEFAULT_SUBAGENT_MODEL
 ): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
   try {
-    const data = await getLLMProvider().chat(ollamaBaseUrl, {
+    const data = await getLLMProvider().chat(llmBaseUrl, {
       model: triageModel,
       messages: [
         {
@@ -125,10 +125,13 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
 /**
  * Unified streaming generator delegating to the resolved LLMProvider (Ollama or llama.cpp)
  */
-async function* streamOllamaChat(ollamaUrl: string, payload: any) {
+async function* streamLlmChat(llmBaseUrl: string, payload: any) {
   const provider = getLLMProvider();
-  yield* provider.streamChat(ollamaUrl, payload);
+  yield* provider.streamChat(llmBaseUrl, payload);
 }
+
+// Backward-compat alias
+const streamOllamaChat = streamLlmChat;
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
@@ -242,7 +245,7 @@ CRITICAL INSTRUCTIONS:
           try {
             const archSpec = await extractArchitectureSpec(
               { name: parsed.name, base64: parsed.rawBase64, type: parsed.type },
-              OLLAMA_URL,
+              LLM_BASE_URL,
               "gemma4:e4b"
             );
             docContexts.push(
@@ -299,12 +302,6 @@ CRITICAL INSTRUCTIONS:
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
             );
             const ragPromise = (async () => {
-              if (process.env.OLLAMA_ALLOW_EMBEDDING_SWAP === "true") {
-                const semanticRes = await searchSemanticMemory(userPrompt);
-                if (!semanticRes.degraded && semanticRes.citations.length > 0) {
-                  return { contextSnippet: semanticRes.contextSnippet, citations: semanticRes.citations };
-                }
-              }
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
                 contextSnippet: oracleResult.contextSnippet || "",
@@ -318,7 +315,7 @@ CRITICAL INSTRUCTIONS:
               oracleCitations = lookupResult.citations;
             }
           } catch (err: any) {
-            console.warn("[ChatRoute] Semantic memory retrieval warning:", err.message);
+            console.warn("[ChatRoute] Oracle codebase retrieval warning:", err.message);
           }
         }
 
@@ -360,7 +357,7 @@ CRITICAL INSTRUCTIONS:
           ...(browserSession?.tools || [])
         ];
 
-        const ollamaTools = allTools.map((t) => ({
+        const llmTools = allTools.map((t) => ({
           type: "function",
           function: {
             name: t.name,
@@ -443,9 +440,9 @@ CRITICAL INSTRUCTIONS:
             mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
           }
 
-          const roundTools = filterToolsForWebBudget(ollamaTools, webResearchCalls);
+          const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
 
-          const ollamaPayload: any = {
+          const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
               tools: isFinalRound ? undefined : roundTools,
@@ -462,14 +459,14 @@ CRITICAL INSTRUCTIONS:
           };
 
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
-            ollamaPayload.tools = roundTools;
+            llmPayload.tools = roundTools;
           }
 
           let fullRoundContent = "";
           let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
-          for await (const chunk of streamOllamaChat(OLLAMA_URL, ollamaPayload)) {
+          for await (const chunk of streamLlmChat(LLM_BASE_URL, llmPayload)) {
             if (chunk.message?.thinking) {
               roundThinking += chunk.message.thinking;
               await sendEvent({ type: "thought", thought: roundThinking });
@@ -680,7 +677,7 @@ CRITICAL INSTRUCTIONS:
           }
 
           let synthContent = "";
-          for await (const chunk of streamOllamaChat(OLLAMA_URL, {
+          for await (const chunk of streamLlmChat(LLM_BASE_URL, {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
             options: resolveRoundModelOptions({

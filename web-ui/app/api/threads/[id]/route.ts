@@ -174,7 +174,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       }
       activeExecutionSet.delete(thread.id);
 
-      // Unload all models from Ollama VRAM immediately
+      // Unload all models from LLM VRAM immediately
       await unloadAllModels();
 
       // Mark the last assistant message as stopped

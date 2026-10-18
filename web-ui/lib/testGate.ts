@@ -125,27 +125,25 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
-  // Memory profile, durable facts & semantic memory
+  // Memory profile & durable facts
   {
     match: (p) => p.includes("lib/memory"),
-    tests: ["tests/userProfile.test.ts", "tests/semanticMemory.test.ts"]
+    tests: ["tests/userProfile.test.ts"]
   },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
   // Chat API route
   {
     match: (p) => p.includes("app/api/chat/route"),
     tests: [
       "tests/chatStreaming.test.ts",
-      "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
-      "tests/semanticMemory.test.ts",
       "tests/chatActionDiscipline.test.ts",
       "tests/llmProvider.test.ts"
     ]
@@ -154,6 +152,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("lib/llm/") ||
+      p.includes("lib/agentEngine") ||
       p.includes("scripts/llamacpp-standalone") ||
       p.includes("app/api/sandbox-status/route"),
     tests: ["tests/llmProvider.test.ts"]
@@ -235,7 +234,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Models config & modelfiles
   {
     match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
-    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts", "tests/agentEngine.test.ts"]
+    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts"]
   },
   // Makefile deployment configuration
   {
@@ -365,7 +364,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/ingest-docs") ||
       p.includes("scripts/verify-phase-d") ||
       p.includes("eval/"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
   {
     match: (p) => p.includes("scripts/verify-phase-c"),
@@ -395,7 +394,6 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.endsWith("package.json") || p.endsWith("tsconfig.json"),
     tests: [
-      "tests/agentEngine.test.ts",
       "tests/tasksApi.test.ts",
       "tests/supervisor.test.ts"
     ]

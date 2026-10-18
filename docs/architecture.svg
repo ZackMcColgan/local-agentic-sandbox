@@ -40,7 +40,7 @@
   </g>
   <g class="drawio-node">
     <rect x="740" y="340" width="300" height="80" fill="#ffffff" stroke="#4f46e5" />
-    <text x="750" y="380">ollama-service</text>
+    <text x="750" y="380">llm-service</text>
   </g>
   <g class="drawio-node">
     <rect x="1080" y="100" width="250" height="60" fill="#d5e8d4" stroke="#82b366" />

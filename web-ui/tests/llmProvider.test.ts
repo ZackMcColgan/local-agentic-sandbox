@@ -660,12 +660,12 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
 
       const provider = new LlamaCppProvider();
       const chunks: any[] = [];
-      for await (const chunk of provider.streamChat("http://ollama-service:11434", { messages: [] })) {
+      for await (const chunk of provider.streamChat("http://llm-service:11434", { messages: [] })) {
         chunks.push(chunk);
       }
 
       assert.ok(attemptedUrls.some((u) => u.includes("bad-host:11435")), "Must first attempt LLAMACPP_BASE_URL");
-      assert.ok(attemptedUrls.some((u) => u.includes("ollama-service:11434")), "Must fall back to baseUrl");
+      assert.ok(attemptedUrls.some((u) => u.includes("llm-service:11434") || u.includes("ollama-service:11434")), "Must fall back to baseUrl");
       assert.equal(chunks.some((c) => c.message?.content === "Recovered!"), true);
     });
 

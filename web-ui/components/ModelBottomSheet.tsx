@@ -68,7 +68,7 @@ export function ModelBottomSheet({
       modelsList.push({
         id: m,
         displayName: m,
-        subtext: "Installed Ollama model",
+        subtext: "Installed LLM model",
         icon: "cpu"
       });
     }

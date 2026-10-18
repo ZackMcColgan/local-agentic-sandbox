@@ -87,7 +87,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
 
     // 3. Verify K8s Layer & Containers restored
     assert.ok(drawioXml.includes("KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)"));
-    assert.ok(drawioXml.includes("ollama-service (K8s Service)"));
+    assert.ok(drawioXml.includes("llm-service (K8s Service)") || drawioXml.includes("ollama-service (K8s Service)"));
     assert.ok(drawioXml.includes("web-ui Orchestrator Pod"));
     assert.ok(drawioXml.includes("mcp-runner Tool Boundary"));
     assert.ok(drawioXml.includes("browser-mcp Scraper Pod"));

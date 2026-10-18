@@ -160,11 +160,11 @@
   <rect x="50" y="660" width="1260" height="190" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" />
   <text x="420" y="685" font-size="12" font-weight="800" fill="#6d28d9" letter-spacing="1">HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB Dedicated VRAM)</text>
 
-  <!-- Ollama Service Bridge -->
+  <!-- LLM Service Bridge -->
   <rect x="70" y="700" width="310" height="130" rx="8" fill="#ffffff" stroke="#a855f7" stroke-width="1.4" filter="url(#cardShadow)" />
-  <text x="85" y="725" font-size="13" font-weight="800" fill="#6d28d9">ollama-service (K8s Service)</text>
+  <text x="85" y="725" font-size="13" font-weight="800" fill="#6d28d9">llm-service (K8s Service)</text>
   <text x="85" y="742" font-size="11" font-weight="600" fill="#475569">Type: ExternalName -&gt; host.docker.internal</text>
-  <text x="85" y="760" font-size="11" font-weight="600" fill="#475569">Port: 11434/TCP (Ollama REST API)</text>
+  <text x="85" y="760" font-size="11" font-weight="600" fill="#475569">Port: 11434/TCP (LLM REST API)</text>
   <text x="85" y="785" font-size="11" fill="#0f172a">• Air-Gapped Inference Path</text>
   <text x="85" y="803" font-size="11" fill="#0f172a">• Bypasses container network virtualization</text>
   <text x="85" y="821" font-size="11" fill="#0f172a">• 100% Direct PCIe ROCm Compute</text>

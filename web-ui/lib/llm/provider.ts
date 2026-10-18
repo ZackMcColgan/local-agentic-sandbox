@@ -168,7 +168,7 @@ export class OllamaProvider implements LLMProvider {
     options?: LLMProviderOptions
   ): Promise<LLMGenerateResult> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 900_000;
     const endpoint = `${effectiveBase}/api/generate`;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -300,7 +300,7 @@ export class OllamaProvider implements LLMProvider {
 
   async listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     const res = await fetchImpl(`${effectiveBase}/api/tags`, {
       signal: AbortSignal.timeout(timeoutMs)
@@ -314,7 +314,7 @@ export class OllamaProvider implements LLMProvider {
 
   async healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     try {
       const res = await fetchImpl(`${effectiveBase}/api/version`, {
@@ -328,7 +328,7 @@ export class OllamaProvider implements LLMProvider {
 
   async ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 30_000;
     try {
       const res = await fetchImpl(`${effectiveBase}/api/generate`, {

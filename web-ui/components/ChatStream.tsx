@@ -398,7 +398,7 @@ export function ChatStream({
         textareaRef.current.style.height = "auto";
       }
       setIsLoading(true);
-      setStreamStatus("Planning autonomous milestones with real Ollama model...");
+      setStreamStatus("Planning autonomous milestones with real LLM model...");
       try {
         await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
       } catch (err: any) {

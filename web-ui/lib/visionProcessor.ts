@@ -1,6 +1,6 @@
 /**
  * Vision Processor for Multimodal Diagram Ingestion
- * Uses gemma4:e4b via Ollama vision API to extract system architecture,
+ * Uses gemma4:e4b via LLM vision API to extract system architecture,
  * component boundaries, network protocol endpoints, and database schemas.
  */
 
@@ -42,14 +42,14 @@ import { getLLMProvider } from "./llm/provider";
 
 export async function extractArchitectureSpec(
   diagram: DiagramInput,
-  ollamaBaseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  llmBaseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
   visionModel: string = "gemma4:e4b"
 ): Promise<ExtractedArchitectureSpec> {
   const startTime = Date.now();
   console.log(`[VisionProcessor] Ingesting diagram '${diagram.name}' via ${visionModel}...`);
 
   try {
-    const data = await getLLMProvider().chat(ollamaBaseUrl, {
+    const data = await getLLMProvider().chat(llmBaseUrl, {
       model: visionModel,
       messages: [
         {

@@ -49,6 +49,7 @@ export default function Home() {
   // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
   const [status, setStatus] = useState({
+    llm: "INITIALIZING",
     ollama: "INITIALIZING",
     mcp: "INITIALIZING",
     airGapped: true
@@ -144,21 +145,26 @@ export default function Home() {
       const res = await fetch("/api/sandbox-status");
       if (res.ok) {
         const data = await res.json();
+        const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
+        const llmModels = data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
+        const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
         setStatus({
-          ollama: data.services?.ollama?.status || "OFFLINE",
+          llm: llmStatus,
+          ollama: llmStatus,
           mcp: data.services?.mcp_server?.status || "OFFLINE",
           airGapped: true
         });
-        if (data.services?.ollama?.installed_models) {
-          setInstalledModels(data.services.ollama.installed_models);
+        if (llmModels) {
+          setInstalledModels(llmModels);
         }
-        if (data.services?.ollama?.profiles) {
-          setProfiles(data.services.ollama.profiles);
+        if (llmProfiles) {
+          setProfiles(llmProfiles);
         }
         setSecurityPosture(data.security_posture);
       }
     } catch {
       setStatus({
+        llm: "UNREACHABLE",
         ollama: "UNREACHABLE",
         mcp: "UNREACHABLE",
         airGapped: true

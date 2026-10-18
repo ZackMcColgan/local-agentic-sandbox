@@ -5,6 +5,7 @@ import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAsserti
 import ts from "typescript";
 export type { TestSnapshot, RevertResult } from "./types";
 import {
+  createLlmGenerate,
   createOllamaGenerate,
   isFastGraphTestMode,
   stripCodeFence,
@@ -25,7 +26,7 @@ export interface ModelRosterConfig {
 export interface WorkerPoolOptions {
   maxConcurrency?: number;
   modelRoster?: ModelRosterConfig;
-  /** Injected model client (tests / alternate backends). Defaults to Ollama per worker. */
+  /** Injected model client (tests / alternate backends). Defaults to local LLM per worker. */
   generate?: GenerateFn;
   /** Residency plan supplying keep_alive per model (see residency.ts). */
   residencyPlan?: ResidencyPlan;
@@ -79,6 +80,7 @@ export interface RecordSkillResult {
 
 export interface WorkerModelOptions {
   model?: string;
+  llmUrl?: string;
   ollamaUrl?: string;
   generate?: GenerateFn;
   keepAlive?: string | number;
@@ -439,7 +441,7 @@ export class BuilderWorker {
   readonly maxIterations: number = 5;
   private readonly model?: string;
   private readonly injectedGenerate?: GenerateFn;
-  private readonly ollamaUrl?: string;
+  private readonly llmUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
   private readonly workspaceRoot?: string;
@@ -454,7 +456,7 @@ export class BuilderWorker {
   constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
     this.injectedGenerate = options?.generate;
-    this.ollamaUrl = options?.ollamaUrl;
+    this.llmUrl = options?.llmUrl || options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
     this.workspaceRoot = options?.workspaceRoot;
@@ -577,7 +579,7 @@ export class BuilderWorker {
         if (synthetic) {
           newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
         } else {
-          const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+          const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
           const priorContext = priorFileContexts.length > 0
             ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
             : "";
@@ -657,7 +659,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
       console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
-      const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+      const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
       const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
       const prompt = isSingleArtifact
         ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
@@ -731,7 +733,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         }
 
         astAttempts++;
-        const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+        const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
         const correctionPrompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
@@ -892,7 +894,7 @@ export class CriticWorker {
   readonly role: WorkerRole = "critic";
   private readonly model?: string;
   private readonly injectedGenerate?: GenerateFn;
-  private readonly ollamaUrl?: string;
+  private readonly llmUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
   private readonly scopedTools = [
@@ -904,7 +906,7 @@ export class CriticWorker {
   constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
     this.injectedGenerate = options?.generate;
-    this.ollamaUrl = options?.ollamaUrl;
+    this.llmUrl = options?.llmUrl || options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
   }
@@ -1104,7 +1106,7 @@ export class CriticWorker {
     }
 
     // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
-    const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+    const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
     const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
