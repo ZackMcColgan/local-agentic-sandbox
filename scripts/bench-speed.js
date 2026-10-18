@@ -9,7 +9,8 @@ async function runBench(runNum) {
   const res = await fetch("http://127.0.0.1:11434/completion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(180000) // 180s deadline exceeded guard
   });
   const data = await res.json();
   const t = data.timings;
