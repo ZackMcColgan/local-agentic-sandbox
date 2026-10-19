@@ -9,10 +9,11 @@ import {
   Wrench,
   FileText,
   Settings,
+  FolderGit2,
   X
 } from "lucide-react";
 
-export type NavView = "sessions" | "thread" | "builds" | "skills" | "morning-report" | "settings" | "security";
+export type NavView = "sessions" | "thread" | "builds" | "skills" | "morning-report" | "settings" | "security" | "projects";
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -124,6 +125,23 @@ export function NavigationDrawer({
           >
             <Rocket className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
             <span>Builds</span>
+          </button>
+
+          {/* Item 3b: Projects & Folders */}
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate("projects");
+              onClose();
+            }}
+            className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-sm transition-colors text-left ${
+              activeView === "projects"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-semibold"
+                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <FolderGit2 className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <span>Projects &amp; Folders</span>
           </button>
 
           {/* Item 4: Skills with "3 pending" badge */}

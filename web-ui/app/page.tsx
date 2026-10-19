@@ -32,6 +32,8 @@ import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
 import { SettingsView } from "@/components/SettingsView";
 import { BuildsView } from "@/components/BuildsView";
 import { SkillsView } from "@/components/SkillsView";
+import { ProjectsView } from "@/components/ProjectsView";
+import { ProjectRecord } from "@/lib/projects/projectStore";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
   getInitialWelcomeMessage,
@@ -68,6 +70,8 @@ export default function Home() {
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
   const [deployHistory, setDeployHistory] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
@@ -106,6 +110,7 @@ export default function Home() {
       const queryTab = urlParams.get("tab") || urlParams.get("view");
       if (queryTab === "skills") setActiveNavView("skills");
       else if (queryTab === "builds") setActiveNavView("builds");
+      else if (queryTab === "projects") setActiveNavView("projects");
       else if (queryTab === "morning-report") setActiveNavView("morning-report");
       else if (queryTab === "settings") setActiveNavView("settings");
       else if (queryTab === "security") setViewMode("security");
@@ -176,13 +181,25 @@ export default function Home() {
     fetchStatus();
     fetchSkills();
     fetchDeployStatus();
+    fetchProjects();
     const interval = setInterval(() => {
       fetchStatus();
       fetchSkills();
       fetchDeployStatus();
+      fetchProjects();
     }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+      }
+    } catch {}
+  };
 
   const fetchSkills = async () => {
     try {
@@ -1005,6 +1022,36 @@ export default function Home() {
             onStopTask={handleStopRun}
             onSelectThread={handleSelectThread}
             onDeployRun={handleDeployRun}
+            onNavigateToProjects={() => setActiveNavView("projects")}
+          />
+        )}
+
+        {activeNavView === "projects" && (
+          <ProjectsView
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={setSelectedProjectId}
+            onRegisterProject={async (data) => {
+              const res = await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+              });
+              if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Failed to register project");
+              }
+              await fetchProjects();
+            }}
+            onToggleAllowlist={async (id, allowlisted) => {
+              await fetch("/api/projects", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, allowlisted })
+              });
+              await fetchProjects();
+            }}
+            onOpenDrawer={() => setIsDrawerOpen(true)}
           />
         )}
 

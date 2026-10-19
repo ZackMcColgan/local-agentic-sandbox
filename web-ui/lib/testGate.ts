@@ -134,6 +134,16 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
+  // Projects & Folders (Phases 1-4)
+  {
+    match: (p) =>
+      p.includes("lib/projects/") ||
+      p.includes("app/api/projects") ||
+      p.includes("components/ProjectsView"),
+    tests: [
+      "tests/projectsRegistryAndExplorer.test.ts"
+    ]
+  },
   // Memory profile & durable facts
   {
     match: (p) => p.includes("lib/memory"),
