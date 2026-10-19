@@ -215,15 +215,16 @@ export function resolveRoundModelOptions(params: {
   userPrompt: string;
   isSynthesisOrFinalRound: boolean;
   hasCompletedToolCalls: boolean;
-}): { num_ctx: number; num_predict?: number; temperature: number } {
+}): { num_ctx: number; num_predict?: number; temperature: number; reasoning_effort?: "low" | "medium" | "xhigh" } {
   const { isArtifactRequest } = hasArtifactCreationIntent(params.userPrompt || "");
   const shouldUseFastSynthesis =
-    isArtifactRequest && (params.isSynthesisOrFinalRound || params.hasCompletedToolCalls);
+    isArtifactRequest || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
   const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
   const baseOpts = computeModelOptions(params.model, effectiveEffort);
-  const result: { num_ctx: number; num_predict?: number; temperature: number } = {
+  const result: { num_ctx: number; num_predict?: number; temperature: number; reasoning_effort?: "low" | "medium" | "xhigh" } = {
     num_ctx: baseOpts.num_ctx,
-    temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5)
+    temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
+    reasoning_effort: effectiveEffort
   };
   if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
     result.num_predict = baseOpts.num_predict;
@@ -515,7 +516,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     if (isFinalRound) {
       mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
-    if (isArtifactRequest && (isFinalRound || round > 0)) {
+    if (isArtifactRequest) {
       mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 

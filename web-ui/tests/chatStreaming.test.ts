@@ -7,7 +7,7 @@ import {
   computeModelOptions,
   resolveEffectiveReasoningEffort
 } from "../lib/chatUtils.js";
-import { isReasoningEffortSupported, PRESET_MODEL_PROFILES } from "../config/models.js";
+import { isReasoningEffortSupported, getModelProfile, PRESET_MODEL_PROFILES } from "../config/models.js";
 
 describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   it("parses completed <think>...</think> blocks into thought and content using real implementation", () => {
@@ -78,6 +78,13 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
     const lowOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "low");
     assert.equal(lowOpts.temperature, 0.2);
     assert.equal(lowOpts.num_predict, 4096);
+
+    // Swift-1.5-Qwen3.8-27B-IQ3_XS support (Bug regression: case-insensitive check + profile definition)
+    assert.equal(isReasoningEffortSupported("Swift-1.5-Qwen3.8-27B-IQ3_XS"), true);
+    assert.equal(resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS"), "medium");
+    const profile = getModelProfile("Swift-1.5-Qwen3.8-27B-IQ3_XS");
+    assert.ok(profile, "Profile must exist for Swift-1.5-Qwen3.8-27B-IQ3_XS");
+    assert.equal(profile?.supportsReasoningEffort, true);
   });
 
   it("disables and omits reasoning effort for unsupported models (Hermes 3)", () => {

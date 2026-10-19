@@ -32,7 +32,7 @@ export function computeModelOptions(
   reasoningEffort?: "low" | "medium" | "xhigh"
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: modelToUse.includes("gemma4") ? 16384 : 8192
+    num_ctx: 12288
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);

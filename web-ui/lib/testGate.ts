@@ -56,6 +56,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("tests/helpers/"),
     tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"]
   },
+  // Grounding helpers (search query derivation, honest-abort gate)
+  {
+    match: (p) => p.includes("lib/grounding"),
+    tests: ["tests/groundingGate.test.ts"]
+  },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),
@@ -392,6 +397,9 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("scripts/capture-svg-render") ||
       p.includes("scripts/test-ui-render") ||
+      p.includes("scripts/run-full-suite") ||
+      p.includes("scripts/test-honest-abort-live") ||
+      p.includes("scripts/test-model-formulation-live") ||
       p.includes("scripts/verify-"),
     tests: ["tests/e2eScriptTimeouts.test.ts"]
   },
@@ -441,8 +449,11 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes(".tmp") ||
     normalizedPath.includes(".agent") ||
     normalizedPath.includes("temp-") ||
+    normalizedPath.endsWith("full-suite-results.json") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
+    normalizedPath.startsWith("scripts/bench-") ||
+    normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||

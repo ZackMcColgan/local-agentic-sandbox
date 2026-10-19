@@ -36,6 +36,16 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
       if (trimmed) userQueries.push(trimmed);
     } else if (msg.role === "tool") {
       if (msg.name) toolsInvoked.add(msg.name);
+      if (typeof msg.content === "string" && msg.content.trim()) {
+        const clean = msg.content
+          .replace(/<think>[\s\S]*?<\/think>/gi, "")
+          .replace(/[\r\n\t]+/g, " ")
+          .trim();
+        if (clean && !clean.startsWith("MCP error") && !clean.startsWith("[Earlier")) {
+          const excerpt = clean.length > 160 ? `${clean.slice(0, 157)}...` : clean;
+          keyDeliverables.push(`Tool ${msg.name || "call"} data: ${excerpt}`);
+        }
+      }
     } else if (msg.role === "assistant") {
       if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
         for (const tc of msg.tool_calls) {

@@ -1,11 +1,12 @@
 import { ChatMessage } from "@/components/ChatStream";
+import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 
 export const STORAGE_KEY = "local_agent_chat_history_v1";
 
 /**
  * Generates the clean initial welcome message seed.
  */
-export function getInitialWelcomeMessage(modelUsed: string = "gemma4:e4b"): ChatMessage {
+export function getInitialWelcomeMessage(modelUsed: string = DEFAULT_PRIMARY_MODEL): ChatMessage {
   return {
     id: "initial-welcome",
     role: "assistant",
@@ -43,7 +44,7 @@ export function sanitizeMessagesForStorage(messages: ChatMessage[]): ChatMessage
  * Validates integrity and falls back gracefully to the welcome message seed
  * on corruption, empty storage, or server-side rendering.
  */
-export function loadChatHistory(defaultModel: string = "gemma4:e4b"): ChatMessage[] {
+export function loadChatHistory(defaultModel: string = DEFAULT_PRIMARY_MODEL): ChatMessage[] {
   if (typeof window === "undefined" || !window.localStorage) {
     return [getInitialWelcomeMessage(defaultModel)];
   }
@@ -94,7 +95,7 @@ export function saveChatHistory(messages: ChatMessage[]): void {
 /**
  * Clears chat history from localStorage and returns the initial welcome seed.
  */
-export function clearChatHistory(defaultModel: string = "gemma4:e4b"): ChatMessage[] {
+export function clearChatHistory(defaultModel: string = DEFAULT_PRIMARY_MODEL): ChatMessage[] {
   const seed = [getInitialWelcomeMessage(defaultModel)];
   if (typeof window !== "undefined" && window.localStorage) {
     try {
@@ -113,7 +114,7 @@ export class TabContainerState {
   private messages: ChatMessage[];
   private defaultModel: string;
 
-  constructor(defaultModel: string = "gemma4:e4b") {
+  constructor(defaultModel: string = DEFAULT_PRIMARY_MODEL) {
     this.defaultModel = defaultModel;
     this.activeTab = "chat";
     this.messages = loadChatHistory(defaultModel);

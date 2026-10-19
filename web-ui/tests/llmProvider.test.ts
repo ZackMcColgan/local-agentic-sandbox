@@ -643,6 +643,23 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(sentBody.messages[3].tool_call_id, assistantMsg.tool_calls[0].id);
     });
 
+    it("LlamaCppProvider.streamChat sends parallel_tool_calls: false when tools are present", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(['data: [DONE]\n\n']);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "hello" }],
+        tools: [{ type: "function", function: { name: "search_web", description: "search", parameters: { type: "object" } } }]
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.equal(sentBody.parallel_tool_calls, false, "Must explicitly set parallel_tool_calls: false to prevent runaway loops");
+    });
+
     it("LlamaCppProvider streamChat retries against baseUrl if llamacppBaseUrl fails with connection error", async () => {
       process.env.LLAMACPP_BASE_URL = "http://bad-host:11435";
       const attemptedUrls: string[] = [];
@@ -781,9 +798,13 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(!standalone.DEFAULT_BINARY_PATH.toLowerCase().includes("ollama"), "Binary path must not reference Ollama");
 
       const args: string[] = standalone.buildLlamaServerArgs();
-      assert.ok(args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"), "Must use standalone GGUF path in C:\\AI\\llamacpp\\models");
+      assert.ok(
+        args.includes("C:\\AI\\llamacpp\\models\\Swift-1.5-Qwen3.8-27B-IQ3_XS.gguf") ||
+        args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"),
+        "Must use standalone GGUF path in C:\\AI\\llamacpp\\models"
+      );
       assert.ok(args.every((a) => !a.toLowerCase().includes("ollama") && !a.includes("blobs\\sha256-")), "Args must not reference Ollama or its blob store");
-      assert.ok(args.includes("-c") && args.includes("8192"), "Must set 8192 context window");
+      assert.ok(args.includes("-c") && (args.includes("12288") || args.includes("8192")), "Must set context window");
       assert.ok(args.includes("--spec-type") && args.includes("draft-mtp"), "Must enable draft-mtp speculative decoding");
       assert.ok(args.includes("--cache-type-k") && args.includes("q8_0"), "Must enable q8_0 KV cache");
       assert.ok(args.includes("--flash-attn") && args.includes("auto"), "Must enable flash-attn auto");
@@ -794,7 +815,121 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(!String(env.PATH).toLowerCase().includes("ollama"), "Env PATH must not inject Ollama directories");
     });
   });
+
+  describe("Task 12: Multimodal OpenAI Vision Message Normalization (Bug 2)", () => {
+    it("normalizeOpenAIMessages converts message.images to OpenAI content parts and deletes images property", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          content: "What diagram is this?",
+          images: ["iVBORw0KGgoAAAANSUhEUg=="]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+
+      assert.equal(normalized.length, 1);
+      const userMsg = normalized[0];
+      assert.equal(userMsg.role, "user");
+      assert.ok(Array.isArray(userMsg.content), "Message content must be converted to an array of content parts");
+      assert.equal(userMsg.content.length, 2);
+      assert.deepEqual(userMsg.content[0], { type: "text", text: "What diagram is this?" });
+      assert.deepEqual(userMsg.content[1], {
+        type: "image_url",
+        image_url: { url: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUg==" }
+      });
+      assert.equal("images" in userMsg, false, "The 'images' property must be stripped from normalized message");
+    });
+
+    it("normalizeOpenAIMessages preserves existing data: URI schemes in images", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          content: "Analyze this PNG",
+          images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+      const userMsg = normalized[0];
+      assert.ok(Array.isArray(userMsg.content));
+      assert.equal(userMsg.content[1].image_url.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==");
+      assert.equal("images" in userMsg, false);
+    });
+
+    it("normalizeOpenAIMessages handles messages with images and no text content", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          images: ["rawbase64data"]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+      const userMsg = normalized[0];
+      assert.ok(Array.isArray(userMsg.content));
+      assert.deepEqual(userMsg.content[0], { type: "text", text: "" });
+      assert.equal(userMsg.content[1].image_url.url, "data:image/jpeg;base64,rawbase64data");
+      assert.equal("images" in userMsg, false);
+    });
+
+    it("LlamaCppProvider.streamChat sends content parts with image_url to /v1/chat/completions without images property", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const visionMessages = [
+        {
+          role: "user",
+          content: "Describe image",
+          images: ["mybase64image"]
+        }
+      ];
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: visionMessages })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      const userMsg = sentBody.messages[0];
+      assert.ok(Array.isArray(userMsg.content), "Sent message content must be content parts array");
+      assert.equal(userMsg.content[0].type, "text");
+      assert.equal(userMsg.content[0].text, "Describe image");
+      assert.equal("images" in userMsg, false, "Must not send 'images' property to /v1/chat/completions");
+    });
+
+    it("LlamaCppProvider.streamChat forwards reasoning_effort and signal to /v1/chat/completions", async () => {
+      let sentBody: any = null;
+      let sentSignal: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentSignal = init?.signal;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const controller = new AbortController();
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "Hi" }],
+        reasoning_effort: "low",
+        signal: controller.signal
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.equal(sentBody.reasoning_effort, "low", "Must forward reasoning_effort in requestBody");
+      assert.equal(sentSignal, controller.signal, "Must forward AbortSignal to fetch");
+    });
+  });
 });
+
 
 
 

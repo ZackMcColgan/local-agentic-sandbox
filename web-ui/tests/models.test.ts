@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES } from "../config/models.js";
 
 describe("Web UI Model Configuration Suite", () => {
-  it("defaults to swift-15-27b-mtp for orchestrator to fit within 16GB VRAM limit", () => {
-    assert.equal(DEFAULT_PRIMARY_MODEL, "swift-15-27b-mtp");
+  it("defaults to Swift-1.5-Qwen3.8-27B-IQ3_XS for orchestrator to fit within 16GB VRAM limit", () => {
+    assert.equal(DEFAULT_PRIMARY_MODEL, "Swift-1.5-Qwen3.8-27B-IQ3_XS");
   });
 
-  it("defaults to swift-15-27b-mtp for fast multimodal sub-agent execution", () => {
-    assert.equal(DEFAULT_SUBAGENT_MODEL, "swift-15-27b-mtp");
+  it("defaults to Swift-1.5-Qwen3.8-27B-IQ3_XS for fast multimodal sub-agent execution", () => {
+    assert.equal(DEFAULT_SUBAGENT_MODEL, "Swift-1.5-Qwen3.8-27B-IQ3_XS");
   });
 
   it("contains complete profiles for orchestrator and sub-agents", () => {

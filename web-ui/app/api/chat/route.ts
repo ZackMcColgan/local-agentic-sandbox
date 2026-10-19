@@ -9,7 +9,6 @@ import {
   isReasoningEffortSupported
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
-import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import {
@@ -49,6 +48,11 @@ import {
   recordProfileEntry
 } from "@/lib/memory/profile";
 import { getLLMProvider } from "@/lib/llm/provider";
+import {
+  evaluateSearchQueryAttempt,
+  shouldInjectHonestAbort,
+  HONEST_ABORT_DIRECTIVE
+} from "@/lib/grounding";
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
@@ -85,7 +89,7 @@ async function connectMcpClient(url: string, name: string) {
 }
 
 /**
- * Lean hierarchical triage classifier using Gemma 4 E4B (~80 tok/s).
+ * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
  * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
  */
 async function triageComplexity(
@@ -175,12 +179,8 @@ export async function POST(req: NextRequest) {
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
 
     if (!activeModel || activeModel === "auto") {
-      if (mode === "flash") {
-        activeModel = "gemma4:e4b";
-      } else {
-        // Zero VRAM eviction: auto and pro modes route directly to DEFAULT_PRIMARY_MODEL without gemma4:e4b triage swap
-        activeModel = DEFAULT_PRIMARY_MODEL;
-      }
+      // Zero VRAM eviction: auto, flash, and pro modes route directly to DEFAULT_PRIMARY_MODEL
+      activeModel = DEFAULT_PRIMARY_MODEL;
     }
 
     // Resolve honest effective reasoning effort
@@ -237,19 +237,6 @@ CRITICAL INSTRUCTIONS:
         const parsed = await parseAttachment(att.name, att.type, att.size, att.base64);
         if (parsed.isImage && parsed.rawBase64) {
           imagePayloads.push(parsed.rawBase64);
-          // Run multimodal architecture diagram ingestion via Gemma 4 E4B
-          try {
-            const archSpec = await extractArchitectureSpec(
-              { name: parsed.name, base64: parsed.rawBase64, type: parsed.type },
-              LLM_BASE_URL,
-              "gemma4:e4b"
-            );
-            docContexts.push(
-              `\n\n--- EXTRACTED ARCHITECTURE SPECIFICATION (${parsed.name}) ---\n${archSpec.markdownSpec}\n--- END OF ARCHITECTURE SPECIFICATION ---`
-            );
-          } catch (err: any) {
-            console.warn(`[ChatRoute] Failed to extract architecture spec for ${parsed.name}:`, err.message);
-          }
         } else if (parsed.textContent) {
           docContexts.push(
             `\n\n--- ATTACHED DOCUMENT: ${parsed.name} (${parsed.type}) ---\n${parsed.textContent}\n--- END OF ATTACHED DOCUMENT ---`
@@ -260,22 +247,49 @@ CRITICAL INSTRUCTIONS:
 
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     const userPrompt = lastUserMsg?.content || "";
+    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
+    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
 
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
     const encoder = new TextEncoder();
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
 
+    let aborted = false;
+    const abortController = new AbortController();
+    const cleanupSignal = () => {
+      aborted = true;
+      clearInterval(heartbeatInterval);
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+    };
+    req.signal.addEventListener("abort", cleanupSignal);
+
     const sendEvent = async (data: any) => {
+      if (aborted || req.signal.aborted) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
       try {
         await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-      } catch (err) {
-        console.warn("[SSE sendEvent error]:", err);
+      } catch (err: any) {
+        clearInterval(heartbeatInterval);
+        aborted = true;
+        if (!req.signal.aborted) {
+          console.warn("[SSE sendEvent error]:", err?.message || err);
+        }
       }
     };
 
     const heartbeatInterval = setInterval(() => {
-      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {});
+      if (aborted || req.signal.aborted) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
+      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {
+        clearInterval(heartbeatInterval);
+      });
     }, 10_000);
 
     // Run async orchestrator pipeline in background feeding SSE stream
@@ -411,12 +425,16 @@ CRITICAL INSTRUCTIONS:
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
         let groundingEnforced = false;
+        let honestAbortInjected = false;
+        let searchNudges = 0;
 
         let accumulatedThoughts: string[] = [];
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (round < MAX_TOOL_ROUNDS) {
+          if (aborted || req.signal.aborted) break;
+
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
           if (compaction.compacted) {
             conversationMessages.length = 0;
@@ -433,11 +451,19 @@ CRITICAL INSTRUCTIONS:
           if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
           }
-          if (isArtifactRequest && (isFinalRound || traces.length > 0)) {
+          if (isArtifactRequest) {
             mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
           }
 
           const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
+
+          const roundOptions = resolveRoundModelOptions({
+            model: activeModel,
+            requestedEffort: effectiveReasoningEffort,
+            userPrompt,
+            isSynthesisOrFinalRound: isFinalRound,
+            hasCompletedToolCalls: traces.length > 0
+          });
 
           const llmPayload: any = {
             model: activeModel,
@@ -446,13 +472,9 @@ CRITICAL INSTRUCTIONS:
               isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            options: resolveRoundModelOptions({
-              model: activeModel,
-              requestedEffort: effectiveReasoningEffort,
-              userPrompt,
-              isSynthesisOrFinalRound: isFinalRound,
-              hasCompletedToolCalls: traces.length > 0
-            })
+            signal: abortController.signal,
+            reasoning_effort: roundOptions.reasoning_effort,
+            options: roundOptions
           };
 
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
@@ -489,7 +511,15 @@ CRITICAL INSTRUCTIONS:
             tool_calls: toolCallsFromMessage.length > 0 ? toolCallsFromMessage : undefined
           };
 
-          const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          const rawToolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          const seenKeys = new Set<string>();
+          const toolCalls = (rawToolCalls || []).filter((tc: any) => {
+            const key = tc.id || `${tc.function?.name}:${typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {})}`;
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          });
+
           if (!toolCalls || toolCalls.length === 0) {
             if (
               isLiveRealTimeIntent(userPrompt) &&
@@ -500,7 +530,7 @@ CRITICAL INSTRUCTIONS:
               groundingEnforced = true;
               mergeSystemDirective(
                 conversationMessages,
-                "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now."
+                `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
               );
               round++;
               continue;
@@ -522,12 +552,148 @@ CRITICAL INSTRUCTIONS:
           };
           conversationMessages.push(assistantMsgToPush);
 
+          let searchBlocked = false;
+
           for (const toolCall of toolCalls) {
+            if (aborted || req.signal.aborted) break;
             const toolName = toolCall.function.name;
-            const toolArgs =
-              typeof toolCall.function.arguments === "string"
-                ? JSON.parse(toolCall.function.arguments)
-                : toolCall.function.arguments;
+            let toolArgs: Record<string, any> = {};
+            if (typeof toolCall.function.arguments === "string") {
+              try {
+                toolArgs = toolCall.function.arguments.trim()
+                  ? JSON.parse(toolCall.function.arguments)
+                  : {};
+              } catch {
+                toolArgs = {};
+              }
+            } else if (toolCall.function.arguments && typeof toolCall.function.arguments === "object") {
+              toolArgs = { ...toolCall.function.arguments };
+            }
+
+            if (toolName === "search_web") {
+              const candidate =
+                toolArgs.query ||
+                toolArgs.q ||
+                toolArgs.search ||
+                toolArgs.search_query ||
+                toolArgs.input ||
+                toolArgs.keyword ||
+                toolArgs.text ||
+                Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+              const queryAttempt = typeof candidate === "string" ? candidate.trim() : "";
+              const evalResult = evaluateSearchQueryAttempt(queryAttempt, userPrompt, searchNudges);
+
+              if (evalResult.action === "nudge") {
+                searchNudges++;
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: JSON.stringify({
+                    status: "RETRY_REQUIRED",
+                    message: evalResult.message
+                  })
+                });
+                mergeSystemDirective(conversationMessages, `[QUERY REVISION REQUIRED]: ${evalResult.message}`);
+                await sendEvent({
+                  type: "status",
+                  status: "Revising search query..."
+                });
+                continue;
+              } else if (evalResult.action === "block") {
+                if (evalResult.countAttempt) {
+                  webResearchCalls++;
+                }
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: JSON.stringify({
+                    status: "BLOCKED",
+                    error: evalResult.message
+                  })
+                });
+                await sendEvent({
+                  type: "status",
+                  status: "Search query blocked"
+                });
+                searchBlocked = true;
+                break;
+              }
+
+              // Valid query -> proceed with tool call
+              toolArgs.query = queryAttempt;
+            } else if (toolName === "fetch_webpage_markdown") {
+              if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
+                const candidate =
+                  toolArgs.link ||
+                  toolArgs.href ||
+                  toolArgs.target ||
+                  toolArgs.uri ||
+                  toolArgs.site ||
+                  toolArgs.page ||
+                  toolArgs.address ||
+                  toolArgs.endpoint ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.url = candidate.trim();
+                } else {
+                  for (let i = traces.length - 1; i >= 0; i--) {
+                    const traceContent = JSON.stringify(traces[i].result || "");
+                    const urlMatch = traceContent.match(/https?:\/\/[^\s)"]+/i);
+                    if (urlMatch) {
+                      toolArgs.url = urlMatch[0];
+                      break;
+                    }
+                  }
+                  if (!toolArgs.url) {
+                    const promptUrlMatch = userPrompt.match(/https?:\/\/[^\s)"]+/i);
+                    if (promptUrlMatch) {
+                      toolArgs.url = promptUrlMatch[0];
+                    }
+                  }
+                }
+              }
+              if (typeof toolArgs.url === "string" && toolArgs.url.trim()) {
+                toolArgs.url = toolArgs.url.trim();
+                if (!/^https?:\/\//i.test(toolArgs.url)) {
+                  toolArgs.url = `https://${toolArgs.url}`;
+                }
+              }
+            } else if (toolName === "workspace_read_file") {
+              if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
+                const candidate =
+                  toolArgs.file ||
+                  toolArgs.filepath ||
+                  toolArgs.filename ||
+                  toolArgs.target ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.path = candidate.trim();
+                }
+              }
+            } else if (toolName === "workspace_run_command") {
+              if (!toolArgs.command || typeof toolArgs.command !== "string" || !toolArgs.command.trim()) {
+                const candidate =
+                  toolArgs.cmd ||
+                  toolArgs.exec ||
+                  toolArgs.script ||
+                  toolArgs.code ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.command = candidate.trim();
+                }
+              }
+            } else if (toolName === "execute_sandboxed_python") {
+              if (!toolArgs.code || typeof toolArgs.code !== "string" || !toolArgs.code.trim()) {
+                const candidate =
+                  toolArgs.python ||
+                  toolArgs.script ||
+                  toolArgs.command ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.code = candidate.trim();
+                }
+              }
+            }
 
             if (toolName === DESCRIBE_TOOL_NAME) {
               const targetTool = toolArgs.tool_name || toolArgs.name;
@@ -652,24 +818,27 @@ CRITICAL INSTRUCTIONS:
             }
 
             if (isWebResearchTool(toolName, target.tier)) {
-              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+              if (isArtifactRequest && !isExecutionError) {
+                webResearchCalls = MAX_WEB_RESEARCH_CALLS;
+                mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, false));
+              } else if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
                 webBudgetNoticeAdded = true;
                 mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
               }
             }
 
-            // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
+            // Auto-Escalation Check: If 2 consecutive failures, ensure activeModel escalates to Primary model
             if (
               mode === "auto" &&
-              activeModel.includes("gemma4") &&
-              consecutiveFailures >= 2
+              consecutiveFailures >= 2 &&
+              activeModel !== DEFAULT_PRIMARY_MODEL
             ) {
-              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
+              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Primary model...");
               activeModel = DEFAULT_PRIMARY_MODEL;
               effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
               await sendEvent({
                 type: "status",
-                status: "Auto-escalating to Pro Reasoning Model (Qwen 27B)..."
+                status: "Auto-escalating to Pro Reasoning Model..."
               });
               await sendEvent({
                 type: "meta",
@@ -678,10 +847,59 @@ CRITICAL INSTRUCTIONS:
               });
               mergeSystemDirective(
                 conversationMessages,
-                "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+                "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
           }
+
+          if (searchBlocked) {
+            break;
+          }
+
+          if (
+            !honestAbortInjected &&
+            (isArtifactRequest || webResearchCalls >= MAX_WEB_RESEARCH_CALLS) &&
+            shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
+          ) {
+            honestAbortInjected = true;
+            mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+            await sendEvent({
+              type: "trace",
+              trace: {
+                tool: "grounding_gate",
+                args: { reason: "insufficient_live_web_results" },
+                result: HONEST_ABORT_DIRECTIVE,
+                durationMs: 0,
+                timestamp: new Date().toISOString(),
+                model: activeModel,
+                tier: "ORCHESTRATOR"
+              }
+            });
+          }
+
+          if (isArtifactRequest && traces.some((t) => isWebResearchTool(t.tool))) {
+            break;
+          }
+        }
+
+        if (
+          !honestAbortInjected &&
+          shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
+        ) {
+          honestAbortInjected = true;
+          mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+          await sendEvent({
+            type: "trace",
+            trace: {
+              tool: "grounding_gate",
+              args: { reason: "insufficient_live_web_results" },
+              result: HONEST_ABORT_DIRECTIVE,
+              durationMs: 0,
+              timestamp: new Date().toISOString(),
+              model: activeModel,
+              tier: "ORCHESTRATOR"
+            }
+          });
         }
 
         // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
@@ -711,16 +929,20 @@ CRITICAL INSTRUCTIONS:
           }
 
           let synthContent = "";
+          const synthOptions = resolveRoundModelOptions({
+            model: activeModel,
+            requestedEffort: effectiveReasoningEffort,
+            userPrompt,
+            isSynthesisOrFinalRound: true,
+            hasCompletedToolCalls: traces.length > 0
+          });
+
           for await (const chunk of streamLlmChat(LLM_BASE_URL, {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-            options: resolveRoundModelOptions({
-              model: activeModel,
-              requestedEffort: effectiveReasoningEffort,
-              userPrompt,
-              isSynthesisOrFinalRound: true,
-              hasCompletedToolCalls: traces.length > 0
-            })
+            signal: abortController.signal,
+            reasoning_effort: synthOptions.reasoning_effort,
+            options: synthOptions
           })) {
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
@@ -791,6 +1013,10 @@ CRITICAL INSTRUCTIONS:
         });
       } finally {
         clearInterval(heartbeatInterval);
+        req.signal.removeEventListener("abort", cleanupSignal);
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
         for (const session of activeSessions) {
           try {
             await session.client.close();

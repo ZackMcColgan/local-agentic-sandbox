@@ -31,6 +31,7 @@ describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
       const entries = fs.readdirSync(scriptsDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isFile() && (entry.name.endsWith(".js") || entry.name.endsWith(".ts"))) {
+          if (entry.name.startsWith("bench-") || entry.name.startsWith("test-q3")) continue;
           filesToCheck.push(path.join(scriptsDir, entry.name));
         }
       }

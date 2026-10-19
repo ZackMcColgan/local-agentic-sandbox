@@ -27,10 +27,13 @@ export interface LLMChatRequest {
   messages: any[];
   tools?: any[];
   keep_alive?: string | number;
+  reasoning_effort?: "low" | "medium" | "xhigh";
+  signal?: AbortSignal;
   options?: {
     temperature?: number;
     num_predict?: number;
     num_ctx?: number;
+    reasoning_effort?: "low" | "medium" | "xhigh";
     [key: string]: any;
   };
   [key: string]: any;
@@ -383,19 +386,52 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
   // Guarantee at least one role === "user" message exists so strict Jinja templates
   // (e.g. Qwen/Swift multi-step tools) never throw "No user query found in messages"
   const hasUserMessage = reordered.some(
-    (m) => m?.role === "user" && typeof m?.content === "string" && m.content.trim().length > 0
+    (m) =>
+      m?.role === "user" &&
+      ((typeof m?.content === "string" && m.content.trim().length > 0) ||
+        (Array.isArray(m?.content) && m.content.length > 0) ||
+        (Array.isArray(m?.images) && m.images.length > 0))
   );
   if (!hasUserMessage) {
     const insertIdx = reordered.length > 0 && reordered[0]?.role === "system" ? 1 : 0;
     reordered.splice(insertIdx, 0, { role: "user", content: "Proceed with the request." });
   }
 
-  // 2. Track tool calls and assign IDs
+  // 2. Track tool calls, convert multimodal images, and assign IDs
   const pendingToolCallIds: string[] = [];
   return reordered.map((msg, msgIdx) => {
-    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    let currentMsg = msg;
+
+    // Convert Ollama-format images array into OpenAI multimodal content parts
+    if (Array.isArray(currentMsg?.images) && currentMsg.images.length > 0) {
+      const parts: any[] = [];
+      if (typeof currentMsg.content === "string" && currentMsg.content.length > 0) {
+        parts.push({ type: "text", text: currentMsg.content });
+      } else if (Array.isArray(currentMsg.content)) {
+        parts.push(...currentMsg.content);
+      } else {
+        parts.push({ type: "text", text: "" });
+      }
+
+      for (const img of currentMsg.images) {
+        if (!img || typeof img !== "string") continue;
+        const url = img.startsWith("data:") ? img : `data:image/jpeg;base64,${img}`;
+        parts.push({
+          type: "image_url",
+          image_url: { url }
+        });
+      }
+
+      const { images, ...rest } = currentMsg;
+      currentMsg = {
+        ...rest,
+        content: parts
+      };
+    }
+
+    if (currentMsg?.role === "assistant" && Array.isArray(currentMsg.tool_calls) && currentMsg.tool_calls.length > 0) {
       pendingToolCallIds.length = 0; // reset for this assistant turn
-      const normalizedCalls = msg.tool_calls.map((tc: any, tcIdx: number) => {
+      const normalizedCalls = currentMsg.tool_calls.map((tc: any, tcIdx: number) => {
         const id = tc.id || `call_${msgIdx}_${tcIdx}`;
         pendingToolCallIds.push(id);
         const rawArgs = tc.function?.arguments;
@@ -410,22 +446,22 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
         };
       });
       return {
-        ...msg,
-        content: msg.content ?? "",
+        ...currentMsg,
+        content: currentMsg.content ?? "",
         tool_calls: normalizedCalls
       };
     }
 
-    if (msg?.role === "tool") {
-      const matchedId = msg.tool_call_id || pendingToolCallIds.shift() || `call_${msgIdx}_0`;
+    if (currentMsg?.role === "tool") {
+      const matchedId = currentMsg.tool_call_id || pendingToolCallIds.shift() || `call_${msgIdx}_0`;
       return {
-        ...msg,
+        ...currentMsg,
         tool_call_id: matchedId,
-        content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content ?? "")
+        content: typeof currentMsg.content === "string" ? currentMsg.content : JSON.stringify(currentMsg.content ?? "")
       };
     }
 
-    return msg;
+    return currentMsg;
   });
 }
 
@@ -457,6 +493,7 @@ export class LlamaCppProvider implements LLMProvider {
     }
     if (payload.tools && payload.tools.length > 0) {
       requestBody.tools = payload.tools;
+      requestBody.parallel_tool_calls = false;
     }
     if (payload.options?.temperature !== undefined) {
       requestBody.temperature = payload.options.temperature;
@@ -464,15 +501,23 @@ export class LlamaCppProvider implements LLMProvider {
     if (payload.options?.num_predict !== undefined) {
       requestBody.max_tokens = payload.options.num_predict;
     }
+    const effort = payload.reasoning_effort || payload.options?.reasoning_effort;
+    if (effort) {
+      requestBody.reasoning_effort = effort;
+    }
 
     let res: Response;
     try {
       res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: payload.signal
       });
     } catch (err: any) {
+      if (payload.signal?.aborted || err?.name === "AbortError") {
+        throw err;
+      }
       const cleanBase = (baseUrl || "").replace(/\/$/, "");
       if (effectiveBase !== cleanBase && cleanBase) {
         const fallbackUrl = `${cleanBase}/v1/chat/completions`;
@@ -480,7 +525,8 @@ export class LlamaCppProvider implements LLMProvider {
           res = await fetch(fallbackUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: payload.signal
           });
         } catch {
           throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
@@ -507,6 +553,8 @@ export class LlamaCppProvider implements LLMProvider {
       number,
       { id?: string; type?: string; function: { name: string; arguments: string } }
     > = new Map();
+
+    let insideThinking = false;
 
     try {
       while (true) {
@@ -543,18 +591,43 @@ export class LlamaCppProvider implements LLMProvider {
             };
           }
 
-          // Handle streaming delta content
-          const content = choice.delta?.content;
+          // Handle streaming delta content with inline <think> tags separation
+          let content = choice.delta?.content;
           if (content) {
-            yield {
-              message: { content }
-            };
+            if (!insideThinking && content.includes("<think>")) {
+              const parts = content.split("<think>");
+              if (parts[0]) {
+                yield { message: { content: parts[0] } };
+              }
+              insideThinking = true;
+              content = parts.slice(1).join("<think>");
+            }
+
+            if (insideThinking) {
+              if (content.includes("</think>")) {
+                const parts = content.split("</think>");
+                if (parts[0]) {
+                  yield { message: { thinking: parts[0] } };
+                }
+                insideThinking = false;
+                const after = parts.slice(1).join("</think>");
+                if (after) {
+                  yield { message: { content: after } };
+                }
+              } else if (content) {
+                yield { message: { thinking: content } };
+              }
+            } else if (content) {
+              yield { message: { content } };
+            }
           }
 
           // Handle streaming delta tool calls
           if (Array.isArray(choice.delta?.tool_calls)) {
             for (const tc of choice.delta.tool_calls) {
               const idx = tc.index ?? 0;
+              // Guard against runaway multi-index degenerate loops: only track primary tool call (index 0)
+              if (idx > 0) continue;
               if (!toolCallsAccumulator.has(idx)) {
                 toolCallsAccumulator.set(idx, {
                   id: tc.id || "",
@@ -570,30 +643,29 @@ export class LlamaCppProvider implements LLMProvider {
             }
           }
 
-          // Handle non-delta message tool calls
+          // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, do NOT yield on every chunk!
           if (Array.isArray(choice.message?.tool_calls)) {
-            const normalizedMessageCalls = choice.message.tool_calls.map((tc: any) => {
-              let args: any = tc.function?.arguments;
-              if (typeof args === "string") {
-                try {
-                  args = JSON.parse(args);
-                } catch {}
+            for (let i = 0; i < choice.message.tool_calls.length; i++) {
+              const tc = choice.message.tool_calls[i];
+              const idx = tc.index ?? i;
+              if (!toolCallsAccumulator.has(idx)) {
+                toolCallsAccumulator.set(idx, {
+                  id: tc.id || "",
+                  type: tc.type || "function",
+                  function: { name: "", arguments: "" }
+                });
               }
-              return {
-                ...tc,
-                function: {
-                  ...tc.function,
-                  arguments: args
-                }
-              };
-            });
-            yield {
-              message: {
-                role: choice.message.role || "assistant",
-                content: choice.message.content || "",
-                tool_calls: normalizedMessageCalls
+              const acc = toolCallsAccumulator.get(idx)!;
+              if (tc.id) acc.id = tc.id;
+              if (tc.type) acc.type = tc.type;
+              if (tc.function?.name) acc.function.name = tc.function.name;
+              const rawArgs = tc.function?.arguments;
+              if (typeof rawArgs === "string" && rawArgs.length > acc.function.arguments.length) {
+                acc.function.arguments = rawArgs;
+              } else if (rawArgs && typeof rawArgs === "object") {
+                acc.function.arguments = JSON.stringify(rawArgs);
               }
-            };
+            }
           }
         }
       }

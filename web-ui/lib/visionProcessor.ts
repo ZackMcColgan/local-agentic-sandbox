@@ -1,6 +1,6 @@
 /**
  * Vision Processor for Multimodal Diagram Ingestion
- * Uses gemma4:e4b via LLM vision API to extract system architecture,
+ * Uses multimodal LLM vision API to extract system architecture,
  * component boundaries, network protocol endpoints, and database schemas.
  */
 
@@ -39,11 +39,12 @@ Extract and synthesize a standardized, implementation-ready Markdown architectur
 Structure your output cleanly in Markdown with tables, bullet points, and code blocks.`;
 
 import { getLLMProvider } from "./llm/provider";
+import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
 export async function extractArchitectureSpec(
   diagram: DiagramInput,
   llmBaseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
-  visionModel: string = "gemma4:e4b"
+  visionModel: string = DEFAULT_PRIMARY_MODEL
 ): Promise<ExtractedArchitectureSpec> {
   const startTime = Date.now();
   console.log(`[VisionProcessor] Ingesting diagram '${diagram.name}' via ${visionModel}...`);

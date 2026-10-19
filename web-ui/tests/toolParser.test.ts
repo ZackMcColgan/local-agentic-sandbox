@@ -100,6 +100,45 @@ describe("Tool Parser & URL Normalization Suite", () => {
       const calls = parseToolCallsFromText(text, allowedTools);
       assert.equal(calls.length, 0);
     });
+
+    it("ignores tool calls that appear inside <think>...</think> reasoning blocks", () => {
+      const text = `<think>
+I should check if workspace_read_file is available.
+<function=workspace_read_file>
+<parameter=path>test.txt</parameter>
+</function>
+Actually, I don't need to read any files.
+</think>
+I will answer the user's question directly without reading files.`;
+      const calls = parseToolCallsFromText(text, allowedTools);
+      assert.equal(calls.length, 0, "Tool calls inside <think> must not be parsed");
+    });
+
+    it("recovers raw text content inside <function=NAME>...</function> to primary parameter", () => {
+      const allowed = new Set(["fetch_webpage_markdown", "search_web", "workspace_read_file"]);
+      const text1 = `<function=fetch_webpage_markdown>https://wttr.in/Spanish+Fort</function>`;
+      const calls1 = parseToolCallsFromText(text1, allowed);
+      assert.equal(calls1.length, 1);
+      assert.equal(calls1[0].function.name, "fetch_webpage_markdown");
+      assert.equal(calls1[0].function.arguments.url, "https://wttr.in/Spanish+Fort");
+
+      const text2 = `<function=search_web>weather tomorrow in spanish fort al</function>`;
+      const calls2 = parseToolCallsFromText(text2, allowed);
+      assert.equal(calls2.length, 1);
+      assert.equal(calls2[0].function.name, "search_web");
+      assert.equal(calls2[0].function.arguments.query, "weather tomorrow in spanish fort al");
+    });
+
+    it("recovers string arguments inside <tool_call> JSON blocks to primary parameter", () => {
+      const allowed = new Set(["fetch_webpage_markdown"]);
+      const text = `<tool_call>
+{"name": "fetch_webpage_markdown", "arguments": "https://wttr.in/Spanish+Fort"}
+</tool_call>`;
+      const calls = parseToolCallsFromText(text, allowed);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].function.name, "fetch_webpage_markdown");
+      assert.equal(calls[0].function.arguments.url, "https://wttr.in/Spanish+Fort");
+    });
   });
 
   describe("cleanResidualToolTags", () => {
