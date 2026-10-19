@@ -63,13 +63,13 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
     );
   });
 
-  it("deploy/k8s/web-ui.yaml configures swift-15-27b-mtp model environment variables", () => {
+  it("deploy/k8s/web-ui.yaml configures Swift-1.5-Qwen3.8-27B-IQ3_XS or swift-15-27b-mtp model environment variables", () => {
     const root = findRepoRoot();
     const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
 
     assert.ok(
-      k8sDeployContent.includes("swift-15-27b-mtp"),
-      "deploy/k8s/web-ui.yaml must configure swift-15-27b-mtp"
+      k8sDeployContent.includes("Swift-1.5-Qwen3.8-27B-IQ3_XS") || k8sDeployContent.includes("swift-15-27b-mtp"),
+      "deploy/k8s/web-ui.yaml must configure Swift-1.5-Qwen3.8-27B-IQ3_XS or swift-15-27b-mtp"
     );
     assert.ok(
       k8sDeployContent.includes("MODEL_NAME"),

@@ -383,19 +383,52 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
   // Guarantee at least one role === "user" message exists so strict Jinja templates
   // (e.g. Qwen/Swift multi-step tools) never throw "No user query found in messages"
   const hasUserMessage = reordered.some(
-    (m) => m?.role === "user" && typeof m?.content === "string" && m.content.trim().length > 0
+    (m) =>
+      m?.role === "user" &&
+      ((typeof m?.content === "string" && m.content.trim().length > 0) ||
+        (Array.isArray(m?.content) && m.content.length > 0) ||
+        (Array.isArray(m?.images) && m.images.length > 0))
   );
   if (!hasUserMessage) {
     const insertIdx = reordered.length > 0 && reordered[0]?.role === "system" ? 1 : 0;
     reordered.splice(insertIdx, 0, { role: "user", content: "Proceed with the request." });
   }
 
-  // 2. Track tool calls and assign IDs
+  // 2. Track tool calls, convert multimodal images, and assign IDs
   const pendingToolCallIds: string[] = [];
   return reordered.map((msg, msgIdx) => {
-    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    let currentMsg = msg;
+
+    // Convert Ollama-format images array into OpenAI multimodal content parts
+    if (Array.isArray(currentMsg?.images) && currentMsg.images.length > 0) {
+      const parts: any[] = [];
+      if (typeof currentMsg.content === "string" && currentMsg.content.length > 0) {
+        parts.push({ type: "text", text: currentMsg.content });
+      } else if (Array.isArray(currentMsg.content)) {
+        parts.push(...currentMsg.content);
+      } else {
+        parts.push({ type: "text", text: "" });
+      }
+
+      for (const img of currentMsg.images) {
+        if (!img || typeof img !== "string") continue;
+        const url = img.startsWith("data:") ? img : `data:image/jpeg;base64,${img}`;
+        parts.push({
+          type: "image_url",
+          image_url: { url }
+        });
+      }
+
+      const { images, ...rest } = currentMsg;
+      currentMsg = {
+        ...rest,
+        content: parts
+      };
+    }
+
+    if (currentMsg?.role === "assistant" && Array.isArray(currentMsg.tool_calls) && currentMsg.tool_calls.length > 0) {
       pendingToolCallIds.length = 0; // reset for this assistant turn
-      const normalizedCalls = msg.tool_calls.map((tc: any, tcIdx: number) => {
+      const normalizedCalls = currentMsg.tool_calls.map((tc: any, tcIdx: number) => {
         const id = tc.id || `call_${msgIdx}_${tcIdx}`;
         pendingToolCallIds.push(id);
         const rawArgs = tc.function?.arguments;
@@ -410,22 +443,22 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
         };
       });
       return {
-        ...msg,
-        content: msg.content ?? "",
+        ...currentMsg,
+        content: currentMsg.content ?? "",
         tool_calls: normalizedCalls
       };
     }
 
-    if (msg?.role === "tool") {
-      const matchedId = msg.tool_call_id || pendingToolCallIds.shift() || `call_${msgIdx}_0`;
+    if (currentMsg?.role === "tool") {
+      const matchedId = currentMsg.tool_call_id || pendingToolCallIds.shift() || `call_${msgIdx}_0`;
       return {
-        ...msg,
+        ...currentMsg,
         tool_call_id: matchedId,
-        content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content ?? "")
+        content: typeof currentMsg.content === "string" ? currentMsg.content : JSON.stringify(currentMsg.content ?? "")
       };
     }
 
-    return msg;
+    return currentMsg;
   });
 }
 
@@ -508,6 +541,8 @@ export class LlamaCppProvider implements LLMProvider {
       { id?: string; type?: string; function: { name: string; arguments: string } }
     > = new Map();
 
+    let insideThinking = false;
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -543,12 +578,35 @@ export class LlamaCppProvider implements LLMProvider {
             };
           }
 
-          // Handle streaming delta content
-          const content = choice.delta?.content;
+          // Handle streaming delta content with inline <think> tags separation
+          let content = choice.delta?.content;
           if (content) {
-            yield {
-              message: { content }
-            };
+            if (!insideThinking && content.includes("<think>")) {
+              const parts = content.split("<think>");
+              if (parts[0]) {
+                yield { message: { content: parts[0] } };
+              }
+              insideThinking = true;
+              content = parts.slice(1).join("<think>");
+            }
+
+            if (insideThinking) {
+              if (content.includes("</think>")) {
+                const parts = content.split("</think>");
+                if (parts[0]) {
+                  yield { message: { thinking: parts[0] } };
+                }
+                insideThinking = false;
+                const after = parts.slice(1).join("</think>");
+                if (after) {
+                  yield { message: { content: after } };
+                }
+              } else if (content) {
+                yield { message: { thinking: content } };
+              }
+            } else if (content) {
+              yield { message: { content } };
+            }
           }
 
           // Handle streaming delta tool calls

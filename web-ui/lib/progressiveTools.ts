@@ -44,20 +44,20 @@ export const DESCRIBE_TOOL_SCHEMA = {
 };
 
 export const KNOWN_ONE_LINERS: Record<string, string> = {
-  search_web: "Search internet with DuckDuckGo; returns clean markdown.",
-  fetch_webpage_markdown: "Fetch public URL and convert content to clean markdown.",
-  workspace_get_tree: "Retrieve directory tree excluding node_modules and .git.",
-  workspace_grep: "Fast regex/substring search across codebase.",
-  workspace_read_file: "Read file with line numbers.",
-  workspace_write_file: "Atomically write code, Markdown, or SVG files.",
-  workspace_run_command: "Execute test/build commands in sandbox container.",
-  git_status: "Inspect git branch status and unstaged changes.",
-  git_diff: "Inspect branch unified diff.",
-  git_checkout_branch: "Create or switch git branch.",
-  git_commit: "Commit staged modifications with semantic message.",
-  execute_sandboxed_python: "Run Python code inside isolated sandbox container.",
-  verify_container_provenance: "Inspect container security boundaries and SLSA attestations.",
-  docker_scout_policy_gate: "Evaluate container CVE vulnerabilities against policy."
+  search_web: "search_web(query, limit?): Web search via DuckDuckGo with markdown.",
+  fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch public URL as markdown.",
+  workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree excluding git/modules.",
+  workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",
+  workspace_read_file: "workspace_read_file(path, offset?, limit?): Read file contents.",
+  workspace_write_file: "workspace_write_file(path, content): Write code, Markdown, or SVG files.",
+  workspace_run_command: "workspace_run_command(command, timeout_ms?): Run commands in sandbox.",
+  git_status: "git_status(): Inspect git branch status.",
+  git_diff: "git_diff(staged?, file_path?): Inspect git diff.",
+  git_checkout_branch: "git_checkout_branch(branch): Switch git branch.",
+  git_commit: "git_commit(message): Commit staged changes.",
+  execute_sandboxed_python: "execute_sandboxed_python(code): Run Python in sandbox.",
+  verify_container_provenance: "verify_container_provenance(container_id): Verify SLSA provenance.",
+  docker_scout_policy_gate: "docker_scout_policy_gate(image_tag): Check CVEs against policy."
 };
 
 export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
@@ -207,6 +207,21 @@ export function toOneLiner(description?: string): string {
 }
 
 /**
+ * Derives a clean parameter signature `name(param, opt?)` from a tool's JSON schema properties.
+ */
+export function deriveToolSignature(name: string, schema?: Record<string, any>): string {
+  if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
+    return `${name}()`;
+  }
+  const required = new Set<string>(schema.required || []);
+  const allProps = Object.keys(schema.properties);
+  const requiredParams = allProps.filter((p) => required.has(p));
+  const optionalParams = allProps.filter((p) => !required.has(p)).map((p) => `${p}?`);
+  const params = [...requiredParams, ...optionalParams];
+  return `${name}(${params.join(", ")})`;
+}
+
+/**
  * Builds Layer 1 lightweight tool definitions from raw MCP tools or full tool functions.
  * Layer 1 tools keep names and one-liner descriptions with flexible open schemas (~300 tokens total).
  */
@@ -217,18 +232,26 @@ export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; fun
   for (const t of listToIterate) {
     let name = "";
     let description = "";
+    let schema: Record<string, any> | undefined;
 
     if ("function" in t && t.function) {
       name = t.function.name;
       description = t.function.description || "";
+      schema = t.function.parameters || t.function.inputSchema;
     } else if ("name" in t) {
       name = (t as McpToolItem).name;
       description = (t as McpToolItem).description || "";
+      schema = (t as McpToolItem).inputSchema;
     }
 
     if (!name || name === DESCRIBE_TOOL_NAME) continue;
 
-    const oneLiner = KNOWN_ONE_LINERS[name] || toOneLiner(description);
+    let oneLiner = KNOWN_ONE_LINERS[name];
+    if (!oneLiner) {
+      const cleanDesc = toOneLiner(description);
+      const sig = deriveToolSignature(name, schema);
+      oneLiner = sig ? `${sig}: ${cleanDesc}` : cleanDesc;
+    }
 
     layer1.push({
       type: "function",

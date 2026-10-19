@@ -153,10 +153,10 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         "chat/route.ts must not call triageComplexity in auto mode (swaps gemma4:e4b into VRAM)"
       );
 
-      // Verify flash mode opt-in is preserved
+      // Verify flash mode does not swap to gemma4:e4b
       assert.ok(
-        /if\s*\(\s*mode === "flash"\s*\)\s*\{\s*activeModel = "gemma4:e4b";/.test(content),
-        "chat/route.ts must preserve explicit user opt-in for flash mode -> gemma4:e4b"
+        !content.includes('activeModel = "gemma4:e4b"'),
+        "chat/route.ts must not route flash mode to gemma4:e4b"
       );
 
       // Verify auto/pro routes to DEFAULT_PRIMARY_MODEL directly

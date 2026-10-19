@@ -798,7 +798,100 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(!String(env.PATH).toLowerCase().includes("ollama"), "Env PATH must not inject Ollama directories");
     });
   });
+
+  describe("Task 12: Multimodal OpenAI Vision Message Normalization (Bug 2)", () => {
+    it("normalizeOpenAIMessages converts message.images to OpenAI content parts and deletes images property", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          content: "What diagram is this?",
+          images: ["iVBORw0KGgoAAAANSUhEUg=="]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+
+      assert.equal(normalized.length, 1);
+      const userMsg = normalized[0];
+      assert.equal(userMsg.role, "user");
+      assert.ok(Array.isArray(userMsg.content), "Message content must be converted to an array of content parts");
+      assert.equal(userMsg.content.length, 2);
+      assert.deepEqual(userMsg.content[0], { type: "text", text: "What diagram is this?" });
+      assert.deepEqual(userMsg.content[1], {
+        type: "image_url",
+        image_url: { url: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUg==" }
+      });
+      assert.equal("images" in userMsg, false, "The 'images' property must be stripped from normalized message");
+    });
+
+    it("normalizeOpenAIMessages preserves existing data: URI schemes in images", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          content: "Analyze this PNG",
+          images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+      const userMsg = normalized[0];
+      assert.ok(Array.isArray(userMsg.content));
+      assert.equal(userMsg.content[1].image_url.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==");
+      assert.equal("images" in userMsg, false);
+    });
+
+    it("normalizeOpenAIMessages handles messages with images and no text content", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+
+      const inputMessages = [
+        {
+          role: "user",
+          images: ["rawbase64data"]
+        }
+      ];
+
+      const normalized = normalizeOpenAIMessages(inputMessages);
+      const userMsg = normalized[0];
+      assert.ok(Array.isArray(userMsg.content));
+      assert.deepEqual(userMsg.content[0], { type: "text", text: "" });
+      assert.equal(userMsg.content[1].image_url.url, "data:image/jpeg;base64,rawbase64data");
+      assert.equal("images" in userMsg, false);
+    });
+
+    it("LlamaCppProvider.streamChat sends content parts with image_url to /v1/chat/completions without images property", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const visionMessages = [
+        {
+          role: "user",
+          content: "Describe image",
+          images: ["mybase64image"]
+        }
+      ];
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: visionMessages })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      const userMsg = sentBody.messages[0];
+      assert.ok(Array.isArray(userMsg.content), "Sent message content must be content parts array");
+      assert.equal(userMsg.content[0].type, "text");
+      assert.equal(userMsg.content[0].text, "Describe image");
+      assert.equal(userMsg.content[1].type, "image_url");
+      assert.equal(userMsg.content[1].image_url.url, "data:image/jpeg;base64,mybase64image");
+      assert.equal("images" in userMsg, false, "Must not send 'images' property to /v1/chat/completions");
+    });
+  });
 });
+
 
 
 

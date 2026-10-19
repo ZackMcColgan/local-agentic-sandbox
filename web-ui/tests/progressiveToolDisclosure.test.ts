@@ -7,8 +7,11 @@ import {
   buildToolRegistry,
   describeTool,
   calculateToolTokenSavings,
-  toOneLiner
+  toOneLiner,
+  KNOWN_ONE_LINERS,
+  deriveToolSignature
 } from "../lib/progressiveTools";
+import { z } from "zod";
 import { estimateTokens } from "../lib/contextBudget";
 
 describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
@@ -272,4 +275,142 @@ describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
     assert.ok(res.error.includes("Available tools:"));
     assert.ok(res.error.includes("workspace_write_file"));
   });
+
+  describe("Bug 1: Layer 1 Parameter Signatures & search_web Execution", () => {
+    it("includes parameter signatures in KNOWN_ONE_LINERS descriptions", () => {
+      assert.ok(
+        KNOWN_ONE_LINERS.search_web?.startsWith("search_web(query"),
+        `search_web must declare signature search_web(query...), got: ${KNOWN_ONE_LINERS.search_web}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.fetch_webpage_markdown?.startsWith("fetch_webpage_markdown(url)"),
+        `fetch_webpage_markdown must declare signature, got: ${KNOWN_ONE_LINERS.fetch_webpage_markdown}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.workspace_read_file?.startsWith("workspace_read_file(path"),
+        `workspace_read_file must declare signature, got: ${KNOWN_ONE_LINERS.workspace_read_file}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.workspace_write_file?.startsWith("workspace_write_file(path, content)"),
+        `workspace_write_file must declare signature, got: ${KNOWN_ONE_LINERS.workspace_write_file}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.workspace_run_command?.startsWith("workspace_run_command(command"),
+        `workspace_run_command must declare signature, got: ${KNOWN_ONE_LINERS.workspace_run_command}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.git_checkout_branch?.startsWith("git_checkout_branch(branch)"),
+        `git_checkout_branch must declare signature, got: ${KNOWN_ONE_LINERS.git_checkout_branch}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.git_commit?.startsWith("git_commit(message)"),
+        `git_commit must declare signature, got: ${KNOWN_ONE_LINERS.git_commit}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.execute_sandboxed_python?.startsWith("execute_sandboxed_python(code)"),
+        `execute_sandboxed_python must declare signature, got: ${KNOWN_ONE_LINERS.execute_sandboxed_python}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.verify_container_provenance?.startsWith("verify_container_provenance(container_id)"),
+        `verify_container_provenance must declare signature, got: ${KNOWN_ONE_LINERS.verify_container_provenance}`
+      );
+      assert.ok(
+        KNOWN_ONE_LINERS.docker_scout_policy_gate?.startsWith("docker_scout_policy_gate(image_tag)"),
+        `docker_scout_policy_gate must declare signature, got: ${KNOWN_ONE_LINERS.docker_scout_policy_gate}`
+      );
+    });
+
+    it("ensures search_web signature produces arguments that satisfy MCP zod schema, rejecting empty object {}", () => {
+      const searchWebMcpSchema = z.object({
+        query: z.string().describe("Search keywords or technical question"),
+        limit: z.number().min(1).max(10).optional().default(5).describe("Maximum number of search results to return")
+      });
+
+      // The Bug 1 symptom: empty arguments {} from blind call fail zod validation
+      const emptyCallResult = searchWebMcpSchema.safeParse({});
+      assert.equal(emptyCallResult.success, false, "Empty arguments {} MUST fail search_web schema validation");
+
+      // Extract parameter signature from Layer 1 description
+      const layer1 = buildLayer1Tools(sampleMcpTools);
+      const searchWebLayer1 = layer1.find((t) => t.function?.name === "search_web");
+      assert.ok(searchWebLayer1, "search_web must exist in Layer 1");
+      const desc = searchWebLayer1.function.description;
+      assert.ok(desc.includes("query"), "search_web description must specify required parameter 'query'");
+
+      // Valid call with query parameter satisfies schema
+      const validCall = searchWebMcpSchema.safeParse({ query: "tomorrow's weather in Spanish Fort AL" });
+      assert.equal(validCall.success, true, "Call with query must satisfy search_web schema");
+      if (validCall.success) {
+        assert.equal(validCall.data.query, "tomorrow's weather in Spanish Fort AL");
+        assert.equal(validCall.data.limit, 5); // default applied
+      }
+    });
+
+    it("every tool in sampleMcpTools with required parameters has all required parameters in its signature", () => {
+      const layer1 = buildLayer1Tools(sampleMcpTools);
+
+      for (const tool of sampleMcpTools) {
+        const requiredParams = tool.inputSchema?.required || [];
+        if (requiredParams.length === 0) continue;
+
+        const layer1Entry = layer1.find((t) => t.function?.name === tool.name);
+        assert.ok(layer1Entry, `Layer 1 must contain ${tool.name}`);
+        const desc = layer1Entry.function.description;
+
+        for (const req of requiredParams) {
+          assert.ok(
+            desc.includes(req),
+            `Layer 1 description for ${tool.name} must include required parameter '${req}', got: "${desc}"`
+          );
+        }
+      }
+    });
+
+    it("buildLayer1Tools derives parameter signatures dynamically from inputSchema when not in KNOWN_ONE_LINERS", () => {
+      const customTool = {
+        name: "custom_analyzer",
+        description: "Analyze system logs and report anomalies.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            log_file: { type: "string" },
+            max_lines: { type: "number" }
+          },
+          required: ["log_file"]
+        }
+      };
+
+      const layer1 = buildLayer1Tools([customTool]);
+      const entry = layer1.find((t) => t.function?.name === "custom_analyzer");
+      assert.ok(entry, "custom_analyzer must be in layer 1");
+      assert.ok(
+        entry.function.description.startsWith("custom_analyzer(log_file, max_lines?):"),
+        `Expected derived signature custom_analyzer(log_file, max_lines?), got: "${entry.function.description}"`
+      );
+    });
+
+    it("maintains >= 1,000 token savings and <= 700 Layer 1 tokens with signatures added", () => {
+      const fullToolsFormatted = sampleMcpTools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema
+        }
+      }));
+
+      const layer1 = buildLayer1Tools(sampleMcpTools);
+      const savings = calculateToolTokenSavings(fullToolsFormatted, layer1);
+
+      assert.ok(
+        savings.savings >= 1000,
+        `Expected >= 1000 tokens saved with signatures, got ${savings.savings}`
+      );
+      assert.ok(
+        savings.layer1Tokens <= 700,
+        `Layer 1 tokens with signatures must be <= 700, got ${savings.layer1Tokens}`
+      );
+    });
+  });
 });
+

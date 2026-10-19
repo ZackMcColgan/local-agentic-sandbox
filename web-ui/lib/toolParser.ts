@@ -31,6 +31,13 @@ export function parseToolCallsFromText(
     return [];
   }
 
+  // Strip <think>...</think> and unclosed <think> reasoning blocks so model reasoning
+  // is never mistaken for executable tool calls.
+  const cleanContent = content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .trim();
+
   const isToolAllowed = (name: string) => {
     if (!availableTools) return true;
     if (availableTools instanceof Set) return availableTools.has(name);
@@ -43,7 +50,7 @@ export function parseToolCallsFromText(
   // 1. Qwen XML syntax: <function=NAME>...</function>
   const funcRegex = /<function(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/function>/gi;
   let match;
-  while ((match = funcRegex.exec(content)) !== null) {
+  while ((match = funcRegex.exec(cleanContent)) !== null) {
     const name = match[1].trim();
     const paramsBlock = match[2];
     const args: Record<string, any> = {};
@@ -73,7 +80,7 @@ export function parseToolCallsFromText(
   // 2. Qwen JSON inside <tool_call>...</tool_call>
   const toolCallBlockRegex = /<tool_call>([\s\S]*?)<\/tool_call>/gi;
   let blockMatch;
-  while ((blockMatch = toolCallBlockRegex.exec(content)) !== null) {
+  while ((blockMatch = toolCallBlockRegex.exec(cleanContent)) !== null) {
     const inner = blockMatch[1].trim();
     try {
       const parsed = JSON.parse(inner);
@@ -94,7 +101,7 @@ export function parseToolCallsFromText(
   }
 
   // 3. Code block ```json ... ```
-  const codeBlockMatches = Array.from(content.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
+  const codeBlockMatches = Array.from(cleanContent.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
   for (const cMatch of codeBlockMatches) {
     try {
       const parsed = JSON.parse((cMatch as RegExpMatchArray)[1].trim());
@@ -112,7 +119,7 @@ export function parseToolCallsFromText(
   }
 
   // 4. Raw JSON object fallback
-  const jsonMatch = content.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
+  const jsonMatch = cleanContent.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0].trim());

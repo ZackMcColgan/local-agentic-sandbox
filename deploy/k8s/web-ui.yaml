@@ -57,11 +57,11 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
             - name: MODEL_NAME
-              value: "swift-15-27b-mtp"
+              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
             - name: PLANNER_MODEL
-              value: "swift-15-27b-mtp"
+              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
             - name: SUBAGENT_MODEL
-              value: "swift-15-27b-mtp"
+              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
             - name: LLM_ENGINE
               value: "llamacpp"
             - name: LLAMACPP_BASE_URL

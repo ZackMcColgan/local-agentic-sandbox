@@ -9,7 +9,6 @@ import {
   isReasoningEffortSupported
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
-import { extractArchitectureSpec } from "@/lib/visionProcessor";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import {
@@ -85,7 +84,7 @@ async function connectMcpClient(url: string, name: string) {
 }
 
 /**
- * Lean hierarchical triage classifier using Gemma 4 E4B (~80 tok/s).
+ * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
  * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
  */
 async function triageComplexity(
@@ -175,12 +174,8 @@ export async function POST(req: NextRequest) {
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
 
     if (!activeModel || activeModel === "auto") {
-      if (mode === "flash") {
-        activeModel = "gemma4:e4b";
-      } else {
-        // Zero VRAM eviction: auto and pro modes route directly to DEFAULT_PRIMARY_MODEL without gemma4:e4b triage swap
-        activeModel = DEFAULT_PRIMARY_MODEL;
-      }
+      // Zero VRAM eviction: auto, flash, and pro modes route directly to DEFAULT_PRIMARY_MODEL
+      activeModel = DEFAULT_PRIMARY_MODEL;
     }
 
     // Resolve honest effective reasoning effort
@@ -237,19 +232,6 @@ CRITICAL INSTRUCTIONS:
         const parsed = await parseAttachment(att.name, att.type, att.size, att.base64);
         if (parsed.isImage && parsed.rawBase64) {
           imagePayloads.push(parsed.rawBase64);
-          // Run multimodal architecture diagram ingestion via Gemma 4 E4B
-          try {
-            const archSpec = await extractArchitectureSpec(
-              { name: parsed.name, base64: parsed.rawBase64, type: parsed.type },
-              LLM_BASE_URL,
-              "gemma4:e4b"
-            );
-            docContexts.push(
-              `\n\n--- EXTRACTED ARCHITECTURE SPECIFICATION (${parsed.name}) ---\n${archSpec.markdownSpec}\n--- END OF ARCHITECTURE SPECIFICATION ---`
-            );
-          } catch (err: any) {
-            console.warn(`[ChatRoute] Failed to extract architecture spec for ${parsed.name}:`, err.message);
-          }
         } else if (parsed.textContent) {
           docContexts.push(
             `\n\n--- ATTACHED DOCUMENT: ${parsed.name} (${parsed.type}) ---\n${parsed.textContent}\n--- END OF ATTACHED DOCUMENT ---`
@@ -500,7 +482,7 @@ CRITICAL INSTRUCTIONS:
               groundingEnforced = true;
               mergeSystemDirective(
                 conversationMessages,
-                "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now."
+                `[GROUNDING ENFORCEMENT]: You must use 'search_web' with parameter query='${userPrompt.replace(/'/g, "\\'")}' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now.`
               );
               round++;
               continue;
@@ -524,10 +506,32 @@ CRITICAL INSTRUCTIONS:
 
           for (const toolCall of toolCalls) {
             const toolName = toolCall.function.name;
-            const toolArgs =
-              typeof toolCall.function.arguments === "string"
-                ? JSON.parse(toolCall.function.arguments)
-                : toolCall.function.arguments;
+            let toolArgs: Record<string, any> = {};
+            if (typeof toolCall.function.arguments === "string") {
+              try {
+                toolArgs = toolCall.function.arguments.trim()
+                  ? JSON.parse(toolCall.function.arguments)
+                  : {};
+              } catch {
+                toolArgs = {};
+              }
+            } else if (toolCall.function.arguments && typeof toolCall.function.arguments === "object") {
+              toolArgs = { ...toolCall.function.arguments };
+            }
+
+            if (toolName === "search_web") {
+              if (!toolArgs.query || typeof toolArgs.query !== "string" || !toolArgs.query.trim()) {
+                toolArgs.query = toolArgs.q || toolArgs.search || toolArgs.search_query || toolArgs.input || userPrompt;
+              }
+            } else if (toolName === "fetch_webpage_markdown") {
+              if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
+                toolArgs.url = toolArgs.link || toolArgs.href || toolArgs.target;
+              }
+            } else if (toolName === "workspace_read_file") {
+              if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
+                toolArgs.path = toolArgs.file || toolArgs.filepath || toolArgs.filename;
+              }
+            }
 
             if (toolName === DESCRIBE_TOOL_NAME) {
               const targetTool = toolArgs.tool_name || toolArgs.name;
@@ -658,18 +662,18 @@ CRITICAL INSTRUCTIONS:
               }
             }
 
-            // Auto-Escalation Check: If 2 consecutive failures on fast engine, escalate to Pro model
+            // Auto-Escalation Check: If 2 consecutive failures, ensure activeModel escalates to Primary model
             if (
               mode === "auto" &&
-              activeModel.includes("gemma4") &&
-              consecutiveFailures >= 2
+              consecutiveFailures >= 2 &&
+              activeModel !== DEFAULT_PRIMARY_MODEL
             ) {
-              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Pro model (Qwen 3.8 27B)...");
+              console.log("[Auto-Escalation] 2 consecutive failures detected. Escalating to Primary model...");
               activeModel = DEFAULT_PRIMARY_MODEL;
               effectiveReasoningEffort = resolveEffectiveReasoningEffort(activeModel, requestedReasoning);
               await sendEvent({
                 type: "status",
-                status: "Auto-escalating to Pro Reasoning Model (Qwen 27B)..."
+                status: "Auto-escalating to Pro Reasoning Model..."
               });
               await sendEvent({
                 type: "meta",
@@ -678,7 +682,7 @@ CRITICAL INSTRUCTIONS:
               });
               mergeSystemDirective(
                 conversationMessages,
-                "[AUTO-ESCALATION]: Fast execution engine encountered 2 consecutive failures. Escalating session to Pro Reasoning Engine (Qwen 3.8 27B) for deep architectural root-cause diagnosis and code synthesis."
+                "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
           }

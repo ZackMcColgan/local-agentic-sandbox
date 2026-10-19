@@ -103,6 +103,7 @@ export function registerBrowserTools(mcp: McpServer) {
           body: new URLSearchParams({ q: query }),
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": "https://lite.duckduckgo.com/lite/",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           },
@@ -140,6 +141,34 @@ export function registerBrowserTools(mcp: McpServer) {
               snippet: snippets[i] || "Click to fetch full page content.",
               url: links[i].url
             });
+          }
+        }
+
+        // Resilient fallback for weather queries if search engine is throttled or empty
+        if (results.length === 0 && /\b(weather|forecast|temperature)\b/i.test(query)) {
+          try {
+            const cleanLoc = query
+              .replace(/\b(what|is|the|tomorrow'?s?|today'?s?|weather|forecast|temperature|in|for|at)\b/gi, " ")
+              .trim()
+              .replace(/\s+/g, "+");
+            if (cleanLoc) {
+              const weatherRes = await fetch(`https://wttr.in/${encodeURIComponent(cleanLoc)}?format=j1`, {
+                signal: AbortSignal.timeout(4000)
+              });
+              if (weatherRes.ok) {
+                const wData: any = await weatherRes.json();
+                const current = wData.current_condition?.[0];
+                const forecasts = wData.weather || [];
+                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f: any) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || 'clear'}`).join("; ")}`;
+                results.push({
+                  title: `Weather Forecast: ${query}`,
+                  snippet,
+                  url: `https://wttr.in/${encodeURIComponent(cleanLoc)}`
+                });
+              }
+            }
+          } catch {
+            // ignore network/parse errors
           }
         }
 

@@ -1130,7 +1130,7 @@ Respond strictly in JSON:
 
     let verdictText: string;
     try {
-      const useJsonFormat = !modelToUse.toLowerCase().includes("gemma");
+      const useJsonFormat = true;
       const result = await generate({
         model: modelToUse,
         prompt,

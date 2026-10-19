@@ -100,6 +100,19 @@ describe("Tool Parser & URL Normalization Suite", () => {
       const calls = parseToolCallsFromText(text, allowedTools);
       assert.equal(calls.length, 0);
     });
+
+    it("ignores tool calls that appear inside <think>...</think> reasoning blocks", () => {
+      const text = `<think>
+I should check if workspace_read_file is available.
+<function=workspace_read_file>
+<parameter=path>test.txt</parameter>
+</function>
+Actually, I don't need to read any files.
+</think>
+I will answer the user's question directly without reading files.`;
+      const calls = parseToolCallsFromText(text, allowedTools);
+      assert.equal(calls.length, 0, "Tool calls inside <think> must not be parsed");
+    });
   });
 
   describe("cleanResidualToolTags", () => {
