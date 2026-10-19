@@ -505,16 +505,99 @@ export function ProjectsView({
               </div>
             )}
 
-            {/* TAB 2: Overnight Tasks placeholder for Phase 2 */}
+            {/* TAB 2: Overnight Tasks */}
             {activeTab === "tasks" && (
-              <div className="p-6 text-center space-y-3">
-                <Play className="h-8 w-8 mx-auto text-emerald-600 opacity-80" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                  Overnight Autonomous Task Runner
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
-                  Compose an overnight engineering prompt for {activeProject.name}. Verified in Phase 2.
-                </p>
+              <div className="p-4 sm:p-6 space-y-6">
+                {/* Active Task Banner if running */}
+                {activeProject.active_task_id && (
+                  <div className="p-4 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                          Active Overnight Task Running
+                        </span>
+                      </div>
+                      <span className="text-xs font-mono text-emerald-700 dark:text-emerald-400">
+                        {activeProject.active_task_id}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-zinc-300">
+                      Task execution in progress on branch <code className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded">feat/task...</code>
+                    </p>
+                  </div>
+                )}
+
+                {/* Task Composer Form */}
+                <div className="bg-slate-50/50 dark:bg-zinc-800/40 rounded-3xl p-5 border border-slate-100 dark:border-zinc-800 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Play className="h-5 w-5 text-emerald-600" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                      Compose Autonomous Task for {activeProject.name}
+                    </h3>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    placeholder="Describe what you want the autonomous agent to build overnight (e.g. Implement authentication routes, write tests, refactor database models)..."
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs sm:text-sm focus:outline-emerald-500 resize-none"
+                    id="project-task-prompt-input"
+                  />
+
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                    <div className="text-[11px] text-slate-400">
+                      Target branch: <code className="font-mono">{activeProject.base_branch}</code> · Engine: <code className="font-mono">Swift 1.5</code>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const el = document.getElementById("project-task-prompt-input") as HTMLTextAreaElement | null;
+                          const prompt = el?.value || "";
+                          if (!prompt.trim()) return;
+                          if (onRunOvernightTask) {
+                            await onRunOvernightTask(activeProject.project_id, prompt, "schedule");
+                          } else {
+                            await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ prompt, mode: "schedule", scheduleTime: "02:00" })
+                            });
+                          }
+                          if (el) el.value = "";
+                        }}
+                        className="min-h-[44px] px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <Calendar className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Schedule 2:00 AM</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const el = document.getElementById("project-task-prompt-input") as HTMLTextAreaElement | null;
+                          const prompt = el?.value || "";
+                          if (!prompt.trim()) return;
+                          if (onRunOvernightTask) {
+                            await onRunOvernightTask(activeProject.project_id, prompt, "now");
+                          } else {
+                            await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ prompt, mode: "now" })
+                            });
+                          }
+                          if (el) el.value = "";
+                        }}
+                        className="min-h-[44px] px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        <span>Run Overnight Now</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

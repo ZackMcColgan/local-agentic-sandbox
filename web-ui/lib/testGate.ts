@@ -141,7 +141,8 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/projects") ||
       p.includes("components/ProjectsView"),
     tests: [
-      "tests/projectsRegistryAndExplorer.test.ts"
+      "tests/projectsRegistryAndExplorer.test.ts",
+      "tests/projectOvernightRunner.test.ts"
     ]
   },
   // Memory profile & durable facts

@@ -272,3 +272,147 @@ export function updateProject(projectId: string, updates: Partial<ProjectRecord>
 
   return getProject(projectId, db)!;
 }
+
+export interface ProjectTaskRecord {
+  task_id: string;
+  project_id: string;
+  prompt: string;
+  status: "pending" | "running" | "completed" | "failed" | "parked" | "cancelled";
+  base_sha: string;
+  head_sha?: string | null;
+  branch: string;
+  thread_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export function createProjectTask(
+  input: { projectId: string; prompt: string; baseSha: string; branch: string; threadId?: string },
+  dbOverride?: any
+): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const project = getProject(input.projectId, db);
+  if (!project) {
+    throw new Error(`Project not found: ${input.projectId}`);
+  }
+
+  if (project.active_task_id) {
+    throw new Error(`Project already has an active task running: ${project.active_task_id}`);
+  }
+
+  const existingActive = db
+    .prepare("SELECT * FROM project_tasks WHERE project_id = ? AND status IN ('running', 'in_progress')")
+    .get(input.projectId) as ProjectTaskRecord | undefined;
+  if (existingActive) {
+    throw new Error(`Project already has an active task running: ${existingActive.task_id}`);
+  }
+
+  const taskId = `task_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO project_tasks (
+      task_id, project_id, prompt, status, base_sha, head_sha, branch, thread_id, created_at, updated_at, completed_at
+    ) VALUES (?, ?, ?, 'running', ?, NULL, ?, ?, ?, ?, NULL)
+  `).run(taskId, input.projectId, input.prompt.trim(), input.baseSha, input.branch, input.threadId || null, now, now);
+
+  db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(taskId, now, input.projectId);
+
+  return getProjectTask(taskId, db)!;
+}
+
+export function getProjectTask(taskId: string, dbOverride?: any): ProjectTaskRecord | null {
+  const db = getDb(dbOverride);
+  const row = db.prepare("SELECT * FROM project_tasks WHERE task_id = ?").get(taskId) as ProjectTaskRecord | undefined;
+  return row || null;
+}
+
+export function listProjectTasks(projectId: string, dbOverride?: any): ProjectTaskRecord[] {
+  const db = getDb(dbOverride);
+  const rows = db.prepare("SELECT * FROM project_tasks WHERE project_id = ? ORDER BY created_at DESC").all(projectId) as ProjectTaskRecord[];
+  return rows;
+}
+
+export function updateProjectTask(taskId: string, updates: Partial<ProjectTaskRecord>, dbOverride?: any): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const current = getProjectTask(taskId, db);
+  if (!current) {
+    throw new Error(`Project task not found: ${taskId}`);
+  }
+
+  const status = updates.status !== undefined ? updates.status : current.status;
+  const headSha = updates.head_sha !== undefined ? updates.head_sha : current.head_sha;
+  const completedAt = updates.completed_at !== undefined ? updates.completed_at : current.completed_at;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE project_tasks SET
+      status = ?, head_sha = ?, completed_at = ?, updated_at = ?
+    WHERE task_id = ?
+  `).run(status, headSha, completedAt, now, taskId);
+
+  return getProjectTask(taskId, db)!;
+}
+
+export function completeProjectTask(taskId: string, headSha: string, dbOverride?: any): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const current = getProjectTask(taskId, db);
+  if (!current) {
+    throw new Error(`Project task not found: ${taskId}`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE project_tasks SET status = 'completed', head_sha = ?, completed_at = ?, updated_at = ? WHERE task_id = ?").run(
+    headSha,
+    now,
+    now,
+    taskId
+  );
+
+  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
+    now,
+    current.project_id,
+    taskId
+  );
+
+  return getProjectTask(taskId, db)!;
+}
+
+export function parkProjectTask(taskId: string, reason?: string, dbOverride?: any): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const current = getProjectTask(taskId, db);
+  if (!current) {
+    throw new Error(`Project task not found: ${taskId}`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE project_tasks SET status = 'parked', updated_at = ? WHERE task_id = ?").run(now, taskId);
+
+  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
+    now,
+    current.project_id,
+    taskId
+  );
+
+  return getProjectTask(taskId, db)!;
+}
+
+export function cancelProjectTask(taskId: string, reason?: string, dbOverride?: any): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const current = getProjectTask(taskId, db);
+  if (!current) {
+    throw new Error(`Project task not found: ${taskId}`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE project_tasks SET status = 'cancelled', updated_at = ? WHERE task_id = ?").run(now, taskId);
+
+  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
+    now,
+    current.project_id,
+    taskId
+  );
+
+  return getProjectTask(taskId, db)!;
+}
