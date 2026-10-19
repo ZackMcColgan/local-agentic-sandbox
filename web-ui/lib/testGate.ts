@@ -142,7 +142,8 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ProjectsView"),
     tests: [
       "tests/projectsRegistryAndExplorer.test.ts",
-      "tests/projectOvernightRunner.test.ts"
+      "tests/projectOvernightRunner.test.ts",
+      "tests/projectDiffReview.test.ts"
     ]
   },
   // Memory profile & durable facts

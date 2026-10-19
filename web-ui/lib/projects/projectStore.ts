@@ -416,3 +416,44 @@ export function cancelProjectTask(taskId: string, reason?: string, dbOverride?: 
 
   return getProjectTask(taskId, db)!;
 }
+
+export interface ProjectFileReviewRecord {
+  id: string;
+  task_id: string;
+  file_path: string;
+  status: "pending" | "accepted" | "reverted";
+  reviewed_at?: string | null;
+}
+
+export function getFileReviews(taskId: string, dbOverride?: any): ProjectFileReviewRecord[] {
+  const db = getDb(dbOverride);
+  const rows = db.prepare("SELECT * FROM project_file_reviews WHERE task_id = ?").all(taskId) as ProjectFileReviewRecord[];
+  return rows;
+}
+
+export function setFileReviewStatus(
+  taskId: string,
+  filePath: string,
+  status: "pending" | "accepted" | "reverted",
+  dbOverride?: any
+): ProjectFileReviewRecord {
+  const db = getDb(dbOverride);
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const existing = db
+    .prepare("SELECT * FROM project_file_reviews WHERE task_id = ? AND file_path = ?")
+    .get(taskId, normalizedPath) as ProjectFileReviewRecord | undefined;
+
+  const now = new Date().toISOString();
+
+  if (existing) {
+    db.prepare("UPDATE project_file_reviews SET status = ?, reviewed_at = ? WHERE id = ?").run(status, now, existing.id);
+    return db.prepare("SELECT * FROM project_file_reviews WHERE id = ?").get(existing.id) as ProjectFileReviewRecord;
+  } else {
+    const id = `rev_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    db.prepare(`
+      INSERT INTO project_file_reviews (id, task_id, file_path, status, reviewed_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, taskId, normalizedPath, status, now);
+    return db.prepare("SELECT * FROM project_file_reviews WHERE id = ?").get(id) as ProjectFileReviewRecord;
+  }
+}

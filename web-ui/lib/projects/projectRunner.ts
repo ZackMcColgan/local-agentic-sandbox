@@ -15,7 +15,7 @@ import { runGit } from "./projectGit";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import { generatePlanSpec } from "../subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "../subagents/supervisor";
-import { ToolchainType } from "../subagents/types";
+import { ToolchainType, TaskManifest } from "../subagents/types";
 
 let engineRunningCheckOverride: (() => Promise<boolean>) | null = null;
 
@@ -160,7 +160,7 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
           taskId: task.task_id,
           goal: input.prompt,
           toolchain: project.toolchain as ToolchainType,
-          scope: { rootPath: project.root_path },
+          scope: "PROJECT",
           model: DEFAULT_PRIMARY_MODEL
         });
 
@@ -168,34 +168,39 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
         const stepExecutor = createProductionStepExecutor({
           repoRoot: project.root_path,
           model: DEFAULT_PRIMARY_MODEL,
-          abortSignal: controller.signal
+          signal: controller.signal
         });
 
         for (let i = 0; i < plan.milestones.length; i++) {
           if (controller.signal.aborted) {
             throw new Error("Task aborted by supervisor signal");
           }
+          const taskManifest: TaskManifest = {
+            taskId: task.task_id,
+            goal: input.prompt,
+            status: "active",
+            startedAt: task.created_at,
+            updatedAt: task.updated_at,
+            toolchain: project.toolchain as ToolchainType,
+            milestones: plan.milestones,
+            branchName: branch,
+            scope: "PROJECT",
+            currentMilestoneIndex: i,
+            checkpoints: [],
+            ambiguityFlags: [],
+            journal: []
+          };
+
           await supervisor.executeMilestoneWithTelemetry(
-            {
-              taskId: task.task_id,
-              goal: input.prompt,
-              status: "running",
-              createdAt: task.created_at,
-              updatedAt: task.updated_at,
-              toolchain: project.toolchain as ToolchainType,
-              milestones: plan.milestones,
-              branchName: branch,
-              scope: { rootPath: project.root_path },
-              baseSha
-            },
+            taskManifest,
             i,
             async (m) => {
               const res = await stepExecutor(m, 1);
               return {
-                diff: res.diff,
+                diff: res.diff || "",
                 gitSha: res.gitSha || baseSha,
-                approved: res.approved,
-                feedback: res.feedback || []
+                approved: res.status === "completed",
+                feedback: res.reason ? [res.reason] : []
               };
             }
           );

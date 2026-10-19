@@ -21,11 +21,14 @@ import {
   Calendar,
   Layers,
   ChevronDown,
-  Eye
+  Eye,
+  Check,
+  RotateCcw
 } from "lucide-react";
 import { ProjectRecord } from "@/lib/projects/projectStore";
 import { ProjectTreeNode } from "@/lib/projects/projectGit";
 import { CodeBlock } from "./ArtifactRenderers";
+import { DiffViewer } from "./DiffViewer";
 
 export interface ProjectsViewProps {
   projects: ProjectRecord[];
@@ -79,6 +82,23 @@ export function ProjectsView({
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
+  // Diff Review State
+  const [diffItems, setDiffItems] = useState<any[]>(diffs);
+  const [isLoadingDiffs, setIsLoadingDiffs] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffFilter, setDiffFilter] = useState<"all" | "pending" | "accepted" | "reverted">("all");
+  const [diffTaskId, setDiffTaskId] = useState<string | null>(null);
+  const [diffBaseSha, setDiffBaseSha] = useState<string | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [reviewFinalized, setReviewFinalized] = useState(false);
+
+  // Sync diffs prop if provided
+  useEffect(() => {
+    if (diffs && diffs.length > 0) {
+      setDiffItems(diffs);
+    }
+  }, [diffs]);
+
   // Sync active project if prop changes
   useEffect(() => {
     if (selectedProjectId && selectedProjectId !== activeProjectId) {
@@ -89,6 +109,102 @@ export function ProjectsView({
   }, [selectedProjectId, projects]);
 
   const activeProject = projects.find((p) => p.project_id === activeProjectId) || null;
+
+  // Load diffs when tab is switched to diffs
+  useEffect(() => {
+    if (activeTab !== "diffs" || !activeProject) return;
+    if (activeProject.allowlisted !== 1) {
+      setDiffItems([]);
+      setDiffError("Project access is currently revoked. Enable allowlist to view diffs.");
+      return;
+    }
+
+    const fetchDiffs = async () => {
+      setIsLoadingDiffs(true);
+      setDiffError(null);
+      try {
+        const res = await fetch(`/api/projects/${activeProject.project_id}/diff`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setDiffItems(data.files || []);
+        if (data.taskId) setDiffTaskId(data.taskId);
+        if (data.baseSha) setDiffBaseSha(data.baseSha);
+      } catch (err: any) {
+        setDiffError(err.message || "Failed to load project diffs");
+      } finally {
+        setIsLoadingDiffs(false);
+      }
+    };
+
+    fetchDiffs();
+  }, [activeTab, activeProject?.project_id, activeProject?.allowlisted]);
+
+  const handleAcceptFile = async (filePath: string) => {
+    if (!activeProject) return;
+    setActionInProgress(filePath);
+    try {
+      if (onAcceptFile) {
+        await onAcceptFile(filePath);
+      } else {
+        const tId = diffTaskId || activeProject.active_task_id;
+        await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "accept", taskId: tId, filePath })
+        });
+      }
+      setDiffItems((prev) =>
+        prev.map((f) => (f.filePath === filePath ? { ...f, status: "accepted" } : f))
+      );
+    } catch (err: any) {
+      setDiffError(err.message || "Failed to accept file");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleRevertFile = async (filePath: string) => {
+    if (!activeProject) return;
+    setActionInProgress(filePath);
+    try {
+      if (onRevertFile) {
+        await onRevertFile(filePath);
+      } else {
+        const tId = diffTaskId || activeProject.active_task_id;
+        await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "revert", taskId: tId, filePath, baseSha: diffBaseSha })
+        });
+      }
+      setDiffItems((prev) =>
+        prev.map((f) => (f.filePath === filePath ? { ...f, status: "reverted" } : f))
+      );
+    } catch (err: any) {
+      setDiffError(err.message || "Failed to revert file");
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleFinalizeReview = async () => {
+    if (!activeProject) return;
+    const tId = diffTaskId || activeProject.active_task_id;
+    if (!tId) return;
+    try {
+      await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finalize", taskId: tId })
+      });
+      setReviewFinalized(true);
+    } catch (err: any) {
+      setDiffError(err.message || "Failed to finalize review");
+    }
+  };
 
   // Load tree when active project changes
   useEffect(() => {
@@ -601,16 +717,206 @@ export function ProjectsView({
               </div>
             )}
 
-            {/* TAB 3: Diff Review placeholder for Phase 3 */}
+            {/* TAB 3: Diff Review */}
             {activeTab === "diffs" && (
-              <div className="p-6 text-center space-y-3">
-                <Layers className="h-8 w-8 mx-auto text-emerald-600 opacity-80" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                  Per-File Git Diff Engine &amp; Review
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
-                  Review milestone changes and accept/revert files byte-for-byte. Verified in Phase 3.
-                </p>
+              <div className="p-4 sm:p-6 space-y-4">
+                {/* Diff Review Header & Filters */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                        Per-File Git Diff Engine &amp; Review
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400">
+                      Surgically inspect and accept or revert changes byte-for-byte from baseSha.
+                    </p>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(["all", "pending", "accepted", "reverted"] as const).map((filter) => {
+                      const count =
+                        filter === "all"
+                          ? diffItems.length
+                          : diffItems.filter((i) => i.status === filter).length;
+                      const isSelected = diffFilter === filter;
+
+                      return (
+                        <button
+                          key={filter}
+                          type="button"
+                          onClick={() => setDiffFilter(filter)}
+                          className={`min-h-[32px] px-3 py-1 rounded-full text-xs font-semibold capitalize flex items-center gap-1.5 transition-colors ${
+                            isSelected
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                          }`}
+                        >
+                          <span>{filter}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                              isSelected
+                                ? "bg-white/20 text-white"
+                                : "bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {isLoadingDiffs && (
+                  <div className="p-8 text-center text-xs text-slate-400">Loading diffs...</div>
+                )}
+
+                {diffError && (
+                  <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs">
+                    {diffError}
+                  </div>
+                )}
+
+                {reviewFinalized && (
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>File review has been finalized. Accepted files are approved for merge.</span>
+                  </div>
+                )}
+
+                {!isLoadingDiffs && !diffError && diffItems.length === 0 && (
+                  <div className="p-8 text-center space-y-2">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto opacity-70" />
+                    <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                      No modified files found.
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-zinc-500">
+                      Run an overnight autonomous task or checkout a task branch to review diffs.
+                    </p>
+                  </div>
+                )}
+
+                {/* Diff Items List */}
+                <div className="space-y-4">
+                  {diffItems
+                    .filter((item) => diffFilter === "all" || item.status === diffFilter)
+                    .map((item) => {
+                      const isPending = item.status === "pending";
+                      const isAccepted = item.status === "accepted";
+                      const isReverted = item.status === "reverted";
+                      const inProgress = actionInProgress === item.filePath;
+
+                      const typeColor =
+                        item.changeType === "A"
+                          ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                          : item.changeType === "D"
+                          ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                          : item.changeType === "R"
+                          ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                          : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+
+                      const typeLabel =
+                        item.changeType === "A"
+                          ? "Added"
+                          : item.changeType === "D"
+                          ? "Deleted"
+                          : item.changeType === "R"
+                          ? "Renamed"
+                          : "Modified";
+
+                      return (
+                        <div
+                          key={item.filePath}
+                          className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs"
+                        >
+                          {/* File Header */}
+                          <div className="p-3 sm:p-4 bg-slate-50/60 dark:bg-zinc-950/60 border-b border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold font-mono border ${typeColor}`}
+                              >
+                                {typeLabel} ({item.changeType})
+                              </span>
+                              <span className="font-mono text-xs font-bold text-slate-800 dark:text-zinc-200 truncate break-all">
+                                {item.filePath}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Status Badge */}
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                  isAccepted
+                                    ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                    : isReverted
+                                    ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700"
+                                }`}
+                              >
+                                {isAccepted && <Check className="h-3 w-3" />}
+                                {isReverted && <RotateCcw className="h-3 w-3" />}
+                                <span className="capitalize">{item.status}</span>
+                              </span>
+
+                              {/* Action Buttons */}
+                              <button
+                                type="button"
+                                disabled={inProgress || isAccepted}
+                                onClick={() => handleAcceptFile(item.filePath)}
+                                className="min-h-[36px] px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center gap-1 transition-colors shadow-2xs"
+                              >
+                                <Check className="h-3 w-3" />
+                                <span>Accept</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={inProgress || isReverted}
+                                onClick={() => handleRevertFile(item.filePath)}
+                                className="min-h-[36px] px-3 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 disabled:opacity-50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-semibold text-xs flex items-center gap-1 transition-colors"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                <span>Revert</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Diff Body */}
+                          <div className="p-3">
+                            <DiffViewer
+                              branch={activeProject.base_branch}
+                              diff={item.diff}
+                              modifiedFiles={[item.filePath]}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Finalize Bar */}
+                {diffItems.length > 0 && (
+                  <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-zinc-800">
+                    <div className="text-xs text-slate-500 dark:text-zinc-400">
+                      {diffItems.filter((i) => i.status === "accepted").length} accepted,{" "}
+                      {diffItems.filter((i) => i.status === "reverted").length} reverted,{" "}
+                      {diffItems.filter((i) => i.status === "pending").length} pending
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={reviewFinalized}
+                      onClick={handleFinalizeReview}
+                      className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-900 dark:bg-zinc-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>{reviewFinalized ? "Review Finalized" : "Finalize Review"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

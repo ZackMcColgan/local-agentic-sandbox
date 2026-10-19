@@ -172,3 +172,144 @@ export function runGit(project: ProjectRecord, args: string[]): string {
     shell: false
   }).trim();
 }
+
+export interface FileDiffItem {
+  filePath: string;
+  changeType: "M" | "A" | "D" | "R";
+  diff: string;
+  status: "pending" | "accepted" | "reverted";
+}
+
+export interface ProjectDiffSummary {
+  taskId: string;
+  baseSha: string;
+  files: FileDiffItem[];
+}
+
+export function getProjectDiffSummary(
+  project: ProjectRecord,
+  taskId: string,
+  baseSha?: string
+): ProjectDiffSummary {
+  assertAllowedProjectPath(project, ".");
+  const base = baseSha || project.base_branch || "HEAD~1";
+
+  // Import store review helpers dynamically or from store
+  const { getFileReviews } = require("./projectStore");
+  const reviews = getFileReviews(taskId) as Array<{ file_path: string; status: "pending" | "accepted" | "reverted" }>;
+  const reviewMap = new Map(reviews.map((r) => [r.file_path, r.status]));
+
+  const rawDiff = runGit(project, ["diff", "--name-status", base]);
+  const lines = rawDiff.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  const fileMap = new Map<string, { changeType: "M" | "A" | "D" | "R" }>();
+
+  for (const line of lines) {
+    const parts = line.split(/\s+/);
+    if (parts.length >= 2) {
+      const typeChar = parts[0][0].toUpperCase();
+      const changeType = (["M", "A", "D", "R"].includes(typeChar) ? typeChar : "M") as "M" | "A" | "D" | "R";
+      const filePath = parts[1].replace(/\\/g, "/");
+      fileMap.set(filePath, { changeType });
+    }
+  }
+
+  // Also inspect any uncommitted working tree changes
+  try {
+    const statusOut = runGit(project, ["status", "--porcelain=v1"]);
+    for (const statusLine of statusOut.split("\n")) {
+      const trimmed = statusLine.trim();
+      if (!trimmed || trimmed.length < 3) continue;
+      const code = trimmed.slice(0, 2).trim();
+      const fPath = trimmed.slice(3).trim().replace(/^"|"$/g, "").replace(/\\/g, "/");
+      if (!fileMap.has(fPath)) {
+        const changeType = code === "??" || code === "A" ? "A" : code === "D" ? "D" : "M";
+        fileMap.set(fPath, { changeType });
+      }
+    }
+  } catch {}
+
+  const files: FileDiffItem[] = [];
+
+  for (const [filePath, info] of fileMap.entries()) {
+    let diff = "";
+    try {
+      diff = runGit(project, ["diff", base, "--", filePath]);
+    } catch {}
+
+    const reviewStatus = reviewMap.get(filePath) || "pending";
+    files.push({
+      filePath,
+      changeType: info.changeType,
+      diff,
+      status: reviewStatus
+    });
+  }
+
+  return {
+    taskId,
+    baseSha: base,
+    files
+  };
+}
+
+export function acceptProjectFile(
+  project: ProjectRecord,
+  taskId: string,
+  filePath: string
+): any {
+  assertAllowedProjectPath(project, filePath);
+  const { setFileReviewStatus } = require("./projectStore");
+  return setFileReviewStatus(taskId, filePath, "accepted");
+}
+
+export function revertProjectFile(
+  project: ProjectRecord,
+  taskId: string,
+  filePath: string,
+  baseSha: string
+): any {
+  const targetPath = assertAllowedProjectPath(project, filePath);
+
+  let existedAtBase = false;
+  try {
+    runGit(project, ["cat-file", "-e", `${baseSha}:${filePath}`]);
+    existedAtBase = true;
+  } catch {
+    existedAtBase = false;
+  }
+
+  if (existedAtBase) {
+    runGit(project, ["checkout", baseSha, "--", filePath]);
+    runGit(project, ["add", filePath]);
+  } else {
+    try {
+      fs.rmSync(targetPath, { force: true });
+    } catch {}
+    try {
+      runGit(project, ["rm", "-f", "--ignore-unmatch", "--", filePath]);
+    } catch {}
+  }
+
+  runGit(project, ["commit", "-m", `revert: restore ${filePath} from ${baseSha}`]);
+
+  const { setFileReviewStatus } = require("./projectStore");
+  return setFileReviewStatus(taskId, filePath, "reverted");
+}
+
+export function finalizeProjectReview(
+  project: ProjectRecord,
+  taskId: string
+): { finalized: boolean; acceptedCount: number; revertedCount: number } {
+  const { getFileReviews } = require("./projectStore");
+  const reviews = getFileReviews(taskId) as Array<{ status: string }>;
+  const acceptedCount = reviews.filter((r) => r.status === "accepted").length;
+  const revertedCount = reviews.filter((r) => r.status === "reverted").length;
+
+  return {
+    finalized: true,
+    acceptedCount,
+    revertedCount
+  };
+}
+
