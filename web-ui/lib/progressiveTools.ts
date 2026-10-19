@@ -44,7 +44,7 @@ export const DESCRIBE_TOOL_SCHEMA = {
 };
 
 export const KNOWN_ONE_LINERS: Record<string, string> = {
-  search_web: "search_web(query, limit?): Web search via DuckDuckGo with markdown.",
+  search_web: "search_web(query, limit?): Web search via DuckDuckGo with markdown. query = info need only.",
   fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch public URL as markdown.",
   workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree excluding git/modules.",
   workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",

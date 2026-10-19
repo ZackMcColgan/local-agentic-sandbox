@@ -56,6 +56,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("tests/helpers/"),
     tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"]
   },
+  // Grounding helpers (search query derivation, honest-abort gate)
+  {
+    match: (p) => p.includes("lib/grounding"),
+    tests: ["tests/groundingGate.test.ts"]
+  },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),

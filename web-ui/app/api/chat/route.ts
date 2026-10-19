@@ -48,6 +48,7 @@ import {
   recordProfileEntry
 } from "@/lib/memory/profile";
 import { getLLMProvider } from "@/lib/llm/provider";
+import { deriveSearchQuery, shouldInjectHonestAbort, HONEST_ABORT_DIRECTIVE } from "@/lib/grounding";
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
@@ -242,6 +243,8 @@ CRITICAL INSTRUCTIONS:
 
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     const userPrompt = lastUserMsg?.content || "";
+    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
+    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
 
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
     const encoder = new TextEncoder();
@@ -418,6 +421,7 @@ CRITICAL INSTRUCTIONS:
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
         let groundingEnforced = false;
+        let honestAbortInjected = false;
 
         let accumulatedThoughts: string[] = [];
 
@@ -521,7 +525,7 @@ CRITICAL INSTRUCTIONS:
               groundingEnforced = true;
               mergeSystemDirective(
                 conversationMessages,
-                `[GROUNDING ENFORCEMENT]: You must use 'search_web' with parameter query='${userPrompt.replace(/'/g, "\\'")}' to check current/real-time information before answering this question. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now.`
+                `[GROUNDING ENFORCEMENT]: You must use 'search_web' with parameter query='${deriveSearchQuery(userPrompt, priorUserPrompt).replace(/'/g, "\\'")}' to check current/real-time information before answering this question. Extract ONLY the information need as the query; never search the user instruction, your own reply, or the user's challenge verbatim. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now.`
               );
               round++;
               continue;
@@ -569,7 +573,7 @@ CRITICAL INSTRUCTIONS:
                   toolArgs.keyword ||
                   toolArgs.text ||
                   Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-                toolArgs.query = typeof candidate === "string" && candidate.trim() ? candidate.trim() : userPrompt;
+                toolArgs.query = typeof candidate === "string" && candidate.trim() ? candidate.trim() : deriveSearchQuery(userPrompt, priorUserPrompt);
               }
             } else if (toolName === "fetch_webpage_markdown") {
               if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
@@ -802,9 +806,26 @@ CRITICAL INSTRUCTIONS:
             }
           }
 
+          if (
+            !honestAbortInjected &&
+            (isArtifactRequest || webResearchCalls >= MAX_WEB_RESEARCH_CALLS) &&
+            shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
+          ) {
+            honestAbortInjected = true;
+            mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+          }
+
           if (isArtifactRequest && traces.some((t) => isWebResearchTool(t.tool))) {
             break;
           }
+        }
+
+        if (
+          !honestAbortInjected &&
+          shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
+        ) {
+          honestAbortInjected = true;
+          mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
         }
 
         // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
