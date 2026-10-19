@@ -171,6 +171,10 @@ export interface TaskManifest {
     failed: number;
     durationMs?: number;
   };
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export interface MorningReport {
@@ -200,6 +204,10 @@ export interface MorningReport {
   }>;
   ambiguityFlags: AmbiguityFlag[];
   parkedItems: string[];
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export type WorkerRole = "explorer" | "builder" | "critic" | "recorder";

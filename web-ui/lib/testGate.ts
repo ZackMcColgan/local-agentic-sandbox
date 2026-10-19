@@ -143,7 +143,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/projectsRegistryAndExplorer.test.ts",
       "tests/projectOvernightRunner.test.ts",
-      "tests/projectDiffReview.test.ts"
+      "tests/projectDiffReview.test.ts",
+      "tests/projectMorningReportIntegration.test.ts"
     ]
   },
   // Memory profile & durable facts

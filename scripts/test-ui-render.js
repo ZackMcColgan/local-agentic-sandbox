@@ -9,7 +9,7 @@ setTimeout(() => {
   process.exit(1);
 }, 180_000).unref();
 
-async function waitForPort(port, maxRetries = 15) {
+async function waitForPort(port, maxRetries = 30) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });

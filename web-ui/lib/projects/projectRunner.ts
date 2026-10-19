@@ -185,6 +185,10 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
             milestones: plan.milestones,
             branchName: branch,
             scope: "PROJECT",
+            projectId: project.project_id,
+            projectName: project.name,
+            projectRoot: project.root_path,
+            reviewUrl: `/projects?projectId=${project.project_id}&tab=diffs`,
             currentMilestoneIndex: i,
             checkpoints: [],
             ambiguityFlags: [],
@@ -258,3 +262,5 @@ export function cancelProjectTaskRunner(taskId: string, reason = "Cancelled by u
 
   return false;
 }
+
+export const runProjectOvernightTask = startProjectTask;
