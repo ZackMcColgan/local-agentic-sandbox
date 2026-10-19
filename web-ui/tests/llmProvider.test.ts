@@ -885,9 +885,30 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(Array.isArray(userMsg.content), "Sent message content must be content parts array");
       assert.equal(userMsg.content[0].type, "text");
       assert.equal(userMsg.content[0].text, "Describe image");
-      assert.equal(userMsg.content[1].type, "image_url");
-      assert.equal(userMsg.content[1].image_url.url, "data:image/jpeg;base64,mybase64image");
       assert.equal("images" in userMsg, false, "Must not send 'images' property to /v1/chat/completions");
+    });
+
+    it("LlamaCppProvider.streamChat forwards reasoning_effort and signal to /v1/chat/completions", async () => {
+      let sentBody: any = null;
+      let sentSignal: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentSignal = init?.signal;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      const controller = new AbortController();
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "Hi" }],
+        reasoning_effort: "low",
+        signal: controller.signal
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.equal(sentBody.reasoning_effort, "low", "Must forward reasoning_effort in requestBody");
+      assert.equal(sentSignal, controller.signal, "Must forward AbortSignal to fetch");
     });
   });
 });

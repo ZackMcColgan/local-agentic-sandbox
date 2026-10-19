@@ -248,16 +248,41 @@ CRITICAL INSTRUCTIONS:
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
 
+    let aborted = false;
+    const abortController = new AbortController();
+    const cleanupSignal = () => {
+      aborted = true;
+      clearInterval(heartbeatInterval);
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+    };
+    req.signal.addEventListener("abort", cleanupSignal);
+
     const sendEvent = async (data: any) => {
+      if (aborted || req.signal.aborted) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
       try {
         await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-      } catch (err) {
-        console.warn("[SSE sendEvent error]:", err);
+      } catch (err: any) {
+        clearInterval(heartbeatInterval);
+        aborted = true;
+        if (!req.signal.aborted) {
+          console.warn("[SSE sendEvent error]:", err?.message || err);
+        }
       }
     };
 
     const heartbeatInterval = setInterval(() => {
-      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {});
+      if (aborted || req.signal.aborted) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
+      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {
+        clearInterval(heartbeatInterval);
+      });
     }, 10_000);
 
     // Run async orchestrator pipeline in background feeding SSE stream
@@ -399,6 +424,8 @@ CRITICAL INSTRUCTIONS:
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (round < MAX_TOOL_ROUNDS) {
+          if (aborted || req.signal.aborted) break;
+
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
           if (compaction.compacted) {
             conversationMessages.length = 0;
@@ -415,11 +442,19 @@ CRITICAL INSTRUCTIONS:
           if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
           }
-          if (isArtifactRequest && (isFinalRound || traces.length > 0)) {
+          if (isArtifactRequest) {
             mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
           }
 
           const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
+
+          const roundOptions = resolveRoundModelOptions({
+            model: activeModel,
+            requestedEffort: effectiveReasoningEffort,
+            userPrompt,
+            isSynthesisOrFinalRound: isFinalRound,
+            hasCompletedToolCalls: traces.length > 0
+          });
 
           const llmPayload: any = {
             model: activeModel,
@@ -428,13 +463,9 @@ CRITICAL INSTRUCTIONS:
               isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            options: resolveRoundModelOptions({
-              model: activeModel,
-              requestedEffort: effectiveReasoningEffort,
-              userPrompt,
-              isSynthesisOrFinalRound: isFinalRound,
-              hasCompletedToolCalls: traces.length > 0
-            })
+            signal: abortController.signal,
+            reasoning_effort: roundOptions.reasoning_effort,
+            options: roundOptions
           };
 
           if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
@@ -471,7 +502,15 @@ CRITICAL INSTRUCTIONS:
             tool_calls: toolCallsFromMessage.length > 0 ? toolCallsFromMessage : undefined
           };
 
-          const toolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          const rawToolCalls = getEffectiveToolCalls(currentAssistantMessage);
+          const seenKeys = new Set<string>();
+          const toolCalls = (rawToolCalls || []).filter((tc: any) => {
+            const key = tc.id || `${tc.function?.name}:${typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {})}`;
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          });
+
           if (!toolCalls || toolCalls.length === 0) {
             if (
               isLiveRealTimeIntent(userPrompt) &&
@@ -505,6 +544,7 @@ CRITICAL INSTRUCTIONS:
           conversationMessages.push(assistantMsgToPush);
 
           for (const toolCall of toolCalls) {
+            if (aborted || req.signal.aborted) break;
             const toolName = toolCall.function.name;
             let toolArgs: Record<string, any> = {};
             if (typeof toolCall.function.arguments === "string") {
@@ -521,15 +561,87 @@ CRITICAL INSTRUCTIONS:
 
             if (toolName === "search_web") {
               if (!toolArgs.query || typeof toolArgs.query !== "string" || !toolArgs.query.trim()) {
-                toolArgs.query = toolArgs.q || toolArgs.search || toolArgs.search_query || toolArgs.input || userPrompt;
+                const candidate =
+                  toolArgs.q ||
+                  toolArgs.search ||
+                  toolArgs.search_query ||
+                  toolArgs.input ||
+                  toolArgs.keyword ||
+                  toolArgs.text ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                toolArgs.query = typeof candidate === "string" && candidate.trim() ? candidate.trim() : userPrompt;
               }
             } else if (toolName === "fetch_webpage_markdown") {
               if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
-                toolArgs.url = toolArgs.link || toolArgs.href || toolArgs.target;
+                const candidate =
+                  toolArgs.link ||
+                  toolArgs.href ||
+                  toolArgs.target ||
+                  toolArgs.uri ||
+                  toolArgs.site ||
+                  toolArgs.page ||
+                  toolArgs.address ||
+                  toolArgs.endpoint ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.url = candidate.trim();
+                } else {
+                  for (let i = traces.length - 1; i >= 0; i--) {
+                    const traceContent = JSON.stringify(traces[i].result || "");
+                    const urlMatch = traceContent.match(/https?:\/\/[^\s)"]+/i);
+                    if (urlMatch) {
+                      toolArgs.url = urlMatch[0];
+                      break;
+                    }
+                  }
+                  if (!toolArgs.url) {
+                    const promptUrlMatch = userPrompt.match(/https?:\/\/[^\s)"]+/i);
+                    if (promptUrlMatch) {
+                      toolArgs.url = promptUrlMatch[0];
+                    }
+                  }
+                }
+              }
+              if (typeof toolArgs.url === "string" && toolArgs.url.trim()) {
+                toolArgs.url = toolArgs.url.trim();
+                if (!/^https?:\/\//i.test(toolArgs.url)) {
+                  toolArgs.url = `https://${toolArgs.url}`;
+                }
               }
             } else if (toolName === "workspace_read_file") {
               if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
-                toolArgs.path = toolArgs.file || toolArgs.filepath || toolArgs.filename;
+                const candidate =
+                  toolArgs.file ||
+                  toolArgs.filepath ||
+                  toolArgs.filename ||
+                  toolArgs.target ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.path = candidate.trim();
+                }
+              }
+            } else if (toolName === "workspace_run_command") {
+              if (!toolArgs.command || typeof toolArgs.command !== "string" || !toolArgs.command.trim()) {
+                const candidate =
+                  toolArgs.cmd ||
+                  toolArgs.exec ||
+                  toolArgs.script ||
+                  toolArgs.code ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.command = candidate.trim();
+                }
+              }
+            } else if (toolName === "execute_sandboxed_python") {
+              if (!toolArgs.code || typeof toolArgs.code !== "string" || !toolArgs.code.trim()) {
+                const candidate =
+                  toolArgs.python ||
+                  toolArgs.script ||
+                  toolArgs.command ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.code = candidate.trim();
+                }
               }
             }
 
@@ -656,7 +768,10 @@ CRITICAL INSTRUCTIONS:
             }
 
             if (isWebResearchTool(toolName, target.tier)) {
-              if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+              if (isArtifactRequest && !isExecutionError) {
+                webResearchCalls = MAX_WEB_RESEARCH_CALLS;
+                mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, false));
+              } else if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
                 webBudgetNoticeAdded = true;
                 mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
               }
@@ -685,6 +800,10 @@ CRITICAL INSTRUCTIONS:
                 "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
+          }
+
+          if (isArtifactRequest && traces.some((t) => isWebResearchTool(t.tool))) {
+            break;
           }
         }
 
@@ -715,16 +834,20 @@ CRITICAL INSTRUCTIONS:
           }
 
           let synthContent = "";
+          const synthOptions = resolveRoundModelOptions({
+            model: activeModel,
+            requestedEffort: effectiveReasoningEffort,
+            userPrompt,
+            isSynthesisOrFinalRound: true,
+            hasCompletedToolCalls: traces.length > 0
+          });
+
           for await (const chunk of streamLlmChat(LLM_BASE_URL, {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-            options: resolveRoundModelOptions({
-              model: activeModel,
-              requestedEffort: effectiveReasoningEffort,
-              userPrompt,
-              isSynthesisOrFinalRound: true,
-              hasCompletedToolCalls: traces.length > 0
-            })
+            signal: abortController.signal,
+            reasoning_effort: synthOptions.reasoning_effort,
+            options: synthOptions
           })) {
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
@@ -795,6 +918,10 @@ CRITICAL INSTRUCTIONS:
         });
       } finally {
         clearInterval(heartbeatInterval);
+        req.signal.removeEventListener("abort", cleanupSignal);
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
         for (const session of activeSessions) {
           try {
             await session.client.close();

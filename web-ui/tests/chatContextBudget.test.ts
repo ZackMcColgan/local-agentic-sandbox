@@ -587,14 +587,27 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const { resolveRoundModelOptions } = await import("../lib/contextBudget.js") as any;
       assert.equal(typeof resolveRoundModelOptions, "function");
 
+      // Round 0 (before tool calls) for artifact requests
+      const round0Opts = resolveRoundModelOptions({
+        model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+        requestedEffort: "medium",
+        userPrompt: "Create a svg of the weather in Spanish Fort AL",
+        isSynthesisOrFinalRound: false,
+        hasCompletedToolCalls: false
+      });
+      assert.equal(round0Opts.reasoning_effort, "low", "Artifact turn must use low reasoning effort on round 0 to avoid runaway pre-tool thinking");
+      assert.equal(round0Opts.temperature, 0.2, "Artifact turn must use temperature 0.2 on round 0");
+
+      // Synthesis / post-tool rounds
       const opts = resolveRoundModelOptions({
-        model: "swift-15-27b-mtp",
+        model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
         requestedEffort: "xhigh",
         userPrompt: "Create a svg of the weather in Spanish Fort AL",
         isSynthesisOrFinalRound: false,
         hasCompletedToolCalls: true
       });
 
+      assert.equal(opts.reasoning_effort, "low", "Should drop to low effort on post-tool artifact rounds");
       assert.equal(opts.temperature, 0.2, "Should drop to low effort (temperature 0.2) after tool calls on artifact turn");
       assert.equal(opts.num_predict, undefined, "Must omit num_predict so LlamaCppProvider does not cap max_tokens");
     });

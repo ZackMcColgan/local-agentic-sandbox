@@ -19,6 +19,22 @@ export function normalizeMcpUrl(url: string): string {
   return `${trimmed}/sse`;
 }
 
+export const PRIMARY_TOOL_PARAM: Record<string, string> = {
+  search_web: "query",
+  fetch_webpage_markdown: "url",
+  workspace_read_file: "path",
+  workspace_write_file: "path",
+  workspace_run_command: "command",
+  execute_sandboxed_python: "code",
+  workspace_grep: "pattern",
+  git_checkout_branch: "branch",
+  git_commit: "message",
+  describe_tool: "tool_name",
+  workspace_get_tree: "max_depth",
+  verify_container_provenance: "container_id",
+  docker_scout_policy_gate: "image_tag"
+};
+
 /**
  * Extracts function tool calls from raw model text across Qwen XML, tool_call JSON blocks,
  * markdown code blocks, and raw JSON objects.
@@ -56,7 +72,9 @@ export function parseToolCallsFromText(
     const args: Record<string, any> = {};
     const paramRegex = /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
     let pMatch;
+    let foundParam = false;
     while ((pMatch = paramRegex.exec(paramsBlock)) !== null) {
+      foundParam = true;
       const key = pMatch[1].trim();
       const rawVal = pMatch[2].trim();
       try {
@@ -65,6 +83,24 @@ export function parseToolCallsFromText(
         args[key] = rawVal;
       }
     }
+
+    // Defensive fallback: if no <parameter> tags present, extract raw value or JSON
+    if (!foundParam && paramsBlock.trim()) {
+      const trimmedBlock = paramsBlock.trim();
+      try {
+        const parsedJson = JSON.parse(trimmedBlock);
+        if (parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)) {
+          Object.assign(args, parsedJson);
+        } else if (PRIMARY_TOOL_PARAM[name]) {
+          args[PRIMARY_TOOL_PARAM[name]] = parsedJson;
+        }
+      } catch {
+        if (PRIMARY_TOOL_PARAM[name]) {
+          args[PRIMARY_TOOL_PARAM[name]] = trimmedBlock;
+        }
+      }
+    }
+
     if (isToolAllowed(name)) {
       extractedCalls.push({
         id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -85,12 +121,16 @@ export function parseToolCallsFromText(
     try {
       const parsed = JSON.parse(inner);
       if (parsed && typeof parsed === "object" && parsed.name && isToolAllowed(parsed.name)) {
+        let finalArgs = parsed.arguments || {};
+        if (typeof finalArgs === "string" && PRIMARY_TOOL_PARAM[parsed.name]) {
+          finalArgs = { [PRIMARY_TOOL_PARAM[parsed.name]]: finalArgs };
+        }
         extractedCalls.push({
           id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           type: "function",
           function: {
             name: parsed.name,
-            arguments: parsed.arguments || {}
+            arguments: finalArgs
           }
         });
       }

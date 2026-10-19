@@ -27,10 +27,13 @@ export interface LLMChatRequest {
   messages: any[];
   tools?: any[];
   keep_alive?: string | number;
+  reasoning_effort?: "low" | "medium" | "xhigh";
+  signal?: AbortSignal;
   options?: {
     temperature?: number;
     num_predict?: number;
     num_ctx?: number;
+    reasoning_effort?: "low" | "medium" | "xhigh";
     [key: string]: any;
   };
   [key: string]: any;
@@ -497,15 +500,23 @@ export class LlamaCppProvider implements LLMProvider {
     if (payload.options?.num_predict !== undefined) {
       requestBody.max_tokens = payload.options.num_predict;
     }
+    const effort = payload.reasoning_effort || payload.options?.reasoning_effort;
+    if (effort) {
+      requestBody.reasoning_effort = effort;
+    }
 
     let res: Response;
     try {
       res = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: payload.signal
       });
     } catch (err: any) {
+      if (payload.signal?.aborted || err?.name === "AbortError") {
+        throw err;
+      }
       const cleanBase = (baseUrl || "").replace(/\/$/, "");
       if (effectiveBase !== cleanBase && cleanBase) {
         const fallbackUrl = `${cleanBase}/v1/chat/completions`;
@@ -513,7 +524,8 @@ export class LlamaCppProvider implements LLMProvider {
           res = await fetch(fallbackUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: payload.signal
           });
         } catch {
           throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
@@ -628,30 +640,29 @@ export class LlamaCppProvider implements LLMProvider {
             }
           }
 
-          // Handle non-delta message tool calls
+          // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, do NOT yield on every chunk!
           if (Array.isArray(choice.message?.tool_calls)) {
-            const normalizedMessageCalls = choice.message.tool_calls.map((tc: any) => {
-              let args: any = tc.function?.arguments;
-              if (typeof args === "string") {
-                try {
-                  args = JSON.parse(args);
-                } catch {}
+            for (let i = 0; i < choice.message.tool_calls.length; i++) {
+              const tc = choice.message.tool_calls[i];
+              const idx = tc.index ?? i;
+              if (!toolCallsAccumulator.has(idx)) {
+                toolCallsAccumulator.set(idx, {
+                  id: tc.id || "",
+                  type: tc.type || "function",
+                  function: { name: "", arguments: "" }
+                });
               }
-              return {
-                ...tc,
-                function: {
-                  ...tc.function,
-                  arguments: args
-                }
-              };
-            });
-            yield {
-              message: {
-                role: choice.message.role || "assistant",
-                content: choice.message.content || "",
-                tool_calls: normalizedMessageCalls
+              const acc = toolCallsAccumulator.get(idx)!;
+              if (tc.id) acc.id = tc.id;
+              if (tc.type) acc.type = tc.type;
+              if (tc.function?.name) acc.function.name = tc.function.name;
+              const rawArgs = tc.function?.arguments;
+              if (typeof rawArgs === "string" && rawArgs.length > acc.function.arguments.length) {
+                acc.function.arguments = rawArgs;
+              } else if (rawArgs && typeof rawArgs === "object") {
+                acc.function.arguments = JSON.stringify(rawArgs);
               }
-            };
+            }
           }
         }
       }

@@ -230,19 +230,33 @@ function createControlServer(state, options = {}) {
       path: req.url,
       headers: proxyHeaders
     }, (proxyRes) => {
-      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      if (!res.headersSent) {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      }
       proxyRes.pipe(res);
+    });
+
+    res.on("close", () => {
+      if (!proxyReq.destroyed) {
+        proxyReq.destroy();
+      }
     });
 
     proxyReq.on("error", (err) => {
       writeLog(`[llama-standalone] Proxy error: ${err.message}`);
-      res.writeHead(502, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: {
-          message: `Engine proxy error: ${err.message}`,
-          type: "engine_proxy_error"
-        }
-      }));
+      if (!res.headersSent) {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: {
+            message: `Engine proxy error: ${err.message}`,
+            type: "engine_proxy_error"
+          }
+        }));
+      } else {
+        try {
+          res.destroy();
+        } catch {}
+      }
     });
 
     req.pipe(proxyReq);

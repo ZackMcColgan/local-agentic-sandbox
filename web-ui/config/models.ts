@@ -48,6 +48,15 @@ export const DEFAULT_SUBAGENT_MODEL = "Swift-1.5-Qwen3.8-27B-IQ3_XS";
 
 export const PRESET_MODEL_PROFILES: ModelProfile[] = [
   {
+    id: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+    name: "Swift 1.5 (27B Qwen 3.8 IQ3_XS)",
+    role: "orchestrator",
+    recommendedVRAM: "~12.8 GB",
+    supportsReasoningEffort: true,
+    defaultReasoningEffort: "medium",
+    description: "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning."
+  },
+  {
     id: "gemma4:e4b",
     name: "Gemma 4 E4B (Flash Multimodal)",
     role: "sub-agent",
@@ -85,13 +94,15 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
 
 export function isReasoningEffortSupported(modelId?: string): boolean {
   if (!modelId) return false;
-  const profile = PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  const lower = modelId.toLowerCase();
+  const profile = PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
   if (profile) return profile.supportsReasoningEffort;
-  return modelId.includes("qwen") || modelId.includes("gemma") || modelId.includes("swift");
+  return lower.includes("qwen") || lower.includes("gemma") || lower.includes("swift");
 }
 
 export function getModelProfile(modelId?: string): ModelProfile | undefined {
   if (!modelId) return undefined;
-  return PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  const lower = modelId.toLowerCase();
+  return PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
 }
 
