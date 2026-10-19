@@ -493,6 +493,7 @@ export class LlamaCppProvider implements LLMProvider {
     }
     if (payload.tools && payload.tools.length > 0) {
       requestBody.tools = payload.tools;
+      requestBody.parallel_tool_calls = false;
     }
     if (payload.options?.temperature !== undefined) {
       requestBody.temperature = payload.options.temperature;
@@ -625,6 +626,8 @@ export class LlamaCppProvider implements LLMProvider {
           if (Array.isArray(choice.delta?.tool_calls)) {
             for (const tc of choice.delta.tool_calls) {
               const idx = tc.index ?? 0;
+              // Guard against runaway multi-index degenerate loops: only track primary tool call (index 0)
+              if (idx > 0) continue;
               if (!toolCallsAccumulator.has(idx)) {
                 toolCallsAccumulator.set(idx, {
                   id: tc.id || "",

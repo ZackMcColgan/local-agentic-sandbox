@@ -643,6 +643,23 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(sentBody.messages[3].tool_call_id, assistantMsg.tool_calls[0].id);
     });
 
+    it("LlamaCppProvider.streamChat sends parallel_tool_calls: false when tools are present", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(['data: [DONE]\n\n']);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "hello" }],
+        tools: [{ type: "function", function: { name: "search_web", description: "search", parameters: { type: "object" } } }]
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.equal(sentBody.parallel_tool_calls, false, "Must explicitly set parallel_tool_calls: false to prevent runaway loops");
+    });
+
     it("LlamaCppProvider streamChat retries against baseUrl if llamacppBaseUrl fails with connection error", async () => {
       process.env.LLAMACPP_BASE_URL = "http://bad-host:11435";
       const attemptedUrls: string[] = [];
