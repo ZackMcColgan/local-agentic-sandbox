@@ -1,10 +1,11 @@
 import { isLiveRealTimeIntent } from "./contextBudget";
 
 /**
- * Grounding helpers: derive clean web-search queries from user prompts and
- * decide whether web research actually produced usable evidence.
+ * Grounding helpers: validate search queries and decide whether
+ * web research actually produced usable evidence.
  */
 
+// Used ONLY by shouldInjectHonestAbort as the abort-path classifier. Do not expand its verb list.
 const META_CHALLENGE_RE =
   /^\s*(did|have|are|were|was|do)\s+(you|u)\b[^?]*\b(actually|really|even|truly)?\s*(look(ed)?\s+(it\s+)?up|search(ed)?|check(ed)?|verif(y|ied)|browse[d]?|google[d]?|use[d]?\s+(the\s+)?(web|internet|search)|make\s+(that|this|it)\s+up|hallucinat)/i;
 
@@ -13,48 +14,97 @@ export function isMetaChallenge(prompt: string): boolean {
   return META_CHALLENGE_RE.test(prompt) || /\b(you\s+made\s+(that|this|it)\s+up|are\s+you\s+sure|is\s+that\s+(real|accurate|true))\b/i.test(prompt);
 }
 
-const WRAPPER_PATTERNS: RegExp[] = [
-  /^\s*(hey|hi|ok(ay)?|so)[,!\s]+/i,
-  /\b(can|could|would|will)\s+(you|u)\s+(please\s+)?/gi,
-  /\bplease\b/gi,
-  /\b(i\s+(want|need|would\s+like)\s+(you\s+)?(to\s+)?)/gi,
-  /\b(did|have|do)\s+(you|u)\s+(actually|really|even|truly)?\s*(look(ed)?\s+(it\s+)?up|search(ed)?(\s+for)?|check(ed)?|verif(y|ied))\b/gi,
-  /\b(create|make|draw|generate|build|render|produce|design|give\s+me|show\s+me|write)\b(\s+(me|us))?(\s+(a|an|the|some))?(\s+(nice|simple|quick|small|cool))?(\s+(svg|chart|graph|diagram|image|picture|infographic|visual(ization)?|table|report|summary|html|page|card|widget|plot|map|poster|icon))?(\s+(of|for|about|showing|with|on))?\b/gi,
-  /\b(svg|chart|graph|diagram|infographic|visuali[sz]ation|plot)\s+(of|for|about|showing)\b/gi,
-  /\b(an?\s+)?(svg|infographic)\b/gi,
-  /\b(look\s+up|search\s+(for|the\s+web\s+for)?|find\s+out|tell\s+me|what\s+is|what's|whats)\b/gi
+const DENYLIST_PHRASES = [
+  // challenge phrasing
+  "did you", "have you", "are you", "do you", "were you", "was you",
+  // instruction verbs
+  "create", "make", "generate", "draw", "build", "render", "produce", "design", "show me", "give me", "write me",
+  // format nouns
+  "svg", "chart", "graph", "table", "infographic",
+  // politeness & conversational meta
+  "please", "can you", "could you", "would you", "will you", "where is"
 ];
 
-function cleanup(s: string): string {
+function normalizeForValidation(s: string): string {
   return s
-    .replace(/[?!.]+$/g, "")
-    .replace(/^\s*(the|a|an|of|for|about)\s+/i, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/^[\s,:;-]+|[\s,:;-]+$/g, "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function stripWrappers(prompt: string): string {
-  let s = prompt.replace(/\s+/g, " ").trim();
-  for (const re of WRAPPER_PATTERNS) s = s.replace(re, " ");
-  return cleanup(s);
+export function isValidSearchQuery(query: unknown, userPrompt?: string): boolean {
+  if (typeof query !== "string") return false;
+  const trimmed = query.trim();
+  if (trimmed.length < 2 || trimmed.length > 200) return false;
+
+  const normQuery = normalizeForValidation(trimmed);
+  if (!normQuery) return false;
+
+  if (typeof userPrompt === "string" && userPrompt.trim()) {
+    const normPrompt = normalizeForValidation(userPrompt);
+    if (normQuery === normPrompt && normPrompt.split(" ").length > 4) {
+      return false;
+    }
+  }
+
+  for (const phrase of DENYLIST_PHRASES) {
+    const re = new RegExp(`\\b${phrase.replace(/\s+/g, "\\s+")}\\b`, "i");
+    if (re.test(normQuery)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
-/**
- * Returns the information need from a user prompt, without instruction/format
- * wrappers. If the prompt is a meta-challenge ("did you actually look it up?")
- * and a prior user prompt is supplied, derives from the prior prompt instead.
- */
-export function deriveSearchQuery(userPrompt: string, priorUserPrompt?: string): string {
-  const raw = typeof userPrompt === "string" ? userPrompt : "";
-  const source =
-    isMetaChallenge(raw) && priorUserPrompt && priorUserPrompt.trim() && !isMetaChallenge(priorUserPrompt)
-      ? priorUserPrompt
-      : raw;
-  const q = stripWrappers(source);
-  if (q.length >= 2) return q.slice(0, 200);
-  const fallback = cleanup(source);
-  return (fallback || raw.trim() || "news").slice(0, 200);
+export interface SearchQueryAttemptResult {
+  action: "proceed" | "nudge" | "block";
+  countAttempt: boolean;
+  message?: string;
+}
+
+export function evaluateSearchQueryAttempt(
+  query: unknown,
+  userPrompt?: string,
+  nudgesUsed: number = 0
+): SearchQueryAttemptResult {
+  const isMissing = !query || typeof query !== "string" || !query.trim();
+
+  if (isMissing) {
+    if (nudgesUsed < 1) {
+      return {
+        action: "nudge",
+        countAttempt: false,
+        message: "You called search_web without a query. Formulate one (information need only) and retry."
+      };
+    }
+    return {
+      action: "block",
+      countAttempt: true,
+      message: "You called search_web without a query after being nudged. Web research blocked."
+    };
+  }
+
+  if (!isValidSearchQuery(query, userPrompt)) {
+    if (nudgesUsed < 1) {
+      return {
+        action: "nudge",
+        countAttempt: false,
+        message: "That looks like the user's request, not a search query. Formulate a concise query (information need only) and retry."
+      };
+    }
+    return {
+      action: "block",
+      countAttempt: true,
+      message: "Search query validation failed after being nudged. Web research blocked."
+    };
+  }
+
+  return {
+    action: "proceed",
+    countAttempt: false
+  };
 }
 
 const WEB_TOOLS = new Set(["search_web", "fetch_webpage_markdown"]);

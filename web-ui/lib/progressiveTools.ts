@@ -44,19 +44,19 @@ export const DESCRIBE_TOOL_SCHEMA = {
 };
 
 export const KNOWN_ONE_LINERS: Record<string, string> = {
-  search_web: "search_web(query, limit?): Web search via DuckDuckGo with markdown. query = info need only.",
-  fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch public URL as markdown.",
-  workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree excluding git/modules.",
+  search_web: "search_web(query, limit?): Web search. YOU formulate query: info need only, resolve references from history.",
+  fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch URL as markdown.",
+  workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree.",
   workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",
   workspace_read_file: "workspace_read_file(path, offset?, limit?): Read file contents.",
-  workspace_write_file: "workspace_write_file(path, content): Write code, Markdown, or SVG files.",
+  workspace_write_file: "workspace_write_file(path, content): Write code, MD, or SVG files.",
   workspace_run_command: "workspace_run_command(command, timeout_ms?): Run commands in sandbox.",
   git_status: "git_status(): Inspect git branch status.",
-  git_diff: "git_diff(staged?, file_path?): Inspect git diff.",
+  git_diff: "git_diff(staged?, file_path?): Inspect diff.",
   git_checkout_branch: "git_checkout_branch(branch): Switch git branch.",
   git_commit: "git_commit(message): Commit staged changes.",
-  execute_sandboxed_python: "execute_sandboxed_python(code): Run Python in sandbox.",
-  verify_container_provenance: "verify_container_provenance(container_id): Verify SLSA provenance.",
+  execute_sandboxed_python: "execute_sandboxed_python(code): Run Python code.",
+  verify_container_provenance: "verify_container_provenance(container_id): Verify provenance.",
   docker_scout_policy_gate: "docker_scout_policy_gate(image_tag): Check CVEs against policy."
 };
 
@@ -253,12 +253,18 @@ export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; fun
       oneLiner = sig ? `${sig}: ${cleanDesc}` : cleanDesc;
     }
 
+    const toolParameters: Record<string, any> = { type: "object" };
+    if (name === "search_web") {
+      toolParameters.properties = { query: { type: "string" } };
+      toolParameters.required = ["query"];
+    }
+
     layer1.push({
       type: "function",
       function: {
         name,
         description: oneLiner,
-        parameters: { type: "object" }
+        parameters: toolParameters
       }
     });
   }

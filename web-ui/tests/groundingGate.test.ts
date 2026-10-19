@@ -1,46 +1,82 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  deriveSearchQuery,
+  isValidSearchQuery,
+  evaluateSearchQueryAttempt,
   hasSubstantiveWebResults,
   isMetaChallenge,
   shouldInjectHonestAbort,
   HONEST_ABORT_DIRECTIVE
 } from "../lib/grounding";
 
-test("deriveSearchQuery strips artifact/instruction wrappers", () => {
-  const q = deriveSearchQuery("Create a svg of the weather today in Spanish Fort AL");
-  assert.match(q, /weather/i);
-  assert.match(q, /Spanish Fort/);
-  assert.doesNotMatch(q, /svg/i);
-  assert.doesNotMatch(q, /create/i);
+test("isValidSearchQuery: accepts concise information need query", () => {
+  assert.equal(isValidSearchQuery("Spanish Fort AL hourly forecast today"), true);
 });
 
-test("deriveSearchQuery strips politeness and chart wrappers", () => {
-  const q = deriveSearchQuery("Can you please make a chart of the bitcoin price today?");
-  assert.match(q, /bitcoin price/i);
-  assert.doesNotMatch(q, /chart|can you|please/i);
+test("isValidSearchQuery: rejects verbatim user prompt (>4 words)", () => {
+  const prompt = "What is the weather today in Spanish Fort AL";
+  assert.equal(isValidSearchQuery(prompt, prompt), false);
 });
 
-test("deriveSearchQuery uses prior prompt for meta-challenges", () => {
-  assert.equal(isMetaChallenge("Did you actually look up the weather?"), true);
-  const q = deriveSearchQuery(
-    "Did you actually look up the weather?",
-    "Create a svg of the weather today in Spanish Fort AL"
+test("isValidSearchQuery: rejects denylisted challenge/instruction/format phrasing", () => {
+  assert.equal(
+    isValidSearchQuery("Did you actually read the weather? Create a svg for the 5 days"),
+    false
   );
-  assert.match(q, /weather/i);
-  assert.match(q, /Spanish Fort/);
-  assert.doesNotMatch(q, /did you|actually|svg/i);
+  assert.equal(isValidSearchQuery("Where is the updated svg?"), false);
 });
 
-test("deriveSearchQuery meta-challenge without prior still strips challenge", () => {
-  const q = deriveSearchQuery("Did you actually look up the weather?");
-  assert.match(q, /weather/i);
-  assert.doesNotMatch(q, /did you|actually|look up/i);
+test("isValidSearchQuery: boundary checks for length (empty, 200 chars, 201 chars)", () => {
+  assert.equal(isValidSearchQuery(""), false);
+  assert.equal(isValidSearchQuery(" "), false);
+  assert.equal(isValidSearchQuery("a"), false);
+
+  const query200 = "Spanish Fort AL weather forecast today with hourly cloud cover wind humidity rain details ".padEnd(200, "x");
+  assert.equal(query200.length, 200);
+  assert.equal(isValidSearchQuery(query200), true);
+
+  const query201 = query200 + "x";
+  assert.equal(query201.length, 201);
+  assert.equal(isValidSearchQuery(query201), false);
 });
 
-test("deriveSearchQuery never returns empty", () => {
-  assert.ok(deriveSearchQuery("please").length > 0);
+test("evaluateSearchQueryAttempt helper: first invalid -> nudge, countAttempt false; second invalid -> block, countAttempt true; valid -> proceed", () => {
+  const userPrompt = "Create a svg of the weather today in Spanish Fort AL";
+
+  // First invalid attempt (nudgesUsed = 0)
+  const firstAttempt = evaluateSearchQueryAttempt("Create a svg of the weather", userPrompt, 0);
+  assert.equal(firstAttempt.action, "nudge");
+  assert.equal(firstAttempt.countAttempt, false);
+  assert.ok(firstAttempt.message && firstAttempt.message.length > 0);
+
+  // Second invalid attempt (nudgesUsed = 1)
+  const secondAttempt = evaluateSearchQueryAttempt("Create a svg of the weather", userPrompt, 1);
+  assert.equal(secondAttempt.action, "block");
+  assert.equal(secondAttempt.countAttempt, true);
+  assert.ok(secondAttempt.message && secondAttempt.message.length > 0);
+
+  // Missing/empty query (first attempt -> nudge, second attempt -> block)
+  const emptyFirst = evaluateSearchQueryAttempt("", userPrompt, 0);
+  assert.equal(emptyFirst.action, "nudge");
+  assert.equal(emptyFirst.countAttempt, false);
+
+  const emptySecond = evaluateSearchQueryAttempt("", userPrompt, 1);
+  assert.equal(emptySecond.action, "block");
+  assert.equal(emptySecond.countAttempt, true);
+
+  // Valid query -> proceed
+  const validAttempt = evaluateSearchQueryAttempt("Spanish Fort AL hourly forecast today", userPrompt, 0);
+  assert.equal(validAttempt.action, "proceed");
+  assert.equal(validAttempt.countAttempt, false);
+});
+
+test("isMetaChallenge classification test (abort-path use)", () => {
+  assert.equal(isMetaChallenge("Did you actually look up the weather?"), true);
+  assert.equal(isMetaChallenge("Have you even checked the live data?"), true);
+  assert.equal(isMetaChallenge("You made that up"), true);
+  assert.equal(isMetaChallenge("Are you sure?"), true);
+  assert.equal(isMetaChallenge("Is that accurate?"), true);
+  assert.equal(isMetaChallenge("What is recursion?"), false);
 });
 
 const longText = "Spanish Fort, AL forecast: sunny with highs near 78F. ".repeat(10);
@@ -74,7 +110,7 @@ test("hasSubstantiveWebResults: true for real content", () => {
 });
 
 test("Oct 19 regression: empty search on live intent injects honest abort", () => {
-  const traces = [{ tool: "search_web", args: { query: "Create a svg of the weather today in Spanish Fort AL" }, result: { results: [] } }];
+  const traces = [{ tool: "search_web", args: { query: "weather Spanish Fort AL" }, result: { results: [] } }];
   assert.equal(
     shouldInjectHonestAbort({ userPrompt: "Create a svg of the weather today in Spanish Fort AL", webResearchCalls: 1, traces }),
     true

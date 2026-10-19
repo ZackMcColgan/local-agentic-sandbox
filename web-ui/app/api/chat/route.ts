@@ -48,7 +48,11 @@ import {
   recordProfileEntry
 } from "@/lib/memory/profile";
 import { getLLMProvider } from "@/lib/llm/provider";
-import { deriveSearchQuery, shouldInjectHonestAbort, HONEST_ABORT_DIRECTIVE } from "@/lib/grounding";
+import {
+  evaluateSearchQueryAttempt,
+  shouldInjectHonestAbort,
+  HONEST_ABORT_DIRECTIVE
+} from "@/lib/grounding";
 
 const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
@@ -422,6 +426,7 @@ CRITICAL INSTRUCTIONS:
         let webBudgetNoticeAdded = false;
         let groundingEnforced = false;
         let honestAbortInjected = false;
+        let searchNudges = 0;
 
         let accumulatedThoughts: string[] = [];
 
@@ -525,7 +530,7 @@ CRITICAL INSTRUCTIONS:
               groundingEnforced = true;
               mergeSystemDirective(
                 conversationMessages,
-                `[GROUNDING ENFORCEMENT]: You must use 'search_web' with parameter query='${deriveSearchQuery(userPrompt, priorUserPrompt).replace(/'/g, "\\'")}' to check current/real-time information before answering this question. Extract ONLY the information need as the query; never search the user instruction, your own reply, or the user's challenge verbatim. Do not hallucinate or claim you searched without invoking 'search_web'. Invoke 'search_web' now.`
+                `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
               );
               round++;
               continue;
@@ -547,6 +552,8 @@ CRITICAL INSTRUCTIONS:
           };
           conversationMessages.push(assistantMsgToPush);
 
+          let searchBlocked = false;
+
           for (const toolCall of toolCalls) {
             if (aborted || req.signal.aborted) break;
             const toolName = toolCall.function.name;
@@ -564,17 +571,56 @@ CRITICAL INSTRUCTIONS:
             }
 
             if (toolName === "search_web") {
-              if (!toolArgs.query || typeof toolArgs.query !== "string" || !toolArgs.query.trim()) {
-                const candidate =
-                  toolArgs.q ||
-                  toolArgs.search ||
-                  toolArgs.search_query ||
-                  toolArgs.input ||
-                  toolArgs.keyword ||
-                  toolArgs.text ||
-                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-                toolArgs.query = typeof candidate === "string" && candidate.trim() ? candidate.trim() : deriveSearchQuery(userPrompt, priorUserPrompt);
+              const candidate =
+                toolArgs.query ||
+                toolArgs.q ||
+                toolArgs.search ||
+                toolArgs.search_query ||
+                toolArgs.input ||
+                toolArgs.keyword ||
+                toolArgs.text ||
+                Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+              const queryAttempt = typeof candidate === "string" ? candidate.trim() : "";
+              const evalResult = evaluateSearchQueryAttempt(queryAttempt, userPrompt, searchNudges);
+
+              if (evalResult.action === "nudge") {
+                searchNudges++;
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: JSON.stringify({
+                    status: "RETRY_REQUIRED",
+                    message: evalResult.message
+                  })
+                });
+                mergeSystemDirective(conversationMessages, `[QUERY REVISION REQUIRED]: ${evalResult.message}`);
+                await sendEvent({
+                  type: "status",
+                  status: "Revising search query..."
+                });
+                continue;
+              } else if (evalResult.action === "block") {
+                if (evalResult.countAttempt) {
+                  webResearchCalls++;
+                }
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: JSON.stringify({
+                    status: "BLOCKED",
+                    error: evalResult.message
+                  })
+                });
+                await sendEvent({
+                  type: "status",
+                  status: "Search query blocked"
+                });
+                searchBlocked = true;
+                break;
               }
+
+              // Valid query -> proceed with tool call
+              toolArgs.query = queryAttempt;
             } else if (toolName === "fetch_webpage_markdown") {
               if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
                 const candidate =
@@ -804,6 +850,10 @@ CRITICAL INSTRUCTIONS:
                 "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
+          }
+
+          if (searchBlocked) {
+            break;
           }
 
           if (

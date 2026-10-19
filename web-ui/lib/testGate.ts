@@ -399,6 +399,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/test-ui-render") ||
       p.includes("scripts/run-full-suite") ||
       p.includes("scripts/test-honest-abort-live") ||
+      p.includes("scripts/test-model-formulation-live") ||
       p.includes("scripts/verify-"),
     tests: ["tests/e2eScriptTimeouts.test.ts"]
   },
