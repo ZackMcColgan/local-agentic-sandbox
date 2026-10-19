@@ -813,6 +813,18 @@ CRITICAL INSTRUCTIONS:
           ) {
             honestAbortInjected = true;
             mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+            await sendEvent({
+              type: "trace",
+              trace: {
+                tool: "grounding_gate",
+                args: { reason: "insufficient_live_web_results" },
+                result: HONEST_ABORT_DIRECTIVE,
+                durationMs: 0,
+                timestamp: new Date().toISOString(),
+                model: activeModel,
+                tier: "ORCHESTRATOR"
+              }
+            });
           }
 
           if (isArtifactRequest && traces.some((t) => isWebResearchTool(t.tool))) {
@@ -826,6 +838,18 @@ CRITICAL INSTRUCTIONS:
         ) {
           honestAbortInjected = true;
           mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+          await sendEvent({
+            type: "trace",
+            trace: {
+              tool: "grounding_gate",
+              args: { reason: "insufficient_live_web_results" },
+              result: HONEST_ABORT_DIRECTIVE,
+              durationMs: 0,
+              timestamp: new Date().toISOString(),
+              model: activeModel,
+              tier: "ORCHESTRATOR"
+            }
+          });
         }
 
         // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:

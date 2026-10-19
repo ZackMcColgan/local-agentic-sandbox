@@ -397,6 +397,8 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("scripts/capture-svg-render") ||
       p.includes("scripts/test-ui-render") ||
+      p.includes("scripts/run-full-suite") ||
+      p.includes("scripts/test-honest-abort-live") ||
       p.includes("scripts/verify-"),
     tests: ["tests/e2eScriptTimeouts.test.ts"]
   },
@@ -446,6 +448,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes(".tmp") ||
     normalizedPath.includes(".agent") ||
     normalizedPath.includes("temp-") ||
+    normalizedPath.endsWith("full-suite-results.json") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
     normalizedPath.startsWith("scripts/bench-") ||

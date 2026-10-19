@@ -94,6 +94,16 @@ export function registerBrowserTools(mcp: McpServer) {
     },
     async ({ query, limit }) => {
       try {
+        // Test hook: when SEARCH_FORCE_EMPTY_RESULTS=1, return empty results immediately without touching the network.
+        if (process.env.SEARCH_FORCE_EMPTY_RESULTS === "1") {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({ results: [] })
+            }]
+          };
+        }
+
         const results: Array<{ title: string; snippet: string; url: string }> = [];
 
         // DuckDuckGo Lite Search (POST method, scriptless, zero CAPTCHAs)
