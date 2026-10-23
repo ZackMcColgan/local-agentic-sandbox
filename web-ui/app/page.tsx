@@ -167,6 +167,16 @@ export default function Home() {
         }
         setSecurityPosture(data.security_posture);
       }
+
+      try {
+        const engRes = await fetch("/api/engine");
+        if (engRes.ok) {
+          const engData = await engRes.json();
+          if (engData.model && typeof engData.model === "string") {
+            setSelectedModel(engData.model);
+          }
+        }
+      } catch {}
     } catch {
       setStatus({
         llm: "UNREACHABLE",
@@ -760,7 +770,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
+              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[88vw] max-w-sm sm:w-[320px] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -816,6 +826,10 @@ export default function Home() {
               isSidebarOpen={isSidebarOpen}
               onToggleWorkspace={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
               isWorkspaceOpen={isWorkspaceOpen}
+              onOpenProjects={() => {
+                setActiveNavView("projects");
+                setViewMode("unified");
+              }}
               placeholder="Message..."
             />
           </main>
@@ -1131,79 +1145,6 @@ export default function Home() {
             </section>
           </div>
         )}
-
-        {/* 4. MOBILE BOTTOM NAVIGATION BAR (Visible on Mobile <= 768px with Explicit Text Labels) */}
-        <nav className="mobile-bottom-nav flex md:hidden h-[58px] shrink-0 border-t border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 items-center justify-around z-30 select-none pb-[env(safe-area-inset-bottom)]" aria-label="Mobile Navigation">
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "sessions" && viewMode === "unified"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <MessageSquare className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "builds"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Hammer className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Builds</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "morning-report"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Sun className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Report</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 relative ${
-              activeNavView === "skills"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Sparkles className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Skills</span>
-            {pendingSkillsCount > 0 && (
-              <span className="absolute top-1 right-2 px-1 rounded-full bg-emerald-600 text-[9px] text-white font-bold">
-                {pendingSkillsCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "settings"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Settings className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Settings</span>
-          </button>
-        </nav>
       </div>
     </div>
   );

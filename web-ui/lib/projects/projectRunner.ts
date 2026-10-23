@@ -109,7 +109,20 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   try {
     baseSha = runGit(project, ["rev-parse", "HEAD"]);
   } catch (err: any) {
-    throw new Error(`Failed to determine baseSha from repository: ${err.message}`);
+    // If fresh repo with 0 commits, auto-initialize initial base commit so HEAD exists
+    try {
+      const readmePath = path.join(project.root_path, "README.md");
+      if (!fs.existsSync(readmePath)) {
+        fs.writeFileSync(readmePath, `# ${project.name}\n\nInitial repository commit.\n`, "utf8");
+      }
+      runGit(project, ["config", "user.name", "Local Agent"]);
+      runGit(project, ["config", "user.email", "agent@local-sandbox.internal"]);
+      runGit(project, ["add", "."]);
+      runGit(project, ["commit", "-m", "Initial base commit"]);
+      baseSha = runGit(project, ["rev-parse", "HEAD"]);
+    } catch {
+      throw new Error(`Failed to determine baseSha from repository: ${err.message}`);
+    }
   }
 
   // 2. Generate branch: feat/task-<shortId>

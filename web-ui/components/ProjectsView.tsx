@@ -68,10 +68,152 @@ export function ProjectsView({
   // Registration Form State
   const [formName, setFormName] = useState("");
   const [formPath, setFormPath] = useState("");
-  const [formBranch, setFormBranch] = useState("develop");
+  const [formBranch, setFormBranch] = useState("main");
   const [formToolchain, setFormToolchain] = useState("node:22");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Folder Browser & Smart Discovery State
+  const [entryMode, setEntryMode] = useState<"browse" | "greenfield" | "manual">("browse");
+  const [browserSubpath, setBrowserSubpath] = useState<string>("");
+  const [browserItems, setBrowserItems] = useState<any[]>([]);
+  const [browserCurrentPath, setBrowserCurrentPath] = useState<string>("");
+  const [browserParentPath, setBrowserParentPath] = useState<string | null>(null);
+  const [isBrowserLoading, setIsBrowserLoading] = useState<boolean>(false);
+  const [selectedFolder, setSelectedFolder] = useState<any | null>(null);
+  const [greenfieldName, setGreenfieldName] = useState<string>("");
+  const [greenfieldToolchain, setGreenfieldToolchain] = useState<string>("node:22");
+
+  const fetchBrowse = async (sub = "") => {
+    try {
+      setIsBrowserLoading(true);
+      const res = await fetch(`/api/projects/browse?subpath=${encodeURIComponent(sub)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBrowserItems(data.items || []);
+        setBrowserCurrentPath(data.currentPath || "");
+        setBrowserParentPath(data.parentPath || null);
+        setBrowserSubpath(data.relPath === "." ? "" : data.relPath);
+      }
+    } catch (err: any) {
+      console.warn("Failed to browse filesystem:", err.message);
+    } finally {
+      setIsBrowserLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isRegisterModalOpen && entryMode === "browse") {
+      fetchBrowse(browserSubpath);
+    }
+  }, [isRegisterModalOpen, entryMode, browserSubpath]);
+
+  const handleSelectFolder = (folder: any) => {
+    setSelectedFolder(folder);
+    setFormName(folder.name);
+    setFormPath(folder.path);
+    setFormBranch(folder.defaultBranch || "main");
+    setFormToolchain(folder.toolchain || "node:22");
+    setFormError(null);
+  };
+
+  const handleInitAndRegister = async () => {
+    if (!formPath) return;
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      const initRes = await fetch("/api/projects/browse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "init-repo", targetPath: formPath })
+      });
+      if (!initRes.ok) {
+        const d = await initRes.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to initialize git repository");
+      }
+      if (onRegisterProject) {
+        await onRegisterProject({
+          name: formName.trim() || (formPath.split(/[\/\\]/).filter(Boolean).pop() || "project"),
+          rootPath: formPath.trim(),
+          baseBranch: formBranch.trim() || "main",
+          toolchain: formToolchain.trim() || "node:22"
+        });
+      } else {
+        const regRes = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formName.trim() || (formPath.split(/[\/\\]/).filter(Boolean).pop() || "project"),
+            rootPath: formPath.trim(),
+            baseBranch: formBranch.trim() || "main",
+            toolchain: formToolchain.trim() || "node:22"
+          })
+        });
+        if (!regRes.ok) {
+          const d = await regRes.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${regRes.status}`);
+        }
+      }
+      setIsRegisterModalOpen(false);
+      setSelectedFolder(null);
+      setFormName("");
+      setFormPath("");
+    } catch (err: any) {
+      setFormError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateGreenfield = async () => {
+    if (!greenfieldName.trim()) {
+      setFormError("Project Name is required.");
+      return;
+    }
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      const gfRes = await fetch("/api/projects/browse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create-greenfield", name: greenfieldName.trim() })
+      });
+      if (!gfRes.ok) {
+        const d = await gfRes.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to create greenfield project");
+      }
+      const data = await gfRes.json();
+      if (onRegisterProject) {
+        await onRegisterProject({
+          name: data.name,
+          rootPath: data.projectPath,
+          baseBranch: data.defaultBranch || "main",
+          toolchain: greenfieldToolchain
+        });
+      } else {
+        const regRes = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: data.name,
+            rootPath: data.projectPath,
+            baseBranch: data.defaultBranch || "main",
+            toolchain: greenfieldToolchain
+          })
+        });
+        if (!regRes.ok) {
+          const d = await regRes.json().catch(() => ({}));
+          throw new Error(d.error || `HTTP ${regRes.status}`);
+        }
+      }
+      setIsRegisterModalOpen(false);
+      setGreenfieldName("");
+    } catch (err: any) {
+      setFormError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Explorer State
   const [tree, setTree] = useState<ProjectTreeNode[]>([]);
@@ -922,84 +1064,251 @@ export function ProjectsView({
           </div>
         )}
 
-        {/* Modal: Register Folder Form */}
+        {/* Modal: Interactive Project Discovery & Registration */}
         {isRegisterModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-md w-full space-y-4 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FolderGit2 className="h-5 w-5 text-emerald-600" />
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100">
-                    Register Project Folder
-                  </h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-xl w-full max-h-[92vh] flex flex-col space-y-4 animate-in zoom-in-95 duration-150 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                    <FolderGit2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100">
+                      Add Project
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400">
+                      Pick a repository, init in-place, or create greenfield
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
-                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Close modal"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
+              {/* Mode Tabs */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800 rounded-2xl shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEntryMode("browse"); setFormError(null); }}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
+                    entryMode === "browse"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Browse Repos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEntryMode("greenfield"); setFormError(null); }}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
+                    entryMode === "greenfield"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  New Greenfield
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEntryMode("manual"); setFormError(null); }}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
+                    entryMode === "manual"
+                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Manual Path
+                </button>
+              </div>
+
               {formError && (
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs">
+                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs shrink-0">
                   {formError}
                 </div>
               )}
 
-              <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
-                    Project Display Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. Core Backend Service"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:outline-emerald-500"
-                  />
-                </div>
+              {/* Body: Mode 1: Browse Repos / Folder Picker */}
+              {entryMode === "browse" && (
+                <div className="flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
+                  {/* Path Bar & Up Button */}
+                  <div className="flex items-center gap-2 p-2 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 shrink-0 text-xs font-mono">
+                    <span className="text-slate-500 dark:text-zinc-400 shrink-0">Path:</span>
+                    <span className="truncate flex-1 font-semibold text-slate-800 dark:text-zinc-200">
+                      {browserSubpath ? `./workspace/${browserSubpath}` : "./workspace"}
+                    </span>
+                    {browserParentPath && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const parts = browserSubpath.split("/").filter(Boolean);
+                          parts.pop();
+                          setBrowserSubpath(parts.join("/"));
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 font-semibold text-[11px] border border-slate-200 dark:border-zinc-600"
+                      >
+                        ↑ Up
+                      </button>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
-                    Filesystem Root Path
-                  </label>
-                  <input
-                    type="text"
-                    value={formPath}
-                    onChange={(e) => setFormPath(e.target.value)}
-                    placeholder="./workspace/projects/my-service"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm font-mono focus:outline-emerald-500"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Zack picks the folder. Rejects roots (/, C:\) and system dirs.
-                  </p>
-                </div>
+                  {/* Directory Listing */}
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
+                    {isBrowserLoading ? (
+                      <div className="p-8 text-center text-xs text-slate-400">Scanning filesystem...</div>
+                    ) : browserItems.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-400">No subdirectories found</div>
+                    ) : (
+                      browserItems.map((item) => {
+                        const isSelected = selectedFolder?.path === item.path;
+                        return (
+                          <div
+                            key={item.path}
+                            onClick={() => handleSelectFolder(item)}
+                            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                              isSelected
+                                ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 shadow-xs"
+                                : "border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                item.isGitRepo
+                                  ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                                  : "bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400"
+                              }`}>
+                                {item.isGitRepo ? <FolderGit2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-xs text-slate-900 dark:text-zinc-100 block truncate">
+                                  {item.name}
+                                </span>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  {item.isGitRepo ? (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+                                      branch: {item.defaultBranch}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                                      non-git folder
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    {item.toolchain}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBrowserSubpath(item.relPath);
+                              }}
+                              className="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-400 hover:text-slate-700 text-[11px] shrink-0 font-semibold"
+                              title="Explore into directory"
+                            >
+                              Open →
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Selected Folder Action Card */}
+                  {selectedFolder && (
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 shrink-0 space-y-2.5 animate-in fade-in">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-emerald-950 dark:text-emerald-200">
+                          Selected: {selectedFolder.name}
+                        </span>
+                        <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">
+                          {selectedFolder.isGitRepo ? `Git [HEAD: ${formBranch}]` : "No Git initialized"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <input
+                          type="text"
+                          value={formName}
+                          onChange={(e) => setFormName(e.target.value)}
+                          placeholder="Project name"
+                          className="px-2.5 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs"
+                        />
+                        <select
+                          value={formToolchain}
+                          onChange={(e) => setFormToolchain(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs"
+                        >
+                          <option value="node:22">node:22</option>
+                          <option value="python:3.11">python:3.11</option>
+                          <option value="golang:1.22">golang:1.22</option>
+                          <option value="rust:1.77">rust:1.77</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        {selectedFolder.isGitRepo ? (
+                          <button
+                            type="button"
+                            onClick={handleRegisterSubmit}
+                            disabled={isSubmitting}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors"
+                          >
+                            {isSubmitting ? "Registering..." : "Register Repository"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleInitAndRegister}
+                            disabled={isSubmitting}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors"
+                          >
+                            {isSubmitting ? "Initializing..." : "Git Init & Register"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Body: Mode 2: Greenfield Project */}
+              {entryMode === "greenfield" && (
+                <div className="space-y-4 py-2">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
-                      Base Branch
+                      New Project Name
                     </label>
                     <input
                       type="text"
-                      value={formBranch}
-                      onChange={(e) => setFormBranch(e.target.value)}
-                      placeholder="develop"
-                      className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono focus:outline-emerald-500"
+                      value={greenfieldName}
+                      onChange={(e) => setGreenfieldName(e.target.value)}
+                      placeholder="e.g. auth-service"
+                      className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:outline-emerald-500"
                     />
+                    <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                      Location: ./workspace/projects/{greenfieldName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "<slug>"}
+                    </p>
                   </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
                       Toolchain
                     </label>
                     <select
-                      value={formToolchain}
-                      onChange={(e) => setFormToolchain(e.target.value)}
+                      value={greenfieldToolchain}
+                      onChange={(e) => setGreenfieldToolchain(e.target.value)}
                       className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono focus:outline-emerald-500"
                     >
                       <option value="node:22">node:22</option>
@@ -1008,25 +1317,106 @@ export function ProjectsView({
                       <option value="rust:1.77">rust:1.77</option>
                     </select>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsRegisterModalOpen(false)}
-                    className="min-h-[44px] px-4 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="min-h-[44px] px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
-                  >
-                    {isSubmitting ? "Registering..." : "Register"}
-                  </button>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRegisterModalOpen(false)}
+                      className="min-h-[44px] px-4 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateGreenfield}
+                      disabled={isSubmitting || !greenfieldName.trim()}
+                      className="min-h-[44px] px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs"
+                    >
+                      {isSubmitting ? "Creating..." : "Create & Register"}
+                    </button>
+                  </div>
                 </div>
-              </form>
+              )}
+
+              {/* Body: Mode 3: Manual Path Entry */}
+              {entryMode === "manual" && (
+                <form onSubmit={handleRegisterSubmit} className="space-y-4 py-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                      Project Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      placeholder="e.g. Core Backend Service"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:outline-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                      Filesystem Root Path
+                    </label>
+                    <input
+                      type="text"
+                      value={formPath}
+                      onChange={(e) => setFormPath(e.target.value)}
+                      placeholder="./workspace/projects/my-service"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm font-mono focus:outline-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        Base Branch
+                      </label>
+                      <input
+                        type="text"
+                        value={formBranch}
+                        onChange={(e) => setFormBranch(e.target.value)}
+                        placeholder="main"
+                        className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        Toolchain
+                      </label>
+                      <select
+                        value={formToolchain}
+                        onChange={(e) => setFormToolchain(e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono"
+                      >
+                        <option value="node:22">node:22</option>
+                        <option value="python:3.11">python:3.11</option>
+                        <option value="golang:1.22">golang:1.22</option>
+                        <option value="rust:1.77">rust:1.77</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRegisterModalOpen(false)}
+                      className="min-h-[44px] px-4 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="min-h-[44px] px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs"
+                    >
+                      {isSubmitting ? "Registering..." : "Register"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

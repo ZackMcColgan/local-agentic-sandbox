@@ -139,7 +139,7 @@ export function SkillsView({
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">No skills to review</h3>
             <p className="text-xs text-slate-600 dark:text-zinc-400 max-w-sm mx-auto">
-              Skill candidates proposed by the recorder will appear here for approval once the skills service is connected to the UI.
+              Skill candidates proposed by the recorder will appear here for human review and promotion into active skills.
             </p>
           </div>
         ) : (
@@ -311,7 +311,7 @@ export function SkillsView({
                 <pre className="p-4 font-mono text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
 {`---
 id: ${previewCandidate.id}
-confidence: 0.94
+status: ${previewCandidate.status || "pending"}
 pattern: ${previewCandidate.pattern}
 occurrences: ${previewCandidate.occurrences}
 ---

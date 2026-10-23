@@ -98,7 +98,7 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={onCollapse}
-              className="panel-toggle-btn min-h-[44px] min-w-[44px] flex items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
+              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
               title="Collapse Sessions Panel"
             >
               « Hide

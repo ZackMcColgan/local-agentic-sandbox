@@ -27,6 +27,7 @@ import {
   Plus,
   ArrowDown,
   PanelLeft,
+  FolderGit2,
   FileCode,
   ExternalLink
 } from "lucide-react";
@@ -121,6 +122,7 @@ interface ChatStreamProps {
   isSidebarOpen?: boolean;
   onToggleWorkspace?: () => void;
   isWorkspaceOpen?: boolean;
+  onOpenProjects?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -218,7 +220,8 @@ export function ChatStream({
   isSidebarOpen = true,
   onToggleWorkspace,
   isWorkspaceOpen = false,
-  defaultComposerMode
+  defaultComposerMode,
+  onOpenProjects
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -735,14 +738,16 @@ export function ChatStream({
   };
 
   const modelSafe = activeModel || "swift-15-27b-mtp";
-  const shortModelLabel = modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
-    ? "swift-15-27b"
+  const shortModelLabel = modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
+    ? (modelSafe.includes("Swift-1.5") || modelSafe.includes("swift-15") ? "Swift-1.5 (IQ3_XS)" : "Swift-1.5")
+    : modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
+    ? "Swift-1.5"
     : modelSafe.includes("swift")
-    ? "swift-27b"
+    ? "Swift-27B"
     : modelSafe.includes("qwen")
-    ? "qwen3.8"
+    ? "Qwen3.8"
     : modelSafe.includes("gemma")
-    ? "gemma4:e4b"
+    ? "Gemma-4"
     : modelSafe.split(":")[0];
 
   // Deduplicate consecutive identical user messages in UI stream
@@ -856,6 +861,20 @@ export function ChatStream({
             >
               <span className="text-sm">◨</span>
               <span className="hidden sm:inline">Workspace</span>
+            </button>
+          )}
+
+          {/* Direct Projects Navigation Button */}
+          {onOpenProjects && (
+            <button
+              type="button"
+              onClick={onOpenProjects}
+              className="panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0"
+              title="Open Projects"
+              aria-label="Open Projects"
+            >
+              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Projects</span>
             </button>
           )}
 
