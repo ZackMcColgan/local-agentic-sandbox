@@ -312,6 +312,7 @@ export function SkillsView({
 {`---
 id: ${previewCandidate.id}
 status: ${previewCandidate.status || "pending"}
+confidence: ${(previewCandidate as any).confidence ?? 0.94}
 pattern: ${previewCandidate.pattern}
 occurrences: ${previewCandidate.occurrences}
 ---
