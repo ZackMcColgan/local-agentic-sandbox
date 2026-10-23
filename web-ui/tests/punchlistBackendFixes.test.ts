@@ -484,14 +484,14 @@ describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBa
       listActiveSkills
     } = await import("../lib/subagents/skillGate.js");
 
+    const blockingFile = path.join(os.tmpdir(), `blocking-skills-file-${Date.now()}`);
     try {
       if (fs.existsSync(fallbackDir)) {
         fs.rmSync(fallbackDir, { recursive: true, force: true });
       }
-      // Point SKILLS_DIR to an unwritable / non-creatable path
-      const unwritablePath = process.platform === "win32"
-        ? "Z:\\nonexistent_unwritable_dir_skills\\nested"
-        : "/workspace/.agent/skills";
+      // Point SKILLS_DIR to an unwritable / non-creatable path by nesting inside a regular file (ENOTDIR)
+      fs.writeFileSync(blockingFile, "block");
+      const unwritablePath = path.join(blockingFile, "nested", "skills");
       process.env.SKILLS_DIR = unwritablePath;
 
       // Call getSkillsBasePath without customPath
@@ -520,6 +520,11 @@ describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBa
       try {
         if (fs.existsSync(fallbackDir)) {
           fs.rmSync(fallbackDir, { recursive: true, force: true });
+        }
+      } catch {}
+      try {
+        if (fs.existsSync(blockingFile)) {
+          fs.rmSync(blockingFile, { force: true });
         }
       } catch {}
     }

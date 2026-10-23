@@ -16,7 +16,7 @@ import {
 import { MorningReportView } from "../components/MorningReportView";
 import { registerProject, createProjectTask, getProject, getFileReviews } from "../lib/projects/projectStore";
 import { runGit, getProjectDiffSummary, acceptProjectFile, revertProjectFile } from "../lib/projects/projectGit";
-import { runProjectOvernightTask } from "../lib/projects/projectRunner";
+import { runProjectOvernightTask, setEngineRunningCheckOverride } from "../lib/projects/projectRunner";
 import { GET as getProjectDiff, POST as postProjectDiff } from "../app/api/projects/[id]/diff/route";
 import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
@@ -42,9 +42,13 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
     fs.writeFileSync(path.join(testRepoDir, "index.ts"), "export const base = 1;\n", "utf8");
     execFileSync("git", ["add", "."], { cwd: testRepoDir });
     execFileSync("git", ["commit", "-m", "Initial base commit"], { cwd: testRepoDir });
+
+    // Mock engine running check so tests starting project tasks pass cleanly without live engine
+    setEngineRunningCheckOverride(async () => true);
   });
 
   afterEach(() => {
+    setEngineRunningCheckOverride(null);
     closeSharedRunLedger();
     if (origDbPath !== undefined) {
       process.env.RUN_LEDGER_DB_PATH = origDbPath;
