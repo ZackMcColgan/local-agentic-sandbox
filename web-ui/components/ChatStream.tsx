@@ -806,29 +806,15 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup 01 */}
+      {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
       <header className="px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          {onToggleSidebar ? (
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
-                isSidebarOpen
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
-              }`}
-              title="Toggle Sessions Panel"
-              aria-label="Toggle Sessions Panel"
-            >
-              <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Sessions</span>
-            </button>
-          ) : onOpenDrawer ? (
+          {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
+          {onOpenDrawer ? (
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
@@ -838,7 +824,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onBackToList}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
               title="Back to sessions"
               aria-label="Back to sessions"
             >
@@ -846,25 +832,7 @@ export function ChatStream({
             </button>
           ) : null}
 
-          {/* Workspace Inspector Toggle Button - visible on both mobile and desktop */}
-          {onToggleWorkspace && (
-            <button
-              type="button"
-              onClick={onToggleWorkspace}
-              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
-                isWorkspaceOpen
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
-              }`}
-              title="Toggle Workspace Panel"
-              aria-label="Toggle Workspace Panel"
-            >
-              <span className="text-sm">◨</span>
-              <span className="hidden sm:inline">Workspace</span>
-            </button>
-          )}
-
-          {/* Direct Projects Navigation Button */}
+          {/* Direct Projects Navigation Button - accessible on both mobile and desktop */}
           {onOpenProjects && (
             <button
               type="button"
@@ -875,6 +843,42 @@ export function ChatStream({
             >
               <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="hidden sm:inline">Projects</span>
+            </button>
+          )}
+
+          {/* Desktop Sessions toggle: hidden on mobile (< md:), visible md: and up */}
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
+                isSidebarOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Sessions Panel"
+              aria-label="Toggle Sessions Panel"
+            >
+              <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Sessions</span>
+            </button>
+          )}
+
+          {/* Desktop Workspace Inspector Toggle Button - hidden on mobile (< md:) */}
+          {onToggleWorkspace && (
+            <button
+              type="button"
+              onClick={onToggleWorkspace}
+              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
+                isWorkspaceOpen
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+              title="Toggle Workspace Panel"
+              aria-label="Toggle Workspace Panel"
+            >
+              <span className="text-sm">◨</span>
+              <span className="hidden sm:inline">Workspace</span>
             </button>
           )}
 
@@ -897,27 +901,29 @@ export function ChatStream({
             </span>
           )}
 
-          {/* Engine Status Pill */}
-          <EngineStatusPill onOpenSettings={onOpenModelSheet} />
+          {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
+          <div className="hidden md:flex items-center">
+            <EngineStatusPill onOpenSettings={onOpenModelSheet} />
+          </div>
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[36px] sm:min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[70px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[85px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
           </button>
 
-          {/* New Session Button */}
+          {/* New Session Button - desktop only */}
           {onNewThread && (
             <button
               type="button"
               onClick={onNewThread}
-              className="hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="Start new session"
               aria-label="Start new session"
             >
@@ -925,8 +931,8 @@ export function ChatStream({
             </button>
           )}
 
-          {/* Overflow Menu Button */}
-          <div className="relative">
+          {/* Overflow Menu Button - desktop only */}
+          <div className="hidden md:block relative">
             <button
               type="button"
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
@@ -939,7 +945,7 @@ export function ChatStream({
 
             {showOverflowMenu && (
               <div
-                className="absolute right-0 mt-1 w-52 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30"
                 onClick={() => setShowOverflowMenu(false)}
               >
                 {onOpenModelSheet && (
@@ -948,7 +954,7 @@ export function ChatStream({
                     onClick={onOpenModelSheet}
                     className="w-full text-left px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
                   >
-                    Engine & model settings
+                    Engine &amp; model settings
                   </button>
                 )}
                 {onNewThread && (

@@ -655,6 +655,10 @@ export default function Home() {
         onNavigate={handleNavigate}
         onNewSession={handleNewThread}
         pendingSkillsCount={pendingSkillsCount}
+        threads={threads}
+        selectedThreadId={selectedThreadId}
+        onSelectThread={handleSelectThread}
+        onDeleteThread={handleDeleteThread}
       />
 
       {/* Modal Bottom Sheet for Model & Thinking Effort */}
@@ -770,7 +774,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[88vw] max-w-sm sm:w-[320px] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
+              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 md:z-10 flex-col"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -837,12 +841,21 @@ export default function Home() {
           {/* Right Workspace Inspector Panel */}
           {isWorkspaceOpen && (
             <aside
-              className="app-inspector fixed md:relative right-0 top-0 bottom-0 w-[340px] max-w-[92vw] md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-2xl md:shadow-none"
+              className="app-inspector fixed md:relative inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 w-full md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-none"
               aria-label="Workspace Panel"
             >
               {/* Inspector Header */}
               <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-zinc-950 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsWorkspaceOpen(false)}
+                    className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center -ml-2 p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+                    title="Back to chat"
+                    aria-label="Back to chat"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
                   <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">Workspace</span>
                   {activeTask?.status === "completed" && (
                     <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
