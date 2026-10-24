@@ -105,34 +105,22 @@ describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-
     );
   });
 
-  it("app-sidebar and app-inspector use fixed md:relative slide-over styling with z-50 above backdrop z-40", () => {
+  it("app-sidebar is hidden on mobile and app-inspector opens full-screen on mobile", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
     const content = fs.readFileSync(pageFile, "utf8");
 
-    // app-sidebar must be fixed on mobile with z-50
+    // app-sidebar must be hidden on mobile (< md:)
     assert.match(
       content,
-      /className=["']app-sidebar fixed md:relative inset-y-0 left-0 [^"']*z-50 md:z-10[^"']*["']/,
-      "app-sidebar must render as a fixed slide-over drawer with z-50 md:z-10 on mobile"
+      /className=["']app-sidebar hidden md:flex[^"']*["']/,
+      "app-sidebar must be hidden on mobile (< md:) — sessions live in NavigationDrawer"
     );
 
-    // app-inspector must be fixed on mobile with z-50
+    // app-inspector must open full-screen on mobile
     assert.match(
       content,
-      /className=["']app-inspector fixed md:relative right-0 top-0 bottom-0 [^"']*z-50 md:z-20[^"']*["']/,
-      "app-inspector must render as a fixed slide-over drawer with z-50 md:z-20 on mobile"
-    );
-
-    // mobile-backdrop must be z-40 and close both drawers on click
-    assert.match(
-      content,
-      /mobile-backdrop\s+\$\{\s*\(isSidebarOpen\s*\|\|\s*isWorkspaceOpen\)\s*\?\s*["']block md:hidden["']\s*:\s*["']hidden["']\s*\}\s*fixed inset-0 bg-black\/60 z-40 md:hidden/,
-      "mobile-backdrop must render at z-40 when either sidebar or workspace is open on mobile"
-    );
-    assert.doesNotMatch(
-      content,
-      /mobile-backdrop[^"']*backdrop-blur/,
-      "mobile-backdrop must not apply backdrop-blur over lower z-index drawers"
+      /className=["']app-inspector fixed md:relative inset-0 md:inset-auto[^"']*w-full md:w-96[^"']*["']/,
+      "app-inspector must render as a full-screen view on mobile"
     );
   });
 });

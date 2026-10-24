@@ -9,7 +9,10 @@
     "lint": "next lint",
     "test": "tsx --test tests/**/*.test.ts",
     "test:gate": "tsx scripts/test-gate.ts",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@langchain/core": "^1.2.14",
@@ -29,6 +32,7 @@
     "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^22.13.5",
     "@types/pdf-parse": "^1.1.5",

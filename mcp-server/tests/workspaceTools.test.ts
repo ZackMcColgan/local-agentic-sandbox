@@ -14,7 +14,7 @@ describe("Workspace & Git Tools Suite", () => {
     registerWorkspaceTools(mcp);
   });
 
-  it("registers all 8 autonomous workspace & git tools", () => {
+  it("registers all 9 autonomous workspace & git tools", () => {
     // @ts-ignore
     const tools = mcp._registeredTools;
     const requiredTools = [
@@ -24,6 +24,7 @@ describe("Workspace & Git Tools Suite", () => {
       "workspace_write_file",
       "workspace_run_command",
       "git_status",
+      "git_diff",
       "git_checkout_branch",
       "git_commit"
     ];
@@ -145,5 +146,12 @@ describe("Workspace & Git Tools Suite", () => {
     const statusData = JSON.parse(statusRes.content[0].text);
     assert.equal(statusData.status, "SUCCESS");
     assert.equal(statusData.branch, branchName);
+
+    // Inspect git_diff
+    // @ts-ignore
+    const diffHandler = mcp._registeredTools["git_diff"].handler;
+    const diffRes = await diffHandler({});
+    const diffData = JSON.parse(diffRes.content[0].text);
+    assert.equal(diffData.status, "SUCCESS");
   });
 });

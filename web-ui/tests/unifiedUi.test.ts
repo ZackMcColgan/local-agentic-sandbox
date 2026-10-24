@@ -569,18 +569,19 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
   });
 
   describe("Sprint U2 — Labeled Navigation, Collapsible 3-Pane Workbench, DiffViewer Wiring & 840px Track", () => {
-    it("Task 1: Desktop Left Rail (82px) and Mobile Bottom Bar (58px) display explicit text labels for all 5 destinations", () => {
+    it("Task 1: Desktop Left Rail (82px) and Mobile Navigation via NavigationDrawer", () => {
       const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
-      // Check for rail and bottom bar presence
+      // Check for rail presence
       assert.ok(
         pageSrc.includes("app-rail") || (pageSrc.includes("82px") && pageSrc.includes("Chat")),
         "Must render persistent desktop rail"
       );
-      assert.ok(
-        pageSrc.includes("mobile-bottom-nav") || (pageSrc.includes("58px") && pageSrc.includes("Chat")),
-        "Must render mobile bottom navigation bar"
+      assert.equal(
+        pageSrc.includes("mobile-bottom-nav"),
+        false,
+        "Mobile bottom navigation bar must be removed in favor of NavigationDrawer"
       );
-      // Both must include all 5 labeled views: Chat, Builds, Morning Report/Report, Skills, Settings
+      // Rail must include labeled views: Chat, Builds, Morning Report/Report, Skills, Settings
       const requiredLabels = ["Chat", "Builds", "Report", "Skills", "Settings"];
       for (const label of requiredLabels) {
         assert.ok(pageSrc.includes(label), `Navigation must contain explicit text label '${label}'`);

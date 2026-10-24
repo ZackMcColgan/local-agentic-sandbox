@@ -162,3 +162,48 @@ jobs:
           image: local-agentic-sandbox/mcp-server:test
           only-severities: critical,high
         continue-on-error: true
+
+
+  ui-e2e-playwright:
+    name: Playwright UI Invariants, Flows & Baselines
+    runs-on: ubuntu-24.04
+    needs: test-and-typecheck
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Install Playwright Chromium & System Dependencies
+        working-directory: web-ui
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: Build Web UI
+        working-directory: web-ui
+        run: |
+          npm run build
+
+      - name: Execute Playwright UI Test Suite
+        working-directory: web-ui
+        run: |
+          npx playwright test
+
+      - name: Upload Playwright Artifacts on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web-ui/playwright-report/
+            web-ui/test-results/
+          retention-days: 14

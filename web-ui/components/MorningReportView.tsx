@@ -16,7 +16,9 @@ import {
   SlidersHorizontal,
   FileCode2,
   Eye,
-  Sparkles
+  Sparkles,
+  FolderGit2,
+  Layers
 } from "lucide-react";
 import type {
   MorningReport,
@@ -513,12 +515,31 @@ export function MorningReportView({
                             <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-zinc-100 break-words">
                               {t.goal}
                             </span>
+                            {t.projectName && (
+                              <span
+                                data-testid="project-badge"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0"
+                              >
+                                <FolderGit2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>{t.projectName}</span>
+                              </span>
+                            )}
                             <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
                               ({t.taskId})
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-3 text-xs font-mono text-slate-600 dark:text-zinc-400 shrink-0">
+                          <div className="flex items-center gap-2.5 text-xs font-mono text-slate-600 dark:text-zinc-400 shrink-0 flex-wrap">
+                            {t.reviewUrl && (
+                              <a
+                                href={t.reviewUrl}
+                                data-testid="project-review-link"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold transition-colors"
+                              >
+                                <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Review Project Diffs</span>
+                              </a>
+                            )}
                             <span className="inline-flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5 text-emerald-500" />
                               {t.durationFormatted}

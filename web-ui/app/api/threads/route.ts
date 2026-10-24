@@ -268,10 +268,44 @@ export async function POST(req: Request) {
               });
               threadStore.saveThread(currentThread);
             }
+          } else {
+            // Task ended in non-completed terminal state (failed, parked, cancelled)
+            const currentThread = await threadStore.getThread(activeThreadId);
+            if (currentThread) {
+              currentThread.status = result.status === "failed" || (result.status as string) === "crashed" ? "failed" : result.status === "paused" ? "paused" : "stopped";
+              const reason = result.parkedReason || (result.ambiguityFlags?.[0]?.question) || "Task did not reach completion.";
+              currentThread.messages.push({
+                id: `msg-${Date.now()}-term`,
+                role: "assistant",
+                content: `Task ${result.status}: ${reason}`,
+                taskId,
+                timestamp: new Date().toISOString()
+              });
+              threadStore.saveThread(currentThread);
+            }
           }
         } catch (err: any) {
           console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
-          throw err;
+          manifest.status = "failed";
+          manifest.parkedReason = err?.message || String(err);
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            message: `Fatal execution error: ${manifest.parkedReason}`
+          });
+          supervisor.saveCheckpoint(manifest);
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            currentThread.status = "failed";
+            currentThread.messages.push({
+              id: `msg-${Date.now()}-err`,
+              role: "assistant",
+              content: `Task failed: ${manifest.parkedReason}`,
+              taskId,
+              timestamp: new Date().toISOString()
+            });
+            threadStore.saveThread(currentThread);
+          }
         } finally {
           activeExecutionSet.delete(taskId);
         }

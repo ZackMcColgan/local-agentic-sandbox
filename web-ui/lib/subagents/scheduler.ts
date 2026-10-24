@@ -1,3 +1,8 @@
+export function sanitizeScheduleBranchName(id: string): string {
+  const cleanId = id.replace(/^sched-?/, "");
+  return `feat/sched-${cleanId}`;
+}
+
 import fs from "fs";
 import path from "path";
 import { TaskManifest, TaskStatus, Milestone } from "./types";
@@ -326,7 +331,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       taskId: `task-${Date.now()}`,
       goal: sched.taskDescription,
       toolchain: "node:22",
-      branchName: `sched/${sched.id}`,
+      branchName: sanitizeScheduleBranchName(sched.id),
       status: "active",
       milestones: [
         {

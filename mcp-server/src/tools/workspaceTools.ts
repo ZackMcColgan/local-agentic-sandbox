@@ -602,6 +602,46 @@ export function registerWorkspaceTools(mcp: McpServer) {
     }
   );
 
+  // 6b. git_diff
+  mcp.tool(
+    "git_diff",
+    "Show changes between commits, commit and working tree, or staged changes in /workspace.",
+    {
+      target: z.string().optional().describe("Optional commit, branch, or file path to diff against"),
+      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
+    },
+    async ({ target, cached = false }) => {
+      await ensureWorkspaceInitialized();
+
+      try {
+        const diffArgs = ["diff"];
+        if (cached) diffArgs.push("--cached");
+        if (target) diffArgs.push(target);
+        const diffRes = await execGit(diffArgs, WORKSPACE_DIR);
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "SUCCESS",
+              diff: diffRes.stdout.trim()
+            }, null, 2)
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: `git diff error: ${err.message}`
+            }, null, 2)
+          }]
+        };
+      }
+    }
+  );
+
   // 7. git_checkout_branch
   mcp.tool(
     "git_checkout_branch",
