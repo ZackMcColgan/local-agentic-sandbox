@@ -41,7 +41,7 @@ function buildLlamaServerArgs(config = {}) {
   const alias = config.alias || DEFAULT_MODEL_ALIAS;
   const port = String(config.port || DEFAULT_BACKEND_PORT);
   const host = config.host || "127.0.0.1";
-  const ctxSize = String(config.ctxSize || 8192);
+  const ctxSize = String(config.ctxSize || 64000);
 
   const args = [
     "--model",
