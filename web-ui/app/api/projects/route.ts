@@ -19,7 +19,8 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { name, rootPath, baseBranch, toolchain } = body;
+    const { name, baseBranch, toolchain } = body;
+    const rootPath = body.rootPath || body.path;
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });

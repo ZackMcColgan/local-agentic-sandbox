@@ -170,6 +170,100 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
  * Generates an overnight execution specification (SPEC.md)
  * defining requirements and verifiable milestones with machine-checkable criteria.
  */
+/**
+ * Resilient JSON repair and parser for autonomous planner responses.
+ * Recovers valid milestones from truncated or slightly malformed JSON.
+ */
+export function repairAndParsePlanJson(rawText: string): { milestones: any[] } | null {
+  if (!rawText || !rawText.trim()) return null;
+  const stripped = stripCodeFence(rawText).trim();
+
+  // 1. Try direct clean parse
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) return parsed;
+  } catch {}
+
+  // 2. Try extracting JSON object substring
+  const startIdx = stripped.indexOf("{");
+  if (startIdx === -1) return null;
+  const candidate = stripped.slice(startIdx);
+
+  try {
+    const parsed = JSON.parse(candidate);
+    if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) return parsed;
+  } catch {}
+
+  // 3. Stack-based delimiter balancing
+  try {
+    let repaired = candidate.trim().replace(/,\s*$/, "");
+    
+    // Balance trailing quotes if odd count
+    const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+    if (quoteCount % 2 !== 0) repaired += '"';
+
+    // Remove any trailing comma that might have been inside an unclosed string
+    repaired = repaired.replace(/,\s*$/, "");
+
+    // Track open structural delimiters in exact order
+    const stack: string[] = [];
+    let inString = false;
+    let escape = false;
+
+    for (let i = 0; i < repaired.length; i++) {
+      const ch = repaired[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+
+      if (ch === '{') stack.push('}');
+      else if (ch === '[') stack.push(']');
+      else if (ch === '}' || ch === ']') {
+        if (stack.length > 0 && stack[stack.length - 1] === ch) {
+          stack.pop();
+        }
+      }
+    }
+
+    // Close in exact reverse order
+    while (stack.length > 0) {
+      repaired += stack.pop();
+    }
+
+    const parsed = JSON.parse(repaired);
+    if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
+      return parsed;
+    }
+  } catch {}
+
+  // 4. Regex extraction of complete milestone objects if syntax repair failed
+  const matches = [...stripped.matchAll(/\{\s*"id"\s*:\s*"(M\d+)"\s*,\s*"title"\s*:\s*"([^"]+)"[\s\S]*?\}/g)];
+  if (matches.length > 0) {
+    const recovered = [];
+    for (const m of matches) {
+      try {
+        const item = JSON.parse(m[0]);
+        recovered.push(item);
+      } catch {}
+    }
+    if (recovered.length > 0) {
+      return { milestones: recovered };
+    }
+  }
+
+  return null;
+}
+
 export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> {
   const taskId = input.taskId || `task-${Date.now()}`;
   const goal = input.goal;
@@ -224,7 +318,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       try {
         const matches = skillsStore.retrieveRelevantSkills(goal, 3);
         if (matches && matches.length > 0) {
-          retrievedPatternsContext = `\n\n${formatSkillsForPlannerPrompt(matches)}\n`;
+          retrievedPatternsContext = `\r\n\r\n${formatSkillsForPlannerPrompt(matches)}\r\n`;
         }
       } finally {
         skillsStore.close();
@@ -287,24 +381,25 @@ Respond strictly in valid JSON matching this schema:
     if (input.repoMap) {
       const formattedMap = typeof input.repoMap === "string"
         ? input.repoMap
-        : input.repoMap.treeSummary || input.repoMap.files.map((f) => `${f.path}: ${f.exports.join(", ")}`).join("\n");
-      repoMapContext = `Workspace Repository Map (existing files & symbols):\n${formattedMap.slice(0, 10000)}\nTarget real existing files from this map when modifying existing functionality, or follow established folder structure for new deliverables. Provide executable acceptance test commands.`;
+        : input.repoMap.treeSummary || input.repoMap.files.map((f) => `${f.path}: ${f.exports.join(", ")}`).join("\r\n");
+      repoMapContext = `Workspace Repository Map (existing files & symbols):\r\n${formattedMap.slice(0, 10000)}\r\nTarget real existing files from this map when modifying existing functionality, or follow established folder structure for new deliverables. Provide executable acceptance test commands.`;
     }
 
     const promptParts = [basePrompt];
     if (retrievedPatternsContext) promptParts.push(retrievedPatternsContext);
     if (repoMapContext) promptParts.push(repoMapContext);
-    const prompt = promptParts.join("\n\n");
+    const prompt = promptParts.join("\r\n\r\n");
 
     const res = await generate({
       model: modelToUse,
       prompt,
       format: "json",
       keepAlive: input.keepAlive ?? "30m",
-      options: { temperature: 0.2, num_predict: 2048 }
+      reasoningEffort: "balanced",
+      options: { temperature: 0.2, num_predict: 4096 }
     });
 
-    const parsed = JSON.parse(stripCodeFence(res.text));
+    const parsed = repairAndParsePlanJson(res.text);
     if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
       // Respect SCRIPT cap of 2 milestones max
       const rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
@@ -464,21 +559,21 @@ function formatSpecMarkdown(
   toolchain: ToolchainType,
   milestones: Milestone[]
 ): string {
-  let md = `# SPEC: ${goal}\n\n`;
-  md += `**Task ID**: \`${taskId}\`  \n`;
-  md += `**Toolchain**: \`${toolchain}\`  \n\n`;
-  md += `## Milestones\n\n`;
+  let md = `# SPEC: ${goal}\r\n\r\n`;
+  md += `**Task ID**: \`${taskId}\`  \r\n`;
+  md += `**Toolchain**: \`${toolchain}\`  \r\n\r\n`;
+  md += `## Milestones\r\n\r\n`;
 
   for (const m of milestones) {
-    md += `### Milestone ${m.id}: ${m.title}\n`;
-    md += `${m.description}\n\n`;
-    md += `#### Acceptance Criteria:\n`;
+    md += `### Milestone ${m.id}: ${m.title}\r\n`;
+    md += `${m.description}\r\n\r\n`;
+    md += `#### Acceptance Criteria:\r\n`;
     for (const ac of m.acceptanceCriteria) {
-      md += `- [${ac.id}] **Assertion**: ${ac.assertion}\n`;
-      if (ac.command) md += `  - *Command*: \`${ac.command}\`\n`;
-      if (ac.fileMatch) md += `  - *File*: \`${ac.fileMatch}\`\n`;
+      md += `- [${ac.id}] **Assertion**: ${ac.assertion}\r\n`;
+      if (ac.command) md += `  - *Command*: \`${ac.command}\`\r\n`;
+      if (ac.fileMatch) md += `  - *File*: \`${ac.fileMatch}\`\r\n`;
     }
-    md += `\n`;
+    md += `\r\n`;
   }
 
   return md;
@@ -510,7 +605,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
   const milestones: Milestone[] = [];
 
   for (const chunk of milestoneChunks) {
-    const lines = chunk.trim().split("\n");
+    const lines = chunk.trim().split("\r\n");
     const headerLine = lines[0];
     const headerParts = headerLine.split(":");
     const id = headerParts[0].trim();
@@ -521,7 +616,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
       throw new Error(`Milestone ${id} must declare explicit machine-checkable acceptance criteria`);
     }
 
-    const description = lines.slice(1, criteriaIdx).join("\n").trim();
+    const description = lines.slice(1, criteriaIdx).join("\r\n").trim();
     const criteriaLines = lines.slice(criteriaIdx + 1);
     const acceptanceCriteria: AcceptanceCriterion[] = [];
 

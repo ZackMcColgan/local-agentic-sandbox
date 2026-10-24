@@ -586,6 +586,19 @@ export default function Home() {
         if (data.task) {
           setActiveTask(data.task);
         }
+      } else {
+        const errData = await res.json().catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
+        const msg = errData.error || `Failed to launch task: HTTP ${res.status}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-err`,
+            role: "assistant",
+            content: `Error launching task: ${msg}`,
+            timestamp: new Date().toISOString()
+          }
+        ]);
+        throw new Error(msg);
       }
     } catch (err) {
       console.error("Failed to launch engineering task:", err);

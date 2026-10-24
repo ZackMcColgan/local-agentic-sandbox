@@ -102,12 +102,19 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
-  // Unified Agent UI (Material 3) components, threads store & API
+  // Threads store & Threads API
+  {
+    match: (p) => p.includes("lib/threads") || p.includes("app/api/threads"),
+    tests: [
+      "tests/threadsLaunchTask.test.ts",
+      "tests/sessionIntegrity.test.ts",
+      "tests/chatReasoningAndProgress.test.ts"
+    ]
+  },
+  // Unified Agent UI (Material 3) components & design tokens
   {
     match: (p) =>
-      p.includes("lib/threads") ||
       p.includes("lib/hooks") ||
-      p.includes("app/api/threads") ||
       p.includes("components/LiveRunBlock") ||
       p.includes("components/ArtifactRenderers") ||
       p.includes("components/ModelBottomSheet") ||
@@ -132,7 +139,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/skillsProposeApprove.test.ts",
       "tests/mobileHeaderNav.test.ts",
-      "tests/engineToggle.test.ts"
+      "tests/engineToggle.test.ts",
+      "tests/shakeoutFixes.test.ts"
     ]
   },
   {
@@ -190,7 +198,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/llmProvider.test.ts",
       "tests/engineRoute.test.ts",
-      "tests/engineToggle.test.ts"
+      "tests/engineToggle.test.ts",
+      "tests/shakeoutFixes.test.ts"
     ]
   },
   // Tasks API route
@@ -234,19 +243,27 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
-    tests: ["tests/planner.test.ts"]
+    tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/morningReport"),
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/types") || p.includes("lib/subagents/scheduler"),
+    match: (p) => p.includes("lib/subagents/types"),
     tests: [
       "tests/supervisor.test.ts",
       "tests/workerPool.test.ts",
       "tests/scheduler.test.ts",
       "tests/morningReport.test.ts"
+    ]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/scheduler") || p.includes("app/api/schedules"),
+    tests: [
+      "tests/scheduler.test.ts",
+      "tests/schedulerApi.test.ts",
+      "tests/shakeoutFixes.test.ts"
     ]
   },
   // Telemetry, Tool Parser, File Parser
@@ -473,6 +490,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/bench-") ||
     normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
+    normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("tests/e2e/") ||
     normalizedPath.startsWith("docs/") ||
