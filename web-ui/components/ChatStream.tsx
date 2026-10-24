@@ -55,6 +55,13 @@ import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
+import {
+  parseSimulateCommand,
+  createSimulatedChatResponse,
+  runSimulatedTask,
+  getScenario,
+  SimulationScenarioKey
+} from "../lib/simulator";
 
 
 
@@ -123,6 +130,10 @@ interface ChatStreamProps {
   onToggleWorkspace?: () => void;
   isWorkspaceOpen?: boolean;
   onOpenProjects?: () => void;
+  initialSimulation?: {
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  };
 }
 
 function formatFileSize(bytes: number): string {
@@ -221,7 +232,8 @@ export function ChatStream({
   onToggleWorkspace,
   isWorkspaceOpen = false,
   defaultComposerMode,
-  onOpenProjects
+  onOpenProjects,
+  initialSimulation
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -244,6 +256,23 @@ export function ChatStream({
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [activeSimulation, setActiveSimulation] = useState<{
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  } | null>(initialSimulation ?? null);
+  const activeSimTaskCancelRef = useRef<(() => void) | null>(null);
+  const initialSimulationTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (initialSimulation && !initialSimulationTriggeredRef.current) {
+      initialSimulationTriggeredRef.current = true;
+      setActiveSimulation(initialSimulation);
+      const cmd = `/simulate ${initialSimulation.scenarioKey}${
+        initialSimulation.speedMultiplier ? ` ${initialSimulation.speedMultiplier}` : ""
+      }`;
+      handleSend(cmd);
+    }
+  }, [initialSimulation]);
 
   // Attached files state
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
@@ -449,6 +478,86 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
+    // Check if this is a simulation command (/simulate <scenario> [speed])
+    const simCmd = parseSimulateCommand(prompt);
+    const isSimulating = Boolean(simCmd || activeSimulation);
+    const simKey = (simCmd?.scenarioKey || activeSimulation?.scenarioKey) as SimulationScenarioKey | undefined;
+    const simSpeed = simCmd?.speed || activeSimulation?.speedMultiplier || 1;
+
+    if (simCmd) {
+      setActiveSimulation({ scenarioKey: simCmd.scenarioKey, speedMultiplier: simCmd.speed });
+    }
+
+    if (isSimulating && simKey) {
+      const simScenario = getScenario(simKey);
+      const isBuildScenario = simScenario?.mode === "build" || simKey === "project-task";
+
+      if (isBuildScenario && simScenario?.initialTask) {
+        setErrorMsg(null);
+        setInput("");
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+        setAttachedFiles([]);
+
+        const userMsgId = `user-${Date.now()}`;
+        const userMsg: ChatMessage = {
+          id: userMsgId,
+          role: "user",
+          content: prompt
+        };
+
+        const taskInit = { ...simScenario.initialTask };
+        const assistantMsgId = `assistant-${Date.now()}`;
+        const assistantMsg: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "Started autonomous engineering run.",
+          taskId: taskInit.taskId
+        };
+
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        setIsLoading(true);
+        setStreamStatus("Autonomous milestones scheduled. Workers active...");
+        if (onTaskUpdated) {
+          onTaskUpdated(taskInit);
+        }
+
+        if (activeSimTaskCancelRef.current) {
+          activeSimTaskCancelRef.current();
+          activeSimTaskCancelRef.current = null;
+        }
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        activeSimTaskCancelRef.current = runSimulatedTask(
+          simKey,
+          simSpeed,
+          {
+            onTaskUpdate: (updatedTask) => {
+              if (onTaskUpdated) onTaskUpdated(updatedTask);
+              if (updatedTask.status === "completed" || updatedTask.status === "cancelled" || updatedTask.status === "failed") {
+                setIsLoading(false);
+                setStreamStatus(null);
+              }
+            },
+            onComplete: () => {
+              setIsLoading(false);
+              setStreamStatus(null);
+              activeSimTaskCancelRef.current = null;
+            },
+            onError: (err) => {
+              setErrorMsg(err.message);
+              setIsLoading(false);
+              setStreamStatus(null);
+              activeSimTaskCancelRef.current = null;
+            }
+          },
+          abortController.signal
+        );
+        return;
+      }
+    }
+
     // Check if this is an engineering builder task (Build mode toggle or /build prefix)
     const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
     const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
@@ -505,8 +614,8 @@ export function ChatStream({
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
-    // If inside a persistent thread, persist the user message
-    if (activeThreadId) {
+    // If inside a persistent thread, persist the user message (skip in offline simulation)
+    if (activeThreadId && !isSimulating) {
       try {
         fetch(`/api/threads/${activeThreadId}`, {
           method: "POST",
@@ -533,24 +642,26 @@ export function ChatStream({
     abortControllerRef.current = abortController;
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: abortController.signal,
-        body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
-          model: activeModel,
-          mode: agentMode,
-          reasoning_effort: reasoningEffort,
-          threadId,
-          attachments: currentAttachments.map(a => ({
-            name: a.name,
-            type: a.type,
-            size: a.size,
-            base64: a.base64
-          }))
-        })
-      });
+      const res = isSimulating && simKey
+        ? await createSimulatedChatResponse(simKey, simSpeed, abortController.signal)
+        : await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: abortController.signal,
+            body: JSON.stringify({
+              messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+              model: activeModel,
+              mode: agentMode,
+              reasoning_effort: reasoningEffort,
+              threadId,
+              attachments: currentAttachments.map(a => ({
+                name: a.name,
+                type: a.type,
+                size: a.size,
+                base64: a.base64
+              }))
+            })
+          });
 
       if (!res.ok) {
         let errMessage = "Failed to orchestrate request";
@@ -667,7 +778,7 @@ export function ChatStream({
               const finalModel = event.model || currentModel;
 
               const targetThreadId = activeThreadId || threadId;
-              if (targetThreadId) {
+              if (targetThreadId && !isSimulating) {
                 try {
                   fetch(`/api/threads/${targetThreadId}`, {
                     method: "POST",
@@ -891,6 +1002,36 @@ export function ChatStream({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Simulation Mode Badge */}
+          {activeSimulation && (
+            <div
+              data-testid="simulation-badge"
+              className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-xs font-bold uppercase tracking-wider shrink-0"
+              title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+              <span>SIMULATION</span>
+              <span className="hidden sm:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+                (${activeSimulation.scenarioKey})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeSimTaskCancelRef.current) {
+                    activeSimTaskCancelRef.current();
+                    activeSimTaskCancelRef.current = null;
+                  }
+                  setActiveSimulation(null);
+                }}
+                className="min-h-[40px] min-w-[40px] -mr-1 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                title="Exit simulation mode"
+                aria-label="Exit simulation mode"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
@@ -1663,6 +1804,7 @@ export function ChatStream({
                 <button
                   type="button"
                   onClick={handleStop}
+                  data-testid="stop-button"
                   className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
                   title="Stop generation / halt workers"
                   aria-label="Stop generation"
@@ -1673,6 +1815,7 @@ export function ChatStream({
                 <button
                   type="submit"
                   disabled={!input.trim() && attachedFiles.length === 0}
+                  data-testid="send-button"
                   className="h-9 w-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
                   title="Send message"
                   aria-label="Send message"

@@ -61,6 +61,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/grounding"),
     tests: ["tests/groundingGate.test.ts"]
   },
+  // Simulation mode engine, scenarios registry, and offline runner
+  {
+    match: (p) => p.includes("lib/simulator"),
+    tests: ["tests/simulator.test.ts"]
+  },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),

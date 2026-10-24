@@ -11,6 +11,7 @@ import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
+import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   Layers,
   ShieldCheck,
@@ -97,6 +98,11 @@ export default function Home() {
     }
   };
 
+  const [initialSimulation, setInitialSimulation] = useState<{
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  } | null>(null);
+
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage("swift-15-27b-mtp")
@@ -108,6 +114,15 @@ export default function Home() {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
       const queryTab = urlParams.get("tab") || urlParams.get("view");
+      const querySimulate = urlParams.get("simulate");
+      const querySpeed = urlParams.get("speed");
+      if (querySimulate) {
+        const speedNum = querySpeed ? parseFloat(querySpeed) : undefined;
+        setInitialSimulation({
+          scenarioKey: querySimulate as SimulationScenarioKey,
+          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum
+        });
+      }
       if (queryTab === "skills") setActiveNavView("skills");
       else if (queryTab === "builds") setActiveNavView("builds");
       else if (queryTab === "projects") setActiveNavView("projects");
@@ -405,6 +420,7 @@ export default function Home() {
   // Real-time 2s polling while a task is running (Live run block updates)
   useEffect(() => {
     if (!activeTask || activeTask.status !== "active") return;
+    if (activeTask.taskId?.startsWith("sim-")) return;
 
     const pollTask = async () => {
       try {
@@ -580,6 +596,10 @@ export default function Home() {
   const handleStopRun = async () => {
     if (!selectedThreadId && !activeTask) return;
     try {
+      if (activeTask?.taskId?.startsWith("sim-")) {
+        setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
+        return;
+      }
       if (selectedThreadId) {
         await fetch(`/api/threads/${selectedThreadId}`, {
           method: "POST",
@@ -834,6 +854,7 @@ export default function Home() {
                 setActiveNavView("projects");
                 setViewMode("unified");
               }}
+              initialSimulation={initialSimulation || undefined}
               placeholder="Message..."
             />
           </main>

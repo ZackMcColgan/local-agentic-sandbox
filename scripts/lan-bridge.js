@@ -56,16 +56,21 @@ function createProxyServer(listenPort) {
         resHeaders["expires"] = "0";
       }
       res.writeHead(proxyRes.statusCode, resHeaders);
+      res.on("error", () => { try { proxyReq.destroy(); } catch {} });
+      proxyRes.on("error", () => { try { res.destroy(); } catch {} });
       proxyRes.pipe(res, { end: true });
 
       proxyRes.on("end", () => {
-        console.log(`[LAN Bridge :${listenPort}] ${new Date().toISOString().slice(11, 19)} | ${clientIp} | ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
+        if (!req.url.startsWith("/_next/")) {
+          console.log(`[LAN Bridge :${listenPort}] ${new Date().toISOString().slice(11, 19)} | ${clientIp} | ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
+        }
       });
     });
 
     proxyReq.on("error", (err) => {
       console.error(`[LAN Bridge :${listenPort} Error] ${req.method} ${req.url}:`, err.message);
-      if (!res.headersSent) {
+      try {
+        if (!res.headersSent && !res.destroyed && !res.writableEnded) {
         res.writeHead(502, { "Content-Type": "text/html; charset=utf-8" });
         res.end(`
           <!DOCTYPE html>
@@ -79,7 +84,8 @@ function createProxyServer(listenPort) {
           </body>
           </html>
         `);
-      }
+        }
+      } catch (e) {}
     });
 
     req.on("error", (err) => {
@@ -125,6 +131,10 @@ function createProxyServer(listenPort) {
     }
   });
 
+  server.on("clientError", (err, socket) => {
+    try { socket.destroy(); } catch {}
+  });
+
   server.on("error", (err) => {
     console.error(`[LAN Bridge Error on port ${listenPort}]:`, err.message);
   });
@@ -152,4 +162,12 @@ module.exports = {
 
 process.on("uncaughtException", (err) => {
   console.error("[LAN Bridge uncaughtException]:", err.message);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("[LAN Bridge unhandledRejection]:", err);
+});
+
+process.on("exit", (code) => {
+  console.log(`[LAN Bridge Process Exit] code=${code}`);
 });
