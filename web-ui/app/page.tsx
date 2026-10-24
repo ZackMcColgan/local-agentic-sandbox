@@ -774,7 +774,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 md:z-10 flex-col"
+              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 md:z-10 flex-col overflow-hidden"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -1099,6 +1099,7 @@ export default function Home() {
                     onClick={() => setIsDrawerOpen(true)}
                     className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                     title="Open menu"
+                    aria-label="Open navigation menu"
                   >
                     <Menu className="h-6 w-6" />
                   </button>

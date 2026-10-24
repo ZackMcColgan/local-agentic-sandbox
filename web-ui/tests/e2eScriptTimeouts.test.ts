@@ -10,7 +10,7 @@ describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
 
   const requiredScriptFiles = [
     "scripts/capture-svg-render.js",
-    "scripts/test-ui-render.js",
+    // scripts/test-ui-render.js retired per Work Order #3 in favor of Playwright e2e suite
     "scripts/verify-fix3-behavioral.js",
     "scripts/verify-lan-copy.js",
     "scripts/verify-phase-d.js"

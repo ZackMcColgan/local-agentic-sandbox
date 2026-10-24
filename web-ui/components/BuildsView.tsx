@@ -37,10 +37,12 @@ export function BuildsView({
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
+              data-testid="builds-menu-btn"
               type="button"
               onClick={onOpenDrawer}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
+              aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>

@@ -23,11 +23,12 @@
     "verify:sec": "docker compose exec mcp-server id && docker compose exec browser-mcp id",
     "lan:bridge": "node scripts/lan-bridge.js",
     "dev:proxy": "node scripts/dev-proxy.js",
-    "test:ui": "node scripts/test-ui-render.js",
+    "test:ui": "npm --prefix web-ui run test:e2e",
     "deploy:cluster": "node scripts/deploy-cluster.js",
     "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
-    "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
+    "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts",
+    "test:ui:update": "npm --prefix web-ui run test:e2e:update"
   },
   "overrides": {
     "ip-address": "^10.7.4",

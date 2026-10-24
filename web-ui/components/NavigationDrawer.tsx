@@ -83,7 +83,13 @@ export function NavigationDrawer({
       />
 
       {/* Drawer Surface - Gemini Mobile Menu Pattern */}
-      <div className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-white dark:bg-zinc-900 shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-slate-100 dark:border-zinc-800 transition-transform animate-in slide-in-from-left duration-200">
+      <div
+        data-testid="navigation-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation Drawer"
+        className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-white dark:bg-zinc-900 shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-slate-100 dark:border-zinc-800 transition-transform animate-in slide-in-from-left duration-200"
+      >
         
         {/* Top Header: Robot Sparkle Icon + "Agent" + Close (X) button */}
         <div className="flex items-center justify-between px-2 pb-4 shrink-0">
@@ -125,7 +131,7 @@ export function NavigationDrawer({
         </div>
 
         {/* 2. Destinations Hub */}
-        <nav className="space-y-1 px-1 shrink-0">
+        <nav aria-label="Main Navigation" className="space-y-1 px-1 shrink-0">
           {/* Destination: Sessions */}
           <button
             type="button"

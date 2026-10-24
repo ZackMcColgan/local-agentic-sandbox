@@ -82,6 +82,11 @@ function createProxyServer(listenPort) {
       }
     });
 
+    req.on("error", (err) => {
+      console.error(`[LAN Bridge :${listenPort} Req Error] ${req.method} ${req.url}:`, err.message);
+      try { proxyReq.destroy(); } catch {}
+    });
+
     // Pipe incoming request body to target (e.g. POST /api/chat)
     req.pipe(proxyReq, { end: true });
   });
@@ -144,3 +149,7 @@ module.exports = {
   TARGET_PORT,
   TARGET_HOST
 };
+
+process.on("uncaughtException", (err) => {
+  console.error("[LAN Bridge uncaughtException]:", err.message);
+});

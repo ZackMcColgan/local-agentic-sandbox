@@ -467,6 +467,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/dev-proxy") ||
     normalizedPath.startsWith("scripts/bench-") ||
     normalizedPath.startsWith("scripts/test-q3") ||
+    normalizedPath.startsWith("scripts/test-ui-render") ||
+    normalizedPath.includes("playwright.config") ||
+    normalizedPath.includes("tests/e2e/") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||

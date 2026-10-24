@@ -481,6 +481,7 @@ export function ProjectsView({
               onClick={onOpenDrawer}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
+              aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
@@ -1067,7 +1068,13 @@ export function ProjectsView({
         {/* Modal: Interactive Project Discovery & Registration */}
         {isRegisterModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-xl w-full max-h-[92vh] flex flex-col space-y-4 animate-in zoom-in-95 duration-150 overflow-hidden">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add Project"
+              data-testid="add-project-modal"
+              className="bg-white dark:bg-zinc-900 rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-xl w-full max-h-[92vh] flex flex-col space-y-4 animate-in zoom-in-95 duration-150 overflow-hidden"
+            >
               {/* Header */}
               <div className="flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2.5">
@@ -1088,6 +1095,7 @@ export function ProjectsView({
                   onClick={() => setIsRegisterModalOpen(false)}
                   className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                   title="Close modal"
+                  aria-label="Close modal"
                 >
                   <X className="h-5 w-5" />
                 </button>
