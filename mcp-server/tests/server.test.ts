@@ -1,9 +1,15 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import cors from "cors";
+// Imported first: sets this suite's own WORKSPACE_DIR before workspaceTools resolves it.
+import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 
 describe("MCP Server Express Endpoints", () => {
+  after(() => {
+    cleanupTestWorkspace();
+  });
+
   it("health endpoint returns expected zero-trust security status", async () => {
     const app = express();
     app.use(cors());

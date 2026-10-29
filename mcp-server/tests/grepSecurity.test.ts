@@ -1,6 +1,8 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+// Imported first: sets this suite's own WORKSPACE_DIR before workspaceTools resolves it.
+import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 import { registerWorkspaceTools } from "../src/tools/workspaceTools.js";
 
 describe("workspace_grep ReDoS & Regex Security Suite", () => {
@@ -12,6 +14,10 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
       version: "2.0.0"
     });
     registerWorkspaceTools(mcp);
+  });
+
+  after(() => {
+    cleanupTestWorkspace();
   });
 
   it("safely rejects catastrophic-backtracking nested quantifier patterns (ReDoS)", async () => {
