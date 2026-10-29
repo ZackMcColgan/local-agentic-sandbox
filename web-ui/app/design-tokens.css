@@ -161,7 +161,7 @@
 
   /* Spatial Architecture: 3-Pane Responsive Workbench with Labeled Nav & Collapsible Panes */
   --rail-width: 82px;            /* Widened from 60px so every icon has an explicit text label! */
-  --sidebar-width: 280px;
+  --sidebar-width: 320px;
   --chat-column-max: 840px;      /* Prevents ultrawide 3056px bubble split! */
   --inspector-width: 430px;      /* Contextual right drawer on desktop, permanent split on ultrawide */
   --inspector-width-ultrawide: 540px;

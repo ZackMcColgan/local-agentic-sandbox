@@ -121,6 +121,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "stop") {
+      try {
+        const { cancelActiveProjectTasks } = await import("@/lib/projects/projectRunner");
+        cancelActiveProjectTasks("Engine stopped");
+      } catch {}
+    }
+
     const endpoint = action === "start" ? "/control/start" : "/control/stop";
     const res = await fetch(`${supervisorUrl}${endpoint}`, {
       method: "POST",

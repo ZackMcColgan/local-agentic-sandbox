@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Menu, Rocket, CheckCircle2, AlertCircle, StopCircle, Hammer, Cpu, ArrowRight } from "lucide-react";
+import { Menu, Rocket, CheckCircle2, AlertCircle, StopCircle, Hammer, Cpu, ArrowRight, FolderGit2 } from "lucide-react";
 import { TaskManifest } from "@/lib/subagents/types";
 import { LiveRunBlock } from "./LiveRunBlock";
 
@@ -11,6 +11,7 @@ interface BuildsViewProps {
   onStopTask?: () => Promise<void> | void;
   onSelectThread: (threadId: string) => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
+  onNavigateToProjects?: () => void;
 }
 
 export function BuildsView({
@@ -18,7 +19,8 @@ export function BuildsView({
   activeTask,
   onStopTask,
   onSelectThread,
-  onDeployRun
+  onDeployRun,
+  onNavigateToProjects
 }: BuildsViewProps) {
   const toolchains = [
     { name: "Node.js 22", tag: "node:22", status: "Active", desc: "TypeScript & Web UI toolchain" },
@@ -35,10 +37,12 @@ export function BuildsView({
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
+              data-testid="builds-menu-btn"
               type="button"
               onClick={onOpenDrawer}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
+              aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
@@ -54,6 +58,23 @@ export function BuildsView({
             </span>
           </div>
         </div>
+
+        {/* Sub-Navigation: Builds Pipeline vs Projects & Folders */}
+        {onNavigateToProjects && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-3 py-1.5 rounded-xl border border-emerald-300/60 dark:border-emerald-800">
+              Builds Pipeline
+            </span>
+            <button
+              type="button"
+              onClick={onNavigateToProjects}
+              className="min-h-[44px] text-xs font-semibold text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <FolderGit2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Projects &amp; Folders</span>
+            </button>
+          </div>
+        )}
 
         {/* Active Build Run Section */}
         {activeTask ? (

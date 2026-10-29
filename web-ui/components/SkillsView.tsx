@@ -111,6 +111,7 @@ export function SkillsView({
               onClick={onOpenDrawer}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open menu"
+              aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
@@ -139,7 +140,7 @@ export function SkillsView({
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">No skills to review</h3>
             <p className="text-xs text-slate-600 dark:text-zinc-400 max-w-sm mx-auto">
-              Skill candidates proposed by the recorder will appear here for approval once the skills service is connected to the UI.
+              Skill candidates proposed by the recorder will appear here for human review and promotion into active skills.
             </p>
           </div>
         ) : (
@@ -311,7 +312,8 @@ export function SkillsView({
                 <pre className="p-4 font-mono text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
 {`---
 id: ${previewCandidate.id}
-confidence: 0.94
+status: ${previewCandidate.status || "pending"}
+confidence: ${(previewCandidate as any).confidence ?? 0.94}
 pattern: ${previewCandidate.pattern}
 occurrences: ${previewCandidate.occurrences}
 ---

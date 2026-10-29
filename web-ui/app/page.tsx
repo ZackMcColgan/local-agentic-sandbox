@@ -11,6 +11,7 @@ import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
+import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   Layers,
   ShieldCheck,
@@ -32,6 +33,8 @@ import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
 import { SettingsView } from "@/components/SettingsView";
 import { BuildsView } from "@/components/BuildsView";
 import { SkillsView } from "@/components/SkillsView";
+import { ProjectsView } from "@/components/ProjectsView";
+import { ProjectRecord } from "@/lib/projects/projectStore";
 import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
 import {
   getInitialWelcomeMessage,
@@ -68,6 +71,8 @@ export default function Home() {
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
   const [deployHistory, setDeployHistory] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
@@ -93,6 +98,11 @@ export default function Home() {
     }
   };
 
+  const [initialSimulation, setInitialSimulation] = useState<{
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  } | null>(null);
+
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage("swift-15-27b-mtp")
@@ -104,8 +114,18 @@ export default function Home() {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
       const queryTab = urlParams.get("tab") || urlParams.get("view");
+      const querySimulate = urlParams.get("simulate");
+      const querySpeed = urlParams.get("speed");
+      if (querySimulate) {
+        const speedNum = querySpeed ? parseFloat(querySpeed) : undefined;
+        setInitialSimulation({
+          scenarioKey: querySimulate as SimulationScenarioKey,
+          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum
+        });
+      }
       if (queryTab === "skills") setActiveNavView("skills");
       else if (queryTab === "builds") setActiveNavView("builds");
+      else if (queryTab === "projects") setActiveNavView("projects");
       else if (queryTab === "morning-report") setActiveNavView("morning-report");
       else if (queryTab === "settings") setActiveNavView("settings");
       else if (queryTab === "security") setViewMode("security");
@@ -162,6 +182,16 @@ export default function Home() {
         }
         setSecurityPosture(data.security_posture);
       }
+
+      try {
+        const engRes = await fetch("/api/engine");
+        if (engRes.ok) {
+          const engData = await engRes.json();
+          if (engData.model && typeof engData.model === "string") {
+            setSelectedModel(engData.model);
+          }
+        }
+      } catch {}
     } catch {
       setStatus({
         llm: "UNREACHABLE",
@@ -176,13 +206,25 @@ export default function Home() {
     fetchStatus();
     fetchSkills();
     fetchDeployStatus();
+    fetchProjects();
     const interval = setInterval(() => {
       fetchStatus();
       fetchSkills();
       fetchDeployStatus();
+      fetchProjects();
     }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+      }
+    } catch {}
+  };
 
   const fetchSkills = async () => {
     try {
@@ -378,6 +420,7 @@ export default function Home() {
   // Real-time 2s polling while a task is running (Live run block updates)
   useEffect(() => {
     if (!activeTask || activeTask.status !== "active") return;
+    if (activeTask.taskId?.startsWith("sim-")) return;
 
     const pollTask = async () => {
       try {
@@ -543,6 +586,19 @@ export default function Home() {
         if (data.task) {
           setActiveTask(data.task);
         }
+      } else {
+        const errData = await res.json().catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
+        const msg = errData.error || `Failed to launch task: HTTP ${res.status}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-err`,
+            role: "assistant",
+            content: `Error launching task: ${msg}`,
+            timestamp: new Date().toISOString()
+          }
+        ]);
+        throw new Error(msg);
       }
     } catch (err) {
       console.error("Failed to launch engineering task:", err);
@@ -553,6 +609,10 @@ export default function Home() {
   const handleStopRun = async () => {
     if (!selectedThreadId && !activeTask) return;
     try {
+      if (activeTask?.taskId?.startsWith("sim-")) {
+        setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
+        return;
+      }
       if (selectedThreadId) {
         await fetch(`/api/threads/${selectedThreadId}`, {
           method: "POST",
@@ -628,6 +688,10 @@ export default function Home() {
         onNavigate={handleNavigate}
         onNewSession={handleNewThread}
         pendingSkillsCount={pendingSkillsCount}
+        threads={threads}
+        selectedThreadId={selectedThreadId}
+        onSelectThread={handleSelectThread}
+        onDeleteThread={handleDeleteThread}
       />
 
       {/* Modal Bottom Sheet for Model & Thinking Effort */}
@@ -743,7 +807,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar fixed md:relative inset-y-0 left-0 w-[300px] max-w-[86vw] md:w-80 lg:w-84 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 z-50 md:z-10 shadow-2xl md:shadow-none flex flex-col"
+              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 md:z-10 flex-col overflow-hidden"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -799,6 +863,11 @@ export default function Home() {
               isSidebarOpen={isSidebarOpen}
               onToggleWorkspace={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
               isWorkspaceOpen={isWorkspaceOpen}
+              onOpenProjects={() => {
+                setActiveNavView("projects");
+                setViewMode("unified");
+              }}
+              initialSimulation={initialSimulation || undefined}
               placeholder="Message..."
             />
           </main>
@@ -806,12 +875,21 @@ export default function Home() {
           {/* Right Workspace Inspector Panel */}
           {isWorkspaceOpen && (
             <aside
-              className="app-inspector fixed md:relative right-0 top-0 bottom-0 w-[340px] max-w-[92vw] md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-2xl md:shadow-none"
+              className="app-inspector fixed md:relative inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 w-full md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-none"
               aria-label="Workspace Panel"
             >
               {/* Inspector Header */}
               <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-zinc-950 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsWorkspaceOpen(false)}
+                    className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center -ml-2 p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+                    title="Back to chat"
+                    aria-label="Back to chat"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
                   <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">Workspace</span>
                   {activeTask?.status === "completed" && (
                     <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
@@ -1005,6 +1083,36 @@ export default function Home() {
             onStopTask={handleStopRun}
             onSelectThread={handleSelectThread}
             onDeployRun={handleDeployRun}
+            onNavigateToProjects={() => setActiveNavView("projects")}
+          />
+        )}
+
+        {activeNavView === "projects" && (
+          <ProjectsView
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={setSelectedProjectId}
+            onRegisterProject={async (data) => {
+              const res = await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+              });
+              if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Failed to register project");
+              }
+              await fetchProjects();
+            }}
+            onToggleAllowlist={async (id, allowlisted) => {
+              await fetch("/api/projects", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, allowlisted })
+              });
+              await fetchProjects();
+            }}
+            onOpenDrawer={() => setIsDrawerOpen(true)}
           />
         )}
 
@@ -1025,6 +1133,7 @@ export default function Home() {
                     onClick={() => setIsDrawerOpen(true)}
                     className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                     title="Open menu"
+                    aria-label="Open navigation menu"
                   >
                     <Menu className="h-6 w-6" />
                   </button>
@@ -1084,79 +1193,6 @@ export default function Home() {
             </section>
           </div>
         )}
-
-        {/* 4. MOBILE BOTTOM NAVIGATION BAR (Visible on Mobile <= 768px with Explicit Text Labels) */}
-        <nav className="mobile-bottom-nav flex md:hidden h-[58px] shrink-0 border-t border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 items-center justify-around z-30 select-none pb-[env(safe-area-inset-bottom)]" aria-label="Mobile Navigation">
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "sessions" && viewMode === "unified"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <MessageSquare className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "builds"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Hammer className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Builds</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "morning-report"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Sun className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Report</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 relative ${
-              activeNavView === "skills"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Sparkles className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Skills</span>
-            {pendingSkillsCount > 0 && (
-              <span className="absolute top-1 right-2 px-1 rounded-full bg-emerald-600 text-[9px] text-white font-bold">
-                {pendingSkillsCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
-            className={`mobile-nav-item flex flex-col items-center justify-center py-1 px-3 text-xs font-semibold gap-0.5 ${
-              activeNavView === "settings"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-500 dark:text-zinc-400"
-            }`}
-          >
-            <Settings className="h-5 w-5" />
-            <span className="nav-txt text-[10.5px] font-bold">Settings</span>
-          </button>
-        </nav>
       </div>
     </div>
   );

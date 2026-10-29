@@ -73,7 +73,7 @@ export function ThreadsSidebar({
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-white dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
       {/* Top Header matching Mockup media_1791044464191.webp */}
       <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
@@ -98,7 +98,7 @@ export function ThreadsSidebar({
             <button
               type="button"
               onClick={onCollapse}
-              className="panel-toggle-btn min-h-[44px] min-w-[44px] flex items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
+              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
               title="Collapse Sessions Panel"
             >
               « Hide
@@ -128,7 +128,7 @@ export function ThreadsSidebar({
           </button>
 
           {/* Overflow Menu */}
-          <div className="relative">
+          <div className="relative hidden">
             <button
               type="button"
               onClick={() => setShowOverflow(!showOverflow)}

@@ -43,6 +43,14 @@ Thumbs.db
 scratch/
 extracted_readme.txt
 test_*.png
+test-results/
+playwright-report/
+web-ui/test-results/
+web-ui/playwright-report/
+temp-*
+temp-test-*
+web-ui/temp-*
+web-ui/temp-test-*
 
 # Dynamic Agent Workspace
 /workspace/

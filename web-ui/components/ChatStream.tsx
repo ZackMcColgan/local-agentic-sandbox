@@ -27,6 +27,7 @@ import {
   Plus,
   ArrowDown,
   PanelLeft,
+  FolderGit2,
   FileCode,
   ExternalLink
 } from "lucide-react";
@@ -54,6 +55,13 @@ import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
+import {
+  parseSimulateCommand,
+  createSimulatedChatResponse,
+  runSimulatedTask,
+  getScenario,
+  SimulationScenarioKey
+} from "../lib/simulator";
 
 
 
@@ -121,6 +129,11 @@ interface ChatStreamProps {
   isSidebarOpen?: boolean;
   onToggleWorkspace?: () => void;
   isWorkspaceOpen?: boolean;
+  onOpenProjects?: () => void;
+  initialSimulation?: {
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  };
 }
 
 function formatFileSize(bytes: number): string {
@@ -218,7 +231,9 @@ export function ChatStream({
   isSidebarOpen = true,
   onToggleWorkspace,
   isWorkspaceOpen = false,
-  defaultComposerMode
+  defaultComposerMode,
+  onOpenProjects,
+  initialSimulation
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(activeModel)
@@ -241,6 +256,23 @@ export function ChatStream({
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [activeSimulation, setActiveSimulation] = useState<{
+    scenarioKey: SimulationScenarioKey;
+    speedMultiplier?: number;
+  } | null>(initialSimulation ?? null);
+  const activeSimTaskCancelRef = useRef<(() => void) | null>(null);
+  const initialSimulationTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (initialSimulation && !initialSimulationTriggeredRef.current) {
+      initialSimulationTriggeredRef.current = true;
+      setActiveSimulation(initialSimulation);
+      const cmd = `/simulate ${initialSimulation.scenarioKey}${
+        initialSimulation.speedMultiplier ? ` ${initialSimulation.speedMultiplier}` : ""
+      }`;
+      handleSend(cmd);
+    }
+  }, [initialSimulation]);
 
   // Attached files state
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
@@ -446,6 +478,86 @@ export function ChatStream({
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
 
+    // Check if this is a simulation command (/simulate <scenario> [speed])
+    const simCmd = parseSimulateCommand(prompt);
+    const isSimulating = Boolean(simCmd || activeSimulation);
+    const simKey = (simCmd?.scenarioKey || activeSimulation?.scenarioKey) as SimulationScenarioKey | undefined;
+    const simSpeed = simCmd?.speed || activeSimulation?.speedMultiplier || 1;
+
+    if (simCmd) {
+      setActiveSimulation({ scenarioKey: simCmd.scenarioKey, speedMultiplier: simCmd.speed });
+    }
+
+    if (isSimulating && simKey) {
+      const simScenario = getScenario(simKey);
+      const isBuildScenario = simScenario?.mode === "build" || simKey === "project-task";
+
+      if (isBuildScenario && simScenario?.initialTask) {
+        setErrorMsg(null);
+        setInput("");
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+        setAttachedFiles([]);
+
+        const userMsgId = `user-${Date.now()}`;
+        const userMsg: ChatMessage = {
+          id: userMsgId,
+          role: "user",
+          content: prompt
+        };
+
+        const taskInit = { ...simScenario.initialTask };
+        const assistantMsgId = `assistant-${Date.now()}`;
+        const assistantMsg: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "Started autonomous engineering run.",
+          taskId: taskInit.taskId
+        };
+
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        setIsLoading(true);
+        setStreamStatus("Autonomous milestones scheduled. Workers active...");
+        if (onTaskUpdated) {
+          onTaskUpdated(taskInit);
+        }
+
+        if (activeSimTaskCancelRef.current) {
+          activeSimTaskCancelRef.current();
+          activeSimTaskCancelRef.current = null;
+        }
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        activeSimTaskCancelRef.current = runSimulatedTask(
+          simKey,
+          simSpeed,
+          {
+            onTaskUpdate: (updatedTask) => {
+              if (onTaskUpdated) onTaskUpdated(updatedTask);
+              if (updatedTask.status === "completed" || updatedTask.status === "cancelled" || updatedTask.status === "failed") {
+                setIsLoading(false);
+                setStreamStatus(null);
+              }
+            },
+            onComplete: () => {
+              setIsLoading(false);
+              setStreamStatus(null);
+              activeSimTaskCancelRef.current = null;
+            },
+            onError: (err) => {
+              setErrorMsg(err.message);
+              setIsLoading(false);
+              setStreamStatus(null);
+              activeSimTaskCancelRef.current = null;
+            }
+          },
+          abortController.signal
+        );
+        return;
+      }
+    }
+
     // Check if this is an engineering builder task (Build mode toggle or /build prefix)
     const isBuildPrefix = prompt.toLowerCase().startsWith("/build ");
     const cleanPrompt = isBuildPrefix ? prompt.slice(7).trim() : prompt;
@@ -502,8 +614,8 @@ export function ChatStream({
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
-    // If inside a persistent thread, persist the user message
-    if (activeThreadId) {
+    // If inside a persistent thread, persist the user message (skip in offline simulation)
+    if (activeThreadId && !isSimulating) {
       try {
         fetch(`/api/threads/${activeThreadId}`, {
           method: "POST",
@@ -530,24 +642,26 @@ export function ChatStream({
     abortControllerRef.current = abortController;
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: abortController.signal,
-        body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
-          model: activeModel,
-          mode: agentMode,
-          reasoning_effort: reasoningEffort,
-          threadId,
-          attachments: currentAttachments.map(a => ({
-            name: a.name,
-            type: a.type,
-            size: a.size,
-            base64: a.base64
-          }))
-        })
-      });
+      const res = isSimulating && simKey
+        ? await createSimulatedChatResponse(simKey, simSpeed, abortController.signal)
+        : await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: abortController.signal,
+            body: JSON.stringify({
+              messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+              model: activeModel,
+              mode: agentMode,
+              reasoning_effort: reasoningEffort,
+              threadId,
+              attachments: currentAttachments.map(a => ({
+                name: a.name,
+                type: a.type,
+                size: a.size,
+                base64: a.base64
+              }))
+            })
+          });
 
       if (!res.ok) {
         let errMessage = "Failed to orchestrate request";
@@ -664,7 +778,7 @@ export function ChatStream({
               const finalModel = event.model || currentModel;
 
               const targetThreadId = activeThreadId || threadId;
-              if (targetThreadId) {
+              if (targetThreadId && !isSimulating) {
                 try {
                   fetch(`/api/threads/${targetThreadId}`, {
                     method: "POST",
@@ -735,14 +849,16 @@ export function ChatStream({
   };
 
   const modelSafe = activeModel || "swift-15-27b-mtp";
-  const shortModelLabel = modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
-    ? "swift-15-27b"
+  const shortModelLabel = modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
+    ? (modelSafe.includes("Swift-1.5") || modelSafe.includes("swift-15") ? "Swift-1.5 (IQ3_XS)" : "Swift-1.5")
+    : modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
+    ? "Swift-1.5"
     : modelSafe.includes("swift")
-    ? "swift-27b"
+    ? "Swift-27B"
     : modelSafe.includes("qwen")
-    ? "qwen3.8"
+    ? "Qwen3.8"
     : modelSafe.includes("gemma")
-    ? "gemma4:e4b"
+    ? "Gemma-4"
     : modelSafe.split(":")[0];
 
   // Deduplicate consecutive identical user messages in UI stream
@@ -801,14 +917,52 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup 01 */}
+      {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
       <header className="px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          {onToggleSidebar ? (
+          {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
+          {onOpenDrawer ? (
+            <button
+              type="button"
+              onClick={onOpenDrawer}
+              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Open navigation menu"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          ) : onBackToList ? (
+            <button
+              type="button"
+              onClick={onBackToList}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Back to sessions"
+              aria-label="Back to sessions"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          ) : null}
+
+          {/* Direct Projects Navigation Button - accessible on both mobile and desktop */}
+          {onOpenProjects && (
+            <button
+              type="button"
+              onClick={onOpenProjects}
+              className="panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0"
+              title="Open Projects"
+              aria-label="Open Projects"
+            >
+              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Projects</span>
+            </button>
+          )}
+
+          {/* Desktop Sessions toggle: hidden on mobile (< md:), visible md: and up */}
+          {onToggleSidebar && (
             <button
               type="button"
               onClick={onToggleSidebar}
-              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
+              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isSidebarOpen
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                   : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
@@ -819,34 +973,14 @@ export function ChatStream({
               <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Sessions</span>
             </button>
-          ) : onOpenDrawer ? (
-            <button
-              type="button"
-              onClick={onOpenDrawer}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Open navigation menu"
-              aria-label="Open navigation menu"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-          ) : onBackToList ? (
-            <button
-              type="button"
-              onClick={onBackToList}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Back to sessions"
-              aria-label="Back to sessions"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-          ) : null}
+          )}
 
-          {/* Workspace Inspector Toggle Button - visible on both mobile and desktop */}
+          {/* Desktop Workspace Inspector Toggle Button - hidden on mobile (< md:) */}
           {onToggleWorkspace && (
             <button
               type="button"
               onClick={onToggleWorkspace}
-              className={`panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0 ${
+              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isWorkspaceOpen
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                   : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
@@ -868,6 +1002,36 @@ export function ChatStream({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Simulation Mode Badge */}
+          {activeSimulation && (
+            <div
+              data-testid="simulation-badge"
+              className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-xs font-bold uppercase tracking-wider shrink-0"
+              title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+              <span>SIMULATION</span>
+              <span className="hidden sm:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+                (${activeSimulation.scenarioKey})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeSimTaskCancelRef.current) {
+                    activeSimTaskCancelRef.current();
+                    activeSimTaskCancelRef.current = null;
+                  }
+                  setActiveSimulation(null);
+                }}
+                className="min-h-[40px] min-w-[40px] -mr-1 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                title="Exit simulation mode"
+                aria-label="Exit simulation mode"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
@@ -878,27 +1042,29 @@ export function ChatStream({
             </span>
           )}
 
-          {/* Engine Status Pill */}
-          <EngineStatusPill onOpenSettings={onOpenModelSheet} />
+          {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
+          <div className="hidden md:flex items-center">
+            <EngineStatusPill onOpenSettings={onOpenModelSheet} />
+          </div>
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[36px] sm:min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[70px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[85px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
           </button>
 
-          {/* New Session Button */}
+          {/* New Session Button - desktop only */}
           {onNewThread && (
             <button
               type="button"
               onClick={onNewThread}
-              className="hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="Start new session"
               aria-label="Start new session"
             >
@@ -906,8 +1072,8 @@ export function ChatStream({
             </button>
           )}
 
-          {/* Overflow Menu Button */}
-          <div className="relative">
+          {/* Overflow Menu Button - desktop only */}
+          <div className="hidden md:block relative">
             <button
               type="button"
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
@@ -920,7 +1086,7 @@ export function ChatStream({
 
             {showOverflowMenu && (
               <div
-                className="absolute right-0 mt-1 w-52 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30"
                 onClick={() => setShowOverflowMenu(false)}
               >
                 {onOpenModelSheet && (
@@ -929,7 +1095,7 @@ export function ChatStream({
                     onClick={onOpenModelSheet}
                     className="w-full text-left px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
                   >
-                    Engine & model settings
+                    Engine &amp; model settings
                   </button>
                 )}
                 {onNewThread && (
@@ -1638,6 +1804,7 @@ export function ChatStream({
                 <button
                   type="button"
                   onClick={handleStop}
+                  data-testid="stop-button"
                   className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
                   title="Stop generation / halt workers"
                   aria-label="Stop generation"
@@ -1648,6 +1815,7 @@ export function ChatStream({
                 <button
                   type="submit"
                   disabled={!input.trim() && attachedFiles.length === 0}
+                  data-testid="send-button"
                   className="h-9 w-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
                   title="Send message"
                   aria-label="Send message"

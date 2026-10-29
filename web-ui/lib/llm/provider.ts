@@ -748,7 +748,24 @@ export class LlamaCppProvider implements LLMProvider {
       nKeep = Math.min(2048, Math.max(64, tokens));
     }
 
-    const maxTokens = (req.options?.num_predict as number) ?? (req.options?.max_tokens as number) ?? 2048;
+    // Decouple reasoning token budget from generated output budget:
+    // When using models with thinking tokens, max_tokens in llama-server limits BOTH reasoning and content.
+    // Allocate requested output tokens PLUS reasoning headroom so thinking never starves completion.
+    const effort = req.reasoningEffort || (req.options as any)?.reasoningEffort;
+    let maxTokens: number;
+    if (typeof req.options?.max_tokens === "number") {
+      maxTokens = req.options.max_tokens;
+    } else if (effort) {
+      const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+      let thinkingBudget = 4096;
+      if (effort === "fast" || effort === "low") thinkingBudget = 1024;
+      else if (effort === "deep" || effort === "xhigh") thinkingBudget = 8192;
+      maxTokens = requestedPredict + thinkingBudget;
+    } else if (typeof req.options?.num_predict === "number") {
+      maxTokens = req.options.num_predict;
+    } else {
+      maxTokens = 6144;
+    }
 
     const requestBody: Record<string, any> = {
       model: req.model,
@@ -877,7 +894,21 @@ export class LlamaCppProvider implements LLMProvider {
       }
     }
 
-    const text = accumulatedText.trim();
+    let text = accumulatedText.trim();
+    if (!text && thinkingText.trim()) {
+      // If the model produced reasoning but content is empty, check if it placed code or JSON within the reasoning stream
+      const rawThinking = thinkingText.trim();
+      const codeBlockMatch = rawThinking.match(/```(?:json|xml|svg|typescript|javascript|ts|js)?\s*([\s\S]*?)```/);
+      const jsonObjectMatch = rawThinking.match(/(\{(?:[\s\S]*"milestones"[\s\S]*|"approved"[\s\S]*)\})/);
+      if (codeBlockMatch && codeBlockMatch[1]?.trim()) {
+        text = codeBlockMatch[1].trim();
+      } else if (jsonObjectMatch && jsonObjectMatch[1]?.trim()) {
+        text = jsonObjectMatch[1].trim();
+      } else {
+        text = rawThinking;
+      }
+    }
+
     if (!text) {
       throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: empty response`);
     }

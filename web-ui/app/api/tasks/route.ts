@@ -158,10 +158,19 @@ export async function GET(req: Request) {
 
   // Rehydrate all tasks from disk checkpoints
   const diskTasks = await supervisor.listAllTasks();
+  const now = Date.now();
   for (const dt of diskTasks) {
-    if (!tasksRegistry.has(dt.taskId) || tasksRegistry.get(dt.taskId)?.status === "active") {
-      tasksRegistry.set(dt.taskId, dt);
+    // If a task on disk claims status is 'active' but has no in-memory execution and is stale (> 5m without update), park it
+    if (dt.status === "active" && !activeExecutionSet.has(dt.taskId)) {
+      const lastUpdate = new Date(dt.updatedAt || dt.startedAt).getTime();
+      if (now - lastUpdate > 5 * 60 * 1000) {
+        dt.status = "parked";
+        dt.parkedReason = "Execution interrupted or timed out";
+        dt.updatedAt = new Date().toISOString();
+        supervisor.saveCheckpoint(dt);
+      }
     }
+    tasksRegistry.set(dt.taskId, dt);
   }
 
   const activeQuery = url.searchParams.get("active") === "true";

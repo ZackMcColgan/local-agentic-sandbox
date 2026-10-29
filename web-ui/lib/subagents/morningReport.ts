@@ -51,6 +51,10 @@ export interface OvernightTaskEntry {
   ambiguityFlags: AmbiguityFlag[];
   testsPassed: number;
   testsFailed: number;
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export interface OvernightAttentionItem {
@@ -60,6 +64,9 @@ export interface OvernightAttentionItem {
   status: "parked" | "failed";
   reason: string;
   threadUrl?: string;
+  projectId?: string;
+  projectName?: string;
+  reviewUrl?: string;
 }
 
 export interface OvernightMorningReport {
@@ -355,7 +362,11 @@ export function generateOvernightMorningReport(
       milestones,
       ambiguityFlags: task.ambiguityFlags || [],
       testsPassed,
-      testsFailed
+      testsFailed,
+      projectId: task.projectId,
+      projectName: task.projectName,
+      projectRoot: task.projectRoot,
+      reviewUrl: task.reviewUrl || (task.projectId ? `/projects?projectId=${task.projectId}&tab=diffs` : undefined)
     };
 
     entries.push(entry);

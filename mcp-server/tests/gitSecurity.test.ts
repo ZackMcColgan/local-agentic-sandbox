@@ -1,9 +1,11 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import os from "os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+// Imported first: sets this suite's own WORKSPACE_DIR before workspaceTools resolves it.
+import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 import { registerWorkspaceTools } from "../src/tools/workspaceTools.js";
 
 describe("Task 2 — Git Shell Injection Security Suite", () => {
@@ -28,6 +30,10 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
         fs.unlinkSync(probeFile);
       } catch {}
     }
+  });
+
+  after(() => {
+    cleanupTestWorkspace();
   });
 
   it("prevents shell injection in git_checkout_branch via semicolon and command chaining", async () => {
