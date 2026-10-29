@@ -1,14 +1,15 @@
 # End-to-End Shakeout Bug Register
 
 **Date:** 2026-10-24  
+**Amended:** 2026-10-28 — retro-registered omissions: P0-A and P0-B were in the Oct 24 shakeout scope but were never entered below. Documentation-only amendment; no fixes included.  
 **Scope:** Deployed cluster (`http://127.0.0.1:3001` and `http://192.168.50.254:80`), real LLM engine (`Swift-1.5-Qwen3.8-27B-IQ3_XS`), real git repository, real workspace persistent volume.  
 **Branch:** `feature/projects-and-folders` (PR #35).
 
 ---
 
 ## Register Metric
-- **Total Defects Identified:** 6
-- **P0 Defects (Blocks Core Use):** 3
+- **Total Defects Identified:** 8
+- **P0 Defects (Blocks Core Use):** 5
 - **P1 Defects (Degraded Functionality):** 2
 - **P2 Defects (Minor / Polish):** 1
 
@@ -85,6 +86,36 @@
     const activeTask = list.find((t) => t.status === "active") || list[0] || null;
     ```
 - **Severity:** **P0** (Corrupts task polling; masks new task runs).
+
+---
+
+### [P0-A] Session Durability Lost on Cluster Updates / Redeploys
+- **Feature:** Session Durability / Cluster Lifecycle
+- **Affected Components:** not recorded
+- **Steps to Reproduce:**
+  1. Start an in-progress session on the deployed cluster.
+  2. Update or redeploy the stack.
+  3. Observe the session after the update/redeploy.
+- **Expected Behavior:** In-progress sessions remain durable across cluster updates and redeploys.
+- **Actual Behavior:** When the stack updates or redeploys, in-progress sessions are lost.
+- **Evidence:** not recorded
+- **Severity:** **P0** (Blocks core use; session continuity lost on every update/redeploy).
+- **Status:** **OPEN (unfixed)** — no commit fixes this defect.
+
+---
+
+### [P0-B] User Message Vanishes After Model Finishes Thinking
+- **Feature:** Message Persistence & Reload Integrity
+- **Affected Components:** not recorded
+- **Steps to Reproduce:**
+  1. Send a user message that triggers model thinking.
+  2. Wait for the model to finish thinking.
+  3. Observe the message, then reload the thread.
+- **Expected Behavior:** The user message remains present after thinking completes and returns on reload.
+- **Actual Behavior:** A user message can disappear after the model finishes thinking and does not return on reload. Shakeout triage determined this is a persistence failure (the message is not durably stored), not a rendering bug.
+- **Evidence:** not recorded
+- **Severity:** **P0** (Blocks core use; corrupts conversation history).
+- **Status:** **OPEN (unfixed)** — no commit fixes this defect.
 
 ---
 
