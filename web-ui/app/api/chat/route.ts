@@ -31,7 +31,8 @@ import {
   hasArtifactCreationIntent,
   resolveRoundModelOptions,
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
-  isLiveRealTimeIntent
+  isLiveRealTimeIntent,
+  canContinueToolLoop
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -227,7 +228,7 @@ CRITICAL INSTRUCTIONS:
   - Ground answers in provided context and cite file:line (e.g. \`web-ui/lib/subagents/supervisor.ts:608-655\`). For general knowledge, answer naturally without fabricating citations.
 - CODE EXECUTION: Run test commands with 'workspace_run_command' or run Python via 'execute_sandboxed_python'.
 - WEB RESEARCH & ACTION DISCIPLINE:
-  - Maximum 3 web research calls ('search_web' or 'fetch_webpage_markdown') per turn. As soon as you have the core facts (typically 1-2 searches), STOP searching immediately and produce the requested deliverable or final answer. Never loop on redundant web searches.
+  - You may make up to ${MAX_WEB_RESEARCH_CALLS} web research calls ('search_web' or 'fetch_webpage_markdown') per turn. Use as many as the task genuinely needs; stop when the facts are sufficient. Never loop on redundant web searches.
   - When asked to create, draw, or generate an SVG, diagram, or visual card in chat, output the complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">...</svg> directly in a \`\`\`svg fenced code block in your response. Do NOT call 'workspace_write_file' for chat SVGs unless the user explicitly asks to save a file to disk, and NEVER output the full SVG twice.
 - GROUNDING & HONESTY RULE:
   - Never state, claim, or imply you checked real-time data (weather, live prices, news, web pages) unless you executed a 'search_web' or 'fetch_webpage_markdown' tool call in this turn.
@@ -443,12 +444,13 @@ CRITICAL INSTRUCTIONS:
         let groundingEnforced = false;
         let honestAbortInjected = false;
         let searchNudges = 0;
+        let lastRoundTools: string[] = [];
 
         let accumulatedThoughts: string[] = [];
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
-        while (round < MAX_TOOL_ROUNDS) {
+        while (canContinueToolLoop({ round, maxToolRounds: MAX_TOOL_ROUNDS, lastRoundTools, webResearchCalls })) {
           if (aborted || req.signal.aborted) break;
 
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
@@ -462,7 +464,8 @@ CRITICAL INSTRUCTIONS:
             round
           });
 
-          const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+          const canExtendForResearch = round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls < MAX_WEB_RESEARCH_CALLS && (lastRoundTools.length === 0 || lastRoundTools.every(t => isWebResearchTool(t)));
+          const isFinalRound = (round === MAX_TOOL_ROUNDS - 1 && !canExtendForResearch) || (round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls >= MAX_WEB_RESEARCH_CALLS);
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
           if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
@@ -493,7 +496,7 @@ CRITICAL INSTRUCTIONS:
             options: roundOptions
           };
 
-          if (roundTools.length > 0 && round < MAX_TOOL_ROUNDS - 1) {
+          if (roundTools.length > 0 && !isFinalRound) {
             llmPayload.tools = roundTools;
           }
 
@@ -562,6 +565,7 @@ CRITICAL INSTRUCTIONS:
           }
 
           round++;
+          lastRoundTools = toolCalls.map((tc: any) => tc.function?.name || "");
           const assistantMsgToPush = {
             ...currentAssistantMessage,
             tool_calls: toolCalls
