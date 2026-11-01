@@ -702,13 +702,13 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       );
     });
 
-    it("deploy/k8s/web-ui.yaml sets LLM_ENGINE to llamacpp", () => {
+    it("deploy/k8s/web-ui.yaml sets LLM_ENGINE to llamacpp or strata", () => {
       const k8sManifestPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
       const content = fs.readFileSync(k8sManifestPath, "utf8");
 
       assert.ok(
-        content.includes('name: LLM_ENGINE') && content.includes('value: "llamacpp"'),
-        "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp"
+        content.includes('name: LLM_ENGINE') && (content.includes('value: "llamacpp"') || content.includes('value: "strata"')),
+        "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp or strata"
       );
       assert.ok(
         content.includes('name: LLAMACPP_BASE_URL'),
@@ -926,6 +926,32 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(sentBody, "Must send request body");
       assert.equal(sentBody.reasoning_effort, "low", "Must forward reasoning_effort in requestBody");
       assert.equal(sentSignal, controller.signal, "Must forward AbortSignal to fetch");
+    });
+  });
+
+  describe("Task 13: Strata Provider Endpoint, Model, Single-Flight & Host Header Routing", () => {
+    it("selects Strata provider configuration resolving to port 8080 and model qwen3.8-flash-next-gyro-gyro-s", () => {
+      process.env.LLM_ENGINE = "strata";
+      assert.equal(resolveLLMEngine(), "strata");
+      const provider = getLLMProvider("strata");
+      assert.ok(provider instanceof LlamaCppProvider);
+      assert.equal(provider.engine, "strata");
+    });
+
+    it("injects Host 127.0.0.1:8080 header on outbound calls to pass Strata DNS rebinding check", async () => {
+      let capturedHeaders: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedHeaders = init?.headers;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      process.env.LLM_ENGINE = "strata";
+      const provider = getLLMProvider("strata");
+      for await (const _ of provider.streamChat("http://strata-service:8080", { messages: [{ role: "user", content: "Hi" }] })) {}
+
+      assert.ok(capturedHeaders, "Headers must be passed");
+      const hostVal = capturedHeaders instanceof Headers ? capturedHeaders.get("Host") : capturedHeaders["Host"];
+      assert.equal(hostVal, "127.0.0.1:8080");
     });
   });
 });

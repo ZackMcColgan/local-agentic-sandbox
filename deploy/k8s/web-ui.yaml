@@ -13,13 +13,13 @@ spec:
     matchLabels:
       app: web-ui
       app.kubernetes.io/part-of: local-agentic-sandbox
-      app.kubernetes.io/version: "2.0.0"
+      app.kubernetes.io/version: "1.0.0"
   template:
     metadata:
       labels:
         app: web-ui
         app.kubernetes.io/part-of: local-agentic-sandbox
-        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/version: "1.0.0"
         tier: frontend
     spec:
       securityContext:
@@ -32,7 +32,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-ui
-          image: local-agentic-sandbox-web-ui:v1.0.0
+          image: local-agentic-sandbox-web-ui:v-f105a2d-mvu2nydi
           imagePullPolicy: Never
           ports:
             - containerPort: 3000
@@ -43,9 +43,9 @@ spec:
             - name: PORT
               value: "3000"
             - name: LLM_BASE_URL
-              value: "http://llm-service:11434"
+              value: "http://strata-service:8080"
             - name: LLM_HOST
-              value: "http://llm-service:11434"
+              value: "http://strata-service:8080"
             - name: OLLAMA_BASE_URL
               value: "http://llm-service:11434"
             - name: OLLAMA_HOST
@@ -59,15 +59,17 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "enterprise-ai-portal"
             - name: MODEL_NAME
-              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: PLANNER_MODEL
-              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: SUBAGENT_MODEL
-              value: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: LLM_ENGINE
-              value: "llamacpp"
+              value: "strata"
             - name: LLAMACPP_BASE_URL
-              value: "http://llm-service:11434"
+              value: "http://strata-service:8080"
+            - name: LLM_CONCURRENCY
+              value: "1"
             - name: LLM_SUPERVISOR_TOKEN
               value: "local-sandbox-token-2026"
             - name: WORKER_MODEL_TIMEOUT_MS
@@ -79,11 +81,11 @@ spec:
                 - ALL
           resources:
             limits:
-              cpu: "2000m"
-              memory: "1024Mi"
+              cpu: "1000m"
+              memory: "384Mi"
             requests:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "128Mi"
           volumeMounts:
             - name: workspace-volume
               mountPath: /workspace

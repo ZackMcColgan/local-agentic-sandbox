@@ -115,8 +115,8 @@ export function createLlmGenerate(options?: {
   scope?: string;
 }): GenerateFn {
   const engine = resolveLLMEngine();
-  if (engine === "llamacpp") {
-    const provider = getLLMProvider("llamacpp");
+  if (engine === "llamacpp" || engine === "strata") {
+    const provider = getLLMProvider(engine);
     return async (req: GenerateRequest): Promise<GenerateResult> => {
       try {
         return await provider.generate(req, options?.baseUrl, {

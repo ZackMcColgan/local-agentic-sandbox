@@ -88,11 +88,11 @@ spec:
               mountPath: /qdrant/storage
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 16Mi
             limits:
-              cpu: "1"
-              memory: 1Gi
+              cpu: 500m
+              memory: 256Mi
           readinessProbe:
             httpGet:
               path: /readyz

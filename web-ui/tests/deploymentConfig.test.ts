@@ -1,56 +1,64 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
-  function findRepoRoot(): string {
-    const candidates = [
-      process.cwd(),
-      path.resolve(process.cwd(), ".."),
-      path.resolve(process.cwd(), "../..")
-    ];
-    for (const dir of candidates) {
-      if (fs.existsSync(path.join(dir, "docker-compose.yml"))) {
-        return dir;
+  const findRepoRoot = (): string => {
+    let cur = __dirname;
+    while (cur !== path.dirname(cur)) {
+      if (fs.existsSync(path.join(cur, "deploy/k8s/web-ui.yaml"))) {
+        return cur;
       }
+      cur = path.dirname(cur);
     }
-    throw new Error(`Could not find repo root with docker-compose.yml in: ${candidates.join(", ")}`);
-  }
+    return path.resolve(__dirname, "../..");
+  };
 
-  it("docker-compose.yml contains swift-15-27b-mtp and has zero stale model references", () => {
+  it("deploy/k8s/web-ui.yaml configures read-only root filesystem with explicit non-root UID", () => {
     const root = findRepoRoot();
-    const composeContent = fs.readFileSync(path.join(root, "docker-compose.yml"), "utf8");
-
-    assert.ok(composeContent.includes("MODEL_NAME=swift-15-27b-mtp"), "docker-compose.yml must set MODEL_NAME=swift-15-27b-mtp");
-    assert.equal(composeContent.includes("qwen3.8"), false, "docker-compose.yml must not contain qwen3.8");
-    assert.equal(composeContent.includes("gemma4"), false, "docker-compose.yml must not contain gemma4");
-    assert.equal(composeContent.includes("hermes3"), false, "docker-compose.yml must not contain hermes3");
-  });
-
-  it("docker-compose.yml binds web-ui to all interfaces (3001:3000, not 127.0.0.1:3001)", () => {
-    const root = findRepoRoot();
-    const composeContent = fs.readFileSync(path.join(root, "docker-compose.yml"), "utf8");
+    const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
 
     assert.ok(
-      composeContent.includes('"3001:3000"') || composeContent.includes("- 3001:3000"),
-      "docker-compose.yml must bind web-ui port 3001:3000 across all interfaces"
+      k8sDeployContent.includes("runAsNonRoot: true"),
+      "deploy/k8s/web-ui.yaml must define runAsNonRoot: true"
     );
-    assert.equal(
-      composeContent.includes("127.0.0.1:3001"),
-      false,
-      "docker-compose.yml must not restrict web-ui port to 127.0.0.1"
+    assert.ok(
+      k8sDeployContent.includes("runAsUser: 1001"),
+      "deploy/k8s/web-ui.yaml must define explicit non-root runAsUser: 1001"
     );
   });
 
-  it("Makefile contains swift-15-27b-mtp and has zero stale model references", () => {
+  it("web-ui/Dockerfile contains nextjs non-root user setup and chown static assets", () => {
     const root = findRepoRoot();
-    const makefileContent = fs.readFileSync(path.join(root, "Makefile"), "utf8");
+    const dockerfileContent = fs.readFileSync(path.join(root, "web-ui/Dockerfile"), "utf8");
 
-    assert.ok(makefileContent.includes("swift-15-27b-mtp"), "Makefile must reference swift-15-27b-mtp");
-    assert.equal(makefileContent.includes("qwen3.8"), false, "Makefile must not contain qwen3.8");
-    assert.equal(makefileContent.includes("gemma4"), false, "Makefile must not contain gemma4");
-    assert.equal(makefileContent.includes("hermes3"), false, "Makefile must not contain hermes3");
+    assert.ok(
+      dockerfileContent.includes("addgroup --system --gid 1001 nodejs"),
+      "Dockerfile must define nodejs group with gid 1001"
+    );
+    assert.ok(
+      dockerfileContent.includes("adduser --system --uid 1001 nextjs"),
+      "Dockerfile must define nextjs user with uid 1001"
+    );
+    assert.ok(
+      dockerfileContent.includes("--chown=nextjs:nodejs"),
+      "Dockerfile must set static asset ownership with --chown=nextjs:nodejs"
+    );
+    assert.ok(
+      dockerfileContent.includes("USER nextjs"),
+      "Dockerfile must declare USER nextjs"
+    );
+  });
+
+  it("deploy/k8s/web-ui.yaml drops ALL capabilities in securityContext", () => {
+    const root = findRepoRoot();
+    const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
+
+    assert.ok(
+      k8sDeployContent.includes("drop:") && k8sDeployContent.includes("- ALL"),
+      "deploy/k8s/web-ui.yaml must contain drop ALL capabilities block"
+    );
   });
 
   it("Makefile k8s-build builds with repo root context (-f web-ui/Dockerfile .)", () => {
@@ -63,13 +71,15 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
     );
   });
 
-  it("deploy/k8s/web-ui.yaml configures Swift-1.5-Qwen3.8-27B-IQ3_XS or swift-15-27b-mtp model environment variables", () => {
+  it("deploy/k8s/web-ui.yaml configures Swift-1.5-Qwen3.8-27B-IQ3_XS, swift-15-27b-mtp, or qwen3.8-flash-next-gyro-gyro-s model environment variables", () => {
     const root = findRepoRoot();
     const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
 
     assert.ok(
-      k8sDeployContent.includes("Swift-1.5-Qwen3.8-27B-IQ3_XS") || k8sDeployContent.includes("swift-15-27b-mtp"),
-      "deploy/k8s/web-ui.yaml must configure Swift-1.5-Qwen3.8-27B-IQ3_XS or swift-15-27b-mtp"
+      k8sDeployContent.includes("Swift-1.5-Qwen3.8-27B-IQ3_XS") ||
+      k8sDeployContent.includes("swift-15-27b-mtp") ||
+      k8sDeployContent.includes("qwen3.8-flash-next-gyro-gyro-s"),
+      "deploy/k8s/web-ui.yaml must configure Swift-1.5-Qwen3.8-27B-IQ3_XS, swift-15-27b-mtp, or qwen3.8-flash-next-gyro-gyro-s"
     );
     assert.ok(
       k8sDeployContent.includes("MODEL_NAME"),

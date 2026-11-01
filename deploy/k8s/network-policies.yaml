@@ -97,8 +97,10 @@ spec:
           port: 4318
         - protocol: TCP
           port: 4317
-    # Allow communication to host inference engine (standalone llama-server / ollama-service)
+    # Allow communication to host inference engine (Strata :8080 / standalone llama-server / ollama-service)
     - ports:
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 11434
         - protocol: TCP
