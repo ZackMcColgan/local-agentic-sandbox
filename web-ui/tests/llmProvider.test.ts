@@ -702,13 +702,13 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       );
     });
 
-    it("deploy/k8s/web-ui.yaml sets LLM_ENGINE to llamacpp", () => {
+    it("deploy/k8s/web-ui.yaml sets LLM_ENGINE to llamacpp or strata", () => {
       const k8sManifestPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
       const content = fs.readFileSync(k8sManifestPath, "utf8");
 
       assert.ok(
-        content.includes('name: LLM_ENGINE') && content.includes('value: "llamacpp"'),
-        "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp"
+        content.includes('name: LLM_ENGINE') && (content.includes('value: "llamacpp"') || content.includes('value: "strata"')),
+        "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp or strata"
       );
       assert.ok(
         content.includes('name: LLAMACPP_BASE_URL'),
