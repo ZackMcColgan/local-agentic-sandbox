@@ -150,6 +150,11 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       // Check that shortModelLabel handles swift-27b-mtp cleanly
       assert.ok(src.includes("swift"), "shortModelLabel must recognize swift model");
     });
+
+    it("activeModel indicator resolves to Flash-Next if model contains flash-next or gyro", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(src.includes("Flash-Next"), "shortModelLabel must format Flash-Next");
+    });
   });
 
   describe("Message Stream Deduplication", () => {

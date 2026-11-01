@@ -849,7 +849,9 @@ export function ChatStream({
   };
 
   const modelSafe = activeModel || "swift-15-27b-mtp";
-  const shortModelLabel = modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
+  const shortModelLabel = modelSafe.includes("flash-next") || modelSafe.includes("gyro")
+    ? "Flash-Next"
+    : modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
     ? (modelSafe.includes("Swift-1.5") || modelSafe.includes("swift-15") ? "Swift-1.5 (IQ3_XS)" : "Swift-1.5")
     : modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
     ? "Swift-1.5"

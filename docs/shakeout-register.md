@@ -167,3 +167,64 @@
 - **Evidence:**
   - Probe output: `HTTP 400: {"error":"Project rootPath is required"}`.
 - **Severity:** **P2** (API parameter naming strictness).
+
+
+---
+
+### [P0-6] Browser MCP Pod Scaled to Zero / Tool Unregistered Execution Failure
+- **Feature:** Chat Mode / Web Research & Grounding Toolchain
+- **Affected Components:**
+  - Kubernetes cluster deployment `deployment.apps/browser-mcp`
+  - `web-ui/app/api/chat/route.ts` (`connectMcpClient`, tool registry, and tool execution loop)
+- **Steps to Reproduce:**
+  1. Open chat UI on mobile or desktop (`http://192.168.50.254` or `http://localhost:3001`).
+  2. In Chat mode, ask: *"What's the weather today in Spanish Fort AL?"*
+  3. Observe model reasoning and subsequent UI error banner.
+- **Expected Behavior:**
+  1. `browser-mcp` is deployed with `replicas: 1` and reachable at `http://browser-mcp:8081/sse`.
+  2. Tools `search_web` and `fetch_webpage_markdown` are registered in `toolClientMap`.
+  3. The model calls `search_web`, fetches current forecast data, and answers conversationally.
+  4. If an advertised tool's client is temporarily unreachable, the route returns an informative tool status rather than throwing an unhandled exception that breaks the turn with a red banner.
+- **Actual Behavior:**
+  1. `browser-mcp` was left scaled to 0 replicas in Kubernetes namespace `local-agentic-sandbox`, leaving `service/browser-mcp:8081` with no endpoints.
+  2. `connectMcpClient(BROWSER_MCP_URL)` timed out after 10s, leaving `toolClientMap` with zero browser tools.
+  3. When the model invoked `search_web`, `route.ts` threw: `Model attempted execution of unregistered tool: search_web`.
+  4. The UI rendered a red error banner with a Retry button and no answer was generated.
+- **Evidence:**
+  - Cluster status: `deployment.apps/browser-mcp` had 0 desired / 0 ready replicas; `service/browser-mcp` had `Endpoints: <none>`.
+  - Web UI pod logs: `[Orchestrator] Could not connect to MCP at http://browser-mcp:8081/sse: SSE error: TypeError: fetch failed: Connect Timeout Error (attempted address: browser-mcp:8081, timeout: 10000ms)`.
+  - Browser-MCP pod rebuild and deploy: Rebuilt with multi-session SSE transport fix and scaled to 1 replica (`browser-mcp-66fbf86d65-8zczw` Running).
+  - Graceful degradation implemented in `web-ui/app/api/chat/route.ts` via `ADVERTISED_TOOLS` set.
+- **Resolution:**
+  - Scaled `browser-mcp` deployment to 1 replica and ensured current image is active.
+  - Added graceful fallback in `web-ui/app/api/chat/route.ts` so that advertised tools whose client is disconnected return an in-turn tool explanation instead of crashing the turn.
+  - Verified live: Query *"What is the weather today in Spanish Fort AL?"* invokes `search_web`, fetches AccuWeather forecast, and streams full markdown answer with 200 OK.
+- **Severity:** **P0** (Blocks core live web research tool invocations in Chat mode).
+
+---
+
+### [P1-3] Chat Model Identity Mislabel & Default Model Fallthrough
+- **Feature:** Chat Model Routing & UI Active Model Badge
+- **Affected Components:**
+  - `web-ui/config/models.ts` (`PRESET_MODEL_PROFILES`, `isReasoningEffortSupported`)
+  - `web-ui/components/ChatStream.tsx` (`shortModelLabel`)
+  - `web-ui/app/api/chat/route.ts` (`DEFAULT_MODEL`, model routing fallback)
+- **Steps to Reproduce:**
+  1. Open Chat mode in web UI with active engine served via Strata (`MODEL_NAME=qwen3.8-flash-next-gyro-gyro-s`).
+  2. Inspect the model chip at the top of the chat view.
+- **Expected Behavior:**
+  1. The model chip displays **Flash-Next** to reflect the active serving Strata model.
+  2. Outbound chat API requests resolve `activeModel` to the configured `MODEL_NAME` (`qwen3.8-flash-next-gyro-gyro-s`) without falling back to legacy swift strings.
+- **Actual Behavior:**
+  1. `ChatStream.tsx` model label formatter checked `modelSafe.includes("qwen")` before recognizing Flash-Next / Gyro, reducing `qwen3.8-flash-next-gyro-gyro-s` to `"Qwen3.8"`.
+  2. `route.ts` defaulted `activeModel = DEFAULT_PRIMARY_MODEL` (`"Swift-1.5-Qwen3.8-27B-IQ3_XS"`) when `activeModel` was `"auto"` or unset, rather than honoring `process.env.MODEL_NAME`.
+  3. `config/models.ts` lacked a profile for `qwen3.8-flash-next-gyro-gyro-s`.
+- **Evidence:**
+  - Owner phone screenshot showed model chip reading `"Qwen3.8"`.
+  - `ChatStream.tsx:858` mapped any string containing `"qwen"` to `"Qwen3.8"`.
+- **Resolution:**
+  - Added `qwen3.8-flash-next-gyro-gyro-s` profile to `PRESET_MODEL_PROFILES` in `web-ui/config/models.ts`.
+  - Updated `shortModelLabel` in `ChatStream.tsx` to format `flash-next` and `gyro` as `"Flash-Next"`.
+  - Updated `route.ts` to use `DEFAULT_MODEL` (honoring `MODEL_NAME`) for auto and legacy swift defaults.
+  - Verified live: Model chip and stream metadata show `qwen3.8-flash-next-gyro-gyro-s` / `"Flash-Next"`.
+- **Severity:** **P1** (Inaccurate model display identity and route payload dispatch).

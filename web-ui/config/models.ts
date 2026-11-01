@@ -57,6 +57,15 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     description: "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning."
   },
   {
+    id: "qwen3.8-flash-next-gyro-gyro-s",
+    name: "Flash-Next (Gyro-S)",
+    role: "orchestrator",
+    recommendedVRAM: "~16.0 GB",
+    supportsReasoningEffort: true,
+    defaultReasoningEffort: "medium",
+    description: "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning."
+  },
+  {
     id: "gemma4:e4b",
     name: "Gemma 4 E4B (Flash Multimodal)",
     role: "sub-agent",
@@ -97,7 +106,7 @@ export function isReasoningEffortSupported(modelId?: string): boolean {
   const lower = modelId.toLowerCase();
   const profile = PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
   if (profile) return profile.supportsReasoningEffort;
-  return lower.includes("qwen") || lower.includes("gemma") || lower.includes("swift");
+  return lower.includes("qwen") || lower.includes("gemma") || lower.includes("swift") || lower.includes("flash");
 }
 
 export function getModelProfile(modelId?: string): ModelProfile | undefined {
@@ -105,4 +114,3 @@ export function getModelProfile(modelId?: string): ModelProfile | undefined {
   const lower = modelId.toLowerCase();
   return PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
 }
-

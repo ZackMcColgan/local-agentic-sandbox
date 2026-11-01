@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES } from "../config/models.js";
+import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES, isReasoningEffortSupported } from "../config/models.js";
 
 describe("Web UI Model Configuration Suite", () => {
   it("defaults to Swift-1.5-Qwen3.8-27B-IQ3_XS for orchestrator to fit within 16GB VRAM limit", () => {
@@ -25,5 +25,10 @@ describe("Web UI Model Configuration Suite", () => {
     assert.ok(subagent, "gemma4:e4b profile must exist");
     assert.equal(subagent?.role, "sub-agent");
     assert.equal(subagent?.supportsReasoningEffort, true);
+
+    const flashNext = PRESET_MODEL_PROFILES.find((p) => p.id === "qwen3.8-flash-next-gyro-gyro-s");
+    assert.ok(flashNext, "qwen3.8-flash-next-gyro-gyro-s profile must exist");
+    assert.equal(flashNext?.supportsReasoningEffort, true);
+    assert.equal(isReasoningEffortSupported("qwen3.8-flash-next-gyro-gyro-s"), true);
   });
 });
