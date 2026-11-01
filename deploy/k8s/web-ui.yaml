@@ -74,6 +74,8 @@ spec:
               value: "local-sandbox-token-2026"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
+            - name: THREADS_DIR
+              value: "/workspace/.agent/threads"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

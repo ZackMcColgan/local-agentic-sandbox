@@ -617,7 +617,7 @@ export function ChatStream({
     // If inside a persistent thread, persist the user message (skip in offline simulation)
     if (activeThreadId && !isSimulating) {
       try {
-        fetch(`/api/threads/${activeThreadId}`, {
+        await fetch(`/api/threads/${activeThreadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

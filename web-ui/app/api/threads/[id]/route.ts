@@ -264,7 +264,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 3. Action: Add Message
     if (body.action === "addMessage" && body.message) {
-      thread.messages.push(body.message);
+      thread.messages = thread.messages || [];
+      const existingIdx = thread.messages.findIndex((m) => m.id === body.message.id);
+      if (existingIdx >= 0) {
+        thread.messages[existingIdx] = { ...thread.messages[existingIdx], ...body.message };
+      } else {
+        thread.messages.push(body.message);
+      }
       if (body.message.role === "user") {
         if (
           !thread.title ||

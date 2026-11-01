@@ -9,9 +9,9 @@
 ---
 
 ## Register Metric
-- **Total Defects Identified:** 8
-- **P0 Defects (Blocks Core Use):** 5
-- **P1 Defects (Degraded Functionality):** 2
+- **Total Defects Identified:** 10
+- **P0 Defects (Blocks Core Use):** 6
+- **P1 Defects (Degraded Functionality):** 3
 - **P2 Defects (Minor / Polish):** 1
 
 ---
@@ -104,7 +104,7 @@
 - **Actual Behavior:** When the stack updates or redeploys, in-progress sessions are lost.
 - **Evidence:** not recorded
 - **Severity:** **P0** (Blocks core use; session continuity lost on every update/redeploy).
-- **Status:** **OPEN (unfixed)** — no commit fixes this defect.
+- **Status:** **FIXED** (2026-11-01; commit f6f7e56 in web-ui/lib/threads/threadStore.ts resolving THREADS_DIR to persistent volume mount /workspace/.agent/threads and configuring THREADS_DIR in deploy/k8s/web-ui.yaml; verified live across 2 consecutive pod redeploy/rollout cycles with in-progress thread and message state intact and fully resumable).
 
 ---
 
@@ -119,7 +119,7 @@
 - **Actual Behavior:** A user message can disappear after the model finishes thinking and does not return on reload. Shakeout triage determined this is a persistence failure (the message is not durably stored), not a rendering bug.
 - **Evidence:** not recorded
 - **Severity:** **P0** (Blocks core use; corrupts conversation history).
-- **Status:** **OPEN (unfixed)** — no commit fixes this defect.
+- **Status:** **FIXED** (2026-11-01; commit 561ed84 in web-ui/components/ChatStream.tsx awaiting user message persistence before streaming turn dispatch, atomic temp-file rename in ThreadStore.saveThread, and message deduplication in app/api/threads/[id]/route.ts; verified live across 10/10 consecutive trials of send-with-thinking -> turn completion -> message reload integrity).
 
 ---
 
