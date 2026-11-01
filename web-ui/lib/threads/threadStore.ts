@@ -47,6 +47,12 @@ function resolveThreadsDir(): string {
   let resolvedDir = process.env.THREADS_DIR;
   if (!resolvedDir) {
     const candidates = [
+      process.env.WORKSPACE_DIR
+        ? path.resolve(process.env.WORKSPACE_DIR, ".agent/threads")
+        : null,
+      fs.existsSync("/workspace")
+        ? path.resolve("/workspace/.agent/threads")
+        : null,
       fs.existsSync(path.resolve(process.cwd(), "../workspace"))
         ? path.resolve(process.cwd(), "../workspace/.agent/threads")
         : null,
@@ -444,7 +450,18 @@ export class ThreadStore {
       } catch {}
     }
     thread.updatedAt = new Date().toISOString();
-    fs.writeFileSync(this.getFilePath(thread.id), JSON.stringify(thread, null, 2), "utf8");
+    const targetFile = this.getFilePath(thread.id);
+    const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
+    try {
+      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), "utf8");
+      fs.renameSync(tempFile, targetFile);
+    } catch (err) {
+      if (fs.existsSync(tempFile)) {
+        try { fs.unlinkSync(tempFile); } catch {}
+      }
+      // Fallback to direct write if rename fails across partitions
+      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), "utf8");
+    }
   }
 
   createThread(params: {
