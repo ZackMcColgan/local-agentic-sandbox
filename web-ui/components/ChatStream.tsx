@@ -1587,6 +1587,14 @@ export function ChatStream({
                       • Stopped
                     </div>
                   )}
+
+                  {/* Per-message served model indicator */}
+                  {m.modelUsed && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5">
+                      <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
+                      <span>Served by {m.modelUsed.includes("flash-next") || m.modelUsed.includes("gyro") ? "Flash-Next (Gyro-S)" : m.modelUsed}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

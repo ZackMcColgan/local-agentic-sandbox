@@ -953,6 +953,23 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       const hostVal = capturedHeaders instanceof Headers ? capturedHeaders.get("Host") : capturedHeaders["Host"];
       assert.equal(hostVal, "127.0.0.1:8080");
     });
+
+    it("throws error with Strata engine identifier when LLM_ENGINE is strata", async () => {
+      globalThis.fetch = (async () => {
+        throw new Error("fetch failed");
+      }) as any;
+
+      process.env.LLM_ENGINE = "strata";
+      const provider = getLLMProvider("strata");
+      await assert.rejects(
+        async () => {
+          for await (const _ of provider.streamChat("http://strata-service:8080", { messages: [] })) {}
+        },
+        (err: Error) => {
+          return err.message.includes("Strata engine returned network error at http://strata-service:8080/v1/chat/completions: fetch failed");
+        }
+      );
+    });
   });
 });
 

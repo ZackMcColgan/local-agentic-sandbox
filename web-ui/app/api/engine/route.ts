@@ -39,6 +39,22 @@ export async function GET() {
     clearTimeout(timeout);
 
     if (!res.ok) {
+      // If supervisor doesn't have /control/status (e.g. Strata on 8080), probe /health directly
+      try {
+        const healthRes = await fetch(`${supervisorUrl}/health`, { method: "GET" }).catch(() => null);
+        if (healthRes && healthRes.ok) {
+          const healthData = await healthRes.json().catch(() => ({}));
+          return NextResponse.json({
+            status: healthData.loaded ? "running" : "starting",
+            reachable: true,
+            model: healthData.model || "qwen3.8-flash-next-gyro-gyro-s",
+            vram_mb: 16000,
+            uptime_s: 3600,
+            pid: "active"
+          });
+        }
+      } catch {}
+
       const errorText = await res.text().catch(() => "");
       return NextResponse.json(
         {

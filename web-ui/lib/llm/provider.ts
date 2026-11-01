@@ -521,6 +521,8 @@ export class LlamaCppProvider implements LLMProvider {
       requestBody.reasoning_effort = effort;
     }
 
+    const engineLabel = this.engine === "strata" || process.env.LLM_ENGINE === "strata" ? "Strata" : "llama.cpp";
+
     let res: Response;
     try {
       res = await fetch(targetUrl, {
@@ -544,20 +546,20 @@ export class LlamaCppProvider implements LLMProvider {
             signal: payload.signal
           });
         } catch {
-          throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+          throw new Error(`${engineLabel} engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
         }
       } else {
-        throw new Error(`llama.cpp engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+        throw new Error(`${engineLabel} engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
       }
     }
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`llama.cpp engine returned ${res.status}: ${errText}`);
+      throw new Error(`${engineLabel} engine returned ${res.status}: ${errText}`);
     }
 
     if (!res.body) {
-      throw new Error("llama.cpp returned empty response body");
+      throw new Error(`${engineLabel} returned empty response body`);
     }
 
     const reader = res.body.getReader();

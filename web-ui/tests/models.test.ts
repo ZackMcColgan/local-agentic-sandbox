@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES, isReasoningEffortSupported } from "../config/models.js";
 
 describe("Web UI Model Configuration Suite", () => {
-  it("defaults to Swift-1.5-Qwen3.8-27B-IQ3_XS for orchestrator to fit within 16GB VRAM limit", () => {
-    assert.equal(DEFAULT_PRIMARY_MODEL, "Swift-1.5-Qwen3.8-27B-IQ3_XS");
+  it("defaults to qwen3.8-flash-next-gyro-gyro-s for orchestrator to fit within 16GB VRAM limit", () => {
+    assert.equal(DEFAULT_PRIMARY_MODEL, "qwen3.8-flash-next-gyro-gyro-s");
   });
 
-  it("defaults to Swift-1.5-Qwen3.8-27B-IQ3_XS for fast multimodal sub-agent execution", () => {
-    assert.equal(DEFAULT_SUBAGENT_MODEL, "Swift-1.5-Qwen3.8-27B-IQ3_XS");
+  it("defaults to qwen3.8-flash-next-gyro-gyro-s for fast multimodal sub-agent execution", () => {
+    assert.equal(DEFAULT_SUBAGENT_MODEL, "qwen3.8-flash-next-gyro-gyro-s");
   });
 
   it("contains complete profiles for orchestrator and sub-agents", () => {

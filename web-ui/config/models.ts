@@ -24,27 +24,27 @@ export const AGENT_MODES: Record<AgentMode, AgentModeConfig> = {
     label: "Auto",
     badgeLabel: "Auto (Hierarchical)",
     description: "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
-    defaultModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   },
   flash: {
     id: "flash",
     label: "Flash",
-    badgeLabel: "Flash ~80 t/s",
-    description: "Ultra-fast execution and native multimodal vision via Swift-1.5-Qwen3.8-27B-IQ3_XS.",
-    defaultModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+    badgeLabel: "Flash-Next (Gyro-S)",
+    description: "Ultra-fast execution and native multimodal vision via Flash-Next (Gyro-S).",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   },
   pro: {
     id: "pro",
     label: "Pro",
-    badgeLabel: "Pro (27B)",
-    description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Qwen 3.8 27B / Hermes 3.",
-    defaultModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+    badgeLabel: "Pro (Flash-Next)",
+    description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Flash-Next (Gyro-S).",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   }
 };
 
 export const DEFAULT_AGENT_MODE: AgentMode = "auto";
-export const DEFAULT_PRIMARY_MODEL = "Swift-1.5-Qwen3.8-27B-IQ3_XS";
-export const DEFAULT_SUBAGENT_MODEL = "Swift-1.5-Qwen3.8-27B-IQ3_XS";
+export const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
+export const DEFAULT_SUBAGENT_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export const PRESET_MODEL_PROFILES: ModelProfile[] = [
   {

@@ -9,9 +9,9 @@
 ---
 
 ## Register Metric
-- **Total Defects Identified:** 10
+- **Total Defects Identified:** 12
 - **P0 Defects (Blocks Core Use):** 6
-- **P1 Defects (Degraded Functionality):** 3
+- **P1 Defects (Degraded Functionality):** 5
 - **P2 Defects (Minor / Polish):** 1
 
 ---
@@ -237,3 +237,63 @@
   - Verified live: Model chip and stream metadata show `qwen3.8-flash-next-gyro-gyro-s` / `"Flash-Next"`.
 - **Severity:** **P1** (Inaccurate model display identity and route payload dispatch).
 - **Status:** **FIXED** (via PR #38 commit 5cfe158; verified live Nov 1, 2026; merge into develop pending owner's word).
+
+---
+
+### [P1-4] Client Model Default is Swift-1.5 Instead of Flash-Next Profile
+- **Feature:** Client-Side Model Default Selection & Settings Persistence
+- **Affected Components:**
+  - `web-ui/config/models.ts` (`AGENT_MODES`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_SUBAGENT_MODEL`)
+  - `web-ui/app/page.tsx` (`selectedModel` initial state & persistence)
+  - `web-ui/components/ChatStream.tsx` (`activeModel`, served model indicator)
+  - `web-ui/app/api/chat/route.ts` (routing fallback mapping)
+- **Steps to Reproduce:**
+  1. Open a clean browser session at `http://192.168.50.254/` without prior localStorage.
+  2. Inspect the model selection: Client defaulted to Swift-1.5 (`Swift-1.5-Qwen3.8-27B-IQ3_XS`) across `auto`, `flash`, and `pro` modes rather than the Flash-Next / Gyro-S server model.
+  3. Change model in settings sheet; upon reload, preference was lost.
+- **Expected Behavior:**
+  1. Default model across all agent modes (`auto`, `flash`, `pro`) is `qwen3.8-flash-next-gyro-gyro-s` (Flash-Next).
+  2. Model pill in the chat header reflects the served model name from the server stream (`qwen3.8-flash-next-gyro-gyro-s`).
+  3. User model selections persist across browser reload in `localStorage`.
+  4. Swift-1.5 profile remains selectable as a manual option.
+- **Actual Behavior:**
+  - Client defaulted to Swift-1.5, overriding server identity and requiring manual user intervention.
+- **Resolution:**
+  - Updated `DEFAULT_PRIMARY_MODEL` and `AGENT_MODES` defaults in `web-ui/config/models.ts` to `"qwen3.8-flash-next-gyro-gyro-s"`.
+  - Added localStorage persistence for `preferred_model` in `web-ui/app/page.tsx`.
+  - Remapped `Swift-1.5-Qwen3.8-27B-IQ3_XS` in `web-ui/app/api/chat/route.ts` to `DEFAULT_MODEL` when in auto mode.
+  - Added per-message served model indicator in `web-ui/components/ChatStream.tsx`.
+- **Severity:** **P1** (Client model defaults contradicted runtime server engine).
+- **Status:** **FIXED** (commit pending; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).
+
+---
+
+### [P1-5] Engine Controls Act on Legacy In-Cluster Lifecycle + Strata Default Off
+- **Feature:** Host Engine Controls (Start / Stop) & Boot Startup State
+- **Affected Components:**
+  - Startup directory: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\strata-standalone.vbs`
+  - `scripts/lan-bridge.js` (Host reverse proxy bridge)
+  - `web-ui/app/api/engine/route.ts`
+  - `web-ui/components/EngineStatusPill.tsx`
+  - `web-ui/components/ModelBottomSheet.tsx`
+- **Steps to Reproduce:**
+  1. Check Windows Startup folder: `strata-standalone.vbs` was active, causing Strata to autostart at login.
+  2. Tap Engine STOP in UI: Failed or targeted in-cluster supervisor endpoint (`/control/stop`), returning 404 because Strata on host (:8080) does not implement the legacy control API.
+  3. Engine status pill displayed mock or stale status.
+- **Expected Behavior:**
+  1. Strata's default state at boot is OFF (manual/on-demand startup only).
+  2. Engine controls in the UI act on the real Strata host service (:8080).
+  3. Status pill reflects true status (running when port 8080 `/health` returns `loaded: true`, stopped when offline).
+  4. Clicking STOP cleanly stops the Strata host process, freeing VRAM and port 8080.
+  5. Chat queries while stopped return loud honest in-turn engine-down error.
+  6. Clicking START starts Strata, loads weights, and restores chat inference.
+- **Actual Behavior:**
+  - Autostart was enabled at boot via VBS script; engine controls in UI could not manage host Strata process.
+- **Resolution:**
+  - Disabled boot autostart by renaming `strata-standalone.vbs` to `strata-standalone.vbs.disabled`.
+  - Wired `scripts/lan-bridge.js` to handle `/api/engine` requests with direct host process management (`start-strata.ps1` and `stop-strata.ps1`) and live health polling against `127.0.0.1:8080/health`.
+  - Updated `web-ui/app/api/engine/route.ts` to probe `/health` directly when supervisor control is unavailable.
+  - Aligned status pill and settings card labels to accurately reflect Strata.
+  - Verified live full stop/start cycle: Stop killed process -> status stopped -> chat honest error -> Start launched process -> weights loaded -> live weather chat query answered via search_web.
+- **Severity:** **P1** (Engine controls inoperative on host Strata service; autostart violation).
+- **Status:** **FIXED** (commit pending; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).

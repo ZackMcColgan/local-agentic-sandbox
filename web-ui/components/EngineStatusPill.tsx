@@ -101,7 +101,7 @@ export function EngineStatusPill({
       <div
         onClick={onOpenSettings}
         className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/90 dark:bg-emerald-950/60 text-xs font-semibold text-emerald-900 dark:text-emerald-200 shadow-2xs min-h-[44px] sm:min-h-[32px] ${className}`}
-        title={`LLM Engine: Running (PID ${data.pid || "active"}, ${data.model || "swift-15-27b-mtp"}) · Click Stop to turn off`}
+        title={`LLM Engine: Running (PID ${data.pid || "active"}, ${data.model || "qwen3.8-flash-next-gyro-gyro-s"}) · Click Stop to turn off`}
         role="status"
         aria-label="Engine running"
       >

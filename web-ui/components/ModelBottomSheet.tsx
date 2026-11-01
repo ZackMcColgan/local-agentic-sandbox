@@ -77,9 +77,15 @@ export function ModelBottomSheet({
 
   const modelsList = [
     {
-      id: "swift-15-27b-mtp",
-      displayName: "swift-1.5",
-      subtext: "27B MTP · default orchestrator & workers",
+      id: "qwen3.8-flash-next-gyro-gyro-s",
+      displayName: "Flash-Next",
+      subtext: "Gyro-S · default orchestrator & workers",
+      icon: "bot"
+    },
+    {
+      id: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+      displayName: "Swift-1.5",
+      subtext: "27B MTP · speculative decoding profile",
       icon: "bot"
     },
     {
@@ -271,10 +277,10 @@ export function ModelBottomSheet({
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-                <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">Standalone llama.cpp Engine</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">Standalone llama.cpp Engine (Strata)</span>
               </div>
               <span className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                {engineStatus === "running" ? "Running · 16 GB VRAM · swift-15-27b-mtp" : "Stopped · 0 MB VRAM"}
+                {engineStatus === "running" ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)" : "Stopped · 0 MB VRAM"}
               </span>
             </div>
             <button
