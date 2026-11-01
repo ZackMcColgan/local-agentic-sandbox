@@ -959,7 +959,7 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
-      <header className="px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
+      <header className="sticky top-0 z-30 px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
@@ -1191,7 +1191,7 @@ export function ChatStream({
         data-scroll-container="true"
         className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-zinc-950 relative"
       >
-        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5">
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-8">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
@@ -1708,7 +1708,7 @@ export function ChatStream({
 
       {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
       {isUserScrolledUp && (
-        <div className="flex justify-center -mt-12 mb-2 z-30 pointer-events-none">
+        <div className="flex justify-center -mt-14 mb-3 z-30 pointer-events-none">
           <button
             type="button"
             onClick={() => scrollToBottom("smooth")}

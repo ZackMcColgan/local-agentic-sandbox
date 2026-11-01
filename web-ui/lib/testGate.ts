@@ -490,6 +490,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/bench-") ||
     normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
+    normalizedPath.startsWith("scripts/test-acceptance") ||
     normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.startsWith("scripts/start-strata") ||
     normalizedPath.startsWith("scripts/stop-strata") ||
