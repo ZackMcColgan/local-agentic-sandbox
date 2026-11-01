@@ -35,7 +35,7 @@ import { BuildsView } from "@/components/BuildsView";
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE } from "@/config/models";
+import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import {
   getInitialWelcomeMessage,
   loadChatHistory,
@@ -58,7 +58,13 @@ export default function Home() {
     airGapped: true
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
-  const [selectedModel, setSelectedModel] = useState<string>("swift-15-27b-mtp");
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("preferred_model");
+      if (saved) return saved;
+    }
+    return DEFAULT_PRIMARY_MODEL;
+  });
   const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("medium");
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
@@ -105,7 +111,7 @@ export default function Home() {
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage("swift-15-27b-mtp")
+    getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL)
   ]);
 
   // Synchronous-like hydration for theme support
@@ -701,6 +707,11 @@ export default function Home() {
         selectedModel={selectedModel}
         onModelChange={(m) => {
           setSelectedModel(m);
+          try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("preferred_model", m);
+            }
+          } catch {}
         }}
         reasoningEffort={reasoningEffort}
         onReasoningChange={(e) => {

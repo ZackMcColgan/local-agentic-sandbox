@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     let activeModel = requestedModel;
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
 
-    if (!activeModel || activeModel === "auto" || (process.env.MODEL_NAME && activeModel === "swift-15-27b-mtp")) {
+    if (!activeModel || activeModel === "auto" || activeModel === "Swift-1.5-Qwen3.8-27B-IQ3_XS" || (process.env.MODEL_NAME && activeModel === "swift-15-27b-mtp")) {
       // Zero VRAM eviction: auto, flash, and pro modes route directly to configured DEFAULT_MODEL
       activeModel = DEFAULT_MODEL;
     }
