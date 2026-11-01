@@ -2,6 +2,7 @@
 
 **Date:** 2026-10-24  
 **Amended:** 2026-10-28 — retro-registered omissions: P0-A and P0-B were in the Oct 24 shakeout scope but were never entered below. Documentation-only amendment; no fixes included.  
+**Amended:** 2026-11-01 — status truth-up & closure (Part B register sweep: P0-1, P0-2, P0-3, P1-1, P1-2, P2-1 verified fixed in commit bfb8e2c; P0-A, P0-B design blocked; P0-6, P1-3 fixed via PR #38 commit 5cfe158).  
 **Scope:** Deployed cluster (`http://127.0.0.1:3001` and `http://192.168.50.254:80`), real LLM engine (`Swift-1.5-Qwen3.8-27B-IQ3_XS`), real git repository, real workspace persistent volume.  
 **Branch:** `feature/projects-and-folders` (PR #35).
 
@@ -43,6 +44,7 @@
   - Pod log excerpt: `FATAL for milestone M1: ModelUnavailableError: Model "swift-15-27b-mtp" unavailable at http://llm-service:11434: Model "swift-15-27b-mtp" unavailable at http://llm-service:11434/v1/chat/completions: empty response`
   - Probe log: `HTTP 500: {"error":"Unexpected end of JSON input"}` in `web-ui/lib/subagents/planner.ts:307`.
 - **Severity:** **P0** (Blocks core Build mode feature; causes infinite spinner).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c by allocating 4096 thinking token budget headroom in LlamaCppProvider, content recovery from reasoning chunks, error display in page.tsx, and parked terminal states; verified by unit tests in shakeoutFixes.test.ts and successful in-pod execution).
 
 ---
 
@@ -66,6 +68,7 @@
   - Pod log excerpt: `[supervisor] GitOps milestone commit warning: WorkerGitOps cannot commit directly to protected branch: main`
   - `ls -la /workspace`: `drwxr-xr-x 7 10001 10001 4096 Oct 23 07:01 .git` vs process running as UID 1001.
 - **Severity:** **P0** (Blocks git tracking, branch isolation, and milestone commits in production container).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c by configuring pod securityContext with fsGroup: 1001 and supplementalGroups: [10001] in deploy/k8s/web-ui.yaml; verified live in web-ui pod where git branch creation and commits operate with exit code 0 under non-root user 1001:1001).
 
 ---
 
@@ -86,6 +89,7 @@
     const activeTask = list.find((t) => t.status === "active") || list[0] || null;
     ```
 - **Severity:** **P0** (Corrupts task polling; masks new task runs).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c in web-ui/app/api/tasks/route.ts by auto-parking orphaned disk tasks with status active older than 5 minutes without in-memory execution; fresh tasks sort and surface by updatedAt desc; verified by unit tests and code inspection).
 
 ---
 
@@ -135,6 +139,7 @@
   - Probe error: `UND_ERR_HEADERS_TIMEOUT` on `POST /api/schedules/sched-.../trigger`.
   - Pod log: `[supervisor] GitOps branch switch warning: Invalid worker branch name 'sched/sched-1792822037772-2z8cb'. Must follow feat/<slug>, feature/<slug> or fix/<slug> convention.`
 - **Severity:** **P1** (Scheduled tasks trigger in background, but HTTP API times out and branch naming fails convention).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c by making POST /api/schedules/:id/trigger asynchronous returning 200 OK with runId immediately under 60ms, and sanitizing branch names via sanitizeScheduleBranchName to feat/sched-<id>; verified live on cluster where trigger returned in 54ms and branch feat/sched-1792822037772-2z8cb was created).
 
 ---
 
@@ -151,6 +156,7 @@
 - **Evidence:**
   - Probe error: `HTTP 500: {"error":"Unexpected end of JSON input"}`.
 - **Severity:** **P1** (Causes avoidable planning failures on borderline token lengths).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c in web-ui/lib/subagents/planner.ts via repairAndParsePlanJson which repairs unclosed brackets, missing braces, and trailing commas; verified by unit tests in web-ui/tests/shakeoutFixes.test.ts).
 
 ---
 
@@ -167,6 +173,7 @@
 - **Evidence:**
   - Probe output: `HTTP 400: {"error":"Project rootPath is required"}`.
 - **Severity:** **P2** (API parameter naming strictness).
+- **Status:** **VERIFIED-FIXED** (2026-11-01; resolved in historical commit bfb8e2c in web-ui/app/api/projects/route.ts by accepting rootPath = body.rootPath || body.path; verified live where POST /api/projects with path alias returns 400 Path does not exist rather than rootPath is required, and 400 Project rootPath is required when neither is provided).
 
 
 ---
@@ -200,6 +207,7 @@
   - Added graceful fallback in `web-ui/app/api/chat/route.ts` so that advertised tools whose client is disconnected return an in-turn tool explanation instead of crashing the turn.
   - Verified live: Query *"What is the weather today in Spanish Fort AL?"* invokes `search_web`, fetches AccuWeather forecast, and streams full markdown answer with 200 OK.
 - **Severity:** **P0** (Blocks core live web research tool invocations in Chat mode).
+- **Status:** **FIXED** (via PR #38 commit 5cfe158; verified live Nov 1, 2026; merge into develop pending owner's word).
 
 ---
 
@@ -228,3 +236,4 @@
   - Updated `route.ts` to use `DEFAULT_MODEL` (honoring `MODEL_NAME`) for auto and legacy swift defaults.
   - Verified live: Model chip and stream metadata show `qwen3.8-flash-next-gyro-gyro-s` / `"Flash-Next"`.
 - **Severity:** **P1** (Inaccurate model display identity and route payload dispatch).
+- **Status:** **FIXED** (via PR #38 commit 5cfe158; verified live Nov 1, 2026; merge into develop pending owner's word).
