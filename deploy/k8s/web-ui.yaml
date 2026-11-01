@@ -79,11 +79,11 @@ spec:
                 - ALL
           resources:
             limits:
-              cpu: "2000m"
-              memory: "1024Mi"
+              cpu: "1000m"
+              memory: "384Mi"
             requests:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "128Mi"
           volumeMounts:
             - name: workspace-volume
               mountPath: /workspace

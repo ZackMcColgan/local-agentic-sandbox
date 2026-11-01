@@ -1,0 +1,22 @@
+# Strata inference engine bridge.
+# Strata runs on the host bound to loopback (127.0.0.1:8080); pods cannot reach
+# host loopback directly, so this ExternalName service routes through the
+# container-runtime host gateway (host.docker.internal), which forwards to the
+# host's loopback port without rebinding the engine. Keeps the engine loopback-only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: strata-service
+  namespace: local-agentic-sandbox
+  labels:
+    app: strata-service
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: inference-engine
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: strata-api
