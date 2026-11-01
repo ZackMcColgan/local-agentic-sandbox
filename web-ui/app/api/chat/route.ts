@@ -59,6 +59,22 @@ const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+const ADVERTISED_TOOLS = new Set([
+  "search_web",
+  "fetch_webpage_markdown",
+  "workspace_get_tree",
+  "workspace_grep",
+  "workspace_read_file",
+  "workspace_write_file",
+  "workspace_run_command",
+  "git_status",
+  "git_diff",
+  "git_checkout_branch",
+  "git_commit",
+  "execute_sandboxed_python",
+  "verify_container_provenance",
+  "docker_scout_policy_gate"
+]);
 
 interface TraceItem {
   tool: string;
@@ -178,9 +194,9 @@ export async function POST(req: NextRequest) {
     let activeModel = requestedModel;
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
 
-    if (!activeModel || activeModel === "auto") {
-      // Zero VRAM eviction: auto, flash, and pro modes route directly to DEFAULT_PRIMARY_MODEL
-      activeModel = DEFAULT_PRIMARY_MODEL;
+    if (!activeModel || activeModel === "auto" || (process.env.MODEL_NAME && activeModel === "swift-15-27b-mtp")) {
+      // Zero VRAM eviction: auto, flash, and pro modes route directly to configured DEFAULT_MODEL
+      activeModel = DEFAULT_MODEL;
     }
 
     // Resolve honest effective reasoning effort
@@ -720,6 +736,27 @@ CRITICAL INSTRUCTIONS:
 
             const target = toolClientMap.get(toolName);
             if (!target) {
+              if (ADVERTISED_TOOLS.has(toolName)) {
+                console.warn(`[ChatRoute] Advertised tool \'${toolName}\' called but backend client is disconnected. Gracefully returning tool status.`);
+                conversationMessages.push({
+                  role: "tool",
+                  name: toolName,
+                  content: `Tool \'${toolName}\' is temporarily unavailable (client disconnected or service unreachable). Please proceed without it or explain to the user.`
+                });
+                await sendEvent({
+                  type: "trace",
+                  trace: {
+                    tool: toolName,
+                    args: toolArgs,
+                    result: `Tool \'${toolName}\' temporarily unavailable`,
+                    durationMs: 1,
+                    timestamp: new Date().toISOString(),
+                    model: activeModel,
+                    tier: "browser"
+                  }
+                });
+                continue;
+              }
               throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
             }
 
