@@ -59,4 +59,39 @@ describe("Smart Streaming Scroll Follow & Sticky Pill", () => {
     assert.equal(computeIsUserScrolledUp(1000, 490, 400), true);
     assert.equal(computeIsUserScrolledUp(1000, 100, 400), true);
   });
+
+  describe("Item 1: Synchronous follow ref and programmatic scroll guard", () => {
+    it("tracks follow state synchronously via isFollowPinnedRef and checks before streaming auto-scroll", () => {
+      assert.ok(
+        content.includes("isFollowPinnedRef = useRef"),
+        "ChatStream must define isFollowPinnedRef to track pinned follow state synchronously"
+      );
+      assert.ok(
+        content.includes("isFollowPinnedRef.current"),
+        "Streaming scroll effect must consult isFollowPinnedRef.current synchronously before moving viewport"
+      );
+    });
+
+    it("wraps direct scrollTop streaming assignments with programmatic scroll guard to prevent feedback loops", () => {
+      assert.ok(
+        content.includes("isProgrammaticScrollRef.current = true") &&
+          content.includes("el.scrollTop = el.scrollHeight"),
+        "ChatStream must guard direct el.scrollTop assignments with isProgrammaticScrollRef"
+      );
+    });
+
+    it("re-pins follow state synchronously on handleSend and scrollToBottom", () => {
+      assert.ok(
+        content.includes("isFollowPinnedRef.current = true"),
+        "ChatStream must re-pin isFollowPinnedRef.current = true on user send or jump to bottom"
+      );
+    });
+
+    it("unpins synchronously on user upward wheel or touch gestures", () => {
+      assert.ok(
+        content.includes("isFollowPinnedRef.current = false"),
+        "ChatStream must synchronously unpin on user upward scroll or gesture intent"
+      );
+    });
+  });
 });
