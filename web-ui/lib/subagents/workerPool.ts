@@ -1250,7 +1250,7 @@ export class WorkerPool {
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
-    this.maxConcurrency = options?.maxConcurrency || 2;
+    this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : (process.env.LLM_ENGINE === "strata" ? 1 : 2));
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
     this.generate = options?.generate;
     this.residencyPlan = options?.residencyPlan;

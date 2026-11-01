@@ -9,7 +9,7 @@
 
 import { estimateTokens } from "../contextBudget";
 
-export type LLMEngine = "ollama" | "llamacpp";
+export type LLMEngine = "ollama" | "llamacpp" | "strata";
 
 export interface LLMStreamChunk {
   message?: {
@@ -82,6 +82,9 @@ export interface LLMProvider {
 
 export function resolveLLMEngine(envEngine?: string): LLMEngine {
   const raw = (envEngine ?? process.env.LLM_ENGINE ?? "").trim().toLowerCase();
+  if (raw === "strata") {
+    return "strata";
+  }
   if (raw === "llamacpp") {
     return "llamacpp";
   }
@@ -468,6 +471,18 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
 export class LlamaCppProvider implements LLMProvider {
   engine: LLMEngine = "llamacpp";
 
+  constructor(engine: LLMEngine = "llamacpp") {
+    this.engine = engine;
+  }
+
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.engine === "strata" || process.env.LLM_ENGINE === "strata") {
+      headers["Host"] = "127.0.0.1:8080";
+    }
+    return headers;
+  }
+
   async *streamChat(baseUrl: string, payload: LLMChatRequest): AsyncGenerator<LLMStreamChunk> {
     const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl).replace(/\/$/, "");
     const targetUrl = `${effectiveBase}/v1/chat/completions`;
@@ -510,7 +525,7 @@ export class LlamaCppProvider implements LLMProvider {
     try {
       res = await fetch(targetUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify(requestBody),
         signal: payload.signal
       });
@@ -524,7 +539,7 @@ export class LlamaCppProvider implements LLMProvider {
         try {
           res = await fetch(fallbackUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: this.getHeaders(),
             body: JSON.stringify(requestBody),
             signal: payload.signal
           });
@@ -787,7 +802,7 @@ export class LlamaCppProvider implements LLMProvider {
       res = await fetchImpl(targetUrl, {
         method: "POST",
         signal,
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders(),
         body: JSON.stringify(requestBody)
       });
     } catch (err: any) {
@@ -798,7 +813,7 @@ export class LlamaCppProvider implements LLMProvider {
           res = await fetchImpl(fallbackUrl, {
             method: "POST",
             signal,
-            headers: { "Content-Type": "application/json" },
+            headers: this.getHeaders(),
             body: JSON.stringify(requestBody)
           });
         } catch {
@@ -966,8 +981,11 @@ export class LlamaCppProvider implements LLMProvider {
 
 export function getLLMProvider(engine?: string): LLMProvider {
   const resolved = resolveLLMEngine(engine);
+  if (resolved === "strata") {
+    return new LlamaCppProvider("strata");
+  }
   if (resolved === "llamacpp") {
-    return new LlamaCppProvider();
+    return new LlamaCppProvider("llamacpp");
   }
   return new OllamaProvider();
 }

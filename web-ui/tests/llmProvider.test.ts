@@ -928,6 +928,32 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(sentSignal, controller.signal, "Must forward AbortSignal to fetch");
     });
   });
+
+  describe("Task 13: Strata Provider Endpoint, Model, Single-Flight & Host Header Routing", () => {
+    it("selects Strata provider configuration resolving to port 8080 and model qwen3.8-flash-next-gyro-gyro-s", () => {
+      process.env.LLM_ENGINE = "strata";
+      assert.equal(resolveLLMEngine(), "strata");
+      const provider = getLLMProvider("strata");
+      assert.ok(provider instanceof LlamaCppProvider);
+      assert.equal(provider.engine, "strata");
+    });
+
+    it("injects Host 127.0.0.1:8080 header on outbound calls to pass Strata DNS rebinding check", async () => {
+      let capturedHeaders: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedHeaders = init?.headers;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      process.env.LLM_ENGINE = "strata";
+      const provider = getLLMProvider("strata");
+      for await (const _ of provider.streamChat("http://strata-service:8080", { messages: [{ role: "user", content: "Hi" }] })) {}
+
+      assert.ok(capturedHeaders, "Headers must be passed");
+      const hostVal = capturedHeaders instanceof Headers ? capturedHeaders.get("Host") : capturedHeaders["Host"];
+      assert.equal(hostVal, "127.0.0.1:8080");
+    });
+  });
 });
 
 
