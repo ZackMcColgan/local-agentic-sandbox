@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
@@ -95,7 +95,7 @@ interface TraceItem {
   durationMs: number;
   timestamp: string;
   model: string;
-  tier?: "sandbox" | "browser" | "workspace";
+  tier?: "sandbox" | "browser" | "workspace" | "host";
 }
 
 async function connectMcpClient(url: string, name: string) {
@@ -175,7 +175,7 @@ const streamOllamaChat = streamLlmChat;
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
-  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" }>();
+  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" | "host" }>();
   let rootSpan: any = null;
 
   try {
@@ -409,6 +409,7 @@ CRITICAL INSTRUCTIONS:
         let threadHostAccess = false;
         if (activeThreadId) {
           try {
+            const threadStore = new ThreadStore();
             const threadData = await threadStore.getThread(activeThreadId);
             if (threadData?.hostAccess) {
               threadHostAccess = true;
