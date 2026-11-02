@@ -48,6 +48,12 @@ import {
 } from "@/lib/progressiveTools";
 import { compactConversationHistory } from "@/lib/conversationCompaction";
 import {
+  HOST_TOOLS_DEFINITIONS,
+  executeHostTool,
+  isDestructiveHostAction,
+  createPendingApproval
+} from "@/lib/hostMode";
+import {
   loadUserProfile,
   formatProfileForContext,
   extractDurablePreferences,
@@ -399,9 +405,33 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
+        // 4. Host Mode Tools (if thread opt-in enabled)
+        let threadHostAccess = false;
+        if (activeThreadId) {
+          try {
+            const threadData = await threadStore.getThread(activeThreadId);
+            if (threadData?.hostAccess) {
+              threadHostAccess = true;
+            }
+          } catch {}
+        }
+
+        const hostTools = threadHostAccess
+          ? HOST_TOOLS_DEFINITIONS.map((ht) => ({
+              name: ht.function.name,
+              description: ht.function.description,
+              inputSchema: ht.function.parameters
+            }))
+          : [];
+
+        for (const ht of hostTools) {
+          toolClientMap.set(ht.name, { client: null as any, tier: "host" });
+        }
+
         const allTools = [
           ...(sandboxSession?.tools || []),
-          ...(browserSession?.tools || [])
+          ...(browserSession?.tools || []),
+          ...hostTools
         ];
 
         const toolRegistry = buildToolRegistry(allTools);
@@ -836,10 +866,40 @@ CRITICAL INSTRUCTIONS:
             }
 
             const startTime = performance.now();
-            const result = await target.client.callTool({
-              name: toolName,
-              arguments: toolArgs
-            });
+            let result: any = null;
+
+            if (target.tier === "host") {
+              const check = isDestructiveHostAction(toolName, toolArgs);
+              if (check.isDestructive) {
+                const approval = createPendingApproval(
+                  activeThreadId || "general",
+                  toolName,
+                  toolArgs,
+                  check.reason || "Destructive action requires approval"
+                );
+                await sendEvent({
+                  type: "approval_required",
+                  approval: {
+                    id: approval.id,
+                    tool: toolName,
+                    args: toolArgs,
+                    riskReason: approval.riskReason
+                  }
+                });
+                result = {
+                  approvalRequired: true,
+                  approvalId: approval.id,
+                  message: `[HOST SECURITY GATE]: ${approval.riskReason}. Awaiting user approval.`
+                };
+              } else {
+                result = await executeHostTool(toolName, toolArgs);
+              }
+            } else {
+              result = await target.client.callTool({
+                name: toolName,
+                arguments: toolArgs
+              });
+            }
             const durationMs = Math.round(performance.now() - startTime);
 
             // Track test / command failure for auto-escalation
