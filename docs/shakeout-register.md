@@ -9,10 +9,10 @@
 ---
 
 ## Register Metric
-- **Total Defects Identified:** 12
+- **Total Defects Identified:** 13
 - **P0 Defects (Blocks Core Use):** 6
 - **P1 Defects (Degraded Functionality):** 5
-- **P2 Defects (Minor / Polish):** 1
+- **P2 Defects (Minor / Polish):** 2
 
 ---
 
@@ -264,7 +264,7 @@
   - Remapped `Swift-1.5-Qwen3.8-27B-IQ3_XS` in `web-ui/app/api/chat/route.ts` to `DEFAULT_MODEL` when in auto mode.
   - Added per-message served model indicator in `web-ui/components/ChatStream.tsx`.
 - **Severity:** **P1** (Client model defaults contradicted runtime server engine).
-- **Status:** **FIXED** (commit pending; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).
+- **Status:** **FIXED** (2026-11-01; commit 22b4ec3; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).
 
 ---
 
@@ -296,4 +296,30 @@
   - Aligned status pill and settings card labels to accurately reflect Strata.
   - Verified live full stop/start cycle: Stop killed process -> status stopped -> chat honest error -> Start launched process -> weights loaded -> live weather chat query answered via search_web.
 - **Severity:** **P1** (Engine controls inoperative on host Strata service; autostart violation).
-- **Status:** **FIXED** (commit pending; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).
+- **Status:** **FIXED** (2026-11-01; commit 8bc4e58; verified live on LAN 192.168.50.254 and localhost:3001 Nov 1, 2026).
+
+---
+
+### [P2-2] Chat Streaming Auto-Scroll Cannot Be Escaped (Reader Dragged to Bottom)
+- **Feature:** Chat Stream Viewport & Follow-the-Tail Autoscroll
+- **Affected Components:**
+  - `web-ui/components/ChatStream.tsx` (`handleContainerScroll`, `handleContainerWheel`, `handleContainerTouchMove`, `isFollowPinnedRef`, streaming scroll effect)
+- **Steps to Reproduce:**
+  1. Submit a prompt producing a long multi-paragraph response (e.g., 800-word explanation of orbital mechanics).
+  2. While the assistant is actively streaming tokens, scroll up toward the top to read earlier content.
+  3. Observe viewport behavior during subsequent token arrival.
+- **Expected Behavior:**
+  1. Viewport follows the tail only while pinned to the bottom.
+  2. Upward scroll gesture immediately and synchronously unpins follow mode (`isFollowPinnedRef.current = false`).
+  3. Viewport remains firmly parked at the top or reader position without being dragged back to the bottom by streaming renders.
+  4. Floating "Jump to bottom" affordance appears while unpinned with incoming content; clicking it cleanly re-pins and returns to bottom.
+  5. User's own send action re-pins follow mode to the bottom.
+- **Actual Behavior:**
+  - Follow-state was tracked via asynchronous React state (`isUserScrolledUp`). Incoming streaming tokens arrived faster than state transitions, causing the effect's unguarded direct `el.scrollTop = el.scrollHeight` assignment to repeatedly yank the reader to the bottom.
+- **Resolution:**
+  - Introduced synchronous ref `isFollowPinnedRef` updated immediately within container scroll, wheel, and touchmove handlers.
+  - Guarded programmatic scroll assignments with `isProgrammaticScrollRef` to prevent synthetic feedback loops into scroll handlers.
+  - Consulted `isFollowPinnedRef.current` synchronously before executing programmatic autoscroll in streaming effects.
+  - Wired floating Jump to Bottom button and user send actions to explicitly re-pin follow mode.
+- **Severity:** **P2** (Viewport reading ergonomics degraded during long responses).
+- **Status:** **FIXED** (2026-11-01; commit a7cf59a; verified via Playwright unit and live browser acceptance tests).

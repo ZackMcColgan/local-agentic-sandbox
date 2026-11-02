@@ -24,8 +24,8 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       { type: "function", function: { name: "execute_sandboxed_python", description: "Run python" } }
     ];
 
-    it("defines MAX_WEB_RESEARCH_CALLS = 3 and WEB_RESEARCH_TOOL_NAMES", () => {
-      assert.equal(MAX_WEB_RESEARCH_CALLS, 3);
+    it("defines MAX_WEB_RESEARCH_CALLS = 100 and WEB_RESEARCH_TOOL_NAMES", () => {
+      assert.equal(MAX_WEB_RESEARCH_CALLS, 100);
       assert.ok(WEB_RESEARCH_TOOL_NAMES.has("search_web"));
       assert.ok(WEB_RESEARCH_TOOL_NAMES.has("fetch_webpage_markdown"));
       assert.ok(!WEB_RESEARCH_TOOL_NAMES.has("workspace_write_file"));
@@ -39,8 +39,8 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       assert.equal(isWebResearchTool("execute_sandboxed_python"), false);
     });
 
-    it("returns all tools when webResearchCalls < 3", () => {
-      for (const calls of [0, 1, 2]) {
+    it("returns all tools when webResearchCalls < 100", () => {
+      for (const calls of [0, 1, 2, 50, 99]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 5, `Expected 5 tools for ${calls} calls used`);
         const names = filtered.map((t) => t.function?.name || t.name);
@@ -52,8 +52,8 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       }
     });
 
-    it("withholds web research tools when webResearchCalls >= 3 while preserving sandbox/workspace tools", () => {
-      for (const calls of [3, 4, 10]) {
+    it("withholds web research tools when webResearchCalls >= 100 while preserving sandbox/workspace tools", () => {
+      for (const calls of [100, 101, 150]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 3, `Expected 3 tools for ${calls} calls used`);
         const names = filtered.map((t) => t.function?.name || t.name);

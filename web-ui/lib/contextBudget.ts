@@ -19,12 +19,12 @@ export const MAX_TOOL_OUTPUT_CHARS = 2000;
 export const FINAL_ROUND_SYNTHESIS_DIRECTIVE =
   "You have gathered enough information. Synthesize your final answer now using only the tool results above. Do not call more tools.";
 
-export const MAX_WEB_RESEARCH_CALLS = 3;
+export const MAX_WEB_RESEARCH_CALLS = 100;
 
 export const WEB_RESEARCH_TOOL_NAMES = new Set(["search_web", "fetch_webpage_markdown"]);
 
 export const WEB_BUDGET_EXHAUSTED_DIRECTIVE =
-  "[ACTION DISCIPLINE]: You have reached the maximum of 3 web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.";
+  `[ACTION DISCIPLINE]: You have reached the maximum of ${MAX_WEB_RESEARCH_CALLS} web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.`;
 
 export function isWebResearchTool(toolName: string, tier?: string): boolean {
   return WEB_RESEARCH_TOOL_NAMES.has(toolName) || tier === "browser";
@@ -598,3 +598,25 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   return { finalContent, roundsCompleted: round };
 }
 
+
+export function canContinueToolLoop(options: {
+  round: number;
+  maxToolRounds: number;
+  lastRoundTools?: string[];
+  webResearchCalls: number;
+}): boolean {
+  const { round, maxToolRounds, lastRoundTools = [], webResearchCalls } = options;
+  if (round < maxToolRounds) {
+    return true;
+  }
+  // Rounds beyond maxToolRounds are permitted ONLY while the previous round's calls
+  // were exclusively web-research tools AND webResearchCalls < MAX_WEB_RESEARCH_CALLS.
+  if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
+    return false;
+  }
+  if (!lastRoundTools || lastRoundTools.length === 0) {
+    return false;
+  }
+  const isAllResearch = lastRoundTools.every((t) => isWebResearchTool(t));
+  return isAllResearch;
+}
