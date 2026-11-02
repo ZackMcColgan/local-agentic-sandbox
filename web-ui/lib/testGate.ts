@@ -51,6 +51,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
     tests: [] // handled dynamically
   },
+  // Notifications & Telegram outbound alerts
+  {
+    match: (p) => p.includes("notifications"),
+    tests: ["tests/notifications.test.ts"]
+  },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
     match: (p) => p.includes("tests/helpers/"),
