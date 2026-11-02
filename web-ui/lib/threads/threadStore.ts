@@ -43,7 +43,7 @@ export interface Thread {
   isTest?: boolean;
 }
 
-function resolveThreadsDir(): string {
+export function resolveThreadsDir(): string {
   let resolvedDir = process.env.THREADS_DIR;
   if (!resolvedDir) {
     const candidates = [

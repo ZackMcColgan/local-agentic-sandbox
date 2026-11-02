@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { resolveThreadsDir } from "@/lib/threads/threadStore";
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const requestedPath = url.searchParams.get("path");
     const asJson = url.searchParams.get("format") === "json" || url.searchParams.get("json") === "true";
+    const isDownload = url.searchParams.get("download") === "1" || url.searchParams.get("download") === "true";
 
     if (!requestedPath || typeof requestedPath !== "string") {
       return NextResponse.json({ error: "Missing required 'path' query parameter" }, { status: 400 });
@@ -213,13 +215,20 @@ export async function GET(request: NextRequest) {
     }
 
     const fileBuffer = fs.readFileSync(resolvedPath);
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Content-Length": stat.size.toString(),
+      "Cache-Control": "public, max-age=60"
+    };
+    if (isDownload) {
+      const basename = path.basename(resolvedPath);
+      const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
+      const utf8Name = encodeURIComponent(basename);
+      headers["Content-Disposition"] = `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+    }
     return new NextResponse(fileBuffer, {
       status: 200,
-      headers: {
-        "Content-Type": mimeType,
-        "Content-Length": stat.size.toString(),
-        "Cache-Control": "public, max-age=60"
-      }
+      headers
     });
   } catch (error: any) {
     return NextResponse.json(
