@@ -1214,9 +1214,9 @@ export function ChatStream({
             </span>
           )}
 
-          {/* Context Meter Pill */}
+          {/* Context Meter Pill - hidden on narrow mobile viewports (< sm) */}
           <div
-            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono shrink-0"
+            className="hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono shrink-0"
             title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
           >
             <span
