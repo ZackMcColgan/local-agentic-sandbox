@@ -29,7 +29,8 @@ import {
   PanelLeft,
   FolderGit2,
   FileCode,
-  ExternalLink
+  ExternalLink,
+  Download
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -831,6 +832,7 @@ export function ChatStream({
                         thought: finalThought,
                         modelUsed: finalModel,
                         traces: event.traces || currentTraces,
+                        attachments: event.attachments,
                         durationMs,
                         timestamp: new Date().toISOString()
                       }
@@ -845,6 +847,7 @@ export function ChatStream({
                   content: parsed.content,
                   thought: finalThought,
                   traces: event.traces || currentTraces,
+                  attachments: event.attachments || msg.attachments,
                   modelUsed: finalModel,
                   durationMs: event.durationMs || durationMs
                 }))
@@ -1580,6 +1583,65 @@ export function ChatStream({
                         );
                       })()}
                     </>
+                  )}
+
+                  {/* Generated File Cards (Download / Open) */}
+                  {!isUser && m.attachments && m.attachments.length > 0 && (
+                    <div className="flex flex-col gap-2.5 pt-1 w-full max-w-lg">
+                      {m.attachments.map((att, aIdx) => {
+                        const fileRelPath = att.previewUrl || att.name;
+                        const isHtml = att.name.toLowerCase().endsWith(".html") || att.type === "text/html";
+                        const isSvg = att.name.toLowerCase().endsWith(".svg") || att.type === "image/svg+xml";
+                        const canOpenInTab = isHtml || isSvg;
+                        const downloadUrl = `/api/files?path=${encodeURIComponent(fileRelPath)}&download=1`;
+                        const openUrl = `/api/files?path=${encodeURIComponent(fileRelPath)}`;
+
+                        return (
+                          <div
+                            key={aIdx}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                                <FileCode className="h-5 w-5" />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-sm text-slate-900 dark:text-zinc-100 truncate" title={att.name}>
+                                  {att.name}
+                                </span>
+                                <span className="text-xs text-slate-500 dark:text-zinc-400">
+                                  {formatFileSize(att.size)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {canOpenInTab && (
+                                <a
+                                  href={openUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="min-h-[44px] min-w-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                                  title="Open in new tab"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                  <span>Open</span>
+                                </a>
+                              )}
+                              <a
+                                href={downloadUrl}
+                                download={att.name}
+                                className="min-h-[44px] min-w-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                                title="Download file"
+                              >
+                                <Download className="h-4 w-4" />
+                                <span>Download</span>
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
 
                   {/* Grounded File Citation Card matching Mockup 4 */}
