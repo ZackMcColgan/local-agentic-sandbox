@@ -27,6 +27,14 @@ export interface ThreadMessage {
   isStopped?: boolean;
 }
 
+export interface ThreadCompactionBoundary {
+  throughMessageId: string;
+  summary: string;
+  compactedAt: string;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
 export interface Thread {
   id: string;
   title: string;
@@ -36,6 +44,8 @@ export interface Thread {
   model: string;
   reasoningEffort: "low" | "medium" | "xhigh";
   messages: ThreadMessage[];
+  compaction?: ThreadCompactionBoundary;
+  hostAccess?: boolean;
   taskId?: string;
   scope?: TaskScope;
   workerInfo?: string;
@@ -578,6 +588,73 @@ export class ThreadStore {
       } catch {}
     }
     return false;
+  }
+
+  buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+    const rawMessages = thread.messages || [];
+    if (!thread.compaction || !thread.compaction.throughMessageId) {
+      return rawMessages.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+    }
+
+    const { throughMessageId, summary } = thread.compaction;
+    const boundaryIdx = rawMessages.findIndex((m) => m.id === throughMessageId);
+    if (boundaryIdx < 0) {
+      // If boundary message id is not found, fallback to all messages
+      return rawMessages.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+    }
+
+    const after = rawMessages.slice(boundaryIdx + 1);
+    const result: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+
+    // If there was a leading system message before or at boundary, keep it
+    const leadingSystem = rawMessages.find((m) => m.role === "system");
+    if (leadingSystem) {
+      result.push({ role: "system", content: leadingSystem.content });
+    }
+
+    result.push({
+      role: "assistant",
+      content: summary
+    });
+
+    for (const m of after) {
+      result.push({
+        role: m.role,
+        content: m.content
+      });
+    }
+
+    return result;
+  }
+
+  applyCompactionBoundary(
+    thread: Thread,
+    summary: string,
+    throughMessageId: string,
+    tokensBefore: number,
+    tokensAfter: number
+  ): Thread {
+    thread.compaction = {
+      throughMessageId,
+      summary,
+      compactedAt: new Date().toISOString(),
+      tokensBefore,
+      tokensAfter
+    };
+    this.saveThread(thread);
+    return thread;
+  }
+
+  clearCompactionBoundary(thread: Thread): Thread {
+    delete thread.compaction;
+    this.saveThread(thread);
+    return thread;
   }
 
   async cleanupTestSessions(): Promise<number> {

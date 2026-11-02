@@ -35,7 +35,9 @@ import {
   resolveRoundModelOptions,
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
   isLiveRealTimeIntent,
-  canContinueToolLoop
+  canContinueToolLoop,
+  estimateTokens,
+  CHAT_CONTEXT_BUDGET_TOKENS
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -444,13 +446,19 @@ CRITICAL INSTRUCTIONS:
         };
 
         // Send initial metadata
+        const initialEstimatedTokens = estimateTokens(conversationMessages);
         await sendEvent({
           type: "meta",
           model: activeModel,
           mode,
           reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult,
-          citations: oracleCitations
+          citations: oracleCitations,
+          context: {
+            estimatedTokens: initialEstimatedTokens,
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            compactedThisTurn: false
+          }
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
@@ -472,10 +480,25 @@ CRITICAL INSTRUCTIONS:
         while (canContinueToolLoop({ round, maxToolRounds: MAX_TOOL_ROUNDS, lastRoundTools, webResearchCalls })) {
           if (aborted || req.signal.aborted) break;
 
-          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
+          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
             conversationMessages.length = 0;
             conversationMessages.push(...compaction.messages);
+            await sendEvent({
+              type: "meta",
+              model: activeModel,
+              mode,
+              reasoning_effort: effectiveReasoningEffort,
+              triage: triageComplexityResult,
+              citations: oracleCitations,
+              context: {
+                estimatedTokens: compaction.tokensAfter,
+                budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+                compactedThisTurn: true,
+                tokensBeforeCompaction: compaction.tokensBefore,
+                tokensAfterCompaction: compaction.tokensAfter
+              }
+            });
           }
 
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {

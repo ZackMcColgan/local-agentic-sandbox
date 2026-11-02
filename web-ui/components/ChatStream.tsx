@@ -280,6 +280,27 @@ export function ChatStream({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
 
+  // Context budget meter & compaction state
+  const [contextStats, setContextStats] = useState<{
+    estimatedTokens: number;
+    budgetTokens: number;
+    compactedThisTurn?: boolean;
+    tokensBeforeCompaction?: number;
+    tokensAfterCompaction?: number;
+  }>({
+    estimatedTokens: 0,
+    budgetTokens: 100000
+  });
+  const [threadCompaction, setThreadCompaction] = useState<{
+    throughMessageId: string;
+    summary: string;
+    compactedAt: string;
+    tokensBefore: number;
+    tokensAfter: number;
+  } | null>(null);
+  const [isCompactingManually, setIsCompactingManually] = useState(false);
+  const [showCompactionModal, setShowCompactionModal] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -490,6 +511,48 @@ export function ChatStream({
       }
       return prev;
     });
+  };
+
+  const handleManualCompact = async () => {
+    if (!threadId || isCompactingManually) return;
+    setIsCompactingManually(true);
+    try {
+      const res = await fetch(`/api/threads/${threadId}/compact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread?.compaction) {
+          setThreadCompaction(data.thread.compaction);
+          setContextStats((prev) => ({
+            ...prev,
+            estimatedTokens: data.tokensAfter ?? prev.estimatedTokens
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("Manual compaction error:", err);
+    } finally {
+      setIsCompactingManually(false);
+    }
+  };
+
+  const handleRestoreCompaction = async () => {
+    if (!threadId) return;
+    try {
+      const res = await fetch(`/api/threads/${threadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restoreCompaction" })
+      });
+      if (res.ok) {
+        setThreadCompaction(null);
+        setShowCompactionModal(false);
+      }
+    } catch (err) {
+      console.error("Restore compaction error:", err);
+    }
   };
 
   const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
@@ -782,6 +845,16 @@ export function ChatStream({
 
             if (event.type === "meta") {
               if (event.model) currentModel = event.model;
+              if (event.context) {
+                setContextStats((prev) => ({
+                  ...prev,
+                  estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
+                  budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
+                  compactedThisTurn: event.context.compactedThisTurn,
+                  tokensBeforeCompaction: event.context.tokensBeforeCompaction,
+                  tokensAfterCompaction: event.context.tokensAfterCompaction
+                }));
+              }
             } else if (event.type === "status") {
               setStreamStatus(event.status);
             } else if (event.type === "thought") {
@@ -939,6 +1012,61 @@ export function ChatStream({
         className="hidden"
       />
 
+      {/* Compaction Details & Restore Modal */}
+      {showCompactionModal && threadCompaction && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowCompactionModal(false)}
+        >
+          <div
+            className="relative max-w-lg w-full rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Conversation Compaction
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+              <div className="flex justify-between font-mono text-[11px] bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800">
+                <span>Before: ~{threadCompaction.tokensBefore} tokens</span>
+                <span>After: ~{threadCompaction.tokensAfter} tokens</span>
+              </div>
+              <p className="font-semibold text-slate-800 dark:text-zinc-200">Retained Digest:</p>
+              <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
+                {threadCompaction.summary}
+              </pre>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={handleRestoreCompaction}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors"
+              >
+                Restore full history
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(false)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Lightbox Modal */}
       {previewModalImage && (
         <div
@@ -1086,6 +1214,48 @@ export function ChatStream({
             </span>
           )}
 
+          {/* Context Meter Pill */}
+          <div
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono shrink-0"
+            title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
+          >
+            <span
+              className={`font-semibold ${
+                contextStats.estimatedTokens > 85000
+                  ? "text-rose-600 dark:text-rose-400"
+                  : contextStats.estimatedTokens > 70000
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-slate-600 dark:text-zinc-400"
+              }`}
+            >
+              {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
+            </span>
+            <div className="w-8 sm:w-12 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  contextStats.estimatedTokens > 85000
+                    ? "bg-rose-500"
+                    : contextStats.estimatedTokens > 70000
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+                style={{
+                  width: `${Math.min(100, Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100))}%`
+                }}
+              />
+            </div>
+            {threadCompaction ? (
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(true)}
+                className="ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                title="View compaction summary and restore options"
+              >
+                Compacted
+              </button>
+            ) : null}
+          </div>
+
           {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
           <div className="hidden md:flex items-center">
             <EngineStatusPill onOpenSettings={onOpenModelSheet} />
@@ -1149,6 +1319,16 @@ export function ChatStream({
                     className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                   >
                     New thread
+                  </button>
+                )}
+                {threadId && (
+                  <button
+                    type="button"
+                    onClick={handleManualCompact}
+                    disabled={isCompactingManually}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl disabled:opacity-50"
+                  >
+                    {isCompactingManually ? "Compacting history..." : "Compact history now"}
                   </button>
                 )}
                 {onViewSecurityTelemetry && (

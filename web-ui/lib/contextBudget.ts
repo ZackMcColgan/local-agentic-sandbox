@@ -10,8 +10,11 @@ import { compactConversationHistory } from "./conversationCompaction";
 
 export { compactConversationHistory } from "./conversationCompaction";
 
+export const CHAT_CONTEXT_BUDGET_TOKENS = 100000;
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
+
 export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
-  "[Earlier tool output truncated to fit the 8192-token context window]";
+  "[Earlier tool output truncated to fit the context window]";
 
 export const TOOL_TRUNCATION_MARKER = "...[truncated]";
 export const MAX_TOOL_OUTPUT_CHARS = 2000;
@@ -258,7 +261,7 @@ export function fitContextWindow(
   }
 
   const source = options?.compactHistory
-    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? 6000 }).messages
+    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS }).messages
     : messages;
 
   // 1. Enforce invariant: role === "system" ONLY exists at index 0.
@@ -306,7 +309,7 @@ export function fitContextWindow(
     options?.isArtifactTurn ?? hasArtifactCreationIntent(lastUserContent).isArtifactRequest;
 
   // 2. Budget reservation for tool schemas and artifact output headroom
-  let maxTokens = options?.maxContentTokens ?? 6000;
+  let maxTokens = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
   const rawToolTokens =
     options?.tools && Array.isArray(options.tools) && options.tools.length > 0
       ? estimateTokens(JSON.stringify(options.tools))
@@ -322,7 +325,8 @@ export function fitContextWindow(
     const headroom =
       options?.reserveOutputTokens ??
       (hasWebResults ? ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB : ARTIFACT_OUTPUT_HEADROOM_TOKENS);
-    const artifactCeiling = 8192 - headroom - rawToolTokens;
+    const windowBudget = options?.maxContentTokens ?? (CHAT_CONTEXT_BUDGET_TOKENS > 10000 ? 8192 : CHAT_CONTEXT_BUDGET_TOKENS);
+    const artifactCeiling = windowBudget - headroom - rawToolTokens;
     maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
 

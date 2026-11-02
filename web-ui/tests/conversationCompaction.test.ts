@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compactConversationHistory,
   summarizeTurnHistory,
+  extractIdentifiersAndErrors,
   DEFAULT_COMPACTION_THRESHOLD
 } from "../lib/conversationCompaction";
 import { estimateTokens } from "../lib/contextBudget";
@@ -102,5 +103,25 @@ describe("Conversation Compaction at 85% Suite (Fix D3)", () => {
     const resSingle = compactConversationHistory(single);
     assert.equal(resSingle.compacted, false);
     assert.equal(resSingle.messages.length, 1);
+  });
+
+  it("extracts identifiers (file paths, git SHAs, URLs, and errors) into compaction summary", () => {
+    const messages = [
+      { role: "user", content: "Inspect repo status and commit sha 86c8901c6433617cb9abe5db97123a0f52f58c89" },
+      { role: "assistant", content: "I will read web-ui/lib/contextBudget.ts and check https://github.com/test/repo." },
+      { role: "tool", name: "read_file", content: "Read web-ui/lib/contextBudget.ts successfully." },
+      { role: "assistant", content: "Execution error: failed to compile module at line 42." }
+    ];
+    const extracted = extractIdentifiersAndErrors(messages);
+    assert.ok(extracted.filePaths.includes("web-ui/lib/contextBudget.ts"));
+    assert.ok(extracted.gitShas.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+    assert.ok(extracted.urls.some((u: string) => u.startsWith("https://github.com/test/repo")));
+    assert.ok(extracted.errorLines.some((l: string) => l.includes("failed to compile module")));
+
+    const summary = summarizeTurnHistory(messages);
+    assert.ok(summary.includes("web-ui/lib/contextBudget.ts"));
+    assert.ok(summary.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+    assert.ok(summary.includes("https://github.com/test/repo"));
+    assert.ok(summary.includes("failed to compile module"));
   });
 });

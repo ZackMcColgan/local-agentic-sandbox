@@ -295,6 +295,19 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return NextResponse.json({ thread });
     }
 
+    // 4. Action: Restore Compaction
+    if (body.action === "restoreCompaction") {
+      threadStore.clearCompactionBoundary(thread);
+      return NextResponse.json({ thread });
+    }
+
+    // 5. Action: Toggle Host Access
+    if (body.action === "setHostAccess") {
+      thread.hostAccess = Boolean(body.hostAccess);
+      threadStore.saveThread(thread);
+      return NextResponse.json({ thread });
+    }
+
     return NextResponse.json({ thread });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
