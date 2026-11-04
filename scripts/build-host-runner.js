@@ -17,20 +17,6 @@ const distDir = path.resolve(hostBridgeDir, "dist");
 const aiControlBinDir = "C:\\AI\\ai-control\\bin";
 const aiControlBinExe = path.join(aiControlBinDir, "host-runner.exe");
 
-console.log("==========================================================");
-console.log("  Building Host Runner SEA Binary (TypeScript / Node 22)  ");
-console.log("==========================================================");
-
-// 1. Prepare directories
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
-}
-if (!fs.existsSync(aiControlBinDir)) {
-  fs.mkdirSync(aiControlBinDir, { recursive: true });
-}
-
-// 2. Compute Bridge Source SHA-256 and write manifest.json
-console.log("[1/6] Computing bridgeSourceSha256 provenance manifest...");
 function computeSha256() {
   const crypto = require("crypto");
   const sourceFiles = [];
@@ -81,6 +67,27 @@ function computeSha256() {
 
   return hash.digest("hex");
 }
+
+if (process.argv.includes("--get-digest")) {
+  const digest = computeSha256();
+  process.stdout.write(digest);
+  process.exit(0);
+}
+
+console.log("==========================================================");
+console.log("  Building Host Runner SEA Binary (TypeScript / Node 22)  ");
+console.log("==========================================================");
+
+// 1. Prepare directories
+if (!fs.existsSync(distDir)) {
+  fs.mkdirSync(distDir, { recursive: true });
+}
+if (!fs.existsSync(aiControlBinDir)) {
+  fs.mkdirSync(aiControlBinDir, { recursive: true });
+}
+
+// 2. Compute Bridge Source SHA-256 and write manifest.json
+console.log("[1/6] Computing bridgeSourceSha256 provenance manifest...");
 
 const sha256 = computeSha256();
 const manifestData = {
@@ -165,6 +172,11 @@ execSync(postjectCmd, {
 // 6. Copy compiled binary to C:\AI\ai-control\bin\host-runner.exe
 console.log(`[5/6] Deploying executable to ${aiControlBinExe}...`);
 fs.copyFileSync(localExePath, aiControlBinExe);
+fs.writeFileSync(
+  path.join(aiControlBinDir, "manifest.json"),
+  JSON.stringify(manifestData, null, 2) + "\n",
+  "utf8"
+);
 
 // 7. Verify executable runs
 console.log("[6/6] Verifying compiled executable fail-closed and health readiness...");
