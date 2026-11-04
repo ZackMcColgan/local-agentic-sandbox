@@ -23,6 +23,7 @@ spec:
         runAsGroup: 10001
         runAsNonRoot: true
         fsGroup: 10001
+        supplementalGroups: [1001]
         seccompProfile:
           type: RuntimeDefault
       containers:

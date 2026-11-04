@@ -133,8 +133,17 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/threadsLaunchTask.test.ts",
       "tests/sessionIntegrity.test.ts",
-      "tests/chatReasoningAndProgress.test.ts"
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/permissions.test.ts"
     ]
+  },
+  // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
+  {
+    match: (p) =>
+      p.includes("permissions") ||
+      p.includes("deploy/k8s/mcp-runner") ||
+      p.includes("deploy/k8s/web-ui"),
+    tests: ["tests/permissions.test.ts"]
   },
   // Unified Agent UI (Material 3) components & design tokens
   {
@@ -534,8 +543,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.endsWith("script.py") ||
     normalizedPath.endsWith(".py")
   ) {
-    // Only exception: docs/architecture.drawio is covered
+    // Exceptions: covered files in otherwise ignored paths
     if (normalizedPath.includes("architecture.drawio")) return false;
+    if (normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") || normalizedPath.startsWith("deploy/k8s/web-ui.yaml")) return false;
     return true;
   }
   return false;

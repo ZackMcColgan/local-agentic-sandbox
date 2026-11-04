@@ -83,11 +83,11 @@ export function resolveThreadsDir(): string {
     for (const dir of candidates) {
       try {
         if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
+          fs.mkdirSync(dir, { recursive: true, mode: 0o770 });
         }
         try {
-          fs.chmodSync(dir, 0o777);
-          fs.chmodSync(path.dirname(dir), 0o777);
+          fs.chmodSync(dir, 0o770);
+          fs.chmodSync(path.dirname(dir), 0o770);
         } catch {}
         fs.accessSync(dir, fs.constants.W_OK);
         resolvedDir = dir;
@@ -110,11 +110,11 @@ export class ThreadStore {
     this.supervisor = supervisor || new OvernightSupervisor();
     if (!fs.existsSync(this.threadsDir)) {
       try {
-        fs.mkdirSync(this.threadsDir, { recursive: true });
+        fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
     }
-    try { fs.chmodSync(path.dirname(this.threadsDir), 0o777); } catch {}
-    try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
+    try { fs.chmodSync(path.dirname(this.threadsDir), 0o770); } catch {}
+    try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
   }
 
   getFilePath(threadId: string): string {
@@ -130,9 +130,9 @@ export class ThreadStore {
     }
     if (!fs.existsSync(this.threadsDir)) {
       try {
-        fs.mkdirSync(this.threadsDir, { recursive: true });
+        fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
-      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
     }
 
     const files = fs.readdirSync(this.threadsDir).filter((f) => f.endsWith(".json"));
@@ -473,22 +473,22 @@ export class ThreadStore {
   saveThread(thread: Thread): void {
     if (!fs.existsSync(this.threadsDir)) {
       try {
-        fs.mkdirSync(this.threadsDir, { recursive: true });
+        fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
-      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
     }
     thread.updatedAt = new Date().toISOString();
     const targetFile = this.getFilePath(thread.id);
     const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
     try {
-      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), "utf8");
+      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
       fs.renameSync(tempFile, targetFile);
     } catch (err) {
       if (fs.existsSync(tempFile)) {
         try { fs.unlinkSync(tempFile); } catch {}
       }
       // Fallback to direct write if rename fails across partitions
-      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), "utf8");
+      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
     }
   }
 
