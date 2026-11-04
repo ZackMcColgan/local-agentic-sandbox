@@ -197,4 +197,71 @@ Use \`run_command\` for shell actions.
       assert.equal(activeThread, null, "Navigating back returns to sessions list (activeThread = null)");
     });
   });
+
+  // -------------------------------------------------------------
+  // F4.6 — Compacted Turn Note
+  // -------------------------------------------------------------
+  describe("F4.6 — Compacted Turn Note", () => {
+    it("renders compaction turn note badge when assistant message has compactedThisTurn=true and token stats", () => {
+      const messagesWithCompaction: any[] = [
+        {
+          id: "m-user-1",
+          role: "user" as const,
+          content: "Summarize status"
+        },
+        {
+          id: "m-asst-1",
+          role: "assistant" as const,
+          content: "Here is the summary after compaction.",
+          compactedThisTurn: true,
+          tokensBeforeCompaction: 88400,
+          tokensAfterCompaction: 14200
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: messagesWithCompaction
+        })
+      );
+
+      assert.ok(
+        html.includes('data-testid="compaction-turn-note"'),
+        "Assistant message must render compaction turn note badge"
+      );
+      assert.ok(
+        html.includes("History compacted: 88,400 → 14,200 tokens") ||
+        (html.includes("88,400") && html.includes("14,200")),
+        "Compacted badge must display formatted tokens before and after"
+      );
+    });
+
+    it("does NOT render compaction turn note badge when compactedThisTurn is false or omitted", () => {
+      const messagesWithoutCompaction: any[] = [
+        {
+          id: "m-asst-2",
+          role: "assistant" as const,
+          content: "Standard assistant reply without compaction.",
+          compactedThisTurn: false
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: messagesWithoutCompaction
+        })
+      );
+
+      assert.ok(
+        !html.includes('data-testid="compaction-turn-note"'),
+        "Must NOT render compaction-turn-note when compactedThisTurn is false or omitted"
+      );
+    });
+  });
 });

@@ -416,11 +416,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
+        const threadStore = new ThreadStore();
+        let threadData: any = null;
         let threadHostAccess = false;
         if (activeThreadId) {
           try {
-            const threadStore = new ThreadStore();
-            const threadData = await threadStore.getThread(activeThreadId);
+            threadData = await threadStore.getThread(activeThreadId);
             if (threadData?.hostAccess) {
               threadHostAccess = true;
             }
@@ -451,7 +452,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const toolRegistry = buildToolRegistry(allTools);
         const llmTools = buildLayer1Tools(allTools);
 
-        const conversationMessages = [...messages];
+        const prep = threadStore.prepareTurnConversationMessages(
+          threadData,
+          messages,
+          CHAT_CONTEXT_BUDGET_TOKENS
+        );
+        let turnCompacted = prep.compactedThisTurn;
+        let turnTokensBefore = prep.tokensBeforeCompaction;
+        let turnTokensAfter = prep.tokensAfterCompaction;
+
+        const conversationMessages = [...prep.messages];
         if (conversationMessages.length > 0) {
           const lastIdx = conversationMessages.length - 1;
           const lastMsg = { ...conversationMessages[lastIdx] };
@@ -559,7 +569,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           context: {
             estimatedTokens: initialEstimatedTokens,
             budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
-            compactedThisTurn: false
+            compactedThisTurn: turnCompacted,
+            tokensBeforeCompaction: turnTokensBefore,
+            tokensAfterCompaction: turnTokensAfter
           }
         });
 
@@ -586,6 +598,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           if (compaction.compacted) {
             conversationMessages.length = 0;
             conversationMessages.push(...compaction.messages);
+            turnCompacted = true;
+            turnTokensBefore = compaction.tokensBefore;
+            turnTokensAfter = compaction.tokensAfter;
+
+            if (activeThreadId && threadData) {
+              try {
+                threadStore.compactThreadIncremental(threadData);
+              } catch {}
+            }
+
             await sendEvent({
               type: "meta",
               model: activeModel,
@@ -1217,6 +1239,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           mode,
           reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult,
+          compactedThisTurn: turnCompacted || undefined,
+          tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
+          tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
           trace_session: {
             sessionId: tracer.getSessionId(),
             traceId: tracer.getTraceId()

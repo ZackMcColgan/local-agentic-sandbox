@@ -96,6 +96,9 @@ export interface ChatMessage {
   isStopped?: boolean;
   isStreaming?: boolean;
   timestamp?: string;
+  compactedThisTurn?: boolean;
+  tokensBeforeCompaction?: number;
+  tokensAfterCompaction?: number;
 }
 
 export interface UiHostApproval {
@@ -352,6 +355,25 @@ export function ChatStream({
       })
       .catch(() => {});
 
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  // Rehydration of thread compaction boundary on thread switch
+  useEffect(() => {
+    if (!threadId) {
+      setThreadCompaction(null);
+      return;
+    }
+    let active = true;
+    fetch(`/api/threads/${encodeURIComponent(threadId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active) return;
+        setThreadCompaction(data?.thread?.compaction || null);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -744,6 +766,9 @@ export function ChatStream({
     let accumulatedRawContent = "";
     let currentTraces: ExecutionTraceItem[] = [];
     let currentModel = activeModel;
+    let compactedThisTurn = false;
+    let tokensBeforeCompaction: number | undefined = undefined;
+    let tokensAfterCompaction: number | undefined = undefined;
 
     const upsertAssistant = (
       prev: ChatMessage[],
@@ -792,6 +817,19 @@ export function ChatStream({
                 tokensBeforeCompaction: event.context.tokensBeforeCompaction,
                 tokensAfterCompaction: event.context.tokensAfterCompaction
               }));
+              if (event.context.compactedThisTurn) {
+                compactedThisTurn = true;
+                tokensBeforeCompaction = event.context.tokensBeforeCompaction;
+                tokensAfterCompaction = event.context.tokensAfterCompaction;
+                setMessages((prev) =>
+                  upsertAssistant(prev, (msg) => ({
+                    ...msg,
+                    compactedThisTurn: true,
+                    tokensBeforeCompaction,
+                    tokensAfterCompaction
+                  }))
+                );
+              }
             }
           } else if (event.type === "status") {
             setStreamStatus(event.status);
@@ -850,6 +888,9 @@ export function ChatStream({
             const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
             const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
             const finalModel = event.model || currentModel;
+            const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
+            const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
+            const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
 
             if (targetThreadId && !activeSimulation) {
               try {
@@ -867,7 +908,10 @@ export function ChatStream({
                       traces: event.traces || currentTraces,
                       attachments: event.attachments,
                       durationMs,
-                      timestamp: new Date().toISOString()
+                      timestamp: new Date().toISOString(),
+                      compactedThisTurn: finalCompacted || undefined,
+                      tokensBeforeCompaction: finalTokensBefore,
+                      tokensAfterCompaction: finalTokensAfter
                     }
                   })
                 }).catch((err) => console.warn("Failed to persist assistant message:", err));
@@ -882,7 +926,10 @@ export function ChatStream({
                 traces: event.traces || currentTraces,
                 attachments: event.attachments || msg.attachments,
                 modelUsed: finalModel,
-                durationMs: event.durationMs || durationMs
+                durationMs: event.durationMs || durationMs,
+                compactedThisTurn: finalCompacted || undefined,
+                tokensBeforeCompaction: finalTokensBefore,
+                tokensAfterCompaction: finalTokensAfter
               }))
             );
           } else if (event.type === "error") {
@@ -1819,6 +1866,17 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-[840px] space-y-3">
+                  {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
+                    <div
+                      data-testid="compaction-turn-note"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
+                    >
+                      <span>
+                        History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
+                      </span>
+                    </div>
+                  )}
+
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
                   {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
