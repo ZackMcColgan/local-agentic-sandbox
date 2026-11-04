@@ -54,7 +54,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import {
@@ -279,6 +279,7 @@ export function ChatStream({
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
+  const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   // Host Mode & Approvals state
@@ -2248,6 +2249,75 @@ export function ChatStream({
                       })}
                     </div>
                   )}
+
+                  {/* Chat Diff Cards for File Writes & Patches */}
+                  {(() => {
+                    const fileDiffs = !isUser ? extractFileWriteDiffsFromTraces(m.traces) : [];
+                    if (fileDiffs.length === 0) return null;
+
+                    return (
+                      <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+                        {fileDiffs.map((diffItem) => {
+                          const isExpanded = expandedDiffCards[diffItem.id] ?? true;
+                          return (
+                            <div
+                              key={diffItem.id}
+                              data-testid="chat-diff-card"
+                              className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs overflow-hidden"
+                            >
+                              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span
+                                    className="font-mono text-xs font-semibold text-slate-900 dark:text-zinc-100 truncate"
+                                    title={diffItem.path}
+                                  >
+                                    {diffItem.path}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-mono text-[10px] font-bold shrink-0">
+                                    {`+${diffItem.addedLines}`}
+                                  </span>
+                                  {diffItem.removedLines > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 font-mono text-[10px] font-bold shrink-0">
+                                      {`-${diffItem.removedLines}`}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(diffItem.path, diffItem.id)}
+                                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[11px] font-medium text-slate-600 dark:text-zinc-300 flex items-center gap-1 transition-colors"
+                                    title="Copy path"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                    <span>Copy path</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedDiffCards((prev) => ({
+                                        ...prev,
+                                        [diffItem.id]: !(prev[diffItem.id] ?? true)
+                                      }))
+                                    }
+                                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors"
+                                  >
+                                    {isExpanded ? "Hide diff" : "View diff"}
+                                  </button>
+                                </div>
+                              </div>
+                              {isExpanded && diffItem.diffPreview ? (
+                                <pre className="border-t border-slate-100 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-200 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                  {diffItem.diffPreview}
+                                </pre>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {/* Grounded File Citation Card matching Mockup 4 */}
                   {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (

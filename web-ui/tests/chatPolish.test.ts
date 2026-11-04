@@ -11,7 +11,7 @@ import {
   TURN_PHASE_REASONING,
   TURN_PHASE_WRITING
 } from "../lib/chatStatus";
-import { getServedByNote } from "../lib/chatUtils";
+import { getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
 
 describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
   // -------------------------------------------------------------
@@ -426,6 +426,95 @@ Use \`run_command\` for shell actions.
 
       assert.ok(html.includes('data-testid="context-meter-pill"'), "Must render context-meter-pill");
       assert.ok(!html.includes("hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full"), "Must NOT have hidden sm:flex hiding pill on mobile");
+    });
+  });
+
+  // -------------------------------------------------------------
+  // Phase Ω — Chat Diff Cards for File Writes & Patches
+  // -------------------------------------------------------------
+  describe("Phase Ω — Chat Diff Cards for File Writes & Patches", () => {
+    it("extractFileWriteDiffsFromTraces extracts diff stats and unified preview for workspace_write_file, workspace_patch_file, and host_write_file", () => {
+      const traces = [
+        {
+          tool: "workspace_write_file",
+          args: {
+            path: "src/utils/math.ts",
+            content: "export const add = (a: number, b: number) => a + b;\nexport const sub = (a: number, b: number) => a - b;"
+          }
+        },
+        {
+          tool: "workspace_patch_file",
+          args: {
+            path: "src/index.ts",
+            search: "const oldVal = 1;",
+            replace: "const newVal = 2;\nconst extra = 3;"
+          }
+        },
+        {
+          tool: "workspace_read_file",
+          args: {
+            path: "src/secret.ts"
+          }
+        },
+        {
+          name: "host_read_file",
+          args: {
+            filePath: "C:/system/log.txt"
+          }
+        }
+      ];
+
+      const diffs = extractFileWriteDiffsFromTraces(traces);
+      assert.equal(diffs.length, 2, "Must extract exactly 2 diff items, ignoring read-only tools");
+
+      // Check write item
+      const writeItem = diffs.find((d: any) => d.path === "src/utils/math.ts");
+      assert.ok(writeItem, "Must extract workspace_write_file item");
+      assert.equal(writeItem.tool, "workspace_write_file");
+      assert.equal(writeItem.addedLines, 2);
+      assert.equal(writeItem.removedLines, 0);
+      assert.ok(writeItem.diffPreview.includes("+ export const add"), "diffPreview must contain '+ export const add'");
+
+      // Check patch item
+      const patchItem = diffs.find((d: any) => d.path === "src/index.ts");
+      assert.ok(patchItem, "Must extract workspace_patch_file item");
+      assert.equal(patchItem.addedLines, 2);
+      assert.equal(patchItem.removedLines, 1);
+      assert.ok(patchItem.diffPreview.includes("- const oldVal = 1;"), "diffPreview must contain '- const oldVal = 1;'");
+      assert.ok(patchItem.diffPreview.includes("+ const newVal = 2;"), "diffPreview must contain '+ const newVal = 2;'");
+    });
+
+    it("ChatStream renders data-testid=\"chat-diff-card\" with +added/-removed badges and Copy path button on assistant file-write turns", () => {
+      const messages: any[] = [
+        {
+          id: "m-write-1",
+          role: "assistant",
+          content: "I have updated the file for you.",
+          traces: [
+            {
+              tool: "workspace_write_file",
+              args: {
+                path: "web-ui/lib/newHelper.ts",
+                content: "export const x = 1;\nexport const y = 2;\n"
+              }
+            }
+          ]
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages
+        })
+      );
+
+      assert.ok(html.includes('data-testid="chat-diff-card"'), "Must render chat-diff-card");
+      assert.ok(html.includes("web-ui/lib/newHelper.ts"), "Must render file path web-ui/lib/newHelper.ts");
+      assert.ok(html.includes("+2"), "Must render +2 added lines badge");
+      assert.ok(html.includes("Copy path"), "Must render Copy path button");
     });
   });
 });

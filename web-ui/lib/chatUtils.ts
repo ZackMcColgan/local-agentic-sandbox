@@ -367,3 +367,132 @@ export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
   return { summary: trimmed };
 }
 
+export interface ChatFileDiffItem {
+  id: string;
+  path: string;
+  tool: string;
+  addedLines: number;
+  removedLines: number;
+  diffPreview: string;
+}
+
+/**
+ * Extracts diff stats and unified previews from assistant trace objects
+ * for file write and patch operations (workspace_write_file, workspace_patch_file, host_write_file).
+ */
+export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffItem[] {
+  if (!Array.isArray(traces) || traces.length === 0) {
+    return [];
+  }
+
+  const items: ChatFileDiffItem[] = [];
+
+  traces.forEach((trace, index) => {
+    const tool = trace?.tool || trace?.name;
+    if (
+      tool !== "workspace_write_file" &&
+      tool !== "workspace_patch_file" &&
+      tool !== "host_write_file"
+    ) {
+      return;
+    }
+
+    if (trace?.status === "error") {
+      return;
+    }
+
+    const filePath = trace?.args?.path || trace?.args?.filePath || trace?.args?.targetFile;
+    if (!filePath || typeof filePath !== "string") {
+      return;
+    }
+
+    const id = trace?.id || `${tool}-${filePath}-${index}`;
+
+    if (tool === "workspace_write_file" || tool === "host_write_file") {
+      const rawContent = typeof trace?.args?.content === "string" ? trace.args.content : "";
+      const normalized = rawContent.replace(/\r\n/g, "\n").replace(/\n$/, "");
+      const lines = normalized.length > 0 ? normalized.split("\n") : [];
+      const addedLines = lines.length;
+      const removedLines = 0;
+      let diffPreview = "";
+      if (lines.length > 0) {
+        const previewLines = lines.slice(0, 40).map((l: string) => "+ " + l);
+        diffPreview = previewLines.join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+      }
+
+      items.push({
+        id,
+        path: filePath,
+        tool,
+        addedLines,
+        removedLines,
+        diffPreview
+      });
+    } else if (tool === "workspace_patch_file") {
+      const hasOldOrNew =
+        trace?.args?.search !== undefined ||
+        trace?.args?.oldText !== undefined ||
+        trace?.args?.target !== undefined ||
+        trace?.args?.replace !== undefined ||
+        trace?.args?.newText !== undefined ||
+        trace?.args?.replacement !== undefined ||
+        trace?.args?.content !== undefined;
+
+      if (!hasOldOrNew && (trace?.args?.diff || trace?.args?.patch)) {
+        const diffStr = String(trace.args.diff || trace.args.patch).replace(/\r\n/g, "\n");
+        const lines = diffStr.length > 0 ? diffStr.split("\n") : [];
+        let addedLines = 0;
+        let removedLines = 0;
+        for (const line of lines) {
+          if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+          else if (line.startsWith("-") && !line.startsWith("---")) removedLines++;
+        }
+        let diffPreview = lines.slice(0, 40).join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview
+        });
+      } else {
+        const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
+        const newStr = trace?.args?.replace ?? trace?.args?.newText ?? trace?.args?.replacement ?? trace?.args?.content ?? "";
+
+        const oldNormalized = oldStr ? String(oldStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+        const newNormalized = newStr ? String(newStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+
+        const oldLines = oldNormalized.length > 0 ? oldNormalized.split("\n") : [];
+        const newLines = newNormalized.length > 0 ? newNormalized.split("\n") : [];
+
+        const removedLines = oldLines.length;
+        const addedLines = newLines.length;
+
+        const diffPreview = [
+          ...oldLines.slice(0, 20).map((l: string) => "- " + l),
+          ...newLines.slice(0, 20).map((l: string) => "+ " + l)
+        ].join("\n");
+
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview
+        });
+      }
+    }
+  });
+
+  return items;
+}
+
+
