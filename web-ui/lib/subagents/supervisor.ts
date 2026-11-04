@@ -44,6 +44,7 @@ import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 import { WorkerGitOps } from "../git/workerGitOps";
 import { SelfDeployPipeline } from "../deploy/selfDeploy";
+import { notify } from "../notifications";
 
 let sycophancyProbeExecuted = false;
 
@@ -1754,6 +1755,18 @@ export class OvernightSupervisor {
             message: `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`
           });
         }
+      }
+
+      if (task.gatePassed === false) {
+        notify("task.failed", {
+          title: `Task Failed: ${task.taskId}`,
+          body: `Pre-merge gate test failed: ${task.goal?.slice(0, 100)}`
+        }).catch(() => {});
+      } else {
+        notify("task.completed", {
+          title: `Task Completed: ${task.taskId}`,
+          body: `All ${task.milestones.length} milestones completed: ${task.goal?.slice(0, 100)}`
+        }).catch(() => {});
       }
 
       this.saveCheckpoint(task);

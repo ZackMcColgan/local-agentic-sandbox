@@ -57,12 +57,12 @@ export function DiffViewer({
           <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2">
             {additions > 0 && (
               <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                +{additions}
+                {`+${additions}`}
               </span>
             )}
             {deletions > 0 && (
               <span className="text-rose-600 dark:text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-                -{deletions}
+                {`-${deletions}`}
               </span>
             )}
           </div>

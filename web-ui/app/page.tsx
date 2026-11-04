@@ -851,6 +851,14 @@ export default function Home() {
               threadTitle={currentThread?.title || "New session"}
               threadStatus={currentThread?.status}
               threadScope={currentThread?.scope}
+              threadHostAccess={currentThread?.hostAccess}
+              onHostAccessChanged={(enabled, updatedThread) => {
+                if (updatedThread) {
+                  setThreads((prev) =>
+                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
+                  );
+                }
+              }}
               activeTask={activeTask}
               onStopTask={handleStopRun}
               onTaskUpdated={(task, updatedThread) => {

@@ -7,6 +7,7 @@ import {
   generateMorningReport
 } from "@/lib/subagents/morningReport";
 import { ThreadStore, Thread } from "@/lib/threads/threadStore";
+import { notify } from "@/lib/notifications";
 
 const supervisor = new OvernightSupervisor();
 const threadStore = new ThreadStore();
@@ -89,6 +90,11 @@ export async function POST(req: Request) {
     const tasks = Array.isArray(body.tasks) ? body.tasks : await supervisor.listAllTasks();
     const overnightReport = generateOvernightMorningReport(tasks);
     persistOvernightMorningReport(overnightReport, supervisor.checkpointDirectory);
+    // Outbound notification for morning report readiness
+    notify("morning_report.ready", {
+      title: "Morning Report Ready",
+      body: `Overnight engineering report compiled with ${tasks.length} task(s).`
+    }).catch(() => {});
     return NextResponse.json({ overnightReport });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

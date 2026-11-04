@@ -24,6 +24,8 @@ export function resolveEffectiveReasoningEffort(
   return requestedEffort || profile?.defaultReasoningEffort || "medium";
 }
 
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
+
 /**
  * Computes options for local LLM model request based on model architecture and reasoning effort.
  */
@@ -32,7 +34,7 @@ export function computeModelOptions(
   reasoningEffort?: "low" | "medium" | "xhigh"
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: 12288
+    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);
@@ -275,6 +277,46 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
   };
 }
 
+export function canonicalizeModelId(modelId?: string | null): string {
+  if (!modelId) return "";
+  const lower = modelId.trim().toLowerCase().replace(/:latest$/, "");
+  if (lower.includes("swift-1.5") || lower.includes("swift-15") || lower === "swift-1.5") {
+    return "swift-1.5-qwen3.8-27b-iq3_xs";
+  }
+  if (lower.includes("flash-next") || lower.includes("gyro-s") || lower.includes("gyro")) {
+    return "qwen3.8-flash-next-gyro-gyro-s";
+  }
+  if (lower.includes("qwen3.8:27b") || lower === "qwen3.8") {
+    return "qwen3.8:27b-q3_k_m";
+  }
+  if (lower.includes("gemma4")) {
+    return "gemma4:e4b";
+  }
+  return lower;
+}
+
+export function formatModelDisplayLabel(modelId?: string | null): string {
+  const canon = canonicalizeModelId(modelId);
+  if (canon === "qwen3.8-flash-next-gyro-gyro-s") return "Flash-Next";
+  if (canon === "swift-1.5-qwen3.8-27b-iq3_xs") return "Swift-1.5";
+  if (canon === "qwen3.8:27b-q3_k_m") return "qwen3.8";
+  if (canon === "gemma4:e4b") return "gemma4:e4b";
+  return (modelId || "").trim().replace(/:latest$/, "");
+}
+
+export function getServedByNote(modelUsed?: string | null, selectedModel?: string | null): string | null {
+  if (!modelUsed || !modelUsed.trim()) return null;
+  if (!selectedModel || !selectedModel.trim() || selectedModel.trim().toLowerCase() === "auto") {
+    return null;
+  }
+  const servedCanon = canonicalizeModelId(modelUsed);
+  const selectedCanon = canonicalizeModelId(selectedModel);
+  if (!servedCanon || !selectedCanon || servedCanon === selectedCanon) {
+    return null;
+  }
+  return "Served by " + formatModelDisplayLabel(modelUsed) + " (" + formatModelDisplayLabel(selectedModel) + " selected)";
+}
+
 export interface FormattedChatError {
   summary: string;
   details?: string;
@@ -324,4 +366,135 @@ export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
 
   return { summary: trimmed };
 }
+
+export interface ChatFileDiffItem {
+  id: string;
+  path: string;
+  tool: string;
+  addedLines: number;
+  removedLines: number;
+  diffPreview: string;
+}
+
+/**
+ * Extracts diff stats and unified previews from assistant trace objects
+ * for file write and patch operations (workspace_write_file, workspace_patch_file, host_write_file).
+ */
+export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffItem[] {
+  if (!Array.isArray(traces) || traces.length === 0) {
+    return [];
+  }
+
+  const items: ChatFileDiffItem[] = [];
+
+  traces.forEach((trace, index) => {
+    const tool = trace?.tool || trace?.name;
+    if (
+      tool !== "workspace_write_file" &&
+      tool !== "workspace_patch_file" &&
+      tool !== "host_write_file"
+    ) {
+      return;
+    }
+
+    if (trace?.status === "error") {
+      return;
+    }
+
+    const filePath = trace?.args?.path || trace?.args?.filePath || trace?.args?.targetFile;
+    if (!filePath || typeof filePath !== "string") {
+      return;
+    }
+
+    const id = trace?.id || `${tool}-${filePath}-${index}`;
+
+    if (tool === "workspace_write_file" || tool === "host_write_file") {
+      const rawContent = typeof trace?.args?.content === "string" ? trace.args.content : "";
+      const normalized = rawContent.replace(/\r\n/g, "\n").replace(/\n$/, "");
+      const lines = normalized.length > 0 ? normalized.split("\n") : [];
+      const addedLines = lines.length;
+      const removedLines = 0;
+      let diffPreview = "";
+      if (lines.length > 0) {
+        const previewLines = lines.slice(0, 40).map((l: string) => "+ " + l);
+        diffPreview = previewLines.join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+      }
+
+      items.push({
+        id,
+        path: filePath,
+        tool,
+        addedLines,
+        removedLines,
+        diffPreview
+      });
+    } else if (tool === "workspace_patch_file") {
+      const hasOldOrNew =
+        trace?.args?.search !== undefined ||
+        trace?.args?.oldText !== undefined ||
+        trace?.args?.target !== undefined ||
+        trace?.args?.replace !== undefined ||
+        trace?.args?.newText !== undefined ||
+        trace?.args?.replacement !== undefined ||
+        trace?.args?.content !== undefined;
+
+      if (!hasOldOrNew && (trace?.args?.diff || trace?.args?.patch)) {
+        const diffStr = String(trace.args.diff || trace.args.patch).replace(/\r\n/g, "\n");
+        const lines = diffStr.length > 0 ? diffStr.split("\n") : [];
+        let addedLines = 0;
+        let removedLines = 0;
+        for (const line of lines) {
+          if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+          else if (line.startsWith("-") && !line.startsWith("---")) removedLines++;
+        }
+        let diffPreview = lines.slice(0, 40).join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview
+        });
+      } else {
+        const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
+        const newStr = trace?.args?.replace ?? trace?.args?.newText ?? trace?.args?.replacement ?? trace?.args?.content ?? "";
+
+        const oldNormalized = oldStr ? String(oldStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+        const newNormalized = newStr ? String(newStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+
+        const oldLines = oldNormalized.length > 0 ? oldNormalized.split("\n") : [];
+        const newLines = newNormalized.length > 0 ? newNormalized.split("\n") : [];
+
+        const removedLines = oldLines.length;
+        const addedLines = newLines.length;
+
+        const diffPreview = [
+          ...oldLines.slice(0, 20).map((l: string) => "- " + l),
+          ...newLines.slice(0, 20).map((l: string) => "+ " + l)
+        ].join("\n");
+
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview
+        });
+      }
+    }
+  });
+
+  return items;
+}
+
+export * from "./chatDiffs";
+
 

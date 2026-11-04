@@ -152,12 +152,30 @@ test.describe("Simulation Mode & State Invariants Suite", () => {
     // 3. On desktop, open workspace panel and verify diff viewer
     if (!isMobile) {
       const workspaceBtn = page.locator('button[title="Toggle Workspace Panel"]').first();
+      await expect(workspaceBtn).toBeVisible();
+
+      // Assert that workspaceBtn and simulation-badge have zero bounding-box overlap
+      const simBadge = page.locator('[data-testid="simulation-badge"]').first();
+      await expect(simBadge).toBeVisible();
+      const workspaceBox = await workspaceBtn.boundingBox();
+      const simBadgeBox = await simBadge.boundingBox();
+      expect(workspaceBox).not.toBeNull();
+      expect(simBadgeBox).not.toBeNull();
+      if (workspaceBox && simBadgeBox) {
+        const hasOverlap =
+          workspaceBox.x < simBadgeBox.x + simBadgeBox.width &&
+          workspaceBox.x + workspaceBox.width > simBadgeBox.x &&
+          workspaceBox.y < simBadgeBox.y + simBadgeBox.height &&
+          workspaceBox.y + workspaceBox.height > simBadgeBox.y;
+        expect(hasOverlap).toBe(false);
+      }
+
       await workspaceBtn.click();
 
       // Diff viewer should show the planned telemetry module diff
       const diffTab = page.locator('button:has-text("Diff")').first();
       await diffTab.click();
-      await expect(page.locator('text=MetricsCollector')).toBeVisible();
+      await expect(page.locator('text=MetricsCollector').first()).toBeVisible();
     }
   });
 

@@ -54,7 +54,10 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
+import { DiffViewer } from "./DiffViewer";
+import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import {
   parseSimulateCommand,
@@ -90,12 +93,31 @@ export interface ChatMessage {
     previewUrl?: string;
     isImage: boolean;
   }>;
+  diffs?: TurnFileDiff[];
   modelUsed?: string;
+  selectedModel?: string;
   durationMs?: number;
   taskId?: string;
   isStopped?: boolean;
   isStreaming?: boolean;
   timestamp?: string;
+  compactedThisTurn?: boolean;
+  tokensBeforeCompaction?: number;
+  tokensAfterCompaction?: number;
+}
+
+export interface UiHostApproval {
+  id: string;
+  threadId?: string;
+  tool: string;
+  args: Record<string, any>;
+  riskReason: string;
+  createdAt?: number;
+  expiresAt?: number;
+  status: "pending" | "executed" | "denied" | "expired" | "error";
+  result?: any;
+  error?: string;
+  isSubmitting?: boolean;
 }
 
 interface ChatStreamProps {
@@ -110,6 +132,8 @@ interface ChatStreamProps {
   threadId?: string;
   threadTitle?: string;
   threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
+  threadHostAccess?: boolean;
+  onHostAccessChanged?: (enabled: boolean, updatedThread?: any) => void;
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
@@ -213,6 +237,8 @@ export function ChatStream({
   threadId,
   threadTitle,
   threadStatus,
+  threadHostAccess,
+  onHostAccessChanged,
   activeTask,
   initialScope = "PROJECT",
   threadScope,
@@ -256,7 +282,151 @@ export function ChatStream({
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
+  const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
+  // Host Mode & Approvals state
+  const [hostAccess, setHostAccess] = useState<boolean>(Boolean(threadHostAccess));
+  const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
+  const [hostApprovals, setHostApprovals] = useState<UiHostApproval[]>([]);
+
+  useEffect(() => {
+    if (threadHostAccess !== undefined) {
+      setHostAccess(Boolean(threadHostAccess));
+    }
+  }, [threadHostAccess]);
+
+  useEffect(() => {
+    let active = true;
+    const url = threadId ? `/api/host/status?threadId=${encodeURIComponent(threadId)}` : "/api/host/status";
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        if (typeof data.hostAccess === "boolean" && threadHostAccess === undefined) {
+          setHostAccess(data.hostAccess);
+        }
+        if (typeof data.runnerAvailable === "boolean") {
+          setRunnerAvailable(data.runnerAvailable);
+        }
+      })
+      .catch(() => {
+        if (active) setRunnerAvailable(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [threadId, threadHostAccess]);
+
+  // Rehydration of pending host approvals on thread load
+  useEffect(() => {
+    if (!threadId) {
+      setHostApprovals([]);
+      return;
+    }
+    let active = true;
+
+    fetch(`/api/host/approvals?threadId=${encodeURIComponent(threadId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.approvals) return;
+        const now = Date.now();
+        const unexpired = data.approvals.filter(
+          (a: any) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
+        );
+
+        setHostApprovals((prev) => {
+          const merged = [...prev];
+          for (const app of unexpired) {
+            const idx = merged.findIndex((m) => m.id === app.id);
+            const uiApp: UiHostApproval = {
+              id: app.id,
+              threadId: app.threadId,
+              tool: app.tool,
+              args: app.args || {},
+              riskReason: app.riskReason || "Destructive action requires approval",
+              createdAt: app.createdAt,
+              expiresAt: app.expiresAt,
+              status: "pending"
+            };
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...uiApp };
+            } else {
+              merged.push(uiApp);
+            }
+          }
+          return merged;
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  // Rehydration of thread compaction boundary on thread switch
+  useEffect(() => {
+    if (!threadId) {
+      setThreadCompaction(null);
+      return;
+    }
+    let active = true;
+    fetch(`/api/threads/${encodeURIComponent(threadId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active) return;
+        setThreadCompaction(data?.thread?.compaction || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  const handleToggleHostAccess = async () => {
+    let targetThreadId = threadId;
+    if (!targetThreadId && onEnsureThread) {
+      targetThreadId = (await onEnsureThread("New session")) || undefined;
+    }
+    if (!targetThreadId) {
+      return;
+    }
+
+    const nextHostAccess = !hostAccess;
+    try {
+      const res = await fetch(`/api/threads/${targetThreadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setHostAccess", hostAccess: nextHostAccess })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setHostAccess(nextHostAccess);
+        if (onTaskUpdated && data.thread) {
+          onTaskUpdated(undefined, data.thread);
+        }
+        if (onHostAccessChanged && data.thread) {
+          onHostAccessChanged(nextHostAccess, data.thread);
+        }
+
+        // Fresh check of runner availability
+        try {
+          const statusRes = await fetch(`/api/host/status?threadId=${encodeURIComponent(targetThreadId)}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            if (typeof statusData.runnerAvailable === "boolean") {
+              setRunnerAvailable(statusData.runnerAvailable);
+            }
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn("Failed to toggle host access:", err);
+    }
+  };
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -279,6 +449,27 @@ export function ChatStream({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+
+  // Context budget meter & compaction state
+  const [contextStats, setContextStats] = useState<{
+    estimatedTokens: number;
+    budgetTokens: number;
+    compactedThisTurn?: boolean;
+    tokensBeforeCompaction?: number;
+    tokensAfterCompaction?: number;
+  }>({
+    estimatedTokens: 0,
+    budgetTokens: 100000
+  });
+  const [threadCompaction, setThreadCompaction] = useState<{
+    throughMessageId: string;
+    summary: string;
+    compactedAt: string;
+    tokensBefore: number;
+    tokensAfter: number;
+  } | null>(null);
+  const [isCompactingManually, setIsCompactingManually] = useState(false);
+  const [showCompactionModal, setShowCompactionModal] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -492,6 +683,48 @@ export function ChatStream({
     });
   };
 
+  const handleManualCompact = async () => {
+    if (!threadId || isCompactingManually) return;
+    setIsCompactingManually(true);
+    try {
+      const res = await fetch(`/api/threads/${threadId}/compact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread?.compaction) {
+          setThreadCompaction(data.thread.compaction);
+          setContextStats((prev) => ({
+            ...prev,
+            estimatedTokens: data.tokensAfter ?? prev.estimatedTokens
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("Manual compaction error:", err);
+    } finally {
+      setIsCompactingManually(false);
+    }
+  };
+
+  const handleRestoreCompaction = async () => {
+    if (!threadId) return;
+    try {
+      const res = await fetch(`/api/threads/${threadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restoreCompaction" })
+      });
+      if (res.ok) {
+        setThreadCompaction(null);
+        setShowCompactionModal(false);
+      }
+    } catch (err) {
+      console.error("Restore compaction error:", err);
+    }
+  };
+
   const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
     if (!threadId) return;
     try {
@@ -508,6 +741,355 @@ export function ChatStream({
       }
     } catch {
       // Non-fatal
+    }
+  };
+
+  const readStreamResponse = async (
+    res: Response,
+    targetThreadId?: string,
+    startTime: number = performance.now()
+  ) => {
+    const assistantMsgId = `assistant-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: activeModel,
+        selectedModel: activeModel
+      }
+    ]);
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error("No readable stream received from server");
+    }
+
+    const decoder = new TextDecoder();
+    let streamBuffer = "";
+    let accumulatedRawContent = "";
+    let currentTraces: ExecutionTraceItem[] = [];
+    let currentModel = activeModel;
+    let compactedThisTurn = false;
+    let tokensBeforeCompaction: number | undefined = undefined;
+    let tokensAfterCompaction: number | undefined = undefined;
+
+    const upsertAssistant = (
+      prev: ChatMessage[],
+      patch: (existing: ChatMessage) => ChatMessage
+    ): ChatMessage[] => {
+      const exists = prev.some((msg) => msg.id === assistantMsgId);
+      const base: ChatMessage = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: currentModel,
+        selectedModel: activeModel
+      };
+      if (!exists) {
+        return [...prev, patch(base)];
+      }
+      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      streamBuffer += decoder.decode(value, { stream: true });
+      const blocks = streamBuffer.split("\n\n");
+      streamBuffer = blocks.pop() || "";
+
+      for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const jsonStr = trimmed.replace(/^data:\s*/, "");
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === "meta") {
+            if (event.model) currentModel = event.model;
+            if (event.context) {
+              setContextStats((prev) => ({
+                ...prev,
+                estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
+                budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
+                compactedThisTurn: event.context.compactedThisTurn,
+                tokensBeforeCompaction: event.context.tokensBeforeCompaction,
+                tokensAfterCompaction: event.context.tokensAfterCompaction
+              }));
+              if (event.context.compactedThisTurn) {
+                compactedThisTurn = true;
+                tokensBeforeCompaction = event.context.tokensBeforeCompaction;
+                tokensAfterCompaction = event.context.tokensAfterCompaction;
+                setMessages((prev) =>
+                  upsertAssistant(prev, (msg) => ({
+                    ...msg,
+                    compactedThisTurn: true,
+                    tokensBeforeCompaction,
+                    tokensAfterCompaction
+                  }))
+                );
+              }
+            }
+          } else if (event.type === "status") {
+            setStreamStatus(event.status);
+          } else if (event.type === "thought") {
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                thought: event.thought
+              }))
+            );
+          } else if (event.type === "token") {
+            accumulatedRawContent += event.content || "";
+            const parsed = parseThinkingAndContent(accumulatedRawContent);
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                content: parsed.content,
+                thought: parsed.thought,
+                modelUsed: currentModel
+              }))
+            );
+          } else if (event.type === "trace") {
+            currentTraces = [...currentTraces, event.trace];
+            onTracesUpdate(currentTraces);
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                traces: currentTraces
+              }))
+            );
+          } else if (event.type === "approval_required") {
+            const approval = event.approval;
+            if (approval && approval.id) {
+              setHostApprovals((prev) => {
+                const idx = prev.findIndex((a) => a.id === approval.id);
+                const item: UiHostApproval = {
+                  id: approval.id,
+                  threadId: approval.threadId || targetThreadId,
+                  tool: approval.tool,
+                  args: approval.args || {},
+                  riskReason: approval.riskReason || "Destructive action requires approval",
+                  createdAt: approval.createdAt || Date.now(),
+                  expiresAt: approval.expiresAt || (Date.now() + 10 * 60 * 1000),
+                  status: "pending"
+                };
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = { ...copy[idx], ...item };
+                  return copy;
+                }
+                return [...prev, item];
+              });
+            }
+          } else if (event.type === "done") {
+            const durationMs = Math.round(performance.now() - startTime);
+            const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
+            const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
+            const finalModel = event.model || currentModel;
+            const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
+            const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
+            const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
+
+            if (targetThreadId && !activeSimulation) {
+              try {
+                fetch(`/api/threads/${targetThreadId}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "addMessage",
+                    message: {
+                      id: assistantMsgId,
+                      role: "assistant",
+                      content: parsed.content,
+                      thought: finalThought,
+                      modelUsed: finalModel,
+                      selectedModel: activeModel,
+                      traces: event.traces || currentTraces,
+                      attachments: event.attachments,
+                      diffs: event.diffs,
+                      durationMs,
+                      timestamp: new Date().toISOString(),
+                      compactedThisTurn: finalCompacted || undefined,
+                      tokensBeforeCompaction: finalTokensBefore,
+                      tokensAfterCompaction: finalTokensAfter
+                    }
+                  })
+                }).catch((err) => console.warn("Failed to persist assistant message:", err));
+              } catch {}
+            }
+
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                content: parsed.content,
+                thought: finalThought,
+                traces: event.traces || currentTraces,
+                attachments: event.attachments || msg.attachments,
+                diffs: event.diffs || msg.diffs,
+                modelUsed: finalModel,
+                selectedModel: msg.selectedModel || activeModel,
+                durationMs: event.durationMs || durationMs,
+                compactedThisTurn: finalCompacted || undefined,
+                tokensBeforeCompaction: finalTokensBefore,
+                tokensAfterCompaction: finalTokensAfter
+              }))
+            );
+          } else if (event.type === "error") {
+            throw new Error(event.error || "Streaming error encountered");
+          }
+        } catch (parseErr: any) {
+          if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
+            throw parseErr;
+          }
+        }
+      }
+    }
+  };
+
+  const runApprovalContinuation = async (approvalId: string) => {
+    const targetThreadId = threadId;
+    setIsLoading(true);
+    setStreamStatus("Continuing after host approval...");
+    setErrorMsg(null);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const startTime = performance.now();
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          model: activeModel,
+          mode: agentMode,
+          reasoning_effort: reasoningEffort,
+          threadId: targetThreadId,
+          approvalContinuationId: approvalId
+        })
+      });
+
+      if (!res.ok) {
+        let errMessage = "Failed to continue after host approval";
+        try {
+          const errJson = await res.json();
+          errMessage = errJson.error || errMessage;
+        } catch {}
+        throw new Error(errMessage);
+      }
+
+      await readStreamResponse(res, targetThreadId, startTime);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Approval continuation aborted by user");
+      } else {
+        console.error(err);
+        setErrorMsg(err.message || "Failed to continue chat after host approval");
+      }
+    } finally {
+      setIsLoading(false);
+      setStreamStatus(null);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleApprovalDecision = async (approvalId: string, action: "approved" | "rejected") => {
+    setHostApprovals((prev) =>
+      prev.map((item) => (item.id === approvalId ? { ...item, isSubmitting: true } : item))
+    );
+
+    try {
+      const res = await fetch("/api/host/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId, action })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 410) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? { ...item, status: "expired", isSubmitting: false }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      if (res.ok) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? {
+                  ...item,
+                  status: action === "approved" ? "executed" : "denied",
+                  result: data.result,
+                  isSubmitting: false
+                }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      if (res.status === 500) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? {
+                  ...item,
+                  status: "error",
+                  error: data.error || "Host tool execution failed",
+                  isSubmitting: false
+                }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      setHostApprovals((prev) =>
+        prev.map((item) =>
+          item.id === approvalId
+            ? {
+                ...item,
+                status: "error",
+                error: data.error || `Request failed with HTTP ${res.status}`,
+                isSubmitting: false
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      setHostApprovals((prev) =>
+        prev.map((item) =>
+          item.id === approvalId
+            ? {
+                ...item,
+                status: "error",
+                error: err?.message || "Failed to submit approval",
+                isSubmitting: false
+              }
+            : item
+        )
+      );
     }
   };
 
@@ -720,148 +1302,7 @@ export function ChatStream({
         throw new Error(errMessage);
       }
 
-      const assistantMsgId = `assistant-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: activeModel
-        }
-      ]);
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        throw new Error("No readable stream received from server");
-      }
-
-      const decoder = new TextDecoder();
-      let streamBuffer = "";
-      let accumulatedRawContent = "";
-      let currentTraces: ExecutionTraceItem[] = [];
-      let currentModel = activeModel;
-
-      const upsertAssistant = (
-        prev: ChatMessage[],
-        patch: (existing: ChatMessage) => ChatMessage
-      ): ChatMessage[] => {
-        const exists = prev.some((msg) => msg.id === assistantMsgId);
-        const base: ChatMessage = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: currentModel
-        };
-        if (!exists) {
-          return [...prev, patch(base)];
-        }
-        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        streamBuffer += decoder.decode(value, { stream: true });
-        const blocks = streamBuffer.split("\n\n");
-        streamBuffer = blocks.pop() || "";
-
-        for (const block of blocks) {
-          const trimmed = block.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const jsonStr = trimmed.replace(/^data:\s*/, "");
-          if (!jsonStr) continue;
-
-          try {
-            const event = JSON.parse(jsonStr);
-
-            if (event.type === "meta") {
-              if (event.model) currentModel = event.model;
-            } else if (event.type === "status") {
-              setStreamStatus(event.status);
-            } else if (event.type === "thought") {
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  thought: event.thought
-                }))
-              );
-            } else if (event.type === "token") {
-              accumulatedRawContent += event.content || "";
-              const parsed = parseThinkingAndContent(accumulatedRawContent);
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  content: parsed.content,
-                  thought: parsed.thought,
-                  modelUsed: currentModel
-                }))
-              );
-            } else if (event.type === "trace") {
-              currentTraces = [...currentTraces, event.trace];
-              onTracesUpdate(currentTraces);
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  traces: currentTraces
-                }))
-              );
-            } else if (event.type === "done") {
-              const durationMs = Math.round(performance.now() - startTime);
-              const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
-              const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
-              const finalModel = event.model || currentModel;
-
-              const targetThreadId = activeThreadId || threadId;
-              if (targetThreadId && !isSimulating) {
-                try {
-                  fetch(`/api/threads/${targetThreadId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "addMessage",
-                      message: {
-                        id: assistantMsgId,
-                        role: "assistant",
-                        content: parsed.content,
-                        thought: finalThought,
-                        modelUsed: finalModel,
-                        traces: event.traces || currentTraces,
-                        attachments: event.attachments,
-                        durationMs,
-                        timestamp: new Date().toISOString()
-                      }
-                    })
-                  }).catch((err) => console.warn("Failed to persist assistant message:", err));
-                } catch {}
-              }
-
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  content: parsed.content,
-                  thought: finalThought,
-                  traces: event.traces || currentTraces,
-                  attachments: event.attachments || msg.attachments,
-                  modelUsed: finalModel,
-                  durationMs: event.durationMs || durationMs
-                }))
-              );
-            } else if (event.type === "error") {
-              throw new Error(event.error || "Streaming error encountered");
-            }
-          } catch (parseErr: any) {
-            if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
-              throw parseErr;
-            }
-          }
-        }
-      }
+      await readStreamResponse(res, activeThreadId || threadId, startTime);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Chat stream aborted by user");
@@ -939,6 +1380,65 @@ export function ChatStream({
         className="hidden"
       />
 
+      {/* Compaction Details & Restore Modal */}
+      {showCompactionModal && threadCompaction && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowCompactionModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversation Compaction"
+            data-testid="compaction-modal"
+            className="relative max-w-lg w-full rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Conversation Compaction
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+              <div className="flex justify-between font-mono text-[11px] bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800">
+                <span>Before: ~{threadCompaction.tokensBefore} tokens</span>
+                <span>After: ~{threadCompaction.tokensAfter} tokens</span>
+              </div>
+              <p className="font-semibold text-slate-800 dark:text-zinc-200">Retained Digest:</p>
+              <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
+                {threadCompaction.summary}
+              </pre>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={handleRestoreCompaction}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors"
+              >
+                Restore full history
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(false)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Lightbox Modal */}
       {previewModalImage && (
         <div
@@ -997,7 +1497,7 @@ export function ChatStream({
               aria-label="Open Projects"
             >
               <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden sm:inline">Projects</span>
+              <span className="hidden 2xl:inline">Projects</span>
             </button>
           )}
 
@@ -1015,7 +1515,7 @@ export function ChatStream({
               aria-label="Toggle Sessions Panel"
             >
               <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Sessions</span>
+              <span className="hidden 2xl:inline">Sessions</span>
             </button>
           )}
 
@@ -1038,24 +1538,25 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden md:block text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
+            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[160px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
           </h1>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Simulation Mode Badge */}
           {activeSimulation && (
             <div
               data-testid="simulation-badge"
-              className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-xs font-bold uppercase tracking-wider shrink-0"
+              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
               title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-              <span>SIMULATION</span>
-              <span className="hidden sm:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="sr-only sm:not-sr-only">SIMULATION</span>
+              <span aria-hidden="true" className="sm:hidden">SIM</span>
+              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
                 (${activeSimulation.scenarioKey})
               </span>
               <button
@@ -1067,7 +1568,7 @@ export function ChatStream({
                   }
                   setActiveSimulation(null);
                 }}
-                className="min-h-[40px] min-w-[40px] -mr-1 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
                 title="Exit simulation mode"
                 aria-label="Exit simulation mode"
               >
@@ -1079,28 +1580,115 @@ export function ChatStream({
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
-              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
+              className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
               title={`Task Scope: ${threadScope || activeTask?.scope}`}
             >
               {threadScope || activeTask?.scope}
             </span>
           )}
 
+          {/* Context Meter Pill - visible on both mobile and desktop */}
+          <div
+            data-testid="context-meter-pill"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[10px] sm:text-[11px] font-mono shrink-0"
+            title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
+          >
+            <span
+              className={`font-semibold ${
+                contextStats.estimatedTokens > 85000
+                  ? "text-rose-600 dark:text-rose-400"
+                  : contextStats.estimatedTokens > 70000
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-slate-600 dark:text-zinc-400"
+              }`}
+            >
+              {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
+            </span>
+            <div className="hidden 2xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  contextStats.estimatedTokens > 85000
+                    ? "bg-rose-500"
+                    : contextStats.estimatedTokens > 70000
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+                style={{
+                  width: `${Math.min(100, Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100))}%`
+                }}
+              />
+            </div>
+            {threadCompaction ? (
+              <button
+                type="button"
+                onClick={() => setShowCompactionModal(true)}
+                className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                title="View compaction summary and restore options"
+              >
+                Compacted
+              </button>
+            ) : null}
+          </div>
+
           {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
-          <div className="hidden md:flex items-center">
+          <div className="hidden xl:flex items-center">
             <EngineStatusPill onOpenSettings={onOpenModelSheet} />
           </div>
+
+          {/* Host Mode Toggle Button */}
+          <button
+            type="button"
+            data-testid="host-mode-toggle"
+            onClick={handleToggleHostAccess}
+            className={`min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border text-xs font-semibold transition-colors shrink-0 ${
+              hostAccess
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title={hostAccess ? "Host access ON · Tap to turn off" : "Host access OFF · Tap to turn on"}
+            aria-label={hostAccess ? "Disable host access" : "Enable host access"}
+          >
+            <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>Host</span>
+          </button>
+
+          {/* Host Status Chip (visible when hostAccess is ON) */}
+          {hostAccess && (
+            runnerAvailable !== false ? (
+              <div
+                data-testid="host-access-chip"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
+                title="Host access ON"
+                aria-label="Host access ON"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                <span className="hidden sm:inline">Host access ON</span>
+                <span className="sm:hidden">ON</span>
+              </div>
+            ) : (
+              <div
+                data-testid="host-access-chip"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
+                title="Host runner is unreachable (Host offline)"
+                aria-label="Host offline"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                <span className="hidden sm:inline">Host offline</span>
+                <span className="sm:hidden">Offline</span>
+              </div>
+            )
+          )}
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[85px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[54px] sm:max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
@@ -1149,6 +1737,16 @@ export function ChatStream({
                     className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                   >
                     New thread
+                  </button>
+                )}
+                {threadId && (
+                  <button
+                    type="button"
+                    onClick={handleManualCompact}
+                    disabled={isCompactingManually}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl disabled:opacity-50"
+                  >
+                    {isCompactingManually ? "Compacting history..." : "Compact history now"}
                   </button>
                 )}
                 {onViewSecurityTelemetry && (
@@ -1287,8 +1885,19 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-[840px] space-y-3">
+                  {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
+                    <div
+                      data-testid="compaction-turn-note"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
+                    >
+                      <span>
+                        History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
+                      </span>
+                    </div>
+                  )}
+
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
-                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
+                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
                     const isStreamingThis = isLoading && idx === deduplicatedMessages.length - 1;
 
@@ -1297,6 +1906,8 @@ export function ChatStream({
                         <ThinkingPanel
                           rawThought={rawThought}
                           isStreaming={isStreamingThis}
+                          streamStatus={isStreamingThis ? streamStatus : null}
+                          hasContent={Boolean(m.content && m.content.trim())}
                           defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                         />
                       </div>
@@ -1644,6 +2255,65 @@ export function ChatStream({
                     </div>
                   )}
 
+                  {/* Chat Diff Cards for File Writes & Patches */}
+                  {(() => {
+                    if (isUser) return null;
+
+                    const fileDiffs: Array<{
+                      path: string;
+                      diff: string;
+                      addedLines: number;
+                      removedLines: number;
+                      truncated?: boolean;
+                      totalDiffLines?: number;
+                      omittedLines?: number;
+                    }> = Array.isArray(m.diffs) && m.diffs.length > 0
+                      ? m.diffs
+                      : extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
+                          path: d.path,
+                          diff: d.diffPreview,
+                          addedLines: d.addedLines,
+                          removedLines: d.removedLines,
+                          truncated: d.diffPreview.includes("more lines")
+                        }));
+
+                    if (fileDiffs.length === 0) return null;
+
+                    return (
+                      <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+                        {fileDiffs.map((diffItem, diffIdx) => (
+                          <div
+                            key={`${m.id}-diff-${diffIdx}-${diffItem.path}`}
+                            data-testid="chat-diff-card"
+                            className="w-full max-w-xl space-y-1"
+                          >
+                            <div className="flex items-center justify-end px-1">
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(diffItem.path, `${m.id}-${diffIdx}`)}
+                                className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition-colors"
+                                title="Copy path"
+                              >
+                                <Copy className="h-3 w-3" />
+                                <span>Copy path</span>
+                              </button>
+                            </div>
+                            <DiffViewer
+                              branch={diffItem.path}
+                              diff={diffItem.diff}
+                              modifiedFiles={[diffItem.path]}
+                            />
+                            {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
+                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                Truncated: showing {MAX_DIFF_LINES_CAP} of {diffItem.totalDiffLines} diff lines ({diffItem.omittedLines} omitted)
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {/* Grounded File Citation Card matching Mockup 4 */}
                   {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
                     <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
@@ -1691,13 +2361,21 @@ export function ChatStream({
                     </div>
                   )}
 
-                  {/* Per-message served model indicator */}
-                  {m.modelUsed && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5">
-                      <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
-                      <span>Served by {m.modelUsed.includes("flash-next") || m.modelUsed.includes("gyro") ? "Flash-Next (Gyro-S)" : m.modelUsed}</span>
-                    </div>
-                  )}
+                  {/* Per-message served model indicator: only display when served model differs from selected */}
+                  {(() => {
+                    if (m.id === "initial-welcome") return null;
+                    const note = getServedByNote(m.modelUsed, m.selectedModel ?? activeModel);
+                    if (!note) return null;
+                    return (
+                      <div
+                        data-testid="served-by-note"
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5"
+                      >
+                        <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
+                        <span>{note}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1719,13 +2397,161 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Live Loading Indicator */}
-        {isLoading && (
-          <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-400 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 w-fit">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
-            <span>{streamStatus || "Synthesizing response..."}</span>
+        {/* Host Mode Approvals (Cards & Receipts) */}
+        {hostApprovals.length > 0 && (
+          <div className="w-full max-w-[840px] space-y-3">
+            {hostApprovals.map((approval) => {
+              const isPending =
+                approval.status === "pending" &&
+                (!approval.expiresAt || approval.expiresAt > Date.now());
+
+              if (isPending) {
+                return (
+                  <div
+                    key={approval.id}
+                    data-testid="host-approval-card"
+                    className="w-full rounded-2xl border border-amber-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                          Security Approval Required
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono font-medium text-slate-700 dark:text-zinc-300">
+                          {approval.tool}
+                        </span>
+                      </div>
+                      {approval.expiresAt && (
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
+                          Expires: {new Date(approval.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-slate-700 dark:text-zinc-300 font-medium">
+                      {approval.riskReason}
+                    </div>
+
+                    {(approval.args?.command || approval.args?.path) && (
+                      <div className="rounded-xl bg-slate-950 p-3 overflow-x-auto text-xs text-zinc-200 font-mono">
+                        <pre className="whitespace-pre-wrap break-all">
+                          <code>{approval.args?.command || approval.args?.path}</code>
+                        </pre>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      {approval.args?.cwd && (
+                        <span className="text-slate-500 dark:text-zinc-400 font-mono">
+                          cwd: <span className="text-slate-700 dark:text-zinc-200">{approval.args.cwd}</span>
+                        </span>
+                      )}
+                      {approval.args?.recursive && (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 font-mono font-semibold">
+                          recursive: true
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        data-testid="host-deny-btn"
+                        disabled={approval.isSubmitting}
+                        onClick={() => handleApprovalDecision(approval.id, "rejected")}
+                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
+                        Deny
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="host-approve-btn"
+                        disabled={approval.isSubmitting}
+                        onClick={() => handleApprovalDecision(approval.id, "approved")}
+                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
+                        Approve
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={approval.id}
+                  data-testid="host-approval-receipt"
+                  className="w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 p-3 sm:p-4 text-xs space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                          approval.status === "executed"
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                            : approval.status === "denied"
+                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
+                            : approval.status === "expired"
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                            : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+                        }`}
+                      >
+                        {approval.status === "executed"
+                          ? "Executed"
+                          : approval.status === "denied"
+                          ? "Denied"
+                          : approval.status === "expired"
+                          ? "Expired"
+                          : "Error"}
+                      </span>
+                      <span className="font-mono text-slate-700 dark:text-zinc-300 font-semibold">
+                        {approval.tool}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-slate-600 dark:text-zinc-400 font-mono text-[11px] truncate">
+                    {approval.args?.command || approval.args?.path}
+                  </div>
+
+                  {approval.error && (
+                    <div className="text-rose-600 dark:text-rose-400 text-[11px]">
+                      {approval.error}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+
+        {/* Standalone turn status slot only when isLoading is true and no assistant ThinkingPanel is rendered at the tail */}
+        {isLoading && (() => {
+          const tailIdx = deduplicatedMessages.length - 1;
+          const tailMsg = tailIdx >= 0 ? deduplicatedMessages[tailIdx] : null;
+          const tailIsTaskHost = tailIdx === lastLinkedTaskMsgIndex && !!activeTask;
+          const tailRendersThinkingPanel = Boolean(tailMsg && tailMsg.role === "assistant" && !tailIsTaskHost);
+          if (tailRendersThinkingPanel) return null;
+          const phaseLabel = resolveTurnStatusPhase({
+            isStreaming: true,
+            streamStatus,
+            hasThought: false,
+            hasContent: false
+          });
+          if (!phaseLabel) return null;
+          return (
+            <div
+              data-testid="turn-status-slot"
+              className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 w-fit"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{phaseLabel}</span>
+            </div>
+          );
+        })()}
 
         {errorMsg && (() => {
           const formatted = formatChatErrorMessage(errorMsg);

@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import {
+  buildFileDeliverablesDirective,
+  recordTurnOutputWrite,
+  collectTurnAttachments
+} from "@/lib/threadOutputs";
+import {
+  captureWorkspacePreImage,
+  collectTurnModifiedFileDiffs
+} from "@/lib/chatDiffs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
@@ -35,7 +44,9 @@ import {
   resolveRoundModelOptions,
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
   isLiveRealTimeIntent,
-  canContinueToolLoop
+  canContinueToolLoop,
+  estimateTokens,
+  CHAT_CONTEXT_BUDGET_TOKENS
 } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -45,6 +56,15 @@ import {
   describeTool
 } from "@/lib/progressiveTools";
 import { compactConversationHistory } from "@/lib/conversationCompaction";
+import {
+  HOST_TOOLS_DEFINITIONS,
+  executeHostTool,
+  isDestructiveHostAction,
+  createPendingApproval,
+  consumeContinuationEntry,
+  checkHostRunnerHealth
+} from "@/lib/hostMode";
+import { notify } from "@/lib/notifications";
 import {
   loadUserProfile,
   formatProfileForContext,
@@ -87,7 +107,7 @@ interface TraceItem {
   durationMs: number;
   timestamp: string;
   model: string;
-  tier?: "sandbox" | "browser" | "workspace";
+  tier?: "sandbox" | "browser" | "workspace" | "host";
 }
 
 async function connectMcpClient(url: string, name: string) {
@@ -165,9 +185,13 @@ async function* streamLlmChat(llmBaseUrl: string, payload: any) {
 // Backward-compat alias
 const streamOllamaChat = streamLlmChat;
 
+function shouldAdvertiseHostTools(threadHostAccess: boolean, runnerHealthy: boolean): boolean {
+  return threadHostAccess === true && runnerHealthy === true;
+}
+
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
-  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" }>();
+  const toolClientMap = new Map<string, { client: Client; tier: "sandbox" | "browser" | "workspace" | "host" }>();
   let rootSpan: any = null;
 
   try {
@@ -177,7 +201,8 @@ export async function POST(req: NextRequest) {
       model: requestedModel,
       mode: requestedMode,
       reasoning_effort: requestedReasoning,
-      attachments
+      attachments,
+      approvalContinuationId
     } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
@@ -215,6 +240,10 @@ export async function POST(req: NextRequest) {
       try {
         fs.mkdirSync(threadOutputsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(path.dirname(threadsDir), 0o777); } catch {}
+      try { fs.chmodSync(threadsDir, 0o777); } catch {}
+      try { fs.chmodSync(path.dirname(threadOutputsDir), 0o777); } catch {}
+      try { fs.chmodSync(threadOutputsDir, 0o777); } catch {}
     }
 
     const SYSTEM_PROMPT = `Autonomous AI engineering platform on local hardware with MCP tool integration, workspace automation, and multimodal support.
@@ -249,10 +278,7 @@ CRITICAL INSTRUCTIONS:
   - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
 - REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
   - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.
-- FILE GENERATION & DOWNLOADABLE DELIVERABLES:
-  - When the user asks to generate, create, export, or download a file (single-file HTML app, game, markdown report, Python script, data file, diagram), write the complete file into '${threadOutputsRelPath ? threadOutputsRelPath + "/<filename>" : ".agent/threads/<threadId>/files/<filename>"}' using 'workspace_write_file'.
-  - After saving the file, provide a concise chat reply (1-2 sentences summarizing what was built and confirming it is ready to run or download).
-  - Do NOT paste the complete code or file content into chat when the user asked for a downloadable game or file.`;
+${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -341,7 +367,7 @@ CRITICAL INSTRUCTIONS:
         });
 
         // 1. Gated Oracle Codebase & Semantic Memory Lookup with 2500ms timeout
-        if (userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
+        if (!approvalContinuationId && userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
           try {
             const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) =>
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
@@ -365,7 +391,7 @@ CRITICAL INSTRUCTIONS:
         }
 
         // Tier 1 User Profile Memory
-        if (userPrompt.trim()) {
+        if (!approvalContinuationId && userPrompt.trim()) {
           try {
             const durableFacts = extractDurablePreferences(userPrompt, clientSessionId);
             for (const fact of durableFacts) {
@@ -397,15 +423,53 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
+        // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
+        const threadStore = new ThreadStore();
+        let threadData: any = null;
+        let threadHostAccess = false;
+        if (activeThreadId) {
+          try {
+            threadData = await threadStore.getThread(activeThreadId);
+            if (threadData?.hostAccess) {
+              threadHostAccess = true;
+            }
+          } catch {}
+        }
+
+        const runnerHealthy = threadHostAccess ? await checkHostRunnerHealth() : false;
+        const includeHostTools = shouldAdvertiseHostTools(threadHostAccess, runnerHealthy);
+
+        const hostTools = includeHostTools
+          ? HOST_TOOLS_DEFINITIONS.map((ht) => ({
+              name: ht.function.name,
+              description: ht.function.description,
+              inputSchema: ht.function.parameters
+            }))
+          : [];
+
+        for (const ht of hostTools) {
+          toolClientMap.set(ht.name, { client: null as any, tier: "host" });
+        }
+
         const allTools = [
           ...(sandboxSession?.tools || []),
-          ...(browserSession?.tools || [])
+          ...(browserSession?.tools || []),
+          ...hostTools
         ];
 
         const toolRegistry = buildToolRegistry(allTools);
         const llmTools = buildLayer1Tools(allTools);
 
-        const conversationMessages = [...messages];
+        const prep = threadStore.prepareTurnConversationMessages(
+          threadData,
+          messages,
+          CHAT_CONTEXT_BUDGET_TOKENS
+        );
+        let turnCompacted = prep.compactedThisTurn;
+        let turnTokensBefore = prep.tokensBeforeCompaction;
+        let turnTokensAfter = prep.tokensAfterCompaction;
+
+        const conversationMessages = [...prep.messages];
         if (conversationMessages.length > 0) {
           const lastIdx = conversationMessages.length - 1;
           const lastMsg = { ...conversationMessages[lastIdx] };
@@ -435,6 +499,64 @@ CRITICAL INSTRUCTIONS:
           conversationMessages[sysIdx].content += profileContext;
         }
 
+        // Handle single-use approval continuation buffer
+        if (approvalContinuationId) {
+          const consumed = consumeContinuationEntry(approvalContinuationId, activeThreadId || "general");
+          if (!consumed.ok) {
+            await sendEvent({
+              type: "error",
+              error: `Approval continuation failed: ${consumed.reason}`
+            });
+            clearInterval(heartbeatInterval);
+            for (const s of activeSessions) {
+              try {
+                await s.client.close();
+              } catch {}
+            }
+            try {
+              await writer.close();
+            } catch {}
+            return;
+          }
+
+          const entry = consumed.entry;
+          const toolResultPayload = {
+            status: entry.status,
+            tool: entry.tool,
+            ...(entry.result !== undefined ? { result: entry.result } : {}),
+            ...(entry.error !== undefined ? { error: entry.error } : {})
+          };
+
+          const lastMsg = conversationMessages[conversationMessages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            conversationMessages.push({
+              role: "tool",
+              name: entry.tool,
+              content: JSON.stringify(toolResultPayload)
+            });
+          } else {
+            conversationMessages.push({
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                {
+                  id: `call_${entry.approvalId}`,
+                  type: "function",
+                  function: {
+                    name: entry.tool,
+                    arguments: JSON.stringify(entry.args)
+                  }
+                }
+              ]
+            });
+            conversationMessages.push({
+              role: "tool",
+              name: entry.tool,
+              content: JSON.stringify(toolResultPayload)
+            });
+          }
+        }
+
         // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
         const getEffectiveToolCalls = (msg: any) => {
           if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
@@ -444,17 +566,26 @@ CRITICAL INSTRUCTIONS:
         };
 
         // Send initial metadata
+        const initialEstimatedTokens = estimateTokens(conversationMessages);
         await sendEvent({
           type: "meta",
           model: activeModel,
           mode,
           reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult,
-          citations: oracleCitations
+          citations: oracleCitations,
+          context: {
+            estimatedTokens: initialEstimatedTokens,
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            compactedThisTurn: turnCompacted,
+            tokensBeforeCompaction: turnTokensBefore,
+            tokensAfterCompaction: turnTokensAfter
+          }
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
-        const turnCreatedFiles = new Set<string>();
+        const turnCreatedFiles: string[] = [];
+        const turnPreImages = new Map<string, string>();
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
@@ -472,10 +603,35 @@ CRITICAL INSTRUCTIONS:
         while (canContinueToolLoop({ round, maxToolRounds: MAX_TOOL_ROUNDS, lastRoundTools, webResearchCalls })) {
           if (aborted || req.signal.aborted) break;
 
-          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: 6000 });
+          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
             conversationMessages.length = 0;
             conversationMessages.push(...compaction.messages);
+            turnCompacted = true;
+            turnTokensBefore = compaction.tokensBefore;
+            turnTokensAfter = compaction.tokensAfter;
+
+            if (activeThreadId && threadData) {
+              try {
+                threadStore.compactThreadIncremental(threadData);
+              } catch {}
+            }
+
+            await sendEvent({
+              type: "meta",
+              model: activeModel,
+              mode,
+              reasoning_effort: effectiveReasoningEffort,
+              triage: triageComplexityResult,
+              citations: oracleCitations,
+              context: {
+                estimatedTokens: compaction.tokensAfter,
+                budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+                compactedThisTurn: true,
+                tokensBeforeCompaction: compaction.tokensBefore,
+                tokensAfterCompaction: compaction.tokensAfter
+              }
+            });
           }
 
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
@@ -813,10 +969,53 @@ CRITICAL INSTRUCTIONS:
             }
 
             const startTime = performance.now();
-            const result = await target.client.callTool({
-              name: toolName,
-              arguments: toolArgs
-            });
+            let result: any = null;
+
+            if (
+              (toolName === "workspace_write_file" || toolName === "workspace_patch_file") &&
+              typeof toolArgs?.path === "string"
+            ) {
+              captureWorkspacePreImage(turnPreImages, toolArgs.path);
+            }
+
+            if (target.tier === "host") {
+              const check = isDestructiveHostAction(toolName, toolArgs);
+              if (check.isDestructive) {
+                const approval = createPendingApproval(
+                  activeThreadId || "general",
+                  toolName,
+                  toolArgs,
+                  check.reason || "Destructive action requires approval"
+                );
+                notify("host.approval_pending", {
+                  title: "Host approval needed",
+                  body: "Tap to review in the sandbox chat."
+                }).catch(() => {});
+                await sendEvent({
+                  type: "approval_required",
+                  approval: {
+                    id: approval.id,
+                    tool: toolName,
+                    args: toolArgs,
+                    riskReason: approval.riskReason,
+                    createdAt: approval.createdAt,
+                    expiresAt: approval.expiresAt
+                  }
+                });
+                result = {
+                  approvalRequired: true,
+                  approvalId: approval.id,
+                  message: `[HOST SECURITY GATE]: ${approval.riskReason}. Awaiting user approval.`
+                };
+              } else {
+                result = await executeHostTool(toolName, toolArgs);
+              }
+            } else {
+              result = await target.client.callTool({
+                name: toolName,
+                arguments: toolArgs
+              });
+            }
             const durationMs = Math.round(performance.now() - startTime);
 
             // Track test / command failure for auto-escalation
@@ -858,13 +1057,7 @@ CRITICAL INSTRUCTIONS:
               toolArgs?.path &&
               typeof toolArgs.path === "string"
             ) {
-              const writtenPath = toolArgs.path.replace(/\\/g, "/");
-              const baseName = path.basename(writtenPath);
-              if (activeThreadId && (writtenPath.includes(activeThreadId) || writtenPath.startsWith(activeThreadId) || writtenPath.includes("/files/"))) {
-                turnCreatedFiles.add(baseName);
-              } else if (threadOutputsDir) {
-                turnCreatedFiles.add(baseName);
-              }
+              recordTurnOutputWrite(turnCreatedFiles, toolArgs.path, activeThreadId, threadsDir);
             }
 
             traces.push(traceItem);
@@ -1044,44 +1237,9 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
-        // Gather turn attachments from threadOutputsDir
-        const turnAttachments: Array<{
-          name: string;
-          type: string;
-          size: number;
-          previewUrl: string;
-        }> = [];
-
-        if (threadOutputsDir && fs.existsSync(threadOutputsDir)) {
-          try {
-            const files = fs.readdirSync(threadOutputsDir);
-            for (const f of files) {
-              const fullF = path.join(threadOutputsDir, f);
-              const stat = fs.statSync(fullF);
-              if (stat.isFile() && (turnCreatedFiles.has(f) || (Date.now() - stat.mtimeMs < 300000))) {
-                const ext = path.extname(f).toLowerCase();
-                let mime = "application/octet-stream";
-                if (ext === ".html") mime = "text/html";
-                else if (ext === ".svg") mime = "image/svg+xml";
-                else if (ext === ".md") mime = "text/markdown";
-                else if (ext === ".json") mime = "application/json";
-                else if (ext === ".txt") mime = "text/plain";
-                else if (ext === ".py") mime = "text/x-python";
-                else if (ext === ".js" || ext === ".ts") mime = "application/javascript";
-
-                const relUrl = activeThreadId ? `${activeThreadId}/files/${f}` : f;
-                turnAttachments.push({
-                  name: f,
-                  type: mime,
-                  size: stat.size,
-                  previewUrl: relUrl
-                });
-              }
-            }
-          } catch (scanErr) {
-            console.warn("[ChatRoute] Error scanning threadOutputsDir for attachments:", scanErr);
-          }
-        }
+        // Gather turn attachments using exact write tracking
+        const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+        const turnDiffs = collectTurnModifiedFileDiffs(turnPreImages);
 
         rootSpan.end("ok", {
           tracesCount: traces.length,
@@ -1091,6 +1249,7 @@ CRITICAL INSTRUCTIONS:
         await sendEvent({
           type: "done",
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           content: cleanedContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
           traces,
@@ -1098,6 +1257,9 @@ CRITICAL INSTRUCTIONS:
           mode,
           reasoning_effort: effectiveReasoningEffort,
           triage: triageComplexityResult,
+          compactedThisTurn: turnCompacted || undefined,
+          tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
+          tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
           trace_session: {
             sessionId: tracer.getSessionId(),
             traceId: tracer.getTraceId()

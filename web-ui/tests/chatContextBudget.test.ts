@@ -8,7 +8,10 @@ import {
   clampToolOutput,
   runChatToolLoop,
   FINAL_ROUND_SYNTHESIS_DIRECTIVE,
-  EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+  EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
+  CHAT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  resolveRoundModelOptions
 } from "../lib/contextBudget.js";
 
 describe("Chat Context-Budget Enforcement Suite", () => {
@@ -261,6 +264,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       const result = await runChatToolLoop({
         conversationMessages: messages,
+        maxContentTokens: 6000,
         llmTools: [{ type: "function", function: { name: "workspace_grep" } }],
         maxToolRounds: 5,
         streamLlmChat: mockStreamChat,
@@ -569,6 +573,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       ];
 
       const fitted = fitContextWindow(messages, {
+        maxContentTokens: 8192,
         isArtifactTurn: true,
         tools: mockTools
       } as any);
@@ -679,6 +684,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       const loopRes = await runChatToolLoop({
         conversationMessages,
+        maxContentTokens: 8192,
         activeModel: "swift-15-27b-mtp",
         effectiveReasoningEffort: "xhigh",
         llmTools: [
@@ -712,6 +718,55 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.equal(extracted.length, 1, "Must extract exactly 1 complete SVG artifact");
       assert.ok(extracted[0].code?.startsWith("<svg") && extracted[0].code?.endsWith("</svg>"), "SVG must be complete and untruncated");
       assert.ok(extracted[0].code?.includes("Spanish Fort, AL — 78°F Sunny"));
+    });
+
+    it("resolveRoundModelOptions sets num_ctx to DEFAULT_CONTEXT_WINDOW_TOKENS (131072)", () => {
+      assert.equal(DEFAULT_CONTEXT_WINDOW_TOKENS, 131072);
+      const opts = resolveRoundModelOptions({
+        round: 1,
+        model: "swift-15-27b-mtp",
+        isArtifactTurn: false
+      } as any);
+      assert.equal(opts.num_ctx, 131072, "num_ctx must equal 131072");
+    });
+
+    it("fitContextWindow with isArtifactTurn: true and no maxContentTokens override uses full 100,000 budget and preserves a 50,000-token conversation without truncation or eviction", () => {
+      const systemMessage = {
+        role: "system",
+        content: "You are an autonomous engineering assistant. " + "S".repeat(4000)
+      };
+      const messages: any[] = [systemMessage];
+      for (let i = 0; i < 5; i++) {
+        messages.push({
+          role: "user",
+          content: `Turn ${i + 1} user request: ` + "U".repeat(19950)
+        });
+        messages.push({
+          role: "assistant",
+          content: `Turn ${i + 1} assistant response: ` + "A".repeat(19950)
+        });
+      }
+      messages.push({
+        role: "user",
+        content: "Create a full multi-module deployment artifact and SVG diagram."
+      });
+
+      const initialTokens = estimateTokens(messages);
+      assert.ok(initialTokens >= 48000, `Initial conversation tokens should be >= 48,000, got ${initialTokens}`);
+
+      const result = fitContextWindow(messages, {
+        isArtifactTurn: true,
+        outputHeadroomTokens: 3000,
+        toolSchemaTokens: 1000
+      } as any);
+
+      assert.equal((result as any).evictedCount, 0, "No messages should be evicted under the 100,000 budget");
+      assert.ok((result as any).estimatedTokens >= 48000, `Expected estimatedTokens >= 48000, got ${(result as any).estimatedTokens}`);
+      assert.ok(
+        (result as any).estimatedTokens <= CHAT_CONTEXT_BUDGET_TOKENS - 4000,
+        `Expected estimatedTokens <= ${CHAT_CONTEXT_BUDGET_TOKENS - 4000}, got ${(result as any).estimatedTokens}`
+      );
+      assert.equal(result.length, messages.length, "All messages must be preserved without truncation or eviction");
     });
   });
 });

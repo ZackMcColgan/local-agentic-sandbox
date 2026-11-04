@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compactConversationHistory,
   summarizeTurnHistory,
+  extractIdentifiersAndErrors,
   DEFAULT_COMPACTION_THRESHOLD
 } from "../lib/conversationCompaction";
 import { estimateTokens } from "../lib/contextBudget";
@@ -102,5 +103,111 @@ describe("Conversation Compaction at 85% Suite (Fix D3)", () => {
     const resSingle = compactConversationHistory(single);
     assert.equal(resSingle.compacted, false);
     assert.equal(resSingle.messages.length, 1);
+  });
+
+  it("extracts identifiers (file paths, git SHAs, URLs, and errors) into compaction summary", () => {
+    const messages = [
+      { role: "user", content: "Inspect repo status and commit sha 86c8901c6433617cb9abe5db97123a0f52f58c89" },
+      { role: "assistant", content: "I will read web-ui/lib/contextBudget.ts and check https://github.com/test/repo." },
+      { role: "tool", name: "read_file", content: "Read web-ui/lib/contextBudget.ts successfully." },
+      { role: "assistant", content: "Execution error: failed to compile module at line 42." }
+    ];
+    const extracted = extractIdentifiersAndErrors(messages);
+    assert.ok(extracted.filePaths.includes("web-ui/lib/contextBudget.ts"));
+    assert.ok(extracted.gitShas.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+    assert.ok(extracted.urls.some((u: string) => u.startsWith("https://github.com/test/repo")));
+    assert.ok(extracted.errorLines.some((l: string) => l.includes("failed to compile module")));
+
+    const summary = summarizeTurnHistory(messages);
+    assert.ok(summary.includes("web-ui/lib/contextBudget.ts"));
+    assert.ok(summary.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+    assert.ok(summary.includes("https://github.com/test/repo"));
+    assert.ok(summary.includes("failed to compile module"));
+  });
+
+  it("preserves all 20 git SHAs and 30 file paths (including space-separated and Windows paths) verbatim under compaction", () => {
+    // 20 distinct git SHAs (10 7-char short SHAs and 10 40-char full SHAs)
+    const shortShas = [
+      "a1b2c3d", "e4f5a6b", "c7d8e9f", "1a2b3c4", "5d6e7f8",
+      "9a0b1c2", "3d4e5f6", "7a8b9c0", "2e3f4a5", "6b7c8d9"
+    ];
+    const fullShas = [
+      "0123456789abcdef0123456789abcdef01234567",
+      "123456789abcdef0123456789abcdef012345678",
+      "23456789abcdef0123456789abcdef0123456789",
+      "3456789abcdef0123456789abcdef0123456789a",
+      "456789abcdef0123456789abcdef0123456789ab",
+      "56789abcdef0123456789abcdef0123456789abc",
+      "6789abcdef0123456789abcdef0123456789abcd",
+      "789abcdef0123456789abcdef0123456789abcde",
+      "89abcdef0123456789abcdef0123456789abcdef",
+      "9abcdef0123456789abcdef0123456789abcdef0"
+    ];
+    const allShas = [...shortShas, ...fullShas]; // 20 SHAs
+
+    // 30 distinct file paths (mix of POSIX, Windows, relative, and space-separated paths on single lines)
+    const filePaths = [
+      // Space-separated paths on single line
+      "src/models/user.ts", "src/models/account.ts", "src/models/session.ts",
+      // Windows paths
+      "C:\\Users\\admin\\repo\\index.ts", "D:\\workspace\\project\\config.json",
+      "C:/Users/zackm/Desktop/app.tsx", "C:\\AI\\models\\weights.bin",
+      // Long extensions (.webmanifest, .dockerfile, .properties)
+      "public/site.webmanifest", "deploy/service.dockerfile", "config/app.properties",
+      // POSIX paths
+      "web-ui/lib/contextBudget.ts", "web-ui/lib/chatUtils.ts", "web-ui/lib/conversationCompaction.ts",
+      "web-ui/tests/chatContextBudget.test.ts", "web-ui/tests/llmProvider.test.ts",
+      "web-ui/tests/conversationCompaction.test.ts", "mcp-server/src/server.ts",
+      "mcp-server/src/tools.ts", "browser-mcp/src/browser.ts", "browser-mcp/src/index.ts",
+      "scripts/test-gate.js", "scripts/lan-bridge.js", "scripts/deploy-cluster.js",
+      "deploy/k8s/web-ui.yaml", "deploy/k8s/mcp-server.yaml", "deploy/k8s/browser-mcp.yaml",
+      "web-ui/app/api/chat/route.ts", "web-ui/app/api/files/route.ts",
+      "web-ui/components/ChatStream.tsx", "web-ui/components/WorkspaceViewer.tsx"
+    ]; // 30 paths
+
+    // Seed across older messages
+    const messages = [
+      {
+        role: "user",
+        content: `Inspect commits ${shortShas.slice(0, 5).join(" ")} and inspect space-separated files: ${filePaths[0]} ${filePaths[1]} ${filePaths[2]}`
+      },
+      {
+        role: "assistant",
+        content: `Checking files ${filePaths.slice(3, 10).join(" ")} for commits ${shortShas.slice(5).join(" ")}`,
+        tool_calls: [
+          {
+            function: {
+              name: "workspace_read_file",
+              arguments: JSON.stringify({ path: filePaths[10] })
+            }
+          }
+        ]
+      },
+      {
+        role: "tool",
+        name: "workspace_read_file",
+        content: `Read ${filePaths[11]} and ${filePaths[12]} successfully with SHAs ${fullShas.slice(0, 5).join(" ")}`
+      },
+      {
+        role: "user",
+        content: `Now check Windows paths: ${filePaths.slice(13, 20).join(" ")} on https://internal.git/repo`
+      },
+      {
+        role: "assistant",
+        content: `Error on ${filePaths.slice(20).join(" ")}: fatal compilation error in module with SHAs ${fullShas.slice(5).join(" ")}`
+      }
+    ];
+
+    const summary = summarizeTurnHistory(messages);
+
+    // Verify all 20 SHAs survive verbatim in summary
+    for (const sha of allShas) {
+      assert.ok(summary.includes(sha), `Expected git SHA ${sha} to survive verbatim in compaction summary`);
+    }
+
+    // Verify all 30 file paths survive verbatim in summary
+    for (const fp of filePaths) {
+      assert.ok(summary.includes(fp), `Expected file path ${fp} to survive verbatim in compaction summary`);
+    }
   });
 });

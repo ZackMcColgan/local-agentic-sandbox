@@ -85,7 +85,9 @@ export async function GET(request: NextRequest) {
 
     // Determine candidate root directories where files might reside
     const cwd = process.cwd();
+    const threadsDir = resolveThreadsDir();
     const candidateRoots = [
+      threadsDir,
       process.env.WORKSPACE_DIR || "/workspace",
       path.resolve(cwd, "..", "workspace"),
       path.resolve(cwd, "workspace"),
@@ -96,15 +98,23 @@ export async function GET(request: NextRequest) {
     // Check if target is a directory across candidate roots (directory listing is forbidden)
     for (const root of candidateRoots) {
       if (!fs.existsSync(root)) continue;
-      const candidate = path.resolve(root, cleanPath);
-      const rel = path.relative(root, candidate);
-      if (!rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(candidate)) {
-        try {
-          const stat = fs.statSync(candidate);
-          if (stat.isDirectory()) {
-            return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
-          }
-        } catch {}
+      const candidatesToCheck = [path.resolve(root, cleanPath)];
+      if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
+        candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
+      }
+      if (root === threadsDir && (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))) {
+        candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "")));
+      }
+      for (const candidate of candidatesToCheck) {
+        const rel = path.relative(root, candidate);
+        if (!rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(candidate)) {
+          try {
+            const stat = fs.statSync(candidate);
+            if (stat.isDirectory()) {
+              return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
+            }
+          } catch {}
+        }
       }
     }
 
@@ -156,6 +166,22 @@ export async function GET(request: NextRequest) {
           } catch {}
         }
       }
+
+      // If resolving against resolveThreadsDir() and cleanPath starts with ".agent/threads/", strip it
+      if (root === threadsDir && (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))) {
+        const stripped = cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "");
+        const candidate3 = path.resolve(root, stripped);
+        const rel3 = path.relative(root, candidate3);
+        if (!rel3.startsWith("..") && !path.isAbsolute(rel3) && fs.existsSync(candidate3)) {
+          try {
+            const stat = fs.statSync(candidate3);
+            if (stat.isFile()) {
+              resolvedPath = candidate3;
+              break;
+            }
+          } catch {}
+        }
+      }
     }
 
     // If file not found locally on disk, try proxying to mcp-server if available
@@ -181,13 +207,20 @@ export async function GET(request: NextRequest) {
               content: textContent
             });
           }
+          const headers: Record<string, string> = {
+            "Content-Type": mimeType,
+            "Content-Length": fileBuffer.byteLength.toString(),
+            "Cache-Control": "public, max-age=60"
+          };
+          if (isDownload) {
+            const basename = path.basename(cleanPath);
+            const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
+            const utf8Name = encodeURIComponent(basename);
+            headers["Content-Disposition"] = `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+          }
           return new NextResponse(Buffer.from(fileBuffer), {
             status: 200,
-            headers: {
-              "Content-Type": mimeType,
-              "Content-Length": fileBuffer.byteLength.toString(),
-              "Cache-Control": "public, max-age=60"
-            }
+            headers
           });
         }
       } catch {
