@@ -75,6 +75,22 @@ describe("Start-HostRunner.ps1 Static Security & Conformance Suite", () => {
       "Start-HostRunner.ps1 health endpoint must not include powershell_host"
     );
   });
+
+  it("guards live PowerShell runner spawning with a win32 platform check for Linux CI compatibility", () => {
+    const hostRunnerTestContent = fs.readFileSync(path.resolve(__dirname, "./hostRunnerScript.test.ts"), "utf8");
+    const hostModeTestContent = fs.readFileSync(path.resolve(__dirname, "./hostMode.test.ts"), "utf8");
+
+    assert.match(
+      hostRunnerTestContent,
+      /it\(\s*["']starts runner, binds loopback-only[\s\S]*?skip:\s*process\.platform\s*!==\s*["']win32["']/,
+      "hostRunnerScript.test.ts must guard live runner test with process.platform !== 'win32' skip option"
+    );
+    assert.match(
+      hostModeTestContent,
+      /it\(\s*["']live host runner scratch file acceptance[\s\S]*?skip:\s*process\.platform\s*!==\s*["']win32["']/,
+      "hostMode.test.ts must guard live runner test with process.platform !== 'win32' skip option"
+    );
+  });
 });
 
 describe("Start-HostRunner.ps1 Live Loopback & Execution Suite", () => {
@@ -96,7 +112,7 @@ describe("Start-HostRunner.ps1 Live Loopback & Execution Suite", () => {
     }
   }
 
-  it("starts runner, binds loopback-only, authenticates via shared secret, and handles tool execution with timeouts", async () => {
+  it("starts runner, binds loopback-only, authenticates via shared secret, and handles tool execution with timeouts", { skip: process.platform !== "win32" ? "Windows-only live PowerShell host runner test" : false }, async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-runner-live-"));
     const fixtureFile = path.join(tempDir, "hello.txt");
     fs.writeFileSync(fixtureFile, "Hello from live host runner test!");

@@ -573,7 +573,7 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
     assert.deepEqual(resolveTools(true, true), HOST_TOOLS_DEFINITIONS);
   });
 
-  it("live host runner scratch file acceptance (F3.4 items 1-8)", { timeout: 35000 }, async () => {
+  it("live host runner scratch file acceptance (F3.4 items 1-8)", { timeout: 35000, skip: process.platform !== "win32" ? "Windows-only live PowerShell host runner test" : false }, async () => {
     const scriptPath = path.resolve(__dirname, "../../scripts/Start-HostRunner.ps1");
     const testPort = 8769;
     const testSecret = `f3-live-secret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
