@@ -24,6 +24,8 @@ export function resolveEffectiveReasoningEffort(
   return requestedEffort || profile?.defaultReasoningEffort || "medium";
 }
 
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
+
 /**
  * Computes options for local LLM model request based on model architecture and reasoning effort.
  */
@@ -32,7 +34,7 @@ export function computeModelOptions(
   reasoningEffort?: "low" | "medium" | "xhigh"
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: 12288
+    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);

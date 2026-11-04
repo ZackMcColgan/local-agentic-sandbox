@@ -9,6 +9,7 @@ import {
   LlamaCppProvider,
   type LLMChatRequest
 } from "../lib/llm/provider";
+import { resolveRoundModelOptions } from "../lib/contextBudget";
 
 function createMockSseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -969,6 +970,66 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
           return err.message.includes("Strata engine returned network error at http://strata-service:8080/v1/chat/completions: fetch failed");
         }
       );
+    });
+  });
+
+  describe("Task 14: Provider Context Window & Request Budget Enforcement (F4.1)", () => {
+    it("OllamaProvider.streamChat sends num_ctx: 131072 in request body options", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockNdjsonResponse([JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true })]);
+      }) as any;
+
+      const provider = new OllamaProvider();
+      const roundOptions = resolveRoundModelOptions({
+        round: 1,
+        model: "swift-15-27b-mtp",
+        isArtifactTurn: false
+      } as any);
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:11434", {
+        model: "swift-15-27b-mtp",
+        messages: [{ role: "user", content: "test context window" }],
+        options: roundOptions
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.ok(sentBody.options, "Must include options in request body");
+      assert.equal(sentBody.options.num_ctx, 131072, "OllamaProvider must pass num_ctx: 131072");
+    });
+
+    it("LlamaCppProvider.streamChat captures n_keep: 512 and max_tokens: 2560", async () => {
+      let sentBody: any = null;
+      globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body || "{}"));
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as any;
+
+      const provider = new LlamaCppProvider();
+      // LlamaCppProvider targets llama-server / Strata /v1/chat/completions (where the
+      // 131,072-token context window is configured at server startup via --ctx-size 131072,
+      // while per-request input budget is enforced by fitContextWindow at
+      // CHAT_CONTEXT_BUDGET_TOKENS = 100000 and n_keep pins the system prompt prefix).
+      const roundOptions = resolveRoundModelOptions({
+        round: 1,
+        model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+        isArtifactTurn: false,
+        numKeep: 512
+      } as any);
+
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+        messages: [
+          { role: "system", content: "S".repeat(2048) }, // 512 tokens -> n_keep = 512
+          { role: "user", content: "test provider options" }
+        ],
+        options: roundOptions
+      })) {}
+
+      assert.ok(sentBody, "Must send request body");
+      assert.equal(sentBody.n_keep, 512, "Must pin system prompt prefix with n_keep === 512");
+      assert.equal(sentBody.max_tokens, 2560, "Must set max_tokens === 2560 for output budget");
     });
   });
 });

@@ -215,21 +215,44 @@ export const OUTPUT_HEADROOM_THINKING_DIRECTIVE =
 export function resolveRoundModelOptions(params: {
   model: string;
   requestedEffort?: "low" | "medium" | "xhigh";
-  userPrompt: string;
-  isSynthesisOrFinalRound: boolean;
-  hasCompletedToolCalls: boolean;
-}): { num_ctx: number; num_predict?: number; temperature: number; reasoning_effort?: "low" | "medium" | "xhigh" } {
-  const { isArtifactRequest } = hasArtifactCreationIntent(params.userPrompt || "");
+  userPrompt?: string;
+  isSynthesisOrFinalRound?: boolean;
+  hasCompletedToolCalls?: boolean;
+  round?: number;
+  isArtifactTurn?: boolean;
+  numKeep?: number;
+  [key: string]: any;
+}): {
+  num_ctx: number;
+  num_predict?: number;
+  temperature: number;
+  reasoning_effort?: "low" | "medium" | "xhigh";
+  n_keep?: number;
+  numKeep?: number;
+} {
+  const isArtifact =
+    params.isArtifactTurn ?? (params.userPrompt ? hasArtifactCreationIntent(params.userPrompt).isArtifactRequest : false);
   const shouldUseFastSynthesis =
-    isArtifactRequest || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
+    isArtifact || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
   const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
   const baseOpts = computeModelOptions(params.model, effectiveEffort);
-  const result: { num_ctx: number; num_predict?: number; temperature: number; reasoning_effort?: "low" | "medium" | "xhigh" } = {
-    num_ctx: baseOpts.num_ctx,
+  const result: {
+    num_ctx: number;
+    num_predict?: number;
+    temperature: number;
+    reasoning_effort?: "low" | "medium" | "xhigh";
+    n_keep?: number;
+    numKeep?: number;
+  } = {
+    num_ctx: baseOpts.num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
     temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
     reasoning_effort: effectiveEffort
   };
-  if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
+  if (params.numKeep !== undefined) {
+    result.num_predict = 2048 + params.numKeep;
+    result.n_keep = params.numKeep;
+    result.numKeep = params.numKeep;
+  } else if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
     result.num_predict = baseOpts.num_predict;
   }
   return result;
@@ -240,6 +263,8 @@ export interface FitContextOptions {
   tools?: any[];
   isArtifactTurn?: boolean;
   reserveOutputTokens?: number;
+  outputHeadroomTokens?: number;
+  toolSchemaTokens?: number;
   compactHistory?: boolean;
 }
 
@@ -311,9 +336,10 @@ export function fitContextWindow(
   // 2. Budget reservation for tool schemas and artifact output headroom
   let maxTokens = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
   const rawToolTokens =
-    options?.tools && Array.isArray(options.tools) && options.tools.length > 0
+    options?.toolSchemaTokens ??
+    (options?.tools && Array.isArray(options.tools) && options.tools.length > 0
       ? estimateTokens(JSON.stringify(options.tools))
-      : 0;
+      : 0);
   const toolSchemaTokens = Math.min(2500, rawToolTokens);
 
   if (toolSchemaTokens > 0) {
@@ -321,17 +347,23 @@ export function fitContextWindow(
   }
 
   const hasWebResults = hasWebResearchResults(working);
-  if (isArtifact || options?.reserveOutputTokens !== undefined || hasWebResults) {
+  if (isArtifact || options?.reserveOutputTokens !== undefined || options?.outputHeadroomTokens !== undefined || hasWebResults) {
     const headroom =
+      options?.outputHeadroomTokens ??
       options?.reserveOutputTokens ??
       (hasWebResults ? ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB : ARTIFACT_OUTPUT_HEADROOM_TOKENS);
-    const windowBudget = options?.maxContentTokens ?? (CHAT_CONTEXT_BUDGET_TOKENS > 10000 ? 8192 : CHAT_CONTEXT_BUDGET_TOKENS);
+    const windowBudget = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
     const artifactCeiling = windowBudget - headroom - rawToolTokens;
     maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
 
+  let evictedCount = 0;
+
   if (estimateTokens(working) <= maxTokens) {
-    return working;
+    const res: any = working;
+    res.evictedCount = 0;
+    res.estimatedTokens = estimateTokens(working);
+    return res;
   }
 
   // Identify protected indices
@@ -383,8 +415,10 @@ export function fitContextWindow(
         ...working[candidateIdx],
         content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
       };
+      evictedCount++;
     } else {
       working.splice(candidateIdx, 1);
+      evictedCount++;
     }
   }
 
@@ -404,6 +438,7 @@ export function fitContextWindow(
     }
 
     working.splice(candidateIdx, 1);
+    evictedCount++;
   }
 
   // Pass 3 (Pathological): If still over budget with only protected messages left,
@@ -435,9 +470,13 @@ export function fitContextWindow(
       ...working[longestIdx],
       content: originalContent.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
     };
+    evictedCount++;
   }
 
-  return working;
+  const result: any = working;
+  result.evictedCount = evictedCount;
+  result.estimatedTokens = estimateTokens(working);
+  return result;
 }
 
 /**
@@ -491,7 +530,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     activeModel = "qwen3.8:27b-q3_k_m",
     effectiveReasoningEffort = "medium",
     maxToolRounds = 8,
-    maxContentTokens = 6000,
+    maxContentTokens = CHAT_CONTEXT_BUDGET_TOKENS,
     executeTool
   } = options;
   const llmTools = options.llmTools || options.ollamaTools || [];

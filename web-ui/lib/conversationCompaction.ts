@@ -34,7 +34,7 @@ export function extractIdentifiersAndErrors(messages: any[]): {
   const urlsSet = new Set<string>();
   const errorLines: string[] = [];
 
-  const filePathRegex = /(?:^|[\s"'\(`])((?:[a-zA-Z]:[\\/]|(?:\.{1,2}[\\/])|\/|[a-zA-Z0-9_\-]+\/)[a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]{1,10})(?:[\s"'\)`]|$)/g;
+  const filePathRegex = /(?:^|[\s"'(\`])((?:[a-zA-Z]:[\\/]|\/|\.\.?\/|[a-zA-Z0-9_-]+\/)[a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9]{1,12})(?=$|[\s"'\)\`,;:])/gm;
   const gitShaRegex = /\b([0-9a-f]{7,40})\b/gi;
   const urlRegex = /\b(https?:\/\/[^\s<>"'\)]+)/gi;
 
@@ -71,19 +71,20 @@ export function extractIdentifiersAndErrors(messages: any[]): {
       urlsSet.add(m[1]);
     }
 
-    // Extract failure or error lines verbatim (up to 8 lines)
-    if (errorLines.length < 8) {
+    // Extract failure or error lines verbatim (up to 25 lines)
+    if (errorLines.length < 25) {
       const lines = content.split(/\r?\n/);
       for (const line of lines) {
         const trimmed = line.trim();
+        const lineExcerpt = trimmed.length > 1000 ? trimmed.slice(0, 1000) : trimmed;
         if (
           trimmed.length > 5 &&
           /\b(error|fail|failed|failure|exception|crash|rejected)\b/i.test(trimmed) &&
           !trimmed.startsWith("<") &&
-          !errorLines.includes(trimmed.slice(0, 200))
+          !errorLines.includes(lineExcerpt)
         ) {
-          errorLines.push(trimmed.slice(0, 200));
-          if (errorLines.length >= 8) break;
+          errorLines.push(lineExcerpt);
+          if (errorLines.length >= 25) break;
         }
       }
     }
@@ -109,7 +110,7 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
     if (!msg) continue;
 
     if (msg.role === "user" && typeof msg.content === "string") {
-      const trimmed = msg.content.trim().slice(0, 500);
+      const trimmed = msg.content.trim().slice(0, 2000);
       if (trimmed) userQueries.push(trimmed);
     } else if (msg.role === "tool") {
       if (msg.name) toolsInvoked.add(msg.name);
@@ -164,23 +165,37 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
     }
   }
 
+  const maxFilePaths = 100;
+  const maxGitShas = 100;
+  const maxUrls = 50;
+  const maxErrors = 25;
+
   if (filePaths.length > 0 || gitShas.length > 0 || urls.length > 0) {
     lines.push("\nRetained Identifiers & Artifacts:");
     if (filePaths.length > 0) {
-      lines.push(`- File paths: ${filePaths.slice(0, 25).join(", ")}`);
+      const displayed = filePaths.slice(0, maxFilePaths).join(", ");
+      const overflow = filePaths.length > maxFilePaths ? ` (+${filePaths.length - maxFilePaths} more file paths omitted)` : "";
+      lines.push(`- File paths: ${displayed}${overflow}`);
     }
     if (gitShas.length > 0) {
-      lines.push(`- Git SHAs: ${gitShas.slice(0, 15).join(", ")}`);
+      const displayed = gitShas.slice(0, maxGitShas).join(", ");
+      const overflow = gitShas.length > maxGitShas ? ` (+${gitShas.length - maxGitShas} more git SHAs omitted)` : "";
+      lines.push(`- Git SHAs: ${displayed}${overflow}`);
     }
     if (urls.length > 0) {
-      lines.push(`- URLs: ${urls.slice(0, 10).join(", ")}`);
+      const displayed = urls.slice(0, maxUrls).join(", ");
+      const overflow = urls.length > maxUrls ? ` (+${urls.length - maxUrls} more URLs omitted)` : "";
+      lines.push(`- URLs: ${displayed}${overflow}`);
     }
   }
 
   if (errorLines.length > 0) {
     lines.push("\nCritical Errors & Failures:");
-    for (const err of errorLines.slice(0, 8)) {
+    for (const err of errorLines.slice(0, maxErrors)) {
       lines.push(`- ${err}`);
+    }
+    if (errorLines.length > maxErrors) {
+      lines.push(`- (+${errorLines.length - maxErrors} more error lines omitted)`);
     }
   }
 
