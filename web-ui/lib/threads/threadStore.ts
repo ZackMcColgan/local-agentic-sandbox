@@ -3,6 +3,11 @@ import path from "path";
 import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
+import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
+import { summarizeTurnHistory } from "../conversationCompaction";
+import { TurnFileDiff } from "../chatDiffs";
+
+export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
 
 export interface ThreadAttachment {
   name: string;
@@ -20,11 +25,24 @@ export interface ThreadMessage {
   thought?: string;
   traces?: ExecutionTraceItem[];
   attachments?: ThreadAttachment[];
+  diffs?: TurnFileDiff[];
   modelUsed?: string;
   durationMs?: number;
   timestamp: string;
   taskId?: string;
   isStopped?: boolean;
+  compactedThisTurn?: boolean;
+  tokensBeforeCompaction?: number;
+  tokensAfterCompaction?: number;
+  selectedModel?: string;
+}
+
+export interface ThreadCompactionBoundary {
+  throughMessageId: string;
+  summary: string;
+  compactedAt: string;
+  tokensBefore: number;
+  tokensAfter: number;
 }
 
 export interface Thread {
@@ -36,6 +54,8 @@ export interface Thread {
   model: string;
   reasoningEffort: "low" | "medium" | "xhigh";
   messages: ThreadMessage[];
+  compaction?: ThreadCompactionBoundary;
+  hostAccess?: boolean;
   taskId?: string;
   scope?: TaskScope;
   workerInfo?: string;
@@ -43,7 +63,7 @@ export interface Thread {
   isTest?: boolean;
 }
 
-function resolveThreadsDir(): string {
+export function resolveThreadsDir(): string {
   let resolvedDir = process.env.THREADS_DIR;
   if (!resolvedDir) {
     const candidates = [
@@ -65,6 +85,10 @@ function resolveThreadsDir(): string {
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
+        try {
+          fs.chmodSync(dir, 0o777);
+          fs.chmodSync(path.dirname(dir), 0o777);
+        } catch {}
         fs.accessSync(dir, fs.constants.W_OK);
         resolvedDir = dir;
         break;
@@ -89,6 +113,8 @@ export class ThreadStore {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
     }
+    try { fs.chmodSync(path.dirname(this.threadsDir), 0o777); } catch {}
+    try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
   }
 
   getFilePath(threadId: string): string {
@@ -106,6 +132,7 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
     }
 
     const files = fs.readdirSync(this.threadsDir).filter((f) => f.endsWith(".json"));
@@ -448,6 +475,7 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
     }
     thread.updatedAt = new Date().toISOString();
     const targetFile = this.getFilePath(thread.id);
@@ -578,6 +606,234 @@ export class ThreadStore {
       } catch {}
     }
     return false;
+  }
+
+  buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+    const rawMessages = thread.messages || [];
+    if (!thread.compaction || !thread.compaction.throughMessageId) {
+      return rawMessages.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+    }
+
+    const { throughMessageId, summary } = thread.compaction;
+    const boundaryIdx = rawMessages.findIndex((m) => m.id === throughMessageId);
+    if (boundaryIdx < 0) {
+      // If boundary message id is not found, fallback to all messages
+      return rawMessages.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+    }
+
+    const after = rawMessages.slice(boundaryIdx + 1);
+    const result: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+
+    // If there was a leading system message before or at boundary, keep it
+    const leadingSystem = rawMessages.find((m) => m.role === "system");
+    if (leadingSystem) {
+      result.push({ role: "system", content: leadingSystem.content });
+    }
+
+    result.push({
+      role: "assistant",
+      content: summary
+    });
+
+    for (const m of after) {
+      result.push({
+        role: m.role,
+        content: m.content
+      });
+    }
+
+    return result;
+  }
+
+  applyCompactionBoundary(
+    thread: Thread,
+    summary: string,
+    throughMessageId: string,
+    tokensBefore: number,
+    tokensAfter: number
+  ): Thread {
+    thread.compaction = {
+      throughMessageId,
+      summary,
+      compactedAt: new Date().toISOString(),
+      tokensBefore,
+      tokensAfter
+    };
+    this.saveThread(thread);
+    return thread;
+  }
+
+  clearCompactionBoundary(thread: Thread): Thread {
+    delete thread.compaction;
+    this.saveThread(thread);
+    return thread;
+  }
+
+  compactThreadIncremental(thread: Thread): {
+    noop: boolean;
+    reason?: string;
+    tokensBefore: number;
+    tokensAfter: number;
+    summary?: string;
+    throughMessageId?: string;
+    thread: Thread;
+  } {
+    const currentModelView = this.buildModelMessages(thread);
+    const tokensBefore = estimateTokens(currentModelView);
+    const messages = thread.messages || [];
+
+    if (messages.length <= 4) {
+      return {
+        noop: true,
+        reason: "insufficient_messages",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        thread
+      };
+    }
+
+    const hasSystem = messages[0]?.role === "system";
+    const baseStartIdx = hasSystem ? 1 : 0;
+    const prevBoundaryIdx = thread.compaction?.throughMessageId
+      ? messages.findIndex((m) => m.id === thread.compaction!.throughMessageId)
+      : -1;
+
+    const uncompactedStartIdx = prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
+    const endIdx = Math.max(baseStartIdx, messages.length - 4);
+
+    if (endIdx <= uncompactedStartIdx) {
+      return {
+        noop: true,
+        reason: "already_compacted",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        summary: thread.compaction?.summary,
+        throughMessageId: thread.compaction?.throughMessageId,
+        thread
+      };
+    }
+
+    const newlyEligible = messages.slice(uncompactedStartIdx, endIdx);
+    if (newlyEligible.length === 0) {
+      return {
+        noop: true,
+        reason: "already_compacted",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        summary: thread.compaction?.summary,
+        throughMessageId: thread.compaction?.throughMessageId,
+        thread
+      };
+    }
+
+    const throughMessage = newlyEligible[newlyEligible.length - 1];
+    const priorSummaryAndNewMessages =
+      thread.compaction?.summary && prevBoundaryIdx >= baseStartIdx
+        ? [{ role: "assistant" as const, content: thread.compaction.summary }, ...newlyEligible]
+        : newlyEligible;
+
+    const summary = summarizeTurnHistory(priorSummaryAndNewMessages);
+
+    const candidateModelMessages = [
+      ...(hasSystem ? [{ role: "system" as const, content: messages[0].content }] : []),
+      { role: "assistant" as const, content: summary },
+      ...messages.slice(endIdx).map((m) => ({ role: m.role, content: m.content }))
+    ];
+
+    const candidateTokensAfter = estimateTokens(candidateModelMessages);
+
+    if (candidateTokensAfter >= tokensBefore) {
+      return {
+        noop: true,
+        reason: "already_optimal",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        summary: thread.compaction?.summary,
+        throughMessageId: thread.compaction?.throughMessageId,
+        thread
+      };
+    }
+
+    this.applyCompactionBoundary(
+      thread,
+      summary,
+      throughMessage.id,
+      tokensBefore,
+      candidateTokensAfter
+    );
+
+    return {
+      noop: false,
+      tokensBefore,
+      tokensAfter: candidateTokensAfter,
+      summary,
+      throughMessageId: throughMessage.id,
+      thread
+    };
+  }
+
+  prepareTurnConversationMessages(
+    thread: Thread | null,
+    clientMessages: any[],
+    maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS
+  ): {
+    messages: any[];
+    compactedThisTurn: boolean;
+    tokensBeforeCompaction?: number;
+    tokensAfterCompaction?: number;
+  } {
+    if (thread && thread.messages && thread.messages.length > 0) {
+      const clientUserMessages = (clientMessages || []).filter((m: any) => m.role === "user");
+      const lastClientUser = clientUserMessages[clientUserMessages.length - 1];
+
+      if (lastClientUser && lastClientUser.content) {
+        const threadUserMessages = thread.messages.filter((m) => m.role === "user");
+        const lastThreadUser = threadUserMessages[threadUserMessages.length - 1];
+
+        if (!lastThreadUser || lastThreadUser.content !== lastClientUser.content) {
+          const newMsg: ThreadMessage = {
+            id: lastClientUser.id || `msg-${Date.now()}-u`,
+            role: "user",
+            content: lastClientUser.content,
+            timestamp: new Date().toISOString()
+          };
+          thread.messages.push(newMsg);
+          this.saveThread(thread);
+        }
+      }
+
+      let modelView = this.buildModelMessages(thread);
+      const triggerThreshold = Math.floor(maxBudgetTokens * 0.85);
+
+      if (estimateTokens(modelView) > triggerThreshold) {
+        const compResult = this.compactThreadIncremental(thread);
+        if (!compResult.noop) {
+          modelView = this.buildModelMessages(thread);
+          return {
+            messages: modelView,
+            compactedThisTurn: true,
+            tokensBeforeCompaction: compResult.tokensBefore,
+            tokensAfterCompaction: compResult.tokensAfter
+          };
+        }
+      }
+
+      return {
+        messages: modelView,
+        compactedThisTurn: false
+      };
+    }
+
+    return {
+      messages: [...(clientMessages || [])],
+      compactedThisTurn: false
+    };
   }
 
   async cleanupTestSessions(): Promise<number> {

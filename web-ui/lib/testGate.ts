@@ -51,6 +51,16 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
     tests: [] // handled dynamically
   },
+  // Notifications & Telegram outbound alerts
+  {
+    match: (p) => p.includes("notifications"),
+    tests: ["tests/notifications.test.ts"]
+  },
+  // Host Mode & approvals & status
+  {
+    match: (p) => p.includes("hostMode") || p.includes("host/approvals") || p.includes("host/status") || p.includes("Start-HostRunner"),
+    tests: ["tests/hostMode.test.ts", "tests/hostRunnerScript.test.ts"]
+  },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
     match: (p) => p.includes("tests/helpers/"),
@@ -83,7 +93,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/contextBudget"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
@@ -207,10 +217,18 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("app/api/tasks/route"),
     tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
   },
-  // Files API route & Workspace File alias
+  // Files API route, Workspace File alias & thread outputs
   {
-    match: (p) => p.includes("app/api/files/route") || p.includes("app/api/workspace/file"),
-    tests: ["tests/svgRendering.test.ts", "tests/punchlistBackendFixes.test.ts"]
+    match: (p) =>
+      p.includes("app/api/files/route") ||
+      p.includes("lib/threadOutputs") ||
+      p.includes("app/api/workspace/file"),
+    tests: [
+      "tests/filesApi.test.ts",
+      "tests/chatAttachments.test.ts",
+      "tests/svgRendering.test.ts",
+      "tests/punchlistBackendFixes.test.ts"
+    ]
   },
   // Patch Core surgical utility
   {

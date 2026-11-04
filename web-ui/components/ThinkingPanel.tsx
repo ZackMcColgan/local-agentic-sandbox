@@ -7,8 +7,11 @@ import {
   Map,
   Cog,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Loader2
 } from "lucide-react";
+
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
 
@@ -29,6 +32,9 @@ interface ThinkingPanelProps {
   defaultExpanded?: boolean;
   onToggleExpand?: () => void;
   className?: string;
+  streamStatus?: string | null;
+  activeTool?: string | null;
+  hasContent?: boolean;
 }
 
 export function ThinkingPanel({
@@ -36,7 +42,10 @@ export function ThinkingPanel({
   rawThought = "",
   isStreaming = false,
   defaultExpanded = true,
-  className = ""
+  className = "",
+  streamStatus = null,
+  activeTool = null,
+  hasContent = false
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -81,6 +90,14 @@ export function ThinkingPanel({
 
   const activeStepsCount = effectivePhases.length;
 
+  const turnPhaseLabel = resolveTurnStatusPhase({
+    isStreaming,
+    streamStatus,
+    activeTool,
+    hasThought: Boolean(rawThought && rawThought.trim()),
+    hasContent
+  });
+
   return (
     <div
       data-testid="thinking-panel"
@@ -117,6 +134,16 @@ export function ThinkingPanel({
               )}
             </span>
           </span>
+
+          {isStreaming && turnPhaseLabel && (
+            <span
+              data-testid="turn-status-slot"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+            >
+              <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="truncate">{turnPhaseLabel}</span>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-zinc-400 group-hover:text-slate-800 dark:group-hover:text-zinc-200 shrink-0 ml-2">
@@ -198,13 +225,7 @@ export function ThinkingPanel({
             );
           })}
 
-          {/* Footer Status Pill only while isStreaming === true */}
-          {isStreaming && (
-            <div className="pt-1 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-              <Sparkles className="h-3.5 w-3.5 animate-spin" />
-              <span>Reasoning in progress. Formulating structured execution...</span>
-            </div>
-          )}
+
         </div>
       )}
     </div>

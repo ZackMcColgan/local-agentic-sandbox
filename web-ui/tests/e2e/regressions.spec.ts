@@ -103,4 +103,79 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
       await expect(drawer).toBeHidden();
     }
   });
+
+  test("Regression 4: Chain F mobile header non-overlap, one-drawer law, and single turn-status-slot invariant", async ({ page, isMobile }) => {
+    await page.goto("/?simulate=chat-tools&speed=20");
+    await page.waitForSelector("header");
+
+    const textarea = page.locator("textarea").first();
+    await textarea.waitFor({ state: "visible" });
+
+    // Wait until send button is ready if initial simulation is running
+    const sendButton = page.locator('[data-testid="send-button"]').first();
+    const stopButton = page.locator('[data-testid="stop-button"]').first();
+    if (await stopButton.isVisible()) {
+      await expect(sendButton).toBeVisible({ timeout: 5000 });
+    }
+
+    await textarea.fill("Run a quick tool check");
+    await textarea.press("Enter");
+
+    // Single turn-status-slot invariant: at most ONE turn-status-slot exists in the DOM
+    const slotLocator = page.locator('[data-testid="turn-status-slot"]');
+    expect(await slotLocator.count()).toBeLessThanOrEqual(1);
+
+    // Once turn-status-slot appears, its boundingBox height is > 0 and <= 36
+    if (await slotLocator.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      const box = await slotLocator.first().boundingBox();
+      if (box) {
+        expect(box.height).toBeGreaterThan(0);
+        expect(box.height).toBeLessThanOrEqual(36);
+      }
+    }
+    expect(await slotLocator.count()).toBeLessThanOrEqual(1);
+
+    if (isMobile) {
+      // Verifies [data-testid="context-meter-pill"] is visible in header!
+      const contextMeter = page.locator('header [data-testid="context-meter-pill"]');
+      await expect(contextMeter).toBeVisible();
+
+      // Collects bounding boxes of visible interactive elements in header
+      const headerSelectors = [
+        'header button[aria-label="Open navigation menu"]',
+        'header [data-testid="context-meter-pill"]',
+        'header [data-testid="host-mode-toggle"]',
+        'header button[aria-label="Open Projects"]'
+      ];
+
+      const boxes: Array<{ sel: string; box: { x: number; y: number; width: number; height: number } }> = [];
+      for (const sel of headerSelectors) {
+        const el = page.locator(sel).first();
+        if (await el.isVisible()) {
+          const b = await el.boundingBox();
+          if (b) {
+            boxes.push({ sel, box: b });
+            // Zero horizontal clipping: box.x >= 0 && box.x + box.width <= 390
+            expect(b.x).toBeGreaterThanOrEqual(0);
+            expect(b.x + b.width).toBeLessThanOrEqual(390);
+          }
+        }
+      }
+
+      // Asserts zero pairwise bounding-box overlap (overlapArea === 0)
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const b1 = boxes[i].box;
+          const b2 = boxes[j].box;
+          const overlapW = Math.max(0, Math.min(b1.x + b1.width, b2.x + b2.width) - Math.max(b1.x, b2.x));
+          const overlapH = Math.max(0, Math.min(b1.y + b1.height, b2.y + b2.height) - Math.max(b1.y, b2.y));
+          const overlapArea = overlapW * overlapH;
+          expect(overlapArea).toBe(0);
+        }
+      }
+
+      // One-drawer law: asserts .app-sidebar is hidden on mobile
+      await expect(page.locator(".app-sidebar")).toBeHidden();
+    }
+  });
 });

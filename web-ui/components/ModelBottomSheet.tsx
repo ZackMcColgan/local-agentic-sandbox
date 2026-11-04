@@ -36,6 +36,7 @@ export function ModelBottomSheet({
         if (mounted && d.status) setEngineStatus(d.status);
       })
       .catch(() => {});
+
     return () => {
       mounted = false;
     };
