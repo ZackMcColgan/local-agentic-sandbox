@@ -92,18 +92,47 @@ export function isDestructiveHostAction(tool: string, args: any): { isDestructiv
   return { isDestructive: false };
 }
 
-export const HOST_RUNNER_BASE_URL =
-  process.env.HOST_RUNNER_URL ||
-  (process.env.RUNNING_IN_DOCKER === "true"
-    ? "http://host.docker.internal:8765"
-    : "http://127.0.0.1:8765");
+export function getHostRunnerBaseUrl(): string {
+  return process.env.HOST_RUNNER_URL || "http://127.0.0.1:8765";
+}
+
+export const HOST_RUNNER_BASE_URL = process.env.HOST_RUNNER_URL || "http://127.0.0.1:8765";
+
+export async function checkHostRunnerHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getHostRunnerBaseUrl()}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(1500)
+    });
+    if (!res.ok) {
+      return false;
+    }
+    const data = await res.json();
+    return data?.status === "ok";
+  } catch {
+    return false;
+  }
+}
 
 export async function executeHostTool(tool: string, args: any): Promise<any> {
-  const res = await fetch(`${HOST_RUNNER_BASE_URL}/execute`, {
+  const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
+  let timeoutMs = 30000;
+  if (tool === "host_run_powershell") {
+    let timeoutSec = 120;
+    if (typeof args?.timeoutSeconds === "number" && !isNaN(args.timeoutSeconds)) {
+      timeoutSec = Math.max(1, Math.min(600, Math.floor(args.timeoutSeconds)));
+    }
+    timeoutMs = (timeoutSec + 5) * 1000;
+  }
+
+  const res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Host-Runner-Secret": secret
+    },
     body: JSON.stringify({ tool, args }),
-    signal: AbortSignal.timeout(15000)
+    signal: AbortSignal.timeout(timeoutMs)
   });
 
   if (!res.ok) {
@@ -122,7 +151,9 @@ export const HOST_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          command: { type: "string", description: "The PowerShell command line to execute." }
+          command: { type: "string", description: "The PowerShell command line to execute." },
+          cwd: { type: "string", description: "Optional working directory on the host machine." },
+          timeoutSeconds: { type: "number", description: "Optional execution timeout in seconds (1 to 600, default 120)." }
         },
         required: ["command"]
       }
@@ -178,7 +209,8 @@ export const HOST_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Path to remove." }
+          path: { type: "string", description: "Path to remove." },
+          recursive: { type: "boolean", description: "Whether to recursively delete directories." }
         },
         required: ["path"]
       }

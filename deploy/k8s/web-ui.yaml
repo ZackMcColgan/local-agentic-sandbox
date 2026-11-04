@@ -76,6 +76,14 @@ spec:
               value: "900000"
             - name: THREADS_DIR
               value: "/workspace/.agent/threads"
+            - name: HOST_RUNNER_URL
+              value: "http://host-runner-service:8765"
+            - name: HOST_RUNNER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-host-runner
+                  key: shared-secret
+                  optional: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
