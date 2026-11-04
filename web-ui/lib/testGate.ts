@@ -217,10 +217,18 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("app/api/tasks/route"),
     tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
   },
-  // Files API route & Workspace File alias
+  // Files API route, Workspace File alias & thread outputs
   {
-    match: (p) => p.includes("app/api/files/route") || p.includes("app/api/workspace/file"),
-    tests: ["tests/svgRendering.test.ts", "tests/punchlistBackendFixes.test.ts"]
+    match: (p) =>
+      p.includes("app/api/files/route") ||
+      p.includes("lib/threadOutputs") ||
+      p.includes("app/api/workspace/file"),
+    tests: [
+      "tests/filesApi.test.ts",
+      "tests/chatAttachments.test.ts",
+      "tests/svgRendering.test.ts",
+      "tests/punchlistBackendFixes.test.ts"
+    ]
   },
   // Patch Core surgical utility
   {

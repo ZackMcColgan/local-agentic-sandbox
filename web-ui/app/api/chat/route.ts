@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import {
+  buildFileDeliverablesDirective,
+  recordTurnOutputWrite,
+  collectTurnAttachments
+} from "@/lib/threadOutputs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
@@ -265,10 +270,7 @@ CRITICAL INSTRUCTIONS:
   - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
 - REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
   - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.
-- FILE GENERATION & DOWNLOADABLE DELIVERABLES:
-  - When the user asks to generate, create, export, or download a file (single-file HTML app, game, markdown report, Python script, data file, diagram), write the complete file into '${threadOutputsRelPath ? threadOutputsRelPath + "/<filename>" : ".agent/threads/<threadId>/files/<filename>"}' using 'workspace_write_file'.
-  - After saving the file, provide a concise chat reply (1-2 sentences summarizing what was built and confirming it is ready to run or download).
-  - Do NOT paste the complete code or file content into chat when the user asked for a downloadable game or file.`;
+${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
     if (effectiveReasoningEffort === "low") {
@@ -562,7 +564,7 @@ CRITICAL INSTRUCTIONS:
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
-        const turnCreatedFiles = new Set<string>();
+        const turnCreatedFiles: string[] = [];
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
@@ -1017,13 +1019,7 @@ CRITICAL INSTRUCTIONS:
               toolArgs?.path &&
               typeof toolArgs.path === "string"
             ) {
-              const writtenPath = toolArgs.path.replace(/\\/g, "/");
-              const baseName = path.basename(writtenPath);
-              if (activeThreadId && (writtenPath.includes(activeThreadId) || writtenPath.startsWith(activeThreadId) || writtenPath.includes("/files/"))) {
-                turnCreatedFiles.add(baseName);
-              } else if (threadOutputsDir) {
-                turnCreatedFiles.add(baseName);
-              }
+              recordTurnOutputWrite(turnCreatedFiles, toolArgs.path, activeThreadId, threadsDir);
             }
 
             traces.push(traceItem);
@@ -1203,44 +1199,8 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
-        // Gather turn attachments from threadOutputsDir
-        const turnAttachments: Array<{
-          name: string;
-          type: string;
-          size: number;
-          previewUrl: string;
-        }> = [];
-
-        if (threadOutputsDir && fs.existsSync(threadOutputsDir)) {
-          try {
-            const files = fs.readdirSync(threadOutputsDir);
-            for (const f of files) {
-              const fullF = path.join(threadOutputsDir, f);
-              const stat = fs.statSync(fullF);
-              if (stat.isFile() && (turnCreatedFiles.has(f) || (Date.now() - stat.mtimeMs < 300000))) {
-                const ext = path.extname(f).toLowerCase();
-                let mime = "application/octet-stream";
-                if (ext === ".html") mime = "text/html";
-                else if (ext === ".svg") mime = "image/svg+xml";
-                else if (ext === ".md") mime = "text/markdown";
-                else if (ext === ".json") mime = "application/json";
-                else if (ext === ".txt") mime = "text/plain";
-                else if (ext === ".py") mime = "text/x-python";
-                else if (ext === ".js" || ext === ".ts") mime = "application/javascript";
-
-                const relUrl = activeThreadId ? `${activeThreadId}/files/${f}` : f;
-                turnAttachments.push({
-                  name: f,
-                  type: mime,
-                  size: stat.size,
-                  previewUrl: relUrl
-                });
-              }
-            }
-          } catch (scanErr) {
-            console.warn("[ChatRoute] Error scanning threadOutputsDir for attachments:", scanErr);
-          }
-        }
+        // Gather turn attachments using exact write tracking
+        const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
 
         rootSpan.end("ok", {
           tracesCount: traces.length,
