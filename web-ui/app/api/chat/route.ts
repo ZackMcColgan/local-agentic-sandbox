@@ -52,7 +52,8 @@ import {
   executeHostTool,
   isDestructiveHostAction,
   createPendingApproval,
-  consumeContinuationEntry
+  consumeContinuationEntry,
+  checkHostRunnerHealth
 } from "@/lib/hostMode";
 import { notify } from "@/lib/notifications";
 import {
@@ -174,6 +175,10 @@ async function* streamLlmChat(llmBaseUrl: string, payload: any) {
 
 // Backward-compat alias
 const streamOllamaChat = streamLlmChat;
+
+function shouldAdvertiseHostTools(threadHostAccess: boolean, runnerHealthy: boolean): boolean {
+  return threadHostAccess === true && runnerHealthy === true;
+}
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
@@ -408,7 +413,7 @@ CRITICAL INSTRUCTIONS:
           }
         }
 
-        // 4. Host Mode Tools (if thread opt-in enabled)
+        // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
         let threadHostAccess = false;
         if (activeThreadId) {
           try {
@@ -420,7 +425,10 @@ CRITICAL INSTRUCTIONS:
           } catch {}
         }
 
-        const hostTools = threadHostAccess
+        const runnerHealthy = threadHostAccess ? await checkHostRunnerHealth() : false;
+        const includeHostTools = shouldAdvertiseHostTools(threadHostAccess, runnerHealthy);
+
+        const hostTools = includeHostTools
           ? HOST_TOOLS_DEFINITIONS.map((ht) => ({
               name: ht.function.name,
               description: ht.function.description,

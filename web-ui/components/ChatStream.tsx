@@ -98,6 +98,20 @@ export interface ChatMessage {
   timestamp?: string;
 }
 
+export interface UiHostApproval {
+  id: string;
+  threadId?: string;
+  tool: string;
+  args: Record<string, any>;
+  riskReason: string;
+  createdAt?: number;
+  expiresAt?: number;
+  status: "pending" | "executed" | "denied" | "expired" | "error";
+  result?: any;
+  error?: string;
+  isSubmitting?: boolean;
+}
+
 interface ChatStreamProps {
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
   activeModel: string;
@@ -110,6 +124,8 @@ interface ChatStreamProps {
   threadId?: string;
   threadTitle?: string;
   threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
+  threadHostAccess?: boolean;
+  onHostAccessChanged?: (enabled: boolean, updatedThread?: any) => void;
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
@@ -213,6 +229,8 @@ export function ChatStream({
   threadId,
   threadTitle,
   threadStatus,
+  threadHostAccess,
+  onHostAccessChanged,
   activeTask,
   initialScope = "PROJECT",
   threadScope,
@@ -257,6 +275,130 @@ export function ChatStream({
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
+  // Host Mode & Approvals state
+  const [hostAccess, setHostAccess] = useState<boolean>(Boolean(threadHostAccess));
+  const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
+  const [hostApprovals, setHostApprovals] = useState<UiHostApproval[]>([]);
+
+  useEffect(() => {
+    if (threadHostAccess !== undefined) {
+      setHostAccess(Boolean(threadHostAccess));
+    }
+  }, [threadHostAccess]);
+
+  useEffect(() => {
+    let active = true;
+    const url = threadId ? `/api/host/status?threadId=${encodeURIComponent(threadId)}` : "/api/host/status";
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        if (typeof data.hostAccess === "boolean" && threadHostAccess === undefined) {
+          setHostAccess(data.hostAccess);
+        }
+        if (typeof data.runnerAvailable === "boolean") {
+          setRunnerAvailable(data.runnerAvailable);
+        }
+      })
+      .catch(() => {
+        if (active) setRunnerAvailable(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [threadId, threadHostAccess]);
+
+  // Rehydration of pending host approvals on thread load
+  useEffect(() => {
+    if (!threadId) {
+      setHostApprovals([]);
+      return;
+    }
+    let active = true;
+
+    fetch(`/api/host/approvals?threadId=${encodeURIComponent(threadId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.approvals) return;
+        const now = Date.now();
+        const unexpired = data.approvals.filter(
+          (a: any) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
+        );
+
+        setHostApprovals((prev) => {
+          const merged = [...prev];
+          for (const app of unexpired) {
+            const idx = merged.findIndex((m) => m.id === app.id);
+            const uiApp: UiHostApproval = {
+              id: app.id,
+              threadId: app.threadId,
+              tool: app.tool,
+              args: app.args || {},
+              riskReason: app.riskReason || "Destructive action requires approval",
+              createdAt: app.createdAt,
+              expiresAt: app.expiresAt,
+              status: "pending"
+            };
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...uiApp };
+            } else {
+              merged.push(uiApp);
+            }
+          }
+          return merged;
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  const handleToggleHostAccess = async () => {
+    let targetThreadId = threadId;
+    if (!targetThreadId && onEnsureThread) {
+      targetThreadId = (await onEnsureThread("New session")) || undefined;
+    }
+    if (!targetThreadId) {
+      return;
+    }
+
+    const nextHostAccess = !hostAccess;
+    try {
+      const res = await fetch(`/api/threads/${targetThreadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setHostAccess", hostAccess: nextHostAccess })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setHostAccess(nextHostAccess);
+        if (onTaskUpdated && data.thread) {
+          onTaskUpdated(undefined, data.thread);
+        }
+        if (onHostAccessChanged && data.thread) {
+          onHostAccessChanged(nextHostAccess, data.thread);
+        }
+
+        // Fresh check of runner availability
+        try {
+          const statusRes = await fetch(`/api/host/status?threadId=${encodeURIComponent(targetThreadId)}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            if (typeof statusData.runnerAvailable === "boolean") {
+              setRunnerAvailable(statusData.runnerAvailable);
+            }
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn("Failed to toggle host access:", err);
+    }
+  };
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -574,6 +716,324 @@ export function ChatStream({
     }
   };
 
+  const readStreamResponse = async (
+    res: Response,
+    targetThreadId?: string,
+    startTime: number = performance.now()
+  ) => {
+    const assistantMsgId = `assistant-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: activeModel
+      }
+    ]);
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error("No readable stream received from server");
+    }
+
+    const decoder = new TextDecoder();
+    let streamBuffer = "";
+    let accumulatedRawContent = "";
+    let currentTraces: ExecutionTraceItem[] = [];
+    let currentModel = activeModel;
+
+    const upsertAssistant = (
+      prev: ChatMessage[],
+      patch: (existing: ChatMessage) => ChatMessage
+    ): ChatMessage[] => {
+      const exists = prev.some((msg) => msg.id === assistantMsgId);
+      const base: ChatMessage = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: currentModel
+      };
+      if (!exists) {
+        return [...prev, patch(base)];
+      }
+      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      streamBuffer += decoder.decode(value, { stream: true });
+      const blocks = streamBuffer.split("\n\n");
+      streamBuffer = blocks.pop() || "";
+
+      for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const jsonStr = trimmed.replace(/^data:\s*/, "");
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === "meta") {
+            if (event.model) currentModel = event.model;
+            if (event.context) {
+              setContextStats((prev) => ({
+                ...prev,
+                estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
+                budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
+                compactedThisTurn: event.context.compactedThisTurn,
+                tokensBeforeCompaction: event.context.tokensBeforeCompaction,
+                tokensAfterCompaction: event.context.tokensAfterCompaction
+              }));
+            }
+          } else if (event.type === "status") {
+            setStreamStatus(event.status);
+          } else if (event.type === "thought") {
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                thought: event.thought
+              }))
+            );
+          } else if (event.type === "token") {
+            accumulatedRawContent += event.content || "";
+            const parsed = parseThinkingAndContent(accumulatedRawContent);
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                content: parsed.content,
+                thought: parsed.thought,
+                modelUsed: currentModel
+              }))
+            );
+          } else if (event.type === "trace") {
+            currentTraces = [...currentTraces, event.trace];
+            onTracesUpdate(currentTraces);
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                traces: currentTraces
+              }))
+            );
+          } else if (event.type === "approval_required") {
+            const approval = event.approval;
+            if (approval && approval.id) {
+              setHostApprovals((prev) => {
+                const idx = prev.findIndex((a) => a.id === approval.id);
+                const item: UiHostApproval = {
+                  id: approval.id,
+                  threadId: approval.threadId || targetThreadId,
+                  tool: approval.tool,
+                  args: approval.args || {},
+                  riskReason: approval.riskReason || "Destructive action requires approval",
+                  createdAt: approval.createdAt || Date.now(),
+                  expiresAt: approval.expiresAt || (Date.now() + 10 * 60 * 1000),
+                  status: "pending"
+                };
+                if (idx >= 0) {
+                  const copy = [...prev];
+                  copy[idx] = { ...copy[idx], ...item };
+                  return copy;
+                }
+                return [...prev, item];
+              });
+            }
+          } else if (event.type === "done") {
+            const durationMs = Math.round(performance.now() - startTime);
+            const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
+            const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
+            const finalModel = event.model || currentModel;
+
+            if (targetThreadId && !activeSimulation) {
+              try {
+                fetch(`/api/threads/${targetThreadId}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "addMessage",
+                    message: {
+                      id: assistantMsgId,
+                      role: "assistant",
+                      content: parsed.content,
+                      thought: finalThought,
+                      modelUsed: finalModel,
+                      traces: event.traces || currentTraces,
+                      attachments: event.attachments,
+                      durationMs,
+                      timestamp: new Date().toISOString()
+                    }
+                  })
+                }).catch((err) => console.warn("Failed to persist assistant message:", err));
+              } catch {}
+            }
+
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                content: parsed.content,
+                thought: finalThought,
+                traces: event.traces || currentTraces,
+                attachments: event.attachments || msg.attachments,
+                modelUsed: finalModel,
+                durationMs: event.durationMs || durationMs
+              }))
+            );
+          } else if (event.type === "error") {
+            throw new Error(event.error || "Streaming error encountered");
+          }
+        } catch (parseErr: any) {
+          if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
+            throw parseErr;
+          }
+        }
+      }
+    }
+  };
+
+  const runApprovalContinuation = async (approvalId: string) => {
+    const targetThreadId = threadId;
+    setIsLoading(true);
+    setStreamStatus("Continuing after host approval...");
+    setErrorMsg(null);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const startTime = performance.now();
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          model: activeModel,
+          mode: agentMode,
+          reasoning_effort: reasoningEffort,
+          threadId: targetThreadId,
+          approvalContinuationId: approvalId
+        })
+      });
+
+      if (!res.ok) {
+        let errMessage = "Failed to continue after host approval";
+        try {
+          const errJson = await res.json();
+          errMessage = errJson.error || errMessage;
+        } catch {}
+        throw new Error(errMessage);
+      }
+
+      await readStreamResponse(res, targetThreadId, startTime);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Approval continuation aborted by user");
+      } else {
+        console.error(err);
+        setErrorMsg(err.message || "Failed to continue chat after host approval");
+      }
+    } finally {
+      setIsLoading(false);
+      setStreamStatus(null);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleApprovalDecision = async (approvalId: string, action: "approved" | "rejected") => {
+    setHostApprovals((prev) =>
+      prev.map((item) => (item.id === approvalId ? { ...item, isSubmitting: true } : item))
+    );
+
+    try {
+      const res = await fetch("/api/host/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId, action })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 410) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? { ...item, status: "expired", isSubmitting: false }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      if (res.ok) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? {
+                  ...item,
+                  status: action === "approved" ? "executed" : "denied",
+                  result: data.result,
+                  isSubmitting: false
+                }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      if (res.status === 500) {
+        setHostApprovals((prev) =>
+          prev.map((item) =>
+            item.id === approvalId
+              ? {
+                  ...item,
+                  status: "error",
+                  error: data.error || "Host tool execution failed",
+                  isSubmitting: false
+                }
+              : item
+          )
+        );
+        runApprovalContinuation(approvalId);
+        return;
+      }
+
+      setHostApprovals((prev) =>
+        prev.map((item) =>
+          item.id === approvalId
+            ? {
+                ...item,
+                status: "error",
+                error: data.error || `Request failed with HTTP ${res.status}`,
+                isSubmitting: false
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      setHostApprovals((prev) =>
+        prev.map((item) =>
+          item.id === approvalId
+            ? {
+                ...item,
+                status: "error",
+                error: err?.message || "Failed to submit approval",
+                isSubmitting: false
+              }
+            : item
+        )
+      );
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const prompt = (textToSend || input).trim();
     if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
@@ -783,158 +1243,7 @@ export function ChatStream({
         throw new Error(errMessage);
       }
 
-      const assistantMsgId = `assistant-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: activeModel
-        }
-      ]);
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        throw new Error("No readable stream received from server");
-      }
-
-      const decoder = new TextDecoder();
-      let streamBuffer = "";
-      let accumulatedRawContent = "";
-      let currentTraces: ExecutionTraceItem[] = [];
-      let currentModel = activeModel;
-
-      const upsertAssistant = (
-        prev: ChatMessage[],
-        patch: (existing: ChatMessage) => ChatMessage
-      ): ChatMessage[] => {
-        const exists = prev.some((msg) => msg.id === assistantMsgId);
-        const base: ChatMessage = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: currentModel
-        };
-        if (!exists) {
-          return [...prev, patch(base)];
-        }
-        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        streamBuffer += decoder.decode(value, { stream: true });
-        const blocks = streamBuffer.split("\n\n");
-        streamBuffer = blocks.pop() || "";
-
-        for (const block of blocks) {
-          const trimmed = block.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const jsonStr = trimmed.replace(/^data:\s*/, "");
-          if (!jsonStr) continue;
-
-          try {
-            const event = JSON.parse(jsonStr);
-
-            if (event.type === "meta") {
-              if (event.model) currentModel = event.model;
-              if (event.context) {
-                setContextStats((prev) => ({
-                  ...prev,
-                  estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
-                  budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
-                  compactedThisTurn: event.context.compactedThisTurn,
-                  tokensBeforeCompaction: event.context.tokensBeforeCompaction,
-                  tokensAfterCompaction: event.context.tokensAfterCompaction
-                }));
-              }
-            } else if (event.type === "status") {
-              setStreamStatus(event.status);
-            } else if (event.type === "thought") {
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  thought: event.thought
-                }))
-              );
-            } else if (event.type === "token") {
-              accumulatedRawContent += event.content || "";
-              const parsed = parseThinkingAndContent(accumulatedRawContent);
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  content: parsed.content,
-                  thought: parsed.thought,
-                  modelUsed: currentModel
-                }))
-              );
-            } else if (event.type === "trace") {
-              currentTraces = [...currentTraces, event.trace];
-              onTracesUpdate(currentTraces);
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  traces: currentTraces
-                }))
-              );
-            } else if (event.type === "done") {
-              const durationMs = Math.round(performance.now() - startTime);
-              const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
-              const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
-              const finalModel = event.model || currentModel;
-
-              const targetThreadId = activeThreadId || threadId;
-              if (targetThreadId && !isSimulating) {
-                try {
-                  fetch(`/api/threads/${targetThreadId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "addMessage",
-                      message: {
-                        id: assistantMsgId,
-                        role: "assistant",
-                        content: parsed.content,
-                        thought: finalThought,
-                        modelUsed: finalModel,
-                        traces: event.traces || currentTraces,
-                        attachments: event.attachments,
-                        durationMs,
-                        timestamp: new Date().toISOString()
-                      }
-                    })
-                  }).catch((err) => console.warn("Failed to persist assistant message:", err));
-                } catch {}
-              }
-
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  content: parsed.content,
-                  thought: finalThought,
-                  traces: event.traces || currentTraces,
-                  attachments: event.attachments || msg.attachments,
-                  modelUsed: finalModel,
-                  durationMs: event.durationMs || durationMs
-                }))
-              );
-            } else if (event.type === "error") {
-              throw new Error(event.error || "Streaming error encountered");
-            }
-          } catch (parseErr: any) {
-            if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
-              throw parseErr;
-            }
-          }
-        }
-      }
+      await readStreamResponse(res, activeThreadId || threadId, startTime);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Chat stream aborted by user");
@@ -1260,6 +1569,49 @@ export function ChatStream({
           <div className="hidden md:flex items-center">
             <EngineStatusPill onOpenSettings={onOpenModelSheet} />
           </div>
+
+          {/* Host Mode Toggle Button */}
+          <button
+            type="button"
+            data-testid="host-mode-toggle"
+            onClick={handleToggleHostAccess}
+            className={`min-h-[44px] flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors shrink-0 ${
+              hostAccess
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title={hostAccess ? "Host access ON · Tap to turn off" : "Host access OFF · Tap to turn on"}
+            aria-label={hostAccess ? "Disable host access" : "Enable host access"}
+          >
+            <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>Host</span>
+          </button>
+
+          {/* Host Status Chip (visible when hostAccess is ON) */}
+          {hostAccess && (
+            runnerAvailable !== false ? (
+              <div
+                data-testid="host-access-chip"
+                className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold shrink-0"
+                title="Host access ON"
+                aria-label="Host access ON"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                <span className="hidden sm:inline">Host access ON</span>
+                <span className="sm:hidden">Host ON</span>
+              </div>
+            ) : (
+              <div
+                data-testid="host-access-chip"
+                className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold shrink-0"
+                title="Host runner is unreachable (Host offline)"
+                aria-label="Host offline"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                <span>Host offline</span>
+              </div>
+            )
+          )}
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
@@ -1902,6 +2254,137 @@ export function ChatStream({
               onDeployRun={onDeployRun}
               isStopping={isStoppingTask}
             />
+          </div>
+        )}
+
+        {/* Host Mode Approvals (Cards & Receipts) */}
+        {hostApprovals.length > 0 && (
+          <div className="w-full max-w-[840px] space-y-3">
+            {hostApprovals.map((approval) => {
+              const isPending =
+                approval.status === "pending" &&
+                (!approval.expiresAt || approval.expiresAt > Date.now());
+
+              if (isPending) {
+                return (
+                  <div
+                    key={approval.id}
+                    data-testid="host-approval-card"
+                    className="w-full rounded-2xl border border-amber-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                          Security Approval Required
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono font-medium text-slate-700 dark:text-zinc-300">
+                          {approval.tool}
+                        </span>
+                      </div>
+                      {approval.expiresAt && (
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
+                          Expires: {new Date(approval.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-slate-700 dark:text-zinc-300 font-medium">
+                      {approval.riskReason}
+                    </div>
+
+                    {(approval.args?.command || approval.args?.path) && (
+                      <div className="rounded-xl bg-slate-950 p-3 overflow-x-auto text-xs text-zinc-200 font-mono">
+                        <pre className="whitespace-pre-wrap break-all">
+                          <code>{approval.args?.command || approval.args?.path}</code>
+                        </pre>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      {approval.args?.cwd && (
+                        <span className="text-slate-500 dark:text-zinc-400 font-mono">
+                          cwd: <span className="text-slate-700 dark:text-zinc-200">{approval.args.cwd}</span>
+                        </span>
+                      )}
+                      {approval.args?.recursive && (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 font-mono font-semibold">
+                          recursive: true
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        data-testid="host-deny-btn"
+                        disabled={approval.isSubmitting}
+                        onClick={() => handleApprovalDecision(approval.id, "rejected")}
+                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
+                        Deny
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="host-approve-btn"
+                        disabled={approval.isSubmitting}
+                        onClick={() => handleApprovalDecision(approval.id, "approved")}
+                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
+                        Approve
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={approval.id}
+                  data-testid="host-approval-receipt"
+                  className="w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 p-3 sm:p-4 text-xs space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                          approval.status === "executed"
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                            : approval.status === "denied"
+                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
+                            : approval.status === "expired"
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                            : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+                        }`}
+                      >
+                        {approval.status === "executed"
+                          ? "Executed"
+                          : approval.status === "denied"
+                          ? "Denied"
+                          : approval.status === "expired"
+                          ? "Expired"
+                          : "Error"}
+                      </span>
+                      <span className="font-mono text-slate-700 dark:text-zinc-300 font-semibold">
+                        {approval.tool}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-slate-600 dark:text-zinc-400 font-mono text-[11px] truncate">
+                    {approval.args?.command || approval.args?.path}
+                  </div>
+
+                  {approval.error && (
+                    <div className="text-rose-600 dark:text-rose-400 text-[11px]">
+                      {approval.error}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

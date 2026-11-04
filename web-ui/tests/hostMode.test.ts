@@ -2,8 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
+import os from "node:os";
+import { spawn, execSync } from "node:child_process";
 import * as hostModeLib from "../lib/hostMode";
-import { POST as hostApprovalsPost } from "../app/api/host/approvals/route";
+import { GET as hostApprovalsGet, POST as hostApprovalsPost } from "../app/api/host/approvals/route";
+import { ThreadStore } from "../lib/threads/threadStore";
 
 const {
   isDestructiveHostAction,
@@ -497,6 +500,237 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
     } finally {
       global.fetch = origFetch;
       AbortSignal.timeout = origTimeout;
+    }
+  });
+});
+
+describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance Suite", () => {
+  it("GET /api/host/status returns thread hostAccess and runner health state", async () => {
+    const { GET: hostStatusGet } = await import("../app/api/host/status/route");
+    const threadStore = new ThreadStore();
+    const thread = threadStore.createThread({ title: "F3 Status Test Thread", isTest: true });
+
+    const origFetch = global.fetch;
+    try {
+      // 1. Initial thread without hostAccess
+      const req1 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
+      const res1 = await hostStatusGet(req1);
+      assert.equal(res1.status, 200);
+      const json1 = await res1.json();
+      assert.equal(json1.hostAccess, false);
+
+      // 2. Enable hostAccess on thread, mock healthy runner (200, { status: "ok" })
+      thread.hostAccess = true;
+      threadStore.saveThread(thread);
+
+      global.fetch = (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "ok" })
+      })) as any;
+
+      const req2 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
+      const res2 = await hostStatusGet(req2);
+      assert.equal(res2.status, 200);
+      const json2 = await res2.json();
+      assert.equal(json2.hostAccess, true);
+      assert.equal(json2.runnerAvailable, true);
+
+      // 3. Mock unhealthy runner (500)
+      global.fetch = (async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: "offline" })
+      })) as any;
+
+      const req3 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
+      const res3 = await hostStatusGet(req3);
+      assert.equal(res3.status, 200);
+      const json3 = await res3.json();
+      assert.equal(json3.hostAccess, true);
+      assert.equal(json3.runnerAvailable, false);
+    } finally {
+      global.fetch = origFetch;
+      await threadStore.deleteThread(thread.id);
+    }
+  });
+
+  it("tool gating excludes HOST_TOOLS_DEFINITIONS unless hostAccess is true AND runner is healthy", () => {
+    const shouldAdvertiseHostTools = (threadHostAccess: boolean, runnerHealthy: boolean): boolean =>
+      threadHostAccess === true && runnerHealthy === true;
+
+    assert.equal(shouldAdvertiseHostTools(false, false), false);
+    assert.equal(shouldAdvertiseHostTools(false, true), false);
+    assert.equal(shouldAdvertiseHostTools(true, false), false);
+    assert.equal(shouldAdvertiseHostTools(true, true), true);
+
+    const resolveTools = (access: boolean, healthy: boolean) =>
+      shouldAdvertiseHostTools(access, healthy) ? HOST_TOOLS_DEFINITIONS : [];
+
+    assert.deepEqual(resolveTools(false, true), []);
+    assert.deepEqual(resolveTools(true, false), []);
+    assert.deepEqual(resolveTools(false, false), []);
+    assert.deepEqual(resolveTools(true, true), HOST_TOOLS_DEFINITIONS);
+  });
+
+  it("live host runner scratch file acceptance (F3.4 items 1-8)", { timeout: 35000 }, async () => {
+    const scriptPath = path.resolve(__dirname, "../../scripts/Start-HostRunner.ps1");
+    const testPort = 8769;
+    const testSecret = `f3-live-secret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let runnerProc: ReturnType<typeof spawn> | null = null;
+
+    function stopRunner() {
+      if (runnerProc && runnerProc.pid) {
+        try {
+          execSync(`taskkill /PID ${runnerProc.pid} /T /F`, { stdio: "ignore" });
+        } catch {}
+        try {
+          runnerProc.kill();
+        } catch {}
+        runnerProc = null;
+      }
+    }
+
+    const origUrl = process.env.HOST_RUNNER_URL;
+    const origSecret = process.env.HOST_RUNNER_SHARED_SECRET;
+    let scratchPath: string | null = null;
+
+    try {
+      process.env.HOST_RUNNER_URL = `http://127.0.0.1:${testPort}`;
+      process.env.HOST_RUNNER_SHARED_SECRET = testSecret;
+
+      // 1. Spawn scripts/Start-HostRunner.ps1 on loopback port with test secret
+      runnerProc = spawn(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          scriptPath,
+          "-Port",
+          String(testPort)
+        ],
+        {
+          cwd: os.tmpdir(),
+          env: {
+            ...process.env,
+            HOST_RUNNER_SHARED_SECRET: testSecret
+          },
+          stdio: "pipe"
+        }
+      );
+
+      // Poll until healthy
+      let healthy = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (await checkHostRunnerHealth()) {
+          healthy = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      assert.ok(healthy, "Host runner failed to start and report healthy");
+
+      // 2. Execute host_list_dir against Documents
+      const docsDir = path.join(os.homedir(), "Documents");
+      if (!fs.existsSync(docsDir)) {
+        fs.mkdirSync(docsDir, { recursive: true });
+      }
+      const listRes = await executeHostTool("host_list_dir", { path: docsDir });
+      assert.equal(listRes.success, true);
+      assert.ok(Array.isArray(listRes.items));
+
+      // 3. Execute host_write_file to create scratch file, then host_read_file
+      const timestamp = Date.now();
+      const scratchFileName = `host-mode-test-${timestamp}.txt`;
+      scratchPath = path.join(docsDir, scratchFileName);
+      const testContent = `Host mode live test content at ${timestamp}`;
+
+      const writeRes = await executeHostTool("host_write_file", {
+        path: scratchPath,
+        content: testContent
+      });
+      assert.equal(writeRes.success, true);
+
+      const readRes = await executeHostTool("host_read_file", { path: scratchPath });
+      assert.equal(readRes.success, true);
+      assert.equal(readRes.content, testContent);
+
+      // 4. Verify destructive action gate + create pending approval + reject via POST /api/host/approvals
+      const checkResult = isDestructiveHostAction("host_delete_path", { path: scratchPath });
+      assert.equal(checkResult.isDestructive, true);
+
+      const app1 = createPendingApproval("live-thread-f3", "host_delete_path", { path: scratchPath }, "Delete scratch file 1");
+
+      const getApprovalsRes = await hostApprovalsGet(new Request("http://localhost:3000/api/host/approvals?threadId=live-thread-f3"));
+      assert.equal(getApprovalsRes.status, 200);
+      const getApprovalsJson = await getApprovalsRes.json();
+      assert.ok(getApprovalsJson.approvals.some((a: any) => a.id === app1.id));
+
+      const rejectReq = new Request("http://localhost:3000/api/host/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId: app1.id, action: "rejected" })
+      });
+      const rejectRes = await hostApprovalsPost(rejectReq);
+      assert.equal(rejectRes.status, 200);
+      assert.equal(fs.existsSync(scratchPath), true, "Scratch file must still exist after rejection");
+
+      const contReject = consumeContinuationEntry(app1.id, "live-thread-f3");
+      assert.equal(contReject.ok, true);
+      if (contReject.ok) {
+        assert.equal(contReject.entry.status, "rejected");
+      }
+
+      // 5. Create second pending approval and approve -> verify execution against live runner and deletion
+      const app2 = createPendingApproval("live-thread-f3", "host_delete_path", { path: scratchPath }, "Delete scratch file 2");
+
+      const approveReq = new Request("http://localhost:3000/api/host/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId: app2.id, action: "approved" })
+      });
+      const approveRes = await hostApprovalsPost(approveReq);
+      assert.equal(approveRes.status, 200);
+      assert.equal(fs.existsSync(scratchPath), false, "Scratch file must be deleted after approval");
+
+      const contApprove = consumeContinuationEntry(app2.id, "live-thread-f3");
+      assert.equal(contApprove.ok, true);
+      if (contApprove.ok) {
+        assert.equal(contApprove.entry.status, "executed");
+      }
+
+      // 6. Replay same approvalId -> verify HTTP 409
+      const replayReq = new Request("http://localhost:3000/api/host/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalId: app2.id, action: "approved" })
+      });
+      const replayRes = await hostApprovalsPost(replayReq);
+      assert.equal(replayRes.status, 409);
+
+      // 7. Stop runner and verify checkHostRunnerHealth() returns false
+      stopRunner();
+      const healthyAfterStop = await checkHostRunnerHealth();
+      assert.equal(healthyAfterStop, false, "checkHostRunnerHealth must return false after runner stops");
+    } finally {
+      stopRunner();
+      if (scratchPath && fs.existsSync(scratchPath)) {
+        try {
+          fs.unlinkSync(scratchPath);
+        } catch {}
+      }
+      if (origUrl !== undefined) {
+        process.env.HOST_RUNNER_URL = origUrl;
+      } else {
+        delete process.env.HOST_RUNNER_URL;
+      }
+      if (origSecret !== undefined) {
+        process.env.HOST_RUNNER_SHARED_SECRET = origSecret;
+      } else {
+        delete process.env.HOST_RUNNER_SHARED_SECRET;
+      }
     }
   });
 });
