@@ -6,13 +6,15 @@
   "workspaces": [
     "mcp-server",
     "browser-mcp",
-    "web-ui"
+    "web-ui",
+    "host-bridge"
   ],
   "scripts": {
     "test": "npm run test --workspaces",
     "test:gate": "node scripts/test-gate.js",
     "test:coverage": "npm run test:coverage --workspaces",
     "build": "npm run build --workspaces",
+    "build:host-runner": "node scripts/build-host-runner.js",
     "up": "docker compose up --build -d",
     "down": "docker compose down",
     "restart": "docker compose restart",

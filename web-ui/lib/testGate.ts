@@ -56,10 +56,17 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("notifications"),
     tests: ["tests/notifications.test.ts"]
   },
-  // Host Mode & approvals & status
+  // Host Mode & approvals & status & Host Bridge
   {
-    match: (p) => p.includes("hostMode") || p.includes("host/approvals") || p.includes("host/status") || p.includes("Start-HostRunner"),
-    tests: ["tests/hostMode.test.ts", "tests/hostRunnerScript.test.ts"]
+    match: (p) =>
+      p.includes("hostMode") ||
+      p.includes("host/approvals") ||
+      p.includes("host/status") ||
+      p.includes("Start-HostRunner") ||
+      p.includes("host-bridge") ||
+      p.includes("hostDaemon") ||
+      p.includes("build-host-runner"),
+    tests: ["tests/hostMode.test.ts", "tests/hostRunnerScript.test.ts", "tests/hostDaemon.test.ts"]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
