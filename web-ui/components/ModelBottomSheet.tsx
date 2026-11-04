@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Bot, Cpu, Check, Zap, Brain, X, Power, Bell, Send } from "lucide-react";
+import { Bot, Cpu, Check, Zap, Brain, X, Power } from "lucide-react";
 import { isReasoningEffortSupported } from "@/config/models";
 
 interface ModelBottomSheetProps {
@@ -27,13 +27,6 @@ export function ModelBottomSheet({
 }: ModelBottomSheetProps) {
   const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
   const [engineLoading, setEngineLoading] = useState(false);
-  const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; enabled: boolean; chatIdMasked: string | null }>({
-    configured: false,
-    enabled: false,
-    chatIdMasked: null
-  });
-  const [telegramTesting, setTelegramTesting] = useState(false);
-  const [telegramTestSuccess, setTelegramTestSuccess] = useState<boolean | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -44,48 +37,10 @@ export function ModelBottomSheet({
       })
       .catch(() => {});
 
-    fetch("/api/settings/notifications", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (mounted && d.telegram) setTelegramStatus(d.telegram);
-      })
-      .catch(() => {});
-
     return () => {
       mounted = false;
     };
   }, [isOpen]);
-
-  const handleToggleTelegram = async () => {
-    const nextState = !telegramStatus.enabled;
-    try {
-      const res = await fetch("/api/settings/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggle", enabled: nextState })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.telegram) setTelegramStatus(data.telegram);
-    } catch {}
-  };
-
-  const handleTestTelegram = async () => {
-    setTelegramTesting(true);
-    setTelegramTestSuccess(null);
-    try {
-      const res = await fetch("/api/settings/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "test" })
-      });
-      const data = await res.json().catch(() => ({}));
-      setTelegramTestSuccess(Boolean(data.success));
-    } catch {
-      setTelegramTestSuccess(false);
-    } finally {
-      setTelegramTesting(false);
-    }
-  };
 
   const handleToggleEngine = async () => {
     const action = engineStatus === "running" ? "stop" : "start";
@@ -342,49 +297,6 @@ export function ModelBottomSheet({
               <Power className="h-3.5 w-3.5" />
               <span>{engineLoading ? "Updating..." : engineStatus === "running" ? "Turn Off" : "Start Engine"}</span>
             </button>
-          </div>
-
-          {/* Telegram Notifications Card */}
-          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">Telegram Notifications</span>
-                  <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    {telegramStatus.configured
-                      ? `Hermes Bot · Target ID: ${telegramStatus.chatIdMasked}`
-                      : "No credentials found in Hermes config"}
-                  </span>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={telegramStatus.enabled}
-                  onChange={handleToggleTelegram}
-                  disabled={!telegramStatus.configured}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-              </label>
-            </div>
-            {telegramStatus.configured && (
-              <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-zinc-700/60">
-                <span className="text-[10px] text-slate-500 dark:text-zinc-400">
-                  Sends alerts for completed/failed runs & morning reports
-                </span>
-                <button
-                  type="button"
-                  onClick={handleTestTelegram}
-                  disabled={telegramTesting || !telegramStatus.enabled}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-colors disabled:opacity-40"
-                >
-                  <Send className="h-3 w-3" />
-                  <span>{telegramTesting ? "Sending..." : telegramTestSuccess === true ? "Sent!" : "Test Ping"}</span>
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Done button */}

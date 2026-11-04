@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
 
 export interface DeployHistoryItem {
@@ -60,6 +60,82 @@ export function SettingsView({
   });
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineMessage, setEngineMessage] = useState<string | null>(null);
+  const [notifStatus, setNotifStatus] = useState<{
+    configured: boolean;
+    enabled: boolean;
+    reason?: "missing_credentials" | "disabled";
+    lastResult?: {
+      event: string;
+      ok: boolean;
+      at: string;
+      messageId?: number;
+      errorSummary?: string;
+    };
+  }>({
+    configured: false,
+    enabled: true
+  });
+  const [notifTesting, setNotifTesting] = useState(false);
+  const [notifTestMessage, setNotifTestMessage] = useState<string | null>(null);
+
+  const fetchNotificationStatus = async () => {
+    try {
+      const res = await fetch("/api/settings/notifications", { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifStatus(json);
+      }
+    } catch {}
+  };
+
+  const handleToggleNotifications = async () => {
+    const nextState = !notifStatus.enabled;
+    setNotifStatus((prev) => ({
+      ...prev,
+      enabled: nextState,
+      reason: !prev.configured ? "missing_credentials" : (!nextState ? "disabled" : undefined)
+    }));
+    try {
+      const res = await fetch("/api/settings/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle", enabled: nextState })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifStatus(json);
+      }
+    } catch {
+      fetchNotificationStatus();
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setNotifTesting(true);
+    setNotifTestMessage(null);
+    try {
+      const res = await fetch("/api/settings/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test" })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.lastResult) {
+        setNotifStatus((prev) => ({ ...prev, lastResult: data.lastResult }));
+      } else {
+        fetchNotificationStatus();
+      }
+      if (data.success) {
+        setNotifTestMessage("Test sent!");
+      } else {
+        setNotifTestMessage("Send failed");
+      }
+    } catch {
+      setNotifTestMessage("Send failed");
+    } finally {
+      setNotifTesting(false);
+    }
+  };
 
   const fetchEngineStatus = async () => {
     try {
@@ -75,6 +151,7 @@ export function SettingsView({
 
   useEffect(() => {
     fetchEngineStatus();
+    fetchNotificationStatus();
   }, []);
 
   const handleEngineAction = async (action: "start" | "stop" | "restart") => {
@@ -434,6 +511,136 @@ export function SettingsView({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Section 5: Notifications */}
+        <div data-testid="settings-notifications-card">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
+            Notifications
+          </h2>
+
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Telegram Notifications</span>
+                </div>
+                <p
+                  data-testid="notifications-status-reason"
+                  className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm"
+                >
+                  {!notifStatus.configured
+                    ? "Missing Telegram credentials (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)."
+                    : !notifStatus.enabled
+                    ? "Outbound Telegram notifications are currently disabled."
+                    : "Outbound Telegram notifications active for completed/failed runs, morning reports, and host approvals."}
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div
+                data-testid="notifications-status-badge"
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                  notifStatus.configured && notifStatus.enabled
+                    ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+                    : notifStatus.configured && !notifStatus.enabled
+                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    notifStatus.configured && notifStatus.enabled
+                      ? "bg-emerald-500"
+                      : notifStatus.configured && !notifStatus.enabled
+                      ? "bg-amber-500"
+                      : "bg-slate-400 dark:bg-zinc-600"
+                  }`}
+                />
+                <span>
+                  {notifStatus.configured && notifStatus.enabled
+                    ? "Connected"
+                    : notifStatus.configured && !notifStatus.enabled
+                    ? "Disabled"
+                    : "Not configured"}
+                </span>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                Enable Notifications
+              </span>
+              <button
+                type="button"
+                role="switch"
+                data-testid="notifications-toggle-btn"
+                aria-checked={notifStatus.enabled}
+                onClick={handleToggleNotifications}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  notifStatus.enabled
+                    ? "bg-emerald-600 dark:bg-emerald-500"
+                    : "bg-slate-300 dark:bg-zinc-700"
+                }`}
+                title="Toggle notifications"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    notifStatus.enabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Test Button & Result */}
+            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  data-testid="notifications-test-btn"
+                  disabled={notifTesting || !notifStatus.configured || !notifStatus.enabled}
+                  onClick={handleTestNotification}
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                    notifTesting || !notifStatus.configured || !notifStatus.enabled
+                      ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
+                      : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
+                  }`}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{notifTesting ? "Sending..." : "Send test notification"}</span>
+                </button>
+
+                {notifTestMessage && (
+                  <span className="text-xs text-slate-500 dark:text-zinc-400">
+                    {notifTestMessage}
+                  </span>
+                )}
+              </div>
+
+              {notifStatus.lastResult && (
+                <div
+                  data-testid="notifications-last-result"
+                  className="text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
+                >
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                    {notifStatus.lastResult.ok
+                      ? "Sent"
+                      : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
+                  </span>{" "}
+                  · {notifStatus.lastResult.event} ·{" "}
+                  {new Date(notifStatus.lastResult.at).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit"
+                  })}
+                  {notifStatus.lastResult.messageId !== undefined && (
+                    <span> (msg #{notifStatus.lastResult.messageId})</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

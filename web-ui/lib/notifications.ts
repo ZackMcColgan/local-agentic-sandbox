@@ -1,85 +1,11 @@
 import fs from "fs";
 import path from "path";
+import { resolveThreadsDir } from "./threads/threadStore";
 
 export interface TelegramConfig {
   botToken: string;
   chatId: string;
   enabled: boolean;
-}
-
-let cachedConfig: TelegramConfig | null = null;
-
-export function resolveHermesTelegramConfig(): TelegramConfig {
-  if (cachedConfig) return cachedConfig;
-
-  let botToken = process.env.TELEGRAM_BOT_TOKEN || "";
-  let chatId = process.env.TELEGRAM_CHAT_ID || "";
-  let enabled = process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== "false";
-
-  // If not explicitly set in process.env, inspect Hermes AppData location
-  if (!botToken || !chatId) {
-    const candidates = [
-      path.resolve(process.env.USERPROFILE || "C:\\Users\\zackm", "AppData/Local/hermes/.env"),
-      path.resolve("/workspace/.agent/hermes.env"),
-      path.resolve("/workspace/hermes.env")
-    ];
-
-    for (const envPath of candidates) {
-      if (fs.existsSync(envPath)) {
-        try {
-          const content = fs.readFileSync(envPath, "utf8");
-          const lines = content.split(/\r?\n/);
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith("#") || !trimmed.includes("=")) continue;
-            const [k, ...rest] = trimmed.split("=");
-            const val = rest.join("=").trim().replace(/^['"]|['"]$/g, "");
-            if (k === "TELEGRAM_BOT_TOKEN" && !botToken) {
-              botToken = val;
-            }
-            if ((k === "TELEGRAM_HOME_CHANNEL" || k === "TELEGRAM_CHAT_ID") && !chatId) {
-              chatId = val;
-            }
-          }
-          if (botToken && chatId) break;
-        } catch {}
-      }
-    }
-  }
-
-  // Also check Hermes config.yaml for chat_id if not found
-  if (botToken && !chatId) {
-    const configYamlPath = path.resolve(
-      process.env.USERPROFILE || "C:\\Users\\zackm",
-      "AppData/Local/hermes/config.yaml"
-    );
-    if (fs.existsSync(configYamlPath)) {
-      try {
-        const content = fs.readFileSync(configYamlPath, "utf8");
-        const match = content.match(/chat_id:\s*['"]?([0-9]+)['"]?/);
-        if (match) {
-          chatId = match[1];
-        }
-      } catch {}
-    }
-  }
-
-  cachedConfig = {
-    botToken,
-    chatId,
-    enabled: Boolean(botToken && chatId && enabled)
-  };
-
-  return cachedConfig;
-}
-
-export function setTelegramConfig(config: Partial<TelegramConfig>): TelegramConfig {
-  const current = resolveHermesTelegramConfig();
-  cachedConfig = {
-    ...current,
-    ...config
-  };
-  return cachedConfig;
 }
 
 export type NotificationEvent =
@@ -95,6 +21,146 @@ export interface NotificationPayload {
   url?: string;
 }
 
+export interface NotificationLastResult {
+  event: NotificationEvent;
+  ok: boolean;
+  at: string;
+  messageId?: number;
+  errorSummary?: string;
+}
+
+export interface PersistedNotificationSettings {
+  enabled: boolean;
+  lastResult?: NotificationLastResult;
+}
+
+export interface PublicNotificationStatus {
+  configured: boolean;
+  enabled: boolean;
+  reason?: "missing_credentials" | "disabled";
+  lastResult?: NotificationLastResult;
+}
+
+let configOverride: Partial<TelegramConfig> | null = null;
+
+export function resetTelegramConfigOverride(): void {
+  configOverride = null;
+}
+
+export function resolveSettingsDir(): string {
+  return process.env.SETTINGS_DIR
+    ? path.resolve(process.env.SETTINGS_DIR)
+    : path.resolve(resolveThreadsDir(), "..", "settings");
+}
+
+export function getNotificationSettingsFilePath(): string {
+  return path.join(resolveSettingsDir(), "notifications.json");
+}
+
+export function loadPersistedNotificationSettings(): PersistedNotificationSettings {
+  const filePath = getNotificationSettingsFilePath();
+  const defaultEnabled = process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== "false";
+  if (fs.existsSync(filePath)) {
+    try {
+      const content = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(content);
+      return {
+        enabled: typeof parsed?.enabled === "boolean" ? parsed.enabled : defaultEnabled,
+        ...(parsed?.lastResult ? { lastResult: parsed.lastResult } : {})
+      };
+    } catch {
+      // Fallback on corrupt file
+    }
+  }
+  return { enabled: defaultEnabled };
+}
+
+export function savePersistedNotificationSettings(
+  patch: Partial<PersistedNotificationSettings>
+): PersistedNotificationSettings {
+  const current = loadPersistedNotificationSettings();
+  const updated: PersistedNotificationSettings = {
+    ...current,
+    ...patch
+  };
+
+  const dir = resolveSettingsDir();
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const targetFile = getNotificationSettingsFilePath();
+    const tmpFile = path.join(
+      dir,
+      `.notifications.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    const content = JSON.stringify(updated, null, 2);
+    try {
+      fs.writeFileSync(tmpFile, content, "utf8");
+      fs.renameSync(tmpFile, targetFile);
+    } catch {
+      fs.writeFileSync(targetFile, content, "utf8");
+      try {
+        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      } catch {}
+    }
+  } catch {
+    // Non-fatal persistence error fallback
+  }
+
+  return updated;
+}
+
+export function resolveHermesTelegramConfig(): TelegramConfig {
+  const envBotToken = process.env.TELEGRAM_BOT_TOKEN || "";
+  const envChatId = process.env.TELEGRAM_CHAT_ID || "";
+  const persisted = loadPersistedNotificationSettings();
+
+  const botToken =
+    configOverride?.botToken !== undefined ? configOverride.botToken : envBotToken;
+  const chatId =
+    configOverride?.chatId !== undefined ? configOverride.chatId : envChatId;
+  const enabled =
+    configOverride?.enabled !== undefined ? configOverride.enabled : persisted.enabled;
+
+  return {
+    botToken,
+    chatId,
+    enabled: Boolean(botToken && chatId && enabled)
+  };
+}
+
+export function setTelegramConfig(config: Partial<TelegramConfig>): TelegramConfig {
+  if (typeof config.enabled === "boolean") {
+    savePersistedNotificationSettings({ enabled: config.enabled });
+  }
+  configOverride = {
+    ...(configOverride || {}),
+    ...config
+  };
+  return resolveHermesTelegramConfig();
+}
+
+export function getPublicNotificationStatus(): PublicNotificationStatus {
+  const cfg = resolveHermesTelegramConfig();
+  const persisted = loadPersistedNotificationSettings();
+  const configured = Boolean(cfg.botToken && cfg.chatId);
+  const enabled =
+    configOverride?.enabled !== undefined ? configOverride.enabled : persisted.enabled;
+
+  let reason: "missing_credentials" | "disabled" | undefined;
+  if (!configured) {
+    reason = "missing_credentials";
+  } else if (!enabled) {
+    reason = "disabled";
+  }
+
+  return {
+    configured,
+    enabled,
+    ...(reason ? { reason } : {}),
+    ...(persisted.lastResult ? { lastResult: persisted.lastResult } : {})
+  };
+}
+
 /**
  * Dispatches an outbound notification to Telegram.
  * Guaranteed fire-and-forget, never throws or halts calling flows.
@@ -104,7 +170,12 @@ export async function notify(
   payload: NotificationPayload
 ): Promise<boolean> {
   const cfg = resolveHermesTelegramConfig();
-  if (!cfg.enabled || !cfg.botToken || !cfg.chatId) {
+  const persisted = loadPersistedNotificationSettings();
+
+  const enabled =
+    configOverride?.enabled !== undefined ? configOverride.enabled : persisted.enabled;
+
+  if (!enabled || !cfg.botToken || !cfg.chatId) {
     return false;
   }
 
@@ -119,9 +190,9 @@ export async function notify(
       ? "⚠️"
       : "🔔";
 
-  let message = `${emoji} *${escapeMarkdown(payload.title)}*\n\n${escapeMarkdown(payload.body)}`;
+  let message = `${emoji} ${payload.title}\n\n${payload.body}`;
   if (payload.url) {
-    message += `\n\n[Open Dashboard](${payload.url})`;
+    message += `\n\n${payload.url}`;
   }
 
   try {
@@ -131,24 +202,50 @@ export async function notify(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: cfg.chatId,
-        text: message,
-        parse_mode: "Markdown"
+        text: message
       }),
       signal: AbortSignal.timeout(6000)
     });
 
     if (!res.ok) {
-      console.warn(`[TelegramNotification] Failed to send: HTTP ${res.status}`);
+      savePersistedNotificationSettings({
+        lastResult: {
+          event,
+          ok: false,
+          at: new Date().toISOString(),
+          errorSummary: `HTTP ${res.status}`
+        }
+      });
       return false;
     }
+
+    const data = await res.json().catch(() => ({}));
+    const messageId =
+      typeof data?.result?.message_id === "number" ? data.result.message_id : undefined;
+
+    savePersistedNotificationSettings({
+      lastResult: {
+        event,
+        ok: true,
+        at: new Date().toISOString(),
+        ...(messageId !== undefined ? { messageId } : {})
+      }
+    });
+
     return true;
   } catch (err: any) {
-    console.warn(`[TelegramNotification] Network or timeout error: ${err.message}`);
+    let safeErr = String(err?.message || "Network error");
+    if (cfg.botToken) {
+      safeErr = safeErr.split(cfg.botToken).join("[REDACTED]");
+    }
+    savePersistedNotificationSettings({
+      lastResult: {
+        event,
+        ok: false,
+        at: new Date().toISOString(),
+        errorSummary: safeErr
+      }
+    });
     return false;
   }
-}
-
-function escapeMarkdown(text: string): string {
-  // Minimal Markdown escaping for standard Markdown parse_mode
-  return text.replace(/([_*`\[\]])/g, "\\$1");
 }
