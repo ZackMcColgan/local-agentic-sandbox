@@ -5,6 +5,7 @@ import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
 import { summarizeTurnHistory } from "../conversationCompaction";
+import { TurnFileDiff } from "../chatDiffs";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
 
@@ -24,6 +25,7 @@ export interface ThreadMessage {
   thought?: string;
   traces?: ExecutionTraceItem[];
   attachments?: ThreadAttachment[];
+  diffs?: TurnFileDiff[];
   modelUsed?: string;
   durationMs?: number;
   timestamp: string;

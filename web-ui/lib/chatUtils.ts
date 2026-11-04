@@ -495,4 +495,6 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
   return items;
 }
 
+export * from "./chatDiffs";
+
 

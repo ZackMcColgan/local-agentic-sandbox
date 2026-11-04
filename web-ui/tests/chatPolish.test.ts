@@ -12,6 +12,16 @@ import {
   TURN_PHASE_WRITING
 } from "../lib/chatStatus";
 import { getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import {
+  captureWorkspacePreImage,
+  collectTurnModifiedFileDiffs,
+  computeUnifiedFileDiff,
+  MAX_DIFF_LINES_CAP,
+  TurnFileDiff
+} from "../lib/chatDiffs";
 
 describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
   // -------------------------------------------------------------
@@ -515,6 +525,123 @@ Use \`run_command\` for shell actions.
       assert.ok(html.includes("web-ui/lib/newHelper.ts"), "Must render file path web-ui/lib/newHelper.ts");
       assert.ok(html.includes("+2"), "Must render +2 added lines badge");
       assert.ok(html.includes("Copy path"), "Must render Copy path button");
+    });
+  });
+  // -------------------------------------------------------------
+  // Free Run Part 3 Item 1 — Tool-Loop Pre-Image Diff Capture & DiffViewer Persistence
+  // -------------------------------------------------------------
+  describe("Free Run Part 3 Item 1 — Tool-Loop Pre-Image Diff Capture & DiffViewer Persistence", () => {
+    it("captureWorkspacePreImage + collectTurnModifiedFileDiffs captures pre-image and computes unified diff for modified files", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chat-diff-test-"));
+      try {
+        const testFileRel = "src/example.txt";
+        const testFileAbs = path.join(tempDir, testFileRel);
+        fs.mkdirSync(path.dirname(testFileAbs), { recursive: true });
+        fs.writeFileSync(testFileAbs, "line1\nline2\nline3\n", "utf8");
+
+        const preImages = new Map<string, string>();
+        captureWorkspacePreImage(preImages, testFileRel, tempDir);
+        assert.equal(preImages.size, 1);
+        assert.equal(preImages.get(testFileRel), "line1\nline2\nline3\n");
+
+        // Now modify the file
+        fs.writeFileSync(testFileAbs, "line1\nline2-modified\nline3\nline4\n", "utf8");
+
+        const diffs = collectTurnModifiedFileDiffs(preImages, tempDir);
+        assert.equal(diffs.length, 1);
+        const d = diffs[0];
+        assert.equal(d.path, testFileRel);
+        assert.equal(d.removedLines, 1);
+        assert.equal(d.addedLines, 2);
+        assert.ok(d.diff.includes("-line2"));
+        assert.ok(d.diff.includes("+line2-modified"));
+        assert.ok(d.diff.includes("+line4"));
+        assert.ok(d.diff.includes(`--- a/${testFileRel}`));
+        assert.ok(d.diff.includes(`+++ b/${testFileRel}`));
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("captureWorkspacePreImage ignores brand-new files (produces zero TurnFileDiff entries)", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chat-diff-test-"));
+      try {
+        const newFileRel = "src/brandNew.txt";
+        const newFileAbs = path.join(tempDir, newFileRel);
+
+        const preImages = new Map<string, string>();
+        // File does not exist yet when pre-image is captured
+        captureWorkspacePreImage(preImages, newFileRel, tempDir);
+        assert.equal(preImages.size, 0, "Brand-new file must not be stored in preImages");
+
+        // Tool writes the new file
+        fs.mkdirSync(path.dirname(newFileAbs), { recursive: true });
+        fs.writeFileSync(newFileAbs, "new content\n", "utf8");
+
+        const diffs = collectTurnModifiedFileDiffs(preImages, tempDir);
+        assert.equal(diffs.length, 0, "Modified files only — brand-new file must produce zero TurnFileDiffs");
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("truncates at MAX_DIFF_LINES_CAP (120) and reports truncated, totalDiffLines, and omittedLines", () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chat-diff-test-"));
+      try {
+        const fileRel = "src/large.txt";
+        const fileAbs = path.join(tempDir, fileRel);
+        fs.mkdirSync(path.dirname(fileAbs), { recursive: true });
+        fs.writeFileSync(fileAbs, "initial\n", "utf8");
+
+        const preImages = new Map<string, string>();
+        captureWorkspacePreImage(preImages, fileRel, tempDir);
+
+        // Modify with 150 changed lines
+        const lines = Array.from({ length: 150 }, (_, i) => `line-${i + 1}`);
+        fs.writeFileSync(fileAbs, lines.join("\n") + "\n", "utf8");
+
+        const diffs = collectTurnModifiedFileDiffs(preImages, tempDir, MAX_DIFF_LINES_CAP);
+        assert.equal(diffs.length, 1);
+        const d = diffs[0];
+        assert.equal(d.truncated, true);
+        assert.ok((d.totalDiffLines ?? 0) > MAX_DIFF_LINES_CAP, "totalDiffLines must exceed cap");
+        assert.equal(d.omittedLines, (d.totalDiffLines ?? 0) - MAX_DIFF_LINES_CAP);
+        assert.ok(d.diff.includes(`# ... truncated (${d.omittedLines} of ${d.totalDiffLines} diff lines omitted)`));
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ChatStream renders DiffViewer inside data-testid=\"chat-diff-card\" and persists diffs", () => {
+      const persistedDiff: TurnFileDiff = {
+        path: "web-ui/lib/persistedHelper.ts",
+        diff: "--- a/web-ui/lib/persistedHelper.ts\n+++ b/web-ui/lib/persistedHelper.ts\n@@ -1,2 +1,2 @@\n-const a = 1;\n+const a = 2;\n",
+        addedLines: 1,
+        removedLines: 1
+      };
+
+      const messages: any[] = [
+        {
+          id: "m-persisted-1",
+          role: "assistant",
+          content: "Modified persisted file.",
+          diffs: [persistedDiff]
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages
+        })
+      );
+
+      assert.ok(html.includes('data-testid="chat-diff-card"'), "Must render chat-diff-card");
+      assert.ok(html.includes("web-ui/lib/persistedHelper.ts"), "Must render branch/path for DiffViewer");
+      assert.ok(html.includes("+1"), "Must render +1 badge");
+      assert.ok(html.includes("-1"), "Must render -1 badge");
     });
   });
 });

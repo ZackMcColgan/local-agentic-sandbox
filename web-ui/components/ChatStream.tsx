@@ -55,6 +55,8 @@ import {
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
+import { DiffViewer } from "./DiffViewer";
+import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import {
@@ -91,6 +93,7 @@ export interface ChatMessage {
     previewUrl?: string;
     isImage: boolean;
   }>;
+  diffs?: TurnFileDiff[];
   modelUsed?: string;
   selectedModel?: string;
   durationMs?: number;
@@ -913,6 +916,7 @@ export function ChatStream({
                       selectedModel: activeModel,
                       traces: event.traces || currentTraces,
                       attachments: event.attachments,
+                      diffs: event.diffs,
                       durationMs,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
@@ -931,6 +935,7 @@ export function ChatStream({
                 thought: finalThought,
                 traces: event.traces || currentTraces,
                 attachments: event.attachments || msg.attachments,
+                diffs: event.diffs || msg.diffs,
                 modelUsed: finalModel,
                 selectedModel: msg.selectedModel || activeModel,
                 durationMs: event.durationMs || durationMs,
@@ -2252,69 +2257,59 @@ export function ChatStream({
 
                   {/* Chat Diff Cards for File Writes & Patches */}
                   {(() => {
-                    const fileDiffs = !isUser ? extractFileWriteDiffsFromTraces(m.traces) : [];
+                    if (isUser) return null;
+
+                    const fileDiffs: Array<{
+                      path: string;
+                      diff: string;
+                      addedLines: number;
+                      removedLines: number;
+                      truncated?: boolean;
+                      totalDiffLines?: number;
+                      omittedLines?: number;
+                    }> = Array.isArray(m.diffs) && m.diffs.length > 0
+                      ? m.diffs
+                      : extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
+                          path: d.path,
+                          diff: d.diffPreview,
+                          addedLines: d.addedLines,
+                          removedLines: d.removedLines,
+                          truncated: d.diffPreview.includes("more lines")
+                        }));
+
                     if (fileDiffs.length === 0) return null;
 
                     return (
                       <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                        {fileDiffs.map((diffItem) => {
-                          const isExpanded = expandedDiffCards[diffItem.id] ?? true;
-                          return (
-                            <div
-                              key={diffItem.id}
-                              data-testid="chat-diff-card"
-                              className="rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs overflow-hidden"
-                            >
-                              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                  <span
-                                    className="font-mono text-xs font-semibold text-slate-900 dark:text-zinc-100 truncate"
-                                    title={diffItem.path}
-                                  >
-                                    {diffItem.path}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-mono text-[10px] font-bold shrink-0">
-                                    {`+${diffItem.addedLines}`}
-                                  </span>
-                                  {diffItem.removedLines > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 font-mono text-[10px] font-bold shrink-0">
-                                      {`-${diffItem.removedLines}`}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => copyToClipboard(diffItem.path, diffItem.id)}
-                                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[11px] font-medium text-slate-600 dark:text-zinc-300 flex items-center gap-1 transition-colors"
-                                    title="Copy path"
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                    <span>Copy path</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setExpandedDiffCards((prev) => ({
-                                        ...prev,
-                                        [diffItem.id]: !(prev[diffItem.id] ?? true)
-                                      }))
-                                    }
-                                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors"
-                                  >
-                                    {isExpanded ? "Hide diff" : "View diff"}
-                                  </button>
-                                </div>
-                              </div>
-                              {isExpanded && diffItem.diffPreview ? (
-                                <pre className="border-t border-slate-100 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-200 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
-                                  {diffItem.diffPreview}
-                                </pre>
-                              ) : null}
+                        {fileDiffs.map((diffItem, diffIdx) => (
+                          <div
+                            key={`${m.id}-diff-${diffIdx}-${diffItem.path}`}
+                            data-testid="chat-diff-card"
+                            className="w-full max-w-xl space-y-1"
+                          >
+                            <div className="flex items-center justify-end px-1">
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(diffItem.path, `${m.id}-${diffIdx}`)}
+                                className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition-colors"
+                                title="Copy path"
+                              >
+                                <Copy className="h-3 w-3" />
+                                <span>Copy path</span>
+                              </button>
                             </div>
-                          );
-                        })}
+                            <DiffViewer
+                              branch={diffItem.path}
+                              diff={diffItem.diff}
+                              modifiedFiles={[diffItem.path]}
+                            />
+                            {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
+                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                Truncated: showing {MAX_DIFF_LINES_CAP} of {diffItem.totalDiffLines} diff lines ({diffItem.omittedLines} omitted)
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
                     );
                   })()}

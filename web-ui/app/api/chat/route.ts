@@ -7,6 +7,10 @@ import {
   recordTurnOutputWrite,
   collectTurnAttachments
 } from "@/lib/threadOutputs";
+import {
+  captureWorkspacePreImage,
+  collectTurnModifiedFileDiffs
+} from "@/lib/chatDiffs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
@@ -577,6 +581,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
         const turnCreatedFiles: string[] = [];
+        const turnPreImages = new Map<string, string>();
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
@@ -962,6 +967,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const startTime = performance.now();
             let result: any = null;
 
+            if (
+              (toolName === "workspace_write_file" || toolName === "workspace_patch_file") &&
+              typeof toolArgs?.path === "string"
+            ) {
+              captureWorkspacePreImage(turnPreImages, toolArgs.path);
+            }
+
             if (target.tier === "host") {
               const check = isDestructiveHostAction(toolName, toolArgs);
               if (check.isDestructive) {
@@ -1223,6 +1235,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         // Gather turn attachments using exact write tracking
         const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+        const turnDiffs = collectTurnModifiedFileDiffs(turnPreImages);
 
         rootSpan.end("ok", {
           tracesCount: traces.length,
@@ -1232,6 +1245,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         await sendEvent({
           type: "done",
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           content: cleanedContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
           traces,
