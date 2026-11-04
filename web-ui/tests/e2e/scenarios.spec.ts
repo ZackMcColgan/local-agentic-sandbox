@@ -157,7 +157,7 @@ test.describe("Simulation Mode & State Invariants Suite", () => {
       // Diff viewer should show the planned telemetry module diff
       const diffTab = page.locator('button:has-text("Diff")').first();
       await diffTab.click();
-      await expect(page.locator('text=MetricsCollector')).toBeVisible();
+      await expect(page.locator('text=MetricsCollector').first()).toBeVisible();
     }
   });
 

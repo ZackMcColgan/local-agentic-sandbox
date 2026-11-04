@@ -41,7 +41,7 @@ export function useTheme(initialTheme?: Theme) {
       if (saved === "light" || saved === "dark" || saved === "system") return saved as Theme;
     } catch {}
 
-    return "dark";
+    return getSystemTheme();
   });
 
   const resolvedTheme: ResolvedTheme = theme === "system" ? getSystemTheme() : (theme as ResolvedTheme);

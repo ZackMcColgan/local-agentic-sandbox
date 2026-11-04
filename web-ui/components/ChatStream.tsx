@@ -1381,6 +1381,10 @@ export function ChatStream({
           onClick={() => setShowCompactionModal(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversation Compaction"
+            data-testid="compaction-modal"
             className="relative max-w-lg w-full rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1535,17 +1539,18 @@ export function ChatStream({
           </h1>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Simulation Mode Badge */}
           {activeSimulation && (
             <div
               data-testid="simulation-badge"
-              className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-xs font-bold uppercase tracking-wider shrink-0"
+              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
               title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-              <span>SIMULATION</span>
-              <span className="hidden sm:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="sr-only sm:not-sr-only">SIMULATION</span>
+              <span aria-hidden="true" className="sm:hidden">SIM</span>
+              <span className="hidden lg:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
                 (${activeSimulation.scenarioKey})
               </span>
               <button
@@ -1557,7 +1562,7 @@ export function ChatStream({
                   }
                   setActiveSimulation(null);
                 }}
-                className="min-h-[40px] min-w-[40px] -mr-1 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
                 title="Exit simulation mode"
                 aria-label="Exit simulation mode"
               >
@@ -1611,7 +1616,7 @@ export function ChatStream({
               <button
                 type="button"
                 onClick={() => setShowCompactionModal(true)}
-                className="ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
                 title="View compaction summary and restore options"
               >
                 Compacted
@@ -1662,7 +1667,8 @@ export function ChatStream({
                 aria-label="Host offline"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                <span>Host offline</span>
+                <span className="hidden sm:inline">Host offline</span>
+                <span className="sm:hidden">Offline</span>
               </div>
             )
           )}
@@ -1676,7 +1682,7 @@ export function ChatStream({
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[68px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[54px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
@@ -2292,6 +2298,7 @@ export function ChatStream({
 
                   {/* Per-message served model indicator: only display when served model differs from selected */}
                   {(() => {
+                    if (m.id === "initial-welcome") return null;
                     const note = getServedByNote(m.modelUsed, m.selectedModel ?? activeModel);
                     if (!note) return null;
                     return (
