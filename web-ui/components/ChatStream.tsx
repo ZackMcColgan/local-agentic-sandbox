@@ -1538,7 +1538,7 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden md:block text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[36vw] sm:max-w-md truncate"
+            className="hidden xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[180px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -1556,7 +1556,7 @@ export function ChatStream({
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
               <span className="sr-only sm:not-sr-only">SIMULATION</span>
               <span aria-hidden="true" className="sm:hidden">SIM</span>
-              <span className="hidden lg:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
                 (${activeSimulation.scenarioKey})
               </span>
               <button
@@ -1580,7 +1580,7 @@ export function ChatStream({
           {/* Scope Badge if available */}
           {(threadScope || activeTask?.scope) && (
             <span
-              className="hidden sm:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
+              className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
               title={`Task Scope: ${threadScope || activeTask?.scope}`}
             >
               {threadScope || activeTask?.scope}
@@ -1604,7 +1604,7 @@ export function ChatStream({
             >
               {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
-            <div className="hidden sm:block w-8 sm:w-12 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+            <div className="hidden xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
               <div
                 className={`h-full transition-all ${
                   contextStats.estimatedTokens > 85000
