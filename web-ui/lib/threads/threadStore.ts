@@ -85,6 +85,10 @@ export function resolveThreadsDir(): string {
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
+        try {
+          fs.chmodSync(dir, 0o777);
+          fs.chmodSync(path.dirname(dir), 0o777);
+        } catch {}
         fs.accessSync(dir, fs.constants.W_OK);
         resolvedDir = dir;
         break;
@@ -109,6 +113,8 @@ export class ThreadStore {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
     }
+    try { fs.chmodSync(path.dirname(this.threadsDir), 0o777); } catch {}
+    try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
   }
 
   getFilePath(threadId: string): string {
@@ -126,6 +132,7 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
     }
 
     const files = fs.readdirSync(this.threadsDir).filter((f) => f.endsWith(".json"));
@@ -468,6 +475,7 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(this.threadsDir, 0o777); } catch {}
     }
     thread.updatedAt = new Date().toISOString();
     const targetFile = this.getFilePath(thread.id);

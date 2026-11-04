@@ -240,6 +240,10 @@ export async function POST(req: NextRequest) {
       try {
         fs.mkdirSync(threadOutputsDir, { recursive: true });
       } catch {}
+      try { fs.chmodSync(path.dirname(threadsDir), 0o777); } catch {}
+      try { fs.chmodSync(threadsDir, 0o777); } catch {}
+      try { fs.chmodSync(path.dirname(threadOutputsDir), 0o777); } catch {}
+      try { fs.chmodSync(threadOutputsDir, 0o777); } catch {}
     }
 
     const SYSTEM_PROMPT = `Autonomous AI engineering platform on local hardware with MCP tool integration, workspace automation, and multimodal support.
