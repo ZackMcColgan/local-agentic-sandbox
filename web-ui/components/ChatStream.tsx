@@ -59,6 +59,7 @@ import { DiffViewer } from "./DiffViewer";
 import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
+import type { HostRunnerState } from "../lib/hostMode";
 import {
   parseSimulateCommand,
   createSimulatedChatResponse,
@@ -288,6 +289,8 @@ export function ChatStream({
   // Host Mode & Approvals state
   const [hostAccess, setHostAccess] = useState<boolean>(Boolean(threadHostAccess));
   const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
+  const [runnerState, setRunnerState] = useState<HostRunnerState | null>(null);
+  const [runnerReason, setRunnerReason] = useState<string | null>(null);
   const [hostApprovals, setHostApprovals] = useState<UiHostApproval[]>([]);
 
   useEffect(() => {
@@ -309,9 +312,21 @@ export function ChatStream({
         if (typeof data.runnerAvailable === "boolean") {
           setRunnerAvailable(data.runnerAvailable);
         }
+        if (data.runnerState) {
+          setRunnerState(data.runnerState);
+        } else if (typeof data.runnerAvailable === "boolean") {
+          setRunnerState(data.runnerAvailable ? "READY" : "UNAVAILABLE");
+        }
+        if (data.reason) {
+          setRunnerReason(data.reason);
+        }
       })
       .catch(() => {
-        if (active) setRunnerAvailable(false);
+        if (active) {
+          setRunnerAvailable(false);
+          setRunnerState("UNAVAILABLE");
+          setRunnerReason("Host runner daemon not responding on port 8765");
+        }
       });
 
     return () => {
@@ -419,6 +434,14 @@ export function ChatStream({
             const statusData = await statusRes.json();
             if (typeof statusData.runnerAvailable === "boolean") {
               setRunnerAvailable(statusData.runnerAvailable);
+            }
+            if (statusData.runnerState) {
+              setRunnerState(statusData.runnerState);
+            } else if (typeof statusData.runnerAvailable === "boolean") {
+              setRunnerState(statusData.runnerAvailable ? "READY" : "UNAVAILABLE");
+            }
+            if (statusData.reason) {
+              setRunnerReason(statusData.reason);
             }
           }
         } catch {}
@@ -1653,31 +1676,48 @@ export function ChatStream({
           </button>
 
           {/* Host Status Chip (visible when hostAccess is ON) */}
-          {hostAccess && (
-            runnerAvailable !== false ? (
-              <div
-                data-testid="host-access-chip"
-                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                title="Host access ON"
-                aria-label="Host access ON"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                <span className="hidden sm:inline">Host access ON</span>
-                <span className="sm:hidden">ON</span>
-              </div>
-            ) : (
+          {hostAccess && (() => {
+            if (runnerState === "READY" || (runnerState === null && runnerAvailable === true)) {
+              return (
+                <div
+                  data-testid="host-access-chip"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
+                  title="Host access ON"
+                  aria-label="Host access ON"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  <span className="hidden sm:inline">Host access ON</span>
+                  <span className="sm:hidden">ON</span>
+                </div>
+              );
+            }
+            if (runnerState === "MISMATCH") {
+              return (
+                <div
+                  data-testid="host-access-chip"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
+                  title={runnerReason || "Host runner daemon version/digest mismatch. Run AI-ON.ps1 to update."}
+                  aria-label="Host update required"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                  <span className="hidden sm:inline">Host update required</span>
+                  <span className="sm:hidden">Update</span>
+                </div>
+              );
+            }
+            return (
               <div
                 data-testid="host-access-chip"
                 className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                title="Host runner is unreachable (Host offline)"
+                title={runnerReason || "Host runner is unreachable (Host offline)"}
                 aria-label="Host offline"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
                 <span className="hidden sm:inline">Host offline</span>
                 <span className="sm:hidden">Offline</span>
               </div>
-            )
-          )}
+            );
+          })()}
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button

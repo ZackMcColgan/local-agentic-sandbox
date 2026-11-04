@@ -7,6 +7,7 @@ import { spawn, execSync } from "node:child_process";
 import * as hostModeLib from "../lib/hostMode";
 import { GET as hostApprovalsGet, POST as hostApprovalsPost } from "../app/api/host/approvals/route";
 import { ThreadStore } from "../lib/threads/threadStore";
+import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
 
 const {
   isDestructiveHostAction,
@@ -523,10 +524,15 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       thread.hostAccess = true;
       threadStore.saveThread(thread);
 
+      const manifest = getBridgeManifest();
       global.fetch = (async () => ({
         ok: true,
         status: 200,
-        json: async () => ({ status: "ok" })
+        json: async () => ({
+          status: "ok",
+          protocolVersion: PROTOCOL_VERSION,
+          bridgeSourceSha256: manifest.bridgeSourceSha256
+        })
       })) as any;
 
       const req2 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);

@@ -6,6 +6,10 @@
  * Destructive actions require user approval stored purely in-memory.
  */
 
+import crypto from "crypto";
+import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
+import { computeUnifiedFileDiff, TurnFileDiff } from "./chatDiffs";
+
 export interface HostApprovalRequest {
   id: string;
   threadId: string;
@@ -59,7 +63,7 @@ export function createPendingApproval(
   riskReason: string,
   now: number = Date.now()
 ): HostApprovalRequest {
-  const id = `approval-${now}-${Math.random().toString(36).slice(2, 7)}`;
+  const id = `approval-${crypto.randomUUID()}`;
   const approval: HostApprovalRequest = {
     id,
     threadId,
@@ -182,6 +186,147 @@ export async function checkHostRunnerHealth(): Promise<boolean> {
   }
 }
 
+export type HostRunnerState = "DISABLED" | "READY" | "UNAVAILABLE" | "MISMATCH";
+
+export interface HostStatusResponse {
+  hostAccess: boolean;
+  runnerState: HostRunnerState;
+  runnerAvailable: boolean; // boolean backwards compatibility: runnerState === "READY"
+  reason?: string;
+  expectedSha?: string;
+  actualSha?: string;
+  protocolVersion?: number;
+}
+
+export async function determineHostRunnerState(hostAccess: boolean): Promise<HostStatusResponse> {
+  const manifest = getBridgeManifest();
+  let probe: any = null;
+
+  try {
+    const res = await fetch(`${getHostRunnerBaseUrl()}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(1500)
+    });
+    if (res.ok) {
+      probe = await res.json();
+    }
+  } catch {}
+
+  if (!hostAccess) {
+    return {
+      hostAccess: false,
+      runnerState: "DISABLED",
+      runnerAvailable: false,
+      reason: "Host access is disabled for this thread",
+      expectedSha: manifest.bridgeSourceSha256,
+      actualSha: probe?.bridgeSourceSha256,
+      protocolVersion: probe?.protocolVersion
+    };
+  }
+
+  if (!probe || probe.status !== "ok") {
+    return {
+      hostAccess: true,
+      runnerState: "UNAVAILABLE",
+      runnerAvailable: false,
+      reason: "Host runner daemon not responding on port 8765",
+      expectedSha: manifest.bridgeSourceSha256
+    };
+  }
+
+  if (
+    probe.protocolVersion !== PROTOCOL_VERSION ||
+    probe.bridgeSourceSha256 !== manifest.bridgeSourceSha256
+  ) {
+    return {
+      hostAccess: true,
+      runnerState: "MISMATCH",
+      runnerAvailable: false,
+      reason: "Host runner daemon version/digest mismatch. Run AI-ON.ps1 to update.",
+      expectedSha: manifest.bridgeSourceSha256,
+      actualSha: probe.bridgeSourceSha256,
+      protocolVersion: probe.protocolVersion
+    };
+  }
+
+  return {
+    hostAccess: true,
+    runnerState: "READY",
+    runnerAvailable: true,
+    expectedSha: manifest.bridgeSourceSha256,
+    actualSha: probe.bridgeSourceSha256,
+    protocolVersion: probe.protocolVersion
+  };
+}
+
+export function shouldAdvertiseHostTools(
+  hostAccess: boolean,
+  runnerHealthy: boolean | HostRunnerState
+): boolean {
+  if (hostAccess !== true) return false;
+  if (runnerHealthy === true || runnerHealthy === "READY") return true;
+  return false;
+}
+
+export function getHostStateDirective(state: HostRunnerState, reason?: string): string {
+  switch (state) {
+    case "DISABLED":
+      return (
+        "[HOST ACCESS: DISABLED]\n" +
+        "Host access is turned off for this thread by user settings. Host tools are disabled.\n" +
+        "If the user asks you to inspect, run commands, or interact with their host Windows PC, inform them that host access is currently disabled for this thread and explain that they can enable it via the 'Host' toggle in the chat header."
+      );
+    case "UNAVAILABLE":
+      return (
+        `[HOST ACCESS: UNAVAILABLE]\n` +
+        `Host access is enabled for this thread, but the host runner daemon is offline or unreachable (${reason || "Host runner daemon not responding on port 8765"}).\n` +
+        `Host tools are withheld. You must honestly inform the user that the host daemon is offline and suggest running 'AI-ON.ps1' on their Windows machine to start the runner daemon. You must NEVER pretend to run host commands or fabricate host execution results.`
+      );
+    case "MISMATCH":
+      return (
+        `[HOST ACCESS: MISMATCH]\n` +
+        `Host access is enabled for this thread, but the host runner daemon has a version or provenance digest mismatch (${reason || "version/digest mismatch"}).\n` +
+        `Host tools are withheld for security. You must honestly inform the user that an update is required and suggest running 'AI-ON.ps1' on their Windows machine to rebuild and synchronize the host runner daemon.`
+      );
+    case "READY":
+      return (
+        "[HOST ACCESS: READY]\n" +
+        "Host access is enabled and the host runner daemon is verified ready.\n" +
+        "You have access to host tools (PowerShell execution, file read/write, directory listing, path deletion). Destructive actions (such as file deletion, system modifications, or high-risk commands) require explicit user approval. Always report host execution results honestly and accurately."
+      );
+  }
+}
+
+export function generateHostFileDiff(
+  tool: string,
+  args: any,
+  result: any
+): TurnFileDiff | null {
+  if (
+    (tool === "host_write_file" || tool === "host_replace_string") &&
+    result &&
+    result.preImageExists &&
+    typeof result.preImageContent === "string" &&
+    args?.path
+  ) {
+    let afterContent: string | null = null;
+    if (tool === "host_write_file") {
+      afterContent = typeof args.content === "string" ? args.content : null;
+    } else if (tool === "host_replace_string") {
+      if (typeof args.oldString === "string" && typeof args.newString === "string") {
+        afterContent = result.preImageContent.replace(args.oldString, args.newString);
+      } else if (typeof args.newString === "string") {
+        afterContent = args.newString;
+      }
+    }
+
+    if (afterContent !== null && afterContent !== result.preImageContent) {
+      return computeUnifiedFileDiff(args.path, result.preImageContent, afterContent);
+    }
+  }
+  return null;
+}
+
 export async function executeHostTool(tool: string, args: any): Promise<any> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
@@ -193,15 +338,20 @@ export async function executeHostTool(tool: string, args: any): Promise<any> {
     timeoutMs = (timeoutSec + 5) * 1000;
   }
 
-  const res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Host-Runner-Secret": secret
-    },
-    body: JSON.stringify({ tool, args }),
-    signal: AbortSignal.timeout(timeoutMs)
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Host-Runner-Secret": secret
+      },
+      body: JSON.stringify({ tool, args }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (err: any) {
+    throw new Error(`Host runner daemon disconnected mid-turn: ${err?.message || "connection error"}`);
+  }
 
   if (!res.ok) {
     throw new Error(`Host runner returned HTTP ${res.status}`);

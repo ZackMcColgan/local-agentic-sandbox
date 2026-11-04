@@ -9,7 +9,8 @@ import {
 } from "@/lib/threadOutputs";
 import {
   captureWorkspacePreImage,
-  collectTurnModifiedFileDiffs
+  collectTurnModifiedFileDiffs,
+  TurnFileDiff
 } from "@/lib/chatDiffs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -62,7 +63,11 @@ import {
   isDestructiveHostAction,
   createPendingApproval,
   consumeContinuationEntry,
-  checkHostRunnerHealth
+  checkHostRunnerHealth,
+  determineHostRunnerState,
+  shouldAdvertiseHostTools,
+  getHostStateDirective,
+  generateHostFileDiff
 } from "@/lib/hostMode";
 import { notify } from "@/lib/notifications";
 import {
@@ -184,10 +189,6 @@ async function* streamLlmChat(llmBaseUrl: string, payload: any) {
 
 // Backward-compat alias
 const streamOllamaChat = streamLlmChat;
-
-function shouldAdvertiseHostTools(threadHostAccess: boolean, runnerHealthy: boolean): boolean {
-  return threadHostAccess === true && runnerHealthy === true;
-}
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
@@ -436,8 +437,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           } catch {}
         }
 
-        const runnerHealthy = threadHostAccess ? await checkHostRunnerHealth() : false;
-        const includeHostTools = shouldAdvertiseHostTools(threadHostAccess, runnerHealthy);
+        const hostStatus = await determineHostRunnerState(threadHostAccess);
+        const includeHostTools = shouldAdvertiseHostTools(threadHostAccess, hostStatus.runnerState);
 
         const hostTools = includeHostTools
           ? HOST_TOOLS_DEFINITIONS.map((ht) => ({
@@ -489,15 +490,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const userProfile = loadUserProfile();
         const profileContext = formatProfileForContext(userProfile);
 
+        const hostDirective = "\n\n" + getHostStateDirective(hostStatus.runnerState, hostStatus.reason);
+
         if (!conversationMessages.some((m: any) => m.role === "system")) {
           conversationMessages.unshift({
             role: "system",
-            content: SYSTEM_PROMPT + profileContext + effortDirective
+            content: SYSTEM_PROMPT + profileContext + effortDirective + hostDirective
           });
         } else {
           const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
-          conversationMessages[sysIdx].content += profileContext;
+          conversationMessages[sysIdx].content += profileContext + hostDirective;
         }
+
+        const turnHostDiffs: TurnFileDiff[] = [];
 
         // Handle single-use approval continuation buffer
         if (approvalContinuationId) {
@@ -520,6 +525,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
 
           const entry = consumed.entry;
+          const hostContinuationDiff = generateHostFileDiff(entry.tool, entry.args, entry.result);
+          if (hostContinuationDiff) {
+            turnHostDiffs.push(hostContinuationDiff);
+          }
+
           const toolResultPayload = {
             status: entry.status,
             tool: entry.tool,
@@ -1008,7 +1018,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   message: `[HOST SECURITY GATE]: ${approval.riskReason}. Awaiting user approval.`
                 };
               } else {
-                result = await executeHostTool(toolName, toolArgs);
+                try {
+                  result = await executeHostTool(toolName, toolArgs);
+                  const hostDiff = generateHostFileDiff(toolName, toolArgs, result);
+                  if (hostDiff) {
+                    turnHostDiffs.push(hostDiff);
+                  }
+                } catch (hostErr: any) {
+                  result = {
+                    success: false,
+                    error: hostErr?.message || "Host execution error",
+                    isError: true
+                  };
+                }
               }
             } else {
               result = await target.client.callTool({
@@ -1239,7 +1261,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         // Gather turn attachments using exact write tracking
         const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
-        const turnDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+        const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+        const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
 
         rootSpan.end("ok", {
           tracesCount: traces.length,

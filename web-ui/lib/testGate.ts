@@ -66,9 +66,11 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("host-bridge") ||
       p.includes("hostDaemon") ||
       p.includes("build-host-runner") ||
-      p.includes("aiLifecycle"),
+      p.includes("aiLifecycle") ||
+      p.includes("hostFourState"),
     tests: [
       "tests/hostMode.test.ts",
+      "tests/hostFourState.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
       "tests/aiLifecycle.test.ts"
