@@ -1497,7 +1497,7 @@ export function ChatStream({
               aria-label="Open Projects"
             >
               <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden sm:inline">Projects</span>
+              <span className="hidden 2xl:inline">Projects</span>
             </button>
           )}
 
@@ -1515,7 +1515,7 @@ export function ChatStream({
               aria-label="Toggle Sessions Panel"
             >
               <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Sessions</span>
+              <span className="hidden 2xl:inline">Sessions</span>
             </button>
           )}
 
@@ -1538,7 +1538,7 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[180px] truncate"
+            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[160px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -1604,7 +1604,7 @@ export function ChatStream({
             >
               {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
-            <div className="hidden xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+            <div className="hidden 2xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
               <div
                 className={`h-full transition-all ${
                   contextStats.estimatedTokens > 85000
@@ -1631,7 +1631,7 @@ export function ChatStream({
           </div>
 
           {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
-          <div className="hidden md:flex items-center">
+          <div className="hidden xl:flex items-center">
             <EngineStatusPill onOpenSettings={onOpenModelSheet} />
           </div>
 
@@ -1688,7 +1688,7 @@ export function ChatStream({
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[54px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[54px] sm:max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
