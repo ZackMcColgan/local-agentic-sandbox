@@ -51,8 +51,10 @@ import {
   HOST_TOOLS_DEFINITIONS,
   executeHostTool,
   isDestructiveHostAction,
-  createPendingApproval
+  createPendingApproval,
+  consumeContinuationEntry
 } from "@/lib/hostMode";
+import { notify } from "@/lib/notifications";
 import {
   loadUserProfile,
   formatProfileForContext,
@@ -185,7 +187,8 @@ export async function POST(req: NextRequest) {
       model: requestedModel,
       mode: requestedMode,
       reasoning_effort: requestedReasoning,
-      attachments
+      attachments,
+      approvalContinuationId
     } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
@@ -349,7 +352,7 @@ CRITICAL INSTRUCTIONS:
         });
 
         // 1. Gated Oracle Codebase & Semantic Memory Lookup with 2500ms timeout
-        if (userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
+        if (!approvalContinuationId && userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
           try {
             const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) =>
               setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
@@ -373,7 +376,7 @@ CRITICAL INSTRUCTIONS:
         }
 
         // Tier 1 User Profile Memory
-        if (userPrompt.trim()) {
+        if (!approvalContinuationId && userPrompt.trim()) {
           try {
             const durableFacts = extractDurablePreferences(userPrompt, clientSessionId);
             for (const fact of durableFacts) {
@@ -466,6 +469,64 @@ CRITICAL INSTRUCTIONS:
         } else {
           const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
           conversationMessages[sysIdx].content += profileContext;
+        }
+
+        // Handle single-use approval continuation buffer
+        if (approvalContinuationId) {
+          const consumed = consumeContinuationEntry(approvalContinuationId, activeThreadId || "general");
+          if (!consumed.ok) {
+            await sendEvent({
+              type: "error",
+              error: `Approval continuation failed: ${consumed.reason}`
+            });
+            clearInterval(heartbeatInterval);
+            for (const s of activeSessions) {
+              try {
+                await s.client.close();
+              } catch {}
+            }
+            try {
+              await writer.close();
+            } catch {}
+            return;
+          }
+
+          const entry = consumed.entry;
+          const toolResultPayload = {
+            status: entry.status,
+            tool: entry.tool,
+            ...(entry.result !== undefined ? { result: entry.result } : {}),
+            ...(entry.error !== undefined ? { error: entry.error } : {})
+          };
+
+          const lastMsg = conversationMessages[conversationMessages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            conversationMessages.push({
+              role: "tool",
+              name: entry.tool,
+              content: JSON.stringify(toolResultPayload)
+            });
+          } else {
+            conversationMessages.push({
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                {
+                  id: `call_${entry.approvalId}`,
+                  type: "function",
+                  function: {
+                    name: entry.tool,
+                    arguments: JSON.stringify(entry.args)
+                  }
+                }
+              ]
+            });
+            conversationMessages.push({
+              role: "tool",
+              name: entry.tool,
+              content: JSON.stringify(toolResultPayload)
+            });
+          }
         }
 
         // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
@@ -878,13 +939,19 @@ CRITICAL INSTRUCTIONS:
                   toolArgs,
                   check.reason || "Destructive action requires approval"
                 );
+                notify("host.approval_pending", {
+                  title: "Host approval needed",
+                  body: "Tap to review in the sandbox chat."
+                }).catch(() => {});
                 await sendEvent({
                   type: "approval_required",
                   approval: {
                     id: approval.id,
                     tool: toolName,
                     args: toolArgs,
-                    riskReason: approval.riskReason
+                    riskReason: approval.riskReason,
+                    createdAt: approval.createdAt,
+                    expiresAt: approval.expiresAt
                   }
                 });
                 result = {

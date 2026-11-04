@@ -86,7 +86,8 @@ export type NotificationEvent =
   | "task.completed"
   | "task.failed"
   | "morning_report.ready"
-  | "test.ping";
+  | "test.ping"
+  | "host.approval_pending";
 
 export interface NotificationPayload {
   title: string;
@@ -114,6 +115,8 @@ export async function notify(
       ? "❌"
       : event === "morning_report.ready"
       ? "☀️"
+      : event === "host.approval_pending"
+      ? "⚠️"
       : "🔔";
 
   let message = `${emoji} *${escapeMarkdown(payload.title)}*\n\n${escapeMarkdown(payload.body)}`;

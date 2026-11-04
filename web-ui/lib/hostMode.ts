@@ -14,12 +14,37 @@ export interface HostApprovalRequest {
   riskReason: string;
   status: "pending" | "approved" | "rejected";
   createdAt: number;
+  expiresAt: number;
 }
 
-// Strictly in-memory pending approvals. Zero disk persistence, zero host logging.
-const pendingApprovals = new Map<string, HostApprovalRequest>();
+export interface HostContinuationEntry {
+  approvalId: string;
+  threadId: string;
+  tool: string;
+  args: any;
+  status: "executed" | "rejected" | "expired" | "error";
+  result?: any;
+  error?: string;
+  createdAt: number;
+  expiresAt: number; // createdAt + 5 * 60 * 1000 (5 minutes)
+}
 
-export function getPendingApprovals(threadId?: string): HostApprovalRequest[] {
+// Strictly in-memory pending approvals & consumed ID tracking. Zero disk persistence.
+const pendingApprovals = new Map<string, HostApprovalRequest>();
+const consumedApprovalIds = new Set<string>();
+
+// Strictly in-memory continuation buffer. Zero disk persistence.
+const continuationBuffer = new Map<string, HostContinuationEntry>();
+
+export function getPendingApprovals(threadId?: string, now: number = Date.now()): HostApprovalRequest[] {
+  // Purge any expired records
+  for (const [id, req] of pendingApprovals.entries()) {
+    if (req.expiresAt <= now) {
+      pendingApprovals.delete(id);
+      consumedApprovalIds.add(id);
+    }
+  }
+
   const all = Array.from(pendingApprovals.values());
   if (threadId) {
     return all.filter((a) => a.threadId === threadId && a.status === "pending");
@@ -31,9 +56,10 @@ export function createPendingApproval(
   threadId: string,
   tool: string,
   args: any,
-  riskReason: string
+  riskReason: string,
+  now: number = Date.now()
 ): HostApprovalRequest {
-  const id = `approval-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const id = `approval-${now}-${Math.random().toString(36).slice(2, 7)}`;
   const approval: HostApprovalRequest = {
     id,
     threadId,
@@ -41,46 +67,130 @@ export function createPendingApproval(
     args,
     riskReason,
     status: "pending",
-    createdAt: Date.now()
+    createdAt: now,
+    expiresAt: now + 10 * 60 * 1000 // 10 minutes
   };
   pendingApprovals.set(id, approval);
   return approval;
+}
+
+export type ConsumeApprovalResult =
+  | { status: "not_found" }
+  | { status: "conflict" }
+  | { status: "expired"; approval: HostApprovalRequest }
+  | { status: "approved" | "rejected"; approval: HostApprovalRequest };
+
+export function consumePendingApproval(
+  id: string,
+  decision: "approved" | "rejected",
+  now: number = Date.now()
+): ConsumeApprovalResult {
+  if (consumedApprovalIds.has(id)) {
+    return { status: "conflict" };
+  }
+
+  const entry = pendingApprovals.get(id);
+  if (!entry) {
+    return { status: "not_found" };
+  }
+
+  if (entry.expiresAt <= now) {
+    pendingApprovals.delete(id);
+    consumedApprovalIds.add(id);
+    return { status: "expired", approval: entry };
+  }
+
+  pendingApprovals.delete(id);
+  consumedApprovalIds.add(id);
+  entry.status = decision;
+  return { status: decision, approval: entry };
 }
 
 export function resolvePendingApproval(
   approvalId: string,
   action: "approved" | "rejected"
 ): HostApprovalRequest | null {
-  const req = pendingApprovals.get(approvalId);
-  if (!req) return null;
-  req.status = action;
-  if (action === "rejected") {
-    pendingApprovals.delete(approvalId);
+  const res = consumePendingApproval(approvalId, action);
+  if (res.status === "approved" || res.status === "rejected") {
+    return res.approval;
   }
-  return req;
+  return null;
 }
+
+export function recordContinuationEntry(
+  entry: Omit<HostContinuationEntry, "createdAt" | "expiresAt">,
+  now: number = Date.now()
+): HostContinuationEntry {
+  const continuation: HostContinuationEntry = {
+    ...entry,
+    createdAt: now,
+    expiresAt: now + 5 * 60 * 1000 // 5 minutes
+  };
+  continuationBuffer.set(entry.approvalId, continuation);
+  return continuation;
+}
+
+export function consumeContinuationEntry(
+  approvalId: string,
+  threadId: string,
+  now: number = Date.now()
+): { ok: true; entry: HostContinuationEntry } | { ok: false; reason: "not_found" | "expired" | "thread_mismatch" } {
+  const entry = continuationBuffer.get(approvalId);
+  if (!entry) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  if (entry.expiresAt <= now) {
+    continuationBuffer.delete(approvalId);
+    return { ok: false, reason: "expired" };
+  }
+
+  if (entry.threadId !== threadId) {
+    return { ok: false, reason: "thread_mismatch" };
+  }
+
+  continuationBuffer.delete(approvalId);
+  return { ok: true, entry };
+}
+
+/**
+ * Strips single-quoted ('...') and double-quoted ("...") string literals from PowerShell code,
+ * replacing them with empty quotes ("") so tokens inside string literals are never matched.
+ */
+function stripQuotedStrings(cmd: string): string {
+  return cmd
+    .replace(/'(?:[^']|'')*'/g, '""')
+    .replace(/"(?:[^"`]|`[\s\S]|"")*"/g, '""');
+}
+
+/**
+ * Contract-defined destructive PowerShell patterns:
+ * 1. Remove-* cmdlets
+ * 2. Format-Volume, Clear-Disk, Initialize-Disk, Restart-Computer, Stop-Computer
+ * 3. shutdown or shutdown.exe in command position
+ * 4. del, erase, rd, rmdir, ri, rm in command position (start of string or after ;, |, &, (, or newline)
+ */
+export const DESTRUCTIVE_POWERSHELL_PATTERNS: RegExp[] = [
+  /\bremove-[a-z0-9_]+\b/i,
+  /\b(format-volume|clear-disk|initialize-disk|restart-computer|stop-computer)\b/i,
+  /(?:^|[;|&(\r\n])\s*(?:&\s+)?(?:shutdown(?:\.exe)?)(?![a-zA-Z0-9_\-])/i,
+  /(?:^|[;|&(\r\n])\s*(?:&\s+)?(?:del|erase|rd|rmdir|ri|rm)(?![a-zA-Z0-9_\-])/i
+];
 
 export function isDestructiveHostAction(tool: string, args: any): { isDestructive: boolean; reason?: string } {
   if (tool === "host_delete_path") {
     return {
       isDestructive: true,
-      reason: `Permanent deletion of host path: ${args?.path}`
+      reason: `Permanent deletion of host path: ${args?.path || ""}`
     };
   }
 
   if (tool === "host_run_powershell") {
-    const cmd = String(args?.command || "").toLowerCase();
-    const destructivePatterns = [
-      /\b(rm|del|erase|remove-item)\b/,
-      /\b(format|diskpart|reagentc)\b/,
-      /\b(stop-process|taskkill\s+\/f)\b/,
-      /\b(drop\s+database|truncate)\b/,
-      /\b(reg\s+delete|set-service)\b/,
-      /\b(git\s+clean\s+-f|git\s+reset\s+--hard)\b/
-    ];
+    const rawCmd = String(args?.command || "");
+    const strippedCmd = stripQuotedStrings(rawCmd);
 
-    for (const pattern of destructivePatterns) {
-      if (pattern.test(cmd)) {
+    for (const pattern of DESTRUCTIVE_POWERSHELL_PATTERNS) {
+      if (pattern.test(strippedCmd)) {
         return {
           isDestructive: true,
           reason: `High-risk PowerShell command matched: ${pattern.source}`

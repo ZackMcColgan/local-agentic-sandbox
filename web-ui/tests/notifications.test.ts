@@ -47,4 +47,41 @@ describe("Outbound Telegram Notifications Suite", () => {
 
     assert.equal(result, false);
   });
+
+  it("dispatches host.approval_pending notification without leaking commands or arguments", async () => {
+    let capturedPayload: any = null;
+    const origFetch = global.fetch;
+    try {
+      setTelegramConfig({
+        botToken: "123456:VALID_TEST_TOKEN",
+        chatId: "999999",
+        enabled: true
+      });
+      global.fetch = (async (_url: any, init?: any) => {
+        const body = JSON.parse(init?.body || "{}");
+        capturedPayload = body;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true })
+        } as Response;
+      }) as typeof fetch;
+
+      const payload = {
+        title: "Host approval needed",
+        body: "Tap to review in the sandbox chat."
+      };
+      const result = await notify("host.approval_pending" as any, payload);
+      assert.equal(result, true);
+      assert.ok(capturedPayload);
+      assert.ok(capturedPayload.text.includes("Host approval needed"));
+      assert.ok(capturedPayload.text.includes("Tap to review in the sandbox chat."));
+      // Privacy fence: ensure no commands, paths, or code arguments leaked
+      assert.equal(capturedPayload.text.includes("Remove-Item"), false);
+      assert.equal(capturedPayload.text.includes("powershell"), false);
+      assert.equal(capturedPayload.text.includes("args"), false);
+    } finally {
+      global.fetch = origFetch;
+    }
+  });
 });
