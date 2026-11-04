@@ -277,6 +277,46 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
   };
 }
 
+export function canonicalizeModelId(modelId?: string | null): string {
+  if (!modelId) return "";
+  const lower = modelId.trim().toLowerCase().replace(/:latest$/, "");
+  if (lower.includes("swift-1.5") || lower.includes("swift-15") || lower === "swift-1.5") {
+    return "swift-1.5-qwen3.8-27b-iq3_xs";
+  }
+  if (lower.includes("flash-next") || lower.includes("gyro-s") || lower.includes("gyro")) {
+    return "qwen3.8-flash-next-gyro-gyro-s";
+  }
+  if (lower.includes("qwen3.8:27b") || lower === "qwen3.8") {
+    return "qwen3.8:27b-q3_k_m";
+  }
+  if (lower.includes("gemma4")) {
+    return "gemma4:e4b";
+  }
+  return lower;
+}
+
+export function formatModelDisplayLabel(modelId?: string | null): string {
+  const canon = canonicalizeModelId(modelId);
+  if (canon === "qwen3.8-flash-next-gyro-gyro-s") return "Flash-Next";
+  if (canon === "swift-1.5-qwen3.8-27b-iq3_xs") return "Swift-1.5";
+  if (canon === "qwen3.8:27b-q3_k_m") return "qwen3.8";
+  if (canon === "gemma4:e4b") return "gemma4:e4b";
+  return (modelId || "").trim().replace(/:latest$/, "");
+}
+
+export function getServedByNote(modelUsed?: string | null, selectedModel?: string | null): string | null {
+  if (!modelUsed || !modelUsed.trim()) return null;
+  if (!selectedModel || !selectedModel.trim() || selectedModel.trim().toLowerCase() === "auto") {
+    return null;
+  }
+  const servedCanon = canonicalizeModelId(modelUsed);
+  const selectedCanon = canonicalizeModelId(selectedModel);
+  if (!servedCanon || !selectedCanon || servedCanon === selectedCanon) {
+    return null;
+  }
+  return "Served by " + formatModelDisplayLabel(modelUsed) + " (" + formatModelDisplayLabel(selectedModel) + " selected)";
+}
+
 export interface FormattedChatError {
   summary: string;
   details?: string;

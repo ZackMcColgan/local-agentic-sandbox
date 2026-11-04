@@ -54,7 +54,8 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote } from "../lib/chatUtils";
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import {
   parseSimulateCommand,
@@ -91,6 +92,7 @@ export interface ChatMessage {
     isImage: boolean;
   }>;
   modelUsed?: string;
+  selectedModel?: string;
   durationMs?: number;
   taskId?: string;
   isStopped?: boolean;
@@ -752,7 +754,8 @@ export function ChatStream({
         content: "",
         thought: "",
         traces: [],
-        modelUsed: activeModel
+        modelUsed: activeModel,
+        selectedModel: activeModel
       }
     ]);
 
@@ -781,7 +784,8 @@ export function ChatStream({
         content: "",
         thought: "",
         traces: [],
-        modelUsed: currentModel
+        modelUsed: currentModel,
+        selectedModel: activeModel
       };
       if (!exists) {
         return [...prev, patch(base)];
@@ -905,6 +909,7 @@ export function ChatStream({
                       content: parsed.content,
                       thought: finalThought,
                       modelUsed: finalModel,
+                      selectedModel: activeModel,
                       traces: event.traces || currentTraces,
                       attachments: event.attachments,
                       durationMs,
@@ -926,6 +931,7 @@ export function ChatStream({
                 traces: event.traces || currentTraces,
                 attachments: event.attachments || msg.attachments,
                 modelUsed: finalModel,
+                selectedModel: msg.selectedModel || activeModel,
                 durationMs: event.durationMs || durationMs,
                 compactedThisTurn: finalCompacted || undefined,
                 tokensBeforeCompaction: finalTokensBefore,
@@ -1570,9 +1576,10 @@ export function ChatStream({
             </span>
           )}
 
-          {/* Context Meter Pill - hidden on narrow mobile viewports (< sm) */}
+          {/* Context Meter Pill - visible on both mobile and desktop */}
           <div
-            className="hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono shrink-0"
+            data-testid="context-meter-pill"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[10px] sm:text-[11px] font-mono shrink-0"
             title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
           >
             <span
@@ -1586,7 +1593,7 @@ export function ChatStream({
             >
               {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
-            <div className="w-8 sm:w-12 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+            <div className="hidden sm:block w-8 sm:w-12 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
               <div
                 className={`h-full transition-all ${
                   contextStats.estimatedTokens > 85000
@@ -1622,7 +1629,7 @@ export function ChatStream({
             type="button"
             data-testid="host-mode-toggle"
             onClick={handleToggleHostAccess}
-            className={`min-h-[44px] flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors shrink-0 ${
+            className={`min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border text-xs font-semibold transition-colors shrink-0 ${
               hostAccess
                 ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                 : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
@@ -1639,18 +1646,18 @@ export function ChatStream({
             runnerAvailable !== false ? (
               <div
                 data-testid="host-access-chip"
-                className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold shrink-0"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
                 title="Host access ON"
                 aria-label="Host access ON"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                 <span className="hidden sm:inline">Host access ON</span>
-                <span className="sm:hidden">Host ON</span>
+                <span className="sm:hidden">ON</span>
               </div>
             ) : (
               <div
                 data-testid="host-access-chip"
-                className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold shrink-0"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
                 title="Host runner is unreachable (Host offline)"
                 aria-label="Host offline"
               >
@@ -1664,12 +1671,12 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[85px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
+            <span className="max-w-[68px] sm:max-w-[120px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
@@ -1878,7 +1885,7 @@ export function ChatStream({
                   )}
 
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
-                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content)) && (() => {
+                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1)) && (() => {
                     const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
                     const isStreamingThis = isLoading && idx === deduplicatedMessages.length - 1;
 
@@ -1887,6 +1894,8 @@ export function ChatStream({
                         <ThinkingPanel
                           rawThought={rawThought}
                           isStreaming={isStreamingThis}
+                          streamStatus={isStreamingThis ? streamStatus : null}
+                          hasContent={Boolean(m.content && m.content.trim())}
                           defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                         />
                       </div>
@@ -2282,15 +2291,16 @@ export function ChatStream({
                   )}
 
                   {/* Per-message served model indicator: only display when served model differs from selected */}
-                  {m.modelUsed && (() => {
-                    const servedNormalized = m.modelUsed.includes("flash-next") || m.modelUsed.includes("gyro") ? "Flash-Next" : m.modelUsed;
-                    const selectedNormalized = shortModelLabel;
-                    const isDifferent = !m.modelUsed.includes(shortModelLabel) && !shortModelLabel.toLowerCase().includes(m.modelUsed.toLowerCase());
-                    if (!isDifferent) return null;
+                  {(() => {
+                    const note = getServedByNote(m.modelUsed, m.selectedModel ?? activeModel);
+                    if (!note) return null;
                     return (
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5">
+                      <div
+                        data-testid="served-by-note"
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5"
+                      >
                         <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
-                        <span>Served by {servedNormalized} ({selectedNormalized} selected)</span>
+                        <span>{note}</span>
                       </div>
                     );
                   })()}
@@ -2446,13 +2456,30 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Live Loading Indicator */}
-        {isLoading && (
-          <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-400 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 w-fit">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
-            <span>{streamStatus || "Synthesizing response..."}</span>
-          </div>
-        )}
+        {/* Standalone turn status slot only when isLoading is true and no assistant ThinkingPanel is rendered at the tail */}
+        {isLoading && (() => {
+          const tailIdx = deduplicatedMessages.length - 1;
+          const tailMsg = tailIdx >= 0 ? deduplicatedMessages[tailIdx] : null;
+          const tailIsTaskHost = tailIdx === lastLinkedTaskMsgIndex && !!activeTask;
+          const tailRendersThinkingPanel = Boolean(tailMsg && tailMsg.role === "assistant" && !tailIsTaskHost);
+          if (tailRendersThinkingPanel) return null;
+          const phaseLabel = resolveTurnStatusPhase({
+            isStreaming: true,
+            streamStatus,
+            hasThought: false,
+            hasContent: false
+          });
+          if (!phaseLabel) return null;
+          return (
+            <div
+              data-testid="turn-status-slot"
+              className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 w-fit"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{phaseLabel}</span>
+            </div>
+          );
+        })()}
 
         {errorMsg && (() => {
           const formatted = formatChatErrorMessage(errorMsg);

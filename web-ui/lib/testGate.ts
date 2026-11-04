@@ -93,7 +93,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/contextBudget"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",

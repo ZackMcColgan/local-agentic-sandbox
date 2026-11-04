@@ -4,6 +4,14 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { ChatStream } from "../components/ChatStream";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
+import { ThinkingPanel } from "../components/ThinkingPanel";
+import {
+  resolveTurnStatusPhase,
+  TURN_PHASE_PREPARING,
+  TURN_PHASE_REASONING,
+  TURN_PHASE_WRITING
+} from "../lib/chatStatus";
+import { getServedByNote } from "../lib/chatUtils";
 
 describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
   // -------------------------------------------------------------
@@ -262,6 +270,162 @@ Use \`run_command\` for shell actions.
         !html.includes('data-testid="compaction-turn-note"'),
         "Must NOT render compaction-turn-note when compactedThisTurn is false or omitted"
       );
+    });
+  });
+
+  // -------------------------------------------------------------
+  // F7.1 — Single live turn status surface
+  // -------------------------------------------------------------
+  describe("F7.1 — Single live turn status surface", () => {
+    it("resolveTurnStatusPhase resolves phases accurately across streaming lifecycle", () => {
+      // Phase 1: Preparing
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: true, hasThought: false, hasContent: false }),
+        TURN_PHASE_PREPARING
+      );
+
+      // Phase 2: Reasoning
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: true, hasThought: true, hasContent: false }),
+        TURN_PHASE_REASONING
+      );
+
+      // Phase 3: Active Tool (via activeTool or streamStatus)
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: true, activeTool: "workspace_read_file", hasThought: true }),
+        "Running workspace_read_file"
+      );
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: true, streamStatus: "Running search_web...", hasThought: true }),
+        "Running search_web"
+      );
+
+      // Phase 4: Writing answer
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: true, hasThought: true, hasContent: true }),
+        TURN_PHASE_WRITING
+      );
+
+      // Idle (not streaming) -> null
+      assert.equal(
+        resolveTurnStatusPhase({ isStreaming: false, hasThought: true, hasContent: true }),
+        null
+      );
+    });
+
+    it("renders single turn-status-slot in ThinkingPanel with h-7 and max 1 spinner", () => {
+      const html = renderToString(
+        React.createElement(ThinkingPanel, {
+          isStreaming: true,
+          rawThought: "Checking files...",
+          streamStatus: "Running workspace_grep"
+        })
+      );
+
+      // turn-status-slot appears exactly once with Running workspace_grep and h-7
+      const slotMatches = html.match(/data-testid="turn-status-slot"/g);
+      assert.equal(slotMatches?.length, 1, "turn-status-slot must appear exactly once");
+      assert.ok(html.includes("Running workspace_grep"), "Must display resolved active tool");
+      assert.ok(html.includes("h-7"), "turn-status-slot must have fixed height class h-7");
+
+      // Duplicate footer text must NOT appear
+      assert.ok(
+        !html.includes("Reasoning in progress. Formulating structured execution..."),
+        "Duplicate bottom reasoning footer must not appear"
+      );
+
+      // At most 1 animate-spin in the rendered HTML
+      const spinMatches = html.match(/animate-spin/g);
+      assert.ok((spinMatches?.length || 0) <= 1, `Expected at most 1 animate-spin, found ${spinMatches?.length || 0}`);
+    });
+  });
+
+  // -------------------------------------------------------------
+  // F7.2 — Truthful 'Served by ...' Note
+  // -------------------------------------------------------------
+  describe("F7.2 — Truthful 'Served by ...' Note", () => {
+    it("getServedByNote correctly normalizes aliases and suppresses redundant notes", () => {
+      // Same canonical model (Swift 1.5 aliases)
+      assert.equal(
+        getServedByNote("Swift-1.5-Qwen3.8-27B-IQ3_XS", "swift-15-27b-mtp"),
+        null
+      );
+
+      // Same canonical model (Flash-Next aliases)
+      assert.equal(
+        getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "Flash-Next"),
+        null
+      );
+
+      // Selected auto -> null
+      assert.equal(
+        getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "auto"),
+        null
+      );
+
+      // Legitimate fallback / divergence
+      assert.equal(
+        getServedByNote("gemma4:e4b", "qwen3.8-flash-next-gyro-gyro-s"),
+        "Served by gemma4:e4b (Flash-Next selected)"
+      );
+    });
+
+    it("ChatStream suppresses Served-by note when model matches and renders it when diverged", () => {
+      // Matching model -> no note
+      const htmlMatching = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          messages: [
+            {
+              id: "m-match",
+              role: "assistant" as const,
+              content: "Hello",
+              modelUsed: "qwen3.8-flash-next-gyro-gyro-s"
+            }
+          ]
+        })
+      );
+      assert.ok(!htmlMatching.includes("Served by"), "Must NOT render Served by when served model matches selected");
+
+      // Divergent model -> renders truthful note
+      const htmlDiverged = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          messages: [
+            {
+              id: "m-diverged",
+              role: "assistant" as const,
+              content: "Fallback reply",
+              modelUsed: "gemma4:e4b",
+              selectedModel: "qwen3.8-flash-next-gyro-gyro-s"
+            }
+          ]
+        })
+      );
+      assert.ok(
+        htmlDiverged.includes("Served by gemma4:e4b (Flash-Next selected)"),
+        "Must render truthful Served by note when fallback model is served"
+      );
+    });
+  });
+
+  // -------------------------------------------------------------
+  // F7.0 — c04a372 Revert: Mobile Context Meter Visibility
+  // -------------------------------------------------------------
+  describe("F7.0 — c04a372 Revert: Mobile Context Meter Visibility", () => {
+    it("renders context-meter-pill with flex and without hidden sm:flex", () => {
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          messages: []
+        })
+      );
+
+      assert.ok(html.includes('data-testid="context-meter-pill"'), "Must render context-meter-pill");
+      assert.ok(!html.includes("hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full"), "Must NOT have hidden sm:flex hiding pill on mobile");
     });
   });
 });
