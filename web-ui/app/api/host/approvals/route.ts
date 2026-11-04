@@ -64,7 +64,7 @@ export async function POST(req: Request) {
 
     // action === "approved"
     try {
-      const result = await executeHostTool(approval.tool, approval.args);
+      const result = await executeHostTool(approval.tool, approval.args, approval.id);
 
       if (result && result.success === false) {
         recordContinuationEntry({

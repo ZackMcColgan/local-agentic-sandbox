@@ -580,9 +580,11 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
   });
 
   it("live host runner scratch file acceptance (F3.4 items 1-8)", { timeout: 35000, skip: process.platform !== "win32" ? "Windows-only live PowerShell host runner test" : false }, async () => {
-    const scriptPath = path.resolve(__dirname, "../../scripts/Start-HostRunner.ps1");
+    const exePath = fs.existsSync("C:\\AI\\ai-control\\bin\\host-runner.exe")
+      ? "C:\\AI\\ai-control\\bin\\host-runner.exe"
+      : path.resolve(__dirname, "../../host-bridge/dist/host-runner.exe");
     const testPort = 8769;
-    const testSecret = `f3-live-secret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const testSecret = `f3-live-secret-32-chars-long-at-least-${Date.now()}`;
     let runnerProc: ReturnType<typeof spawn> | null = null;
 
     function stopRunner() {
@@ -605,22 +607,15 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       process.env.HOST_RUNNER_URL = `http://127.0.0.1:${testPort}`;
       process.env.HOST_RUNNER_SHARED_SECRET = testSecret;
 
-      // 1. Spawn scripts/Start-HostRunner.ps1 on loopback port with test secret
+      // 1. Spawn native compiled binary on loopback port with test secret
       runnerProc = spawn(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          scriptPath,
-          "-Port",
-          String(testPort)
-        ],
+        exePath,
+        [],
         {
           cwd: os.tmpdir(),
           env: {
             ...process.env,
+            PORT: String(testPort),
             HOST_RUNNER_SHARED_SECRET: testSecret
           },
           stdio: "pipe"

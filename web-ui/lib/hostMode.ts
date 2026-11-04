@@ -327,7 +327,7 @@ export function generateHostFileDiff(
   return null;
 }
 
-export async function executeHostTool(tool: string, args: any): Promise<any> {
+export async function executeHostTool(tool: string, args: any, approvalId?: string): Promise<any> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
   if (tool === "host_run_powershell") {
@@ -338,14 +338,19 @@ export async function executeHostTool(tool: string, args: any): Promise<any> {
     timeoutMs = (timeoutSec + 5) * 1000;
   }
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Host-Runner-Secret": secret
+  };
+  if (approvalId) {
+    headers["X-Host-Approval-Id"] = approvalId;
+  }
+
   let res: Response;
   try {
     res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Host-Runner-Secret": secret
-      },
+      headers,
       body: JSON.stringify({ tool, args }),
       signal: AbortSignal.timeout(timeoutMs)
     });

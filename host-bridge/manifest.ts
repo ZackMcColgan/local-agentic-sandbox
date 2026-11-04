@@ -34,7 +34,8 @@ export function computeBridgeSourceSha256(targetDir?: string): string {
         entry.name === "manifest.json" ||
         entry.name === "manifest.ts" ||
         relPath.startsWith("dist/") ||
-        relPath.startsWith("bin/")
+        relPath.startsWith("bin/") ||
+        relPath.startsWith("scripts/")
       ) {
         continue;
       }

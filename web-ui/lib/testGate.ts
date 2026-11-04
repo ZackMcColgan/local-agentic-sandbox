@@ -62,7 +62,6 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("hostMode") ||
       p.includes("host/approvals") ||
       p.includes("host/status") ||
-      p.includes("Start-HostRunner") ||
       p.includes("host-bridge") ||
       p.includes("hostDaemon") ||
       p.includes("build-host-runner") ||
@@ -536,6 +535,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.startsWith("scripts/start-strata") ||
     normalizedPath.startsWith("scripts/stop-strata") ||
+    normalizedPath.startsWith("scripts/Start-HostRunner") ||
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("tests/e2e/") ||
     normalizedPath.startsWith("docs/") ||
