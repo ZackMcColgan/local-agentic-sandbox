@@ -10,6 +10,7 @@ COPY package*.json ./
 COPY web-ui/package*.json ./web-ui/
 COPY mcp-server/package*.json ./mcp-server/
 COPY browser-mcp/package*.json ./browser-mcp/
+COPY host-bridge/package*.json ./host-bridge/
 
 # Install from root (honors workspace config)
 RUN npm ci --workspaces
@@ -24,6 +25,7 @@ COPY --from=deps /build/node_modules ./node_modules
 COPY --from=deps /build/node_modules ./web-ui/node_modules
 COPY package*.json ./
 COPY web-ui ./web-ui
+COPY host-bridge ./host-bridge
 
 WORKDIR /build/web-ui
 

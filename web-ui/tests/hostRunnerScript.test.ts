@@ -47,7 +47,7 @@ describe("Architecture Deletion & Provenance Conformance Suite", () => {
     );
   });
 
-  it("Test 3: asserts C:\\AI\\ai-control\\bin\\host-runner.exe exists and is a valid compiled executable (> 50MB)", () => {
+  it("Test 3: asserts C:\\AI\\ai-control\\bin\\host-runner.exe exists and is a valid compiled executable (> 50MB)", { skip: process.platform !== "win32" ? "Windows-only compiled binary path" : false }, () => {
     const exePath = "C:\\AI\\ai-control\\bin\\host-runner.exe";
     assert.strictEqual(fs.existsSync(exePath), true, `Compiled executable must exist at ${exePath}`);
     const stats = fs.statSync(exePath);

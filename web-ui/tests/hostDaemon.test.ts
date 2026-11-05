@@ -138,7 +138,7 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
       assert.equal(statusCode, 400);
     });
 
-    it("returns fast /health (<100ms) with protocolVersion and SHA-256 while a 10s sleep executes concurrently", async () => {
+    it("returns fast /health (<100ms) with protocolVersion and SHA-256 while a 10s sleep executes concurrently", { skip: process.platform !== "win32" ? "Windows PowerShell test" : false }, async () => {
       // Start a long running command
       const execPromise = fetch(`${baseUrl}/execute`, {
         method: "POST",
@@ -176,7 +176,7 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
       assert.equal(execData.success, true);
     });
 
-    it("enforces dual-layer destructive action gate (403 missing, 200 success, 409 replay)", async () => {
+    it("enforces dual-layer destructive action gate (403 missing, 200 success, 409 replay)", { skip: process.platform !== "win32" ? "Windows PowerShell test" : false }, async () => {
       const approvalId = `appr-test-${Date.now()}`;
       const destructivePayload = {
         tool: "host_run_powershell",
@@ -226,7 +226,7 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
       assert.ok(replayData.error.includes("already consumed"));
     });
 
-    it("terminates full process tree and leaves 0 surviving processes on timeout", async () => {
+    it("terminates full process tree and leaves 0 surviving processes on timeout", { skip: process.platform !== "win32" ? "Windows PowerShell test" : false }, async () => {
       const res = await fetch(`${baseUrl}/execute`, {
         method: "POST",
         headers: {
@@ -399,7 +399,7 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
     });
   });
 
-  describe("Compiled SEA Binary Acceptance & Single-Instance Contract", () => {
+  describe("Compiled SEA Binary Acceptance & Single-Instance Contract", { skip: process.platform !== "win32" ? "Windows native binary suite" : false }, () => {
     const BIN_PATH = "C:\\AI\\ai-control\\bin\\host-runner.exe";
     const LIVE_TEST_PORT = 18780;
 

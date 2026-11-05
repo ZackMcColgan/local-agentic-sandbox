@@ -59,7 +59,7 @@ function runPowerShell(args: string[]): { status: number | null; stdout: string;
   };
 }
 
-describe("BLOCK 2 — AI-ON / AI-OFF Lifecycle Suite", () => {
+describe("BLOCK 2 — AI-ON / AI-OFF Lifecycle Suite", { skip: process.platform !== "win32" ? "Windows-only PowerShell lifecycle suite" : false }, () => {
   // Ensure port 8765 is stopped before and after test runs
   before(() => {
     runPowerShell(["-File", AI_OFF_SCRIPT, "-OnlyHostRunner"]);
