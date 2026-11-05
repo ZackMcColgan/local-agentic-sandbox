@@ -105,6 +105,10 @@ spec:
           port: 11434
         - protocol: TCP
           port: 11435
+    # Allow communication to host runner daemon bridge (:8765)
+    - ports:
+        - protocol: TCP
+          port: 8765
     # Allow communication to Qdrant vector database (Oracle memory)
     - to:
         - podSelector:
