@@ -1966,7 +1966,6 @@ export function ChatStream({
                           const proofKey = `${m.id}-${tIdx}`;
                           const isExpanded = !!expandedProofs[proofKey];
                           const human = formatHumanReadableTrace(trace);
-                          const isBrowser = human.badge === "browser";
 
                           return (
                             <div
@@ -1979,12 +1978,25 @@ export function ChatStream({
                                 className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
                               >
                                 <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
-                                  {isBrowser ? (
+                                  {human.badge === "browser" && (
                                     <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold shrink-0">
                                       <Globe className="h-3.5 w-3.5" />
                                       <span>Web</span>
                                     </span>
-                                  ) : (
+                                  )}
+                                  {human.badge === "host" && (
+                                    <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-semibold shrink-0">
+                                      <Terminal className="h-3.5 w-3.5" />
+                                      <span>Host</span>
+                                    </span>
+                                  )}
+                                  {human.badge === "workspace" && (
+                                    <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold shrink-0">
+                                      <FolderGit2 className="h-3.5 w-3.5" />
+                                      <span>Workspace</span>
+                                    </span>
+                                  )}
+                                  {human.badge === "sandbox" && (
                                     <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                                       <ShieldCheck className="h-3.5 w-3.5" />
                                       <span>Sandbox</span>
@@ -2060,7 +2072,8 @@ export function ChatStream({
 
                   {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
                   {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (
-                    <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
+                    <>
+                      <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -2169,7 +2182,32 @@ export function ChatStream({
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
                     </div>
-                  )}
+
+                    {/* Copy Response Action: phone-tappable button copying raw assistant markdown */}
+                    <div className="flex items-center gap-2 pt-1 text-xs">
+                      <button
+                        type="button"
+                        data-testid="copy-response-btn"
+                        onClick={() => copyToClipboard(m.content, m.id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors text-xs font-medium cursor-pointer"
+                        title={isCopied ? "Copied" : "Copy response"}
+                        aria-label={isCopied ? "Copied" : "Copy response"}
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
 
                   {/* Tool Generated SVG Visual Artifacts & Code Deliverables */}
                   {!isTaskHostMessage && (
