@@ -630,10 +630,12 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
 
     for (const toolCall of toolCallsFromMessage) {
       const toolResult = await executeTool(toolCall);
+      const toolName = toolCall.function?.name || toolCall.name;
+      const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
       conversationMessages.push({
         role: "tool",
-        name: toolCall.function?.name || "tool",
-        content: clampToolOutput(JSON.stringify(toolResult))
+        name: toolName,
+        content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))
       });
     }
 

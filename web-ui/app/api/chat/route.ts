@@ -1089,10 +1089,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               trace: traceItem
             });
 
+            const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
             conversationMessages.push({
               role: "tool",
               name: toolName,
-              content: clampToolOutput(JSON.stringify(result))
+              content: isFileReadTool ? JSON.stringify(result) : clampToolOutput(JSON.stringify(result))
             });
 
             if (
