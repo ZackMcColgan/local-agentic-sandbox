@@ -1219,6 +1219,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
 
           let synthContent = "";
+          let synthThinking = "";
           const synthOptions = resolveRoundModelOptions({
             model: activeModel,
             requestedEffort: effectiveReasoningEffort,
@@ -1234,10 +1235,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             reasoning_effort: synthOptions.reasoning_effort,
             options: synthOptions
           })) {
+            if (chunk.message?.thinking) {
+              synthThinking += chunk.message.thinking;
+              await sendEvent({ type: "thinking", content: chunk.message.thinking });
+            }
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
               await sendEvent({ type: "token", content: chunk.message.content });
             }
+          }
+
+          if (synthThinking.trim()) {
+            accumulatedThoughts.push(synthThinking.trim());
           }
 
           if (synthContent.trim()) {
@@ -1247,16 +1256,26 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // Clean residual tool tags
+        const maxToolRounds = MAX_TOOL_ROUNDS;
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
+        let turnStatus: "completed" | "incomplete" | undefined = undefined;
 
         if (!cleanedContent) {
-          if (traces.length > 0) {
-            cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+          turnStatus = "incomplete";
+          if (round >= maxToolRounds) {
+            cleanedContent = `⚠️ [Turn paused: Tool execution limit reached (${round} rounds). Traces captured above; synthesis returned no text.]`;
+          } else if (traces.length > 0) {
+            cleanedContent = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]`;
           } else if (currentAssistantMessage.content?.trim()) {
             cleanedContent = currentAssistantMessage.content.trim();
+            turnStatus = undefined;
           } else {
             cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+            turnStatus = undefined;
           }
+        } else if (round >= maxToolRounds) {
+          turnStatus = "incomplete";
+          cleanedContent = `${cleanedContent}\n\n⚠️ [Turn paused: Tool execution limit reached (${round} rounds).]`;
         }
 
         // Gather turn attachments using exact write tracking
@@ -1271,6 +1290,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         await sendEvent({
           type: "done",
+          status: turnStatus,
+          isIncomplete: turnStatus === "incomplete" ? true : undefined,
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           content: cleanedContent,

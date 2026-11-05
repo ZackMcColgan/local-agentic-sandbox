@@ -105,6 +105,7 @@ export interface ChatMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  status?: "completed" | "incomplete" | "error";
 }
 
 export interface UiHostApproval {
@@ -502,7 +503,34 @@ export function ChatStream({
   const isProgrammaticScrollRef = useRef(false);
   const isFollowPinnedRef = useRef(true);
   const programmaticScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeAssistantMsgIdRef = useRef<string | null>(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+
+  const upsertAssistant = (
+    prev: ChatMessage[],
+    patch: (existing: ChatMessage) => ChatMessage,
+    targetId?: string
+  ): ChatMessage[] => {
+    const id =
+      targetId ||
+      activeAssistantMsgIdRef.current ||
+      [...prev].reverse().find((m) => m.role === "assistant")?.id ||
+      `assistant-${Date.now()}`;
+    const exists = prev.some((msg) => msg.id === id);
+    const base: ChatMessage = {
+      id,
+      role: "assistant",
+      content: "",
+      thought: "",
+      traces: [],
+      modelUsed: activeModel,
+      selectedModel: activeModel
+    };
+    if (!exists) {
+      return [...prev, patch(base)];
+    }
+    return prev.map((msg) => (msg.id === id ? patch(msg) : msg));
+  };
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
@@ -773,6 +801,7 @@ export function ChatStream({
     startTime: number = performance.now()
   ) => {
     const assistantMsgId = `assistant-${Date.now()}`;
+    activeAssistantMsgIdRef.current = assistantMsgId;
     setMessages((prev) => [
       ...prev,
       {
@@ -871,6 +900,13 @@ export function ChatStream({
                 thought: event.thought
               }))
             );
+          } else if (event.type === "thinking") {
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                thought: msg.thought ? msg.thought + (event.content || "") : (event.content || "")
+              }))
+            );
           } else if (event.type === "token") {
             accumulatedRawContent += event.content || "";
             const parsed = parseThinkingAndContent(accumulatedRawContent);
@@ -922,6 +958,12 @@ export function ChatStream({
             const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
             const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
             const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
+            const finalStatus =
+              event.status ||
+              (event.isIncomplete ? "incomplete" : undefined) ||
+              (event.content?.includes("⚠️ [Turn paused:") || event.content?.includes("⚠️ [Turn incomplete:")
+                ? "incomplete"
+                : undefined);
 
             if (targetThreadId && !activeSimulation) {
               try {
@@ -944,7 +986,8 @@ export function ChatStream({
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
                       tokensBeforeCompaction: finalTokensBefore,
-                      tokensAfterCompaction: finalTokensAfter
+                      tokensAfterCompaction: finalTokensAfter,
+                      status: finalStatus
                     }
                   })
                 }).catch((err) => console.warn("Failed to persist assistant message:", err));
@@ -964,10 +1007,17 @@ export function ChatStream({
                 durationMs: event.durationMs || durationMs,
                 compactedThisTurn: finalCompacted || undefined,
                 tokensBeforeCompaction: finalTokensBefore,
-                tokensAfterCompaction: finalTokensAfter
+                tokensAfterCompaction: finalTokensAfter,
+                status: finalStatus
               }))
             );
           } else if (event.type === "error") {
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                status: "error"
+              }))
+            );
             throw new Error(event.error || "Streaming error encountered");
           }
         } catch (parseErr: any) {
@@ -1017,14 +1067,28 @@ export function ChatStream({
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Approval continuation aborted by user");
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => ({
+            ...msg,
+            status: "incomplete",
+            isStopped: true
+          }))
+        );
       } else {
         console.error(err);
         setErrorMsg(err.message || "Failed to continue chat after host approval");
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => ({
+            ...msg,
+            status: "error"
+          }))
+        );
       }
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
       abortControllerRef.current = null;
+      activeAssistantMsgIdRef.current = null;
     }
   };
 
@@ -1285,6 +1349,8 @@ export function ChatStream({
     const startTime = performance.now();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    const assistantMsgId = `assistant-${Date.now()}`;
+    activeAssistantMsgIdRef.current = assistantMsgId;
 
     try {
       const res = isSimulating && simKey
@@ -1329,14 +1395,28 @@ export function ChatStream({
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Chat stream aborted by user");
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => ({
+            ...msg,
+            status: "incomplete",
+            isStopped: true
+          }))
+        );
       } else {
         console.error(err);
         setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => ({
+            ...msg,
+            status: "error"
+          }))
+        );
       }
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
       abortControllerRef.current = null;
+      activeAssistantMsgIdRef.current = null;
     }
   };
 
@@ -1925,14 +2005,36 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-[840px] space-y-3">
-                  {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
-                    <div
-                      data-testid="compaction-turn-note"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
-                    >
-                      <span>
-                        History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
-                      </span>
+                  {((!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined) || m.status === "incomplete" || m.status === "error") && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
+                        <div
+                          data-testid="compaction-turn-note"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
+                        >
+                          <span>
+                            History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
+                          </span>
+                        </div>
+                      )}
+                      {m.status === "incomplete" && (
+                        <div
+                          data-testid="message-status-badge"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[11px] font-mono font-medium text-amber-800 dark:text-amber-300 w-fit"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span>Incomplete</span>
+                        </div>
+                      )}
+                      {m.status === "error" && (
+                        <div
+                          data-testid="message-status-badge"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-[11px] font-mono font-medium text-red-800 dark:text-red-300 w-fit"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                          <span>Error</span>
+                        </div>
+                      )}
                     </div>
                   )}
 

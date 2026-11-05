@@ -126,7 +126,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts",
       "tests/chatUiHonestyAndCopy.test.ts",
-      "tests/chatFilePaging.test.ts"
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -220,7 +221,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/progressiveToolDisclosure.test.ts",
       "tests/conversationCompaction.test.ts",
       "tests/llmProvider.test.ts",
-      "tests/chatFilePaging.test.ts"
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control
