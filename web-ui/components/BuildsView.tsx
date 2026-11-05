@@ -85,6 +85,7 @@ export function BuildsView({
             <LiveRunBlock
               task={activeTask}
               onStopRun={onStopTask}
+              onDeployRun={onDeployRun}
             />
           </div>
         ) : (
@@ -150,7 +151,7 @@ export function BuildsView({
                 onClick={() => onDeployRun && activeTask && onDeployRun(activeTask.taskId)}
                 className="py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
               >
-                Merge to `develop` & Deploy
+                Merge to develop & Deploy
               </button>
             </div>
           </div>
