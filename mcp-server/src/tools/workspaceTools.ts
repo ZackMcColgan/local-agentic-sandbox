@@ -362,17 +362,19 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       path: z.string().describe("File path relative to /workspace"),
       start_line: z.number().optional().describe("Optional start line (1-indexed)"),
-      end_line: z.number().optional().describe("Optional end line (1-indexed)")
+      end_line: z.number().optional().describe("Optional end line (1-indexed)"),
+      offset: z.number().optional().describe("Optional line offset (if start_line not provided)"),
+      limit: z.number().optional().describe("Optional line count limit")
     },
-    async ({ path: filePath, start_line, end_line }) => {
+    async ({ path: filePath, start_line, end_line, offset, limit }) => {
       await ensureWorkspaceInitialized();
 
       try {
         const safePath = resolveSafePath(filePath);
         const raw = await fs.readFile(safePath, "utf8");
         const allLines = raw.split(/\r?\n/);
-        const start = start_line ? Math.max(1, start_line) : 1;
-        const end = end_line ? Math.min(allLines.length, end_line) : allLines.length;
+        const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
+        const end = end_line ? Math.min(allLines.length, end_line) : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
 
         const slice = allLines.slice(start - 1, end);
         const formatted = slice
@@ -386,7 +388,10 @@ export function registerWorkspaceTools(mcp: McpServer) {
               status: "SUCCESS",
               path: filePath,
               total_lines: allLines.length,
+              total_bytes: Buffer.byteLength(raw, "utf8"),
               showing_lines: `${start}-${end}`,
+              has_more: end < allLines.length,
+              next_start_line: end < allLines.length ? end + 1 : null,
               content: formatted
             }, null, 2)
           }]

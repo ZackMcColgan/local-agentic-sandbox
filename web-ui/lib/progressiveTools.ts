@@ -48,7 +48,7 @@ export const KNOWN_ONE_LINERS: Record<string, string> = {
   fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch URL as markdown.",
   workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree.",
   workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",
-  workspace_read_file: "workspace_read_file(path, offset?, limit?): Read file contents.",
+  workspace_read_file: "workspace_read_file(path, start_line?, end_line?, offset?, limit?): Read file contents with line numbers and pagination.",
   workspace_write_file: "workspace_write_file(path, content): Write code, MD, or SVG files.",
   workspace_run_command: "workspace_run_command(command, timeout_ms?): Run commands in sandbox.",
   git_status: "git_status(): Inspect git branch status.",
@@ -110,7 +110,11 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Relative file path" }
+        path: { type: "string", description: "Relative file path" },
+        start_line: { type: "number", description: "Optional start line (1-indexed)" },
+        end_line: { type: "number", description: "Optional end line (1-indexed)" },
+        offset: { type: "number", description: "Optional line offset" },
+        limit: { type: "number", description: "Optional line count limit" }
       },
       required: ["path"]
     }

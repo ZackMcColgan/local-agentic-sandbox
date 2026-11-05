@@ -72,7 +72,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostFourState.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
-      "tests/aiLifecycle.test.ts"
+      "tests/aiLifecycle.test.ts",
+      "tests/chatFilePaging.test.ts"
     ]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
@@ -124,7 +125,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/agentGroundingAndHeadroom.test.ts",
       "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts",
-      "tests/chatUiHonestyAndCopy.test.ts"
+      "tests/chatUiHonestyAndCopy.test.ts",
+      "tests/chatFilePaging.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -217,7 +219,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/agentGroundingAndHeadroom.test.ts",
       "tests/progressiveToolDisclosure.test.ts",
       "tests/conversationCompaction.test.ts",
-      "tests/llmProvider.test.ts"
+      "tests/llmProvider.test.ts",
+      "tests/chatFilePaging.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control

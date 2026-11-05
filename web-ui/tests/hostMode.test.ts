@@ -656,7 +656,7 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
 
       const readRes = await executeHostTool("host_read_file", { path: scratchPath });
       assert.equal(readRes.success, true);
-      assert.equal(readRes.content, testContent);
+      assert.equal(readRes.content, `1 | ${testContent}`);
 
       // 4. Verify destructive action gate + create pending approval + reject via POST /api/host/approvals
       const checkResult = isDestructiveHostAction("host_delete_path", { path: scratchPath });

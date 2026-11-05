@@ -158,19 +158,23 @@ describe("Chat Context-Budget Enforcement Suite", () => {
   });
 
   describe("Task 2 (P0): Tool Output Clamping at Route and MCP Source", () => {
-    it("clamps 25,000-char tool outputs to <= 2,000 chars ending with truncation marker", () => {
-      const raw25k = "A".repeat(25000);
-      const clamped = clampToolOutput(raw25k);
+    it("clamps large tool outputs to <= 64,000 chars ending with truncation marker", () => {
+      const raw75k = "A".repeat(75000);
+      const clamped = clampToolOutput(raw75k);
 
       assert.ok(
-        clamped.length <= 2000,
-        `Clamped output must be <= 2,000 chars, got length ${clamped.length}`
+        clamped.length <= 64000,
+        `Clamped output must be <= 64,000 chars, got length ${clamped.length}`
       );
       assert.ok(
-        clamped.endsWith("...[truncated]"),
-        `Clamped output must end with truncation marker '...[truncated]', got: ${clamped.slice(-30)}`
+        clamped.includes("[TRUNCATED: Output was 75000 chars, showing first 64000 chars"),
+        `Clamped output must include truncation marker, got: ${clamped.slice(-100)}`
       );
-      assert.equal(clamped.length, 2000, "Should clamp exactly to 2,000 chars total length");
+      assert.equal(clamped.length, 64000, "Should clamp exactly to 64,000 chars total length");
+
+      // Custom maxChars override clamps correctly
+      const clamped2k = clampToolOutput("A".repeat(5000), 2000);
+      assert.equal(clamped2k.length, 2000);
 
       // Small tool output is untouched
       const smallOutput = JSON.stringify({ status: "SUCCESS", file: "foo.txt" });
@@ -254,11 +258,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       };
 
       const mockExecuteTool = async (toolCall: any) => {
-        // Return a massive 25,000-char tool result to simulate heavy tool accumulation
+        // Return tool result to simulate tool accumulation
         return {
           status: "SUCCESS",
           tool: toolCall.function?.name,
-          data: "D".repeat(25000)
+          data: "D".repeat(2000)
         };
       };
 

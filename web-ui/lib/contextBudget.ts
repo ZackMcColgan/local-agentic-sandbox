@@ -17,7 +17,7 @@ export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the context window]";
 
 export const TOOL_TRUNCATION_MARKER = "...[truncated]";
-export const MAX_TOOL_OUTPUT_CHARS = 2000;
+export const MAX_TOOL_OUTPUT_CHARS = 64000;
 
 export const FINAL_ROUND_SYNTHESIS_DIRECTIVE =
   "You have gathered enough information. Synthesize your final answer now using only the tool results above. Do not call more tools.";
@@ -480,7 +480,7 @@ export function fitContextWindow(
 }
 
 /**
- * Clamps raw tool output to maxChars (default 2000) ending with a truncation marker.
+ * Clamps raw tool output to maxChars (default 64000) ending with structured paging metadata.
  */
 export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
   if (typeof raw !== "string") {
@@ -489,8 +489,10 @@ export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): 
   if (raw.length <= maxChars) {
     return raw;
   }
-  const keepChars = Math.max(0, maxChars - TOOL_TRUNCATION_MARKER.length);
-  return raw.slice(0, keepChars) + TOOL_TRUNCATION_MARKER;
+  const totalChars = raw.length;
+  const marker = `\n...[TRUNCATED: Output was ${totalChars} chars, showing first ${maxChars} chars. Use start_line/end_line or offset/limit to read remaining chunks.]`;
+  const keepChars = Math.max(0, maxChars - marker.length);
+  return raw.slice(0, keepChars) + marker;
 }
 
 export interface RunChatToolLoopOptions {
