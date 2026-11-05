@@ -377,14 +377,18 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.equal(midSystem.length, 0, "Final round payload must have zero system messages at index > 0");
     });
 
-    it("verifies chat/route.ts contains final round forced synthesis check and omits tools", () => {
+    it("verifies chat/route.ts forces synthesis from the budget decision and omits tools", () => {
       const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       const content = fs.readFileSync(chatRoutePath, "utf8");
 
+      // CHAT-7 port: the final round is decided by headroom/backstop, not a round counter.
       assert.ok(
-        content.includes("round === MAX_TOOL_ROUNDS - 1") ||
-        content.includes("round >= MAX_TOOL_ROUNDS - 1"),
-        "chat/route.ts must check for final round (round === MAX_TOOL_ROUNDS - 1)"
+        content.includes("continuation.forceSynthesis === true"),
+        "chat/route.ts must derive the final round from canContinueToolLoop's decision"
+      );
+      assert.ok(
+        content.includes("canContinueToolLoop({"),
+        "chat/route.ts must consult the budget-governed continuation decision"
       );
 
       assert.ok(
@@ -395,9 +399,8 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
 
       assert.ok(
-        content.includes("round < MAX_TOOL_ROUNDS - 1") ||
         content.includes("!isFinalRound"),
-        "chat/route.ts must omit tools from payload on final round"
+        "chat/route.ts must omit tools from payload on the final round"
       );
     });
   });

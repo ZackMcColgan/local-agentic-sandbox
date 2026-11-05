@@ -323,3 +323,31 @@
   - Wired floating Jump to Bottom button and user send actions to explicitly re-pin follow mode.
 - **Severity:** **P2** (Viewport reading ergonomics degraded during long responses).
 - **Status:** **FIXED** (2026-11-01; commit a7cf59a; verified via Playwright unit and live browser acceptance tests).
+
+---
+
+## Part 4 - Chat Runtime Fix-Phase Register (Nov 5, 2026)
+
+**Round:** Fix phase on branch `feature/chat-runtime-fixes` (Part 1-3 defects below moved to punch-list `argon-cto/punchlist/punch-list.md`, IDs CHAT-1..CHAT-6). This section carries the defects registered here: CHAT-7 (new, Nov 5) and CHAT-8 (new, Nov 5), plus the CHAT-6 truth-up written under the punch-list entry.
+
+### [CHAT-7] Tool Loop Governed by a Fixed 8-Round Ceiling
+- **Feature:** Chat Tool-Loop Continuation (`/api/chat`)
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts` (`MAX_TOOL_ROUNDS` loop)
+  - `web-ui/lib/contextBudget.ts` (`canContinueToolLoop`, `runChatToolLoop`)
+- **Discovery:** Owner + sandbox chat driver, Nov 5, 2026. A multi-step inventory turn (git status + log + progress file + uncommitted inventory) needed ~9-12 tool rounds and hit the ceiling mid-task, ending with a `⚠️ [Tool execution limit reached (8 rounds).]` marker while work remained.
+- **Steps to Reproduce:**
+  1. Ask the chat agent for a multi-step inventory that needs more than 8 tool calls (host git status + git log + read a progress file + inventory uncommitted work).
+  2. Observe the turn end at exactly 8 rounds with the limit marker and an unfinished summary.
+- **Expected Behavior:** Tool rounds continue while context headroom remains; a turn ends when it has no more tool calls to make, when the context budget is exhausted, or only at a runaway backstop - never at an ordinary 8-round wall.
+- **Actual Behavior:** `MAX_TOOL_ROUNDS = 8` hard-capped every turn; `canContinueToolLoop` returned only a boolean and did not consult token headroom.
+- **Resolution:**
+  - Continuation governed by context headroom (`estimateTokens(conversationMessages) <= budgetTokens`); the 8-round wall removed from the route entirely.
+  - `TOOL_ROUND_BACKSTOP = 1000` as a runaway guard only; at the last permitted round `forceSynthesis` is set so tools are omitted and the model synthesizes.
+  - `canContinueToolLoop` returns `ToolLoopDecision { canContinue, stopReason?, forceSynthesis? }` with stop reasons `completed` / `budget` / `backstop` / `web-research-cap`.
+  - Round-0 guard: `lastRoundTools = []` must NOT stop round 0 (route initializes it before any round runs). Regression test added.
+  - Grounding enforcement passes `awaitingToolRound: true` so an injected directive is not swallowed by the `completed` stop.
+  - Web-research extension preserved: a round whose tools are exclusively research tools continues while `webResearchCalls < MAX_WEB_RESEARCH_CALLS` (100).
+  - Honest pause markers keyed on stop reason for `budget`, `web-research-cap`, `backstop`.
+- **Severity:** **P1** (turns truncated mid-task with a misleading limit marker; driver hit its limit literally).
+- **Status:** **IN PROGRESS** (Nov 5, 2026 - implementation + unit/behavioral tests, gate green 314/314; live acceptance pending deploy).

@@ -46,9 +46,11 @@ import {
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
   isLiveRealTimeIntent,
   canContinueToolLoop,
+  TOOL_ROUND_BACKSTOP,
   estimateTokens,
   CHAT_CONTEXT_BUDGET_TOKENS
 } from "@/lib/contextBudget";
+import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -686,7 +688,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
         let round = 0;
-        const MAX_TOOL_ROUNDS = 8;
+        // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
+        // TOOL_ROUND_BACKSTOP is only the runaway guard.
+        let toolLoopStopReason: ToolLoopStopReason | undefined = undefined;
+        let budgetExhaustedAtTokens = 0;
+        let groundingDirectivePending = false;
         let consecutiveFailures = 0;
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
@@ -697,8 +703,24 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
-        while (canContinueToolLoop({ round, maxToolRounds: MAX_TOOL_ROUNDS, lastRoundTools, webResearchCalls })) {
+        while (true) {
           if (aborted || req.signal.aborted) break;
+
+          const continuation = canContinueToolLoop({
+            round,
+            contextTokens: estimateTokens(conversationMessages),
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            lastRoundTools,
+            webResearchCalls,
+            roundBackstop: TOOL_ROUND_BACKSTOP,
+            awaitingToolRound: groundingDirectivePending
+          });
+          if (!continuation.canContinue) {
+            toolLoopStopReason = continuation.stopReason;
+            budgetExhaustedAtTokens = estimateTokens(conversationMessages);
+            break;
+          }
+          groundingDirectivePending = false;
 
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
@@ -736,8 +758,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             round
           });
 
-          const canExtendForResearch = round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls < MAX_WEB_RESEARCH_CALLS && (lastRoundTools.length === 0 || lastRoundTools.every(t => isWebResearchTool(t)));
-          const isFinalRound = (round === MAX_TOOL_ROUNDS - 1 && !canExtendForResearch) || (round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls >= MAX_WEB_RESEARCH_CALLS);
+          // CHAT-7: forced synthesis only on the last permitted round (backstop boundary).
+          // Budget-exhausted research-extension rounds keep tools — they are still gathering data.
+          const isFinalRound = continuation.forceSynthesis === true;
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
           if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
@@ -816,10 +839,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (
               isLiveRealTimeIntent(userPrompt) &&
               webResearchCalls === 0 &&
-              round < MAX_TOOL_ROUNDS - 1 &&
+              round < TOOL_ROUND_BACKSTOP - 1 &&
+              estimateTokens(conversationMessages) <= CHAT_CONTEXT_BUDGET_TOKENS &&
               !groundingEnforced
             ) {
               groundingEnforced = true;
+              groundingDirectivePending = true;
               mergeSystemDirective(
                 conversationMessages,
                 `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
@@ -1346,14 +1371,27 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // Clean residual tool tags
-        const maxToolRounds = MAX_TOOL_ROUNDS;
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
         let turnStatus: "completed" | "incomplete" | undefined = undefined;
 
+        // CHAT-7 honest pause markers keyed on the loop's stop reason.
+        const loopPaused =
+          toolLoopStopReason === "budget" ||
+          toolLoopStopReason === "backstop" ||
+          toolLoopStopReason === "web-research-cap";
+        const pauseNote =
+          toolLoopStopReason === "budget"
+            ? `⚠️ [Turn paused: Context budget exhausted (${budgetExhaustedAtTokens} tokens > ${CHAT_CONTEXT_BUDGET_TOKENS} budget) after ${round} tool rounds.]`
+            : toolLoopStopReason === "web-research-cap"
+            ? `⚠️ [Turn paused: Tool execution limit reached (${webResearchCalls} web research calls / ${round} rounds).]`
+            : toolLoopStopReason === "backstop"
+            ? `⚠️ [Turn paused: Tool execution limit reached (${TOOL_ROUND_BACKSTOP} rounds).]`
+            : "";
+
         if (!cleanedContent) {
           turnStatus = "incomplete";
-          if (round >= maxToolRounds) {
-            cleanedContent = `⚠️ [Turn paused: Tool execution limit reached (${round} rounds). Traces captured above; synthesis returned no text.]`;
+          if (loopPaused) {
+            cleanedContent = `${pauseNote} Traces captured above; synthesis returned no text.`;
           } else if (traces.length > 0) {
             cleanedContent = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]`;
           } else if (currentAssistantMessage.content?.trim()) {
@@ -1363,9 +1401,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             cleanedContent = "I am ready to assist you. What would you like to build or explore?";
             turnStatus = undefined;
           }
-        } else if (round >= maxToolRounds) {
+        } else if (loopPaused) {
           turnStatus = "incomplete";
-          cleanedContent = `${cleanedContent}\n\n⚠️ [Turn paused: Tool execution limit reached (${round} rounds).]`;
+          cleanedContent = `${cleanedContent}\n\n${pauseNote}`;
         }
 
         // Gather turn attachments using exact write tracking
