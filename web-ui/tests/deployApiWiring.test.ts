@@ -173,9 +173,8 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       assert.ok(html.includes("Self-Deploy Pipeline"), "Must render Self-Deploy Pipeline card");
       assert.ok(html.includes("Rollback"), "Must render rollback button");
       assert.ok(
-        window.document.body.textContent?.includes("Merge to `develop` & Deploy") ||
-        html.includes("Merge to `develop` &amp; Deploy") ||
-        html.includes("Merge to `develop` & Deploy"),
+        window.document.body.textContent?.includes("Merge to develop & Deploy") ||
+        window.document.body.textContent?.includes("Merge to `develop` & Deploy"),
         "Must render 1-click merge to develop & deploy button"
       );
       assert.ok(html.includes("Isolated Branch"), "Must render Isolated Branch pipeline step");

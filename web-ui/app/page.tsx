@@ -275,9 +275,10 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "deployBuild",
+          action: "executeSelfDeploy",
           taskId,
-          threadId: selectedThreadId
+          threadId: selectedThreadId,
+          branchName: activeTask?.branchName || (activeTask as any)?.branch
         })
       });
       if (res.ok) {
@@ -285,10 +286,11 @@ export default function Home() {
         if (activeTask && activeTask.taskId === taskId) {
           setActiveTask({
             ...activeTask,
-            deploymentUrl: data.deploymentUrl,
-            deploymentNamespace: data.deploymentNamespace
+            deploymentUrl: data.deploymentUrl || (data.status === "deployed" || data.record?.status === "deployed" || data.success ? `http://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:3001` : activeTask.deploymentUrl),
+            deploymentNamespace: data.deploymentNamespace || data.namespace || activeTask.deploymentNamespace || "local-agentic-sandbox"
           });
         }
+        await fetchDeployStatus();
         await fetchThreads(false);
       }
     } catch (err) {
