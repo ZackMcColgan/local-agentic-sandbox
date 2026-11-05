@@ -191,21 +191,46 @@ export function formatThinkingDisplay(entries: string[]): string[] {
 export interface HumanReadableTrace {
   title: string;
   duration: string;
-  badge: "sandbox" | "browser" | "workspace";
+  badge: "sandbox" | "browser" | "workspace" | "host";
 }
 
 /**
  * Translates technical MCP tool names and timings into plain language descriptions.
  */
-export function formatHumanReadableTrace(trace: { tool: string; durationMs?: number; args?: any }): HumanReadableTrace {
+export function formatHumanReadableTrace(trace: {
+  tool: string;
+  durationMs?: number;
+  args?: any;
+  tier?: "sandbox" | "browser" | "workspace" | "host" | string;
+}): HumanReadableTrace {
   const durationSec = trace.durationMs ? (trace.durationMs / 1000).toFixed(1) + "s" : "";
   const durationFormatted = trace.durationMs ? (trace.durationMs < 1000 ? `${trace.durationMs}ms` : durationSec) : "";
 
   const tool = trace.tool || "";
   let title = tool;
-  let badge: "sandbox" | "browser" | "workspace" = "sandbox";
+  let badge: "sandbox" | "browser" | "workspace" | "host" = "sandbox";
 
-  if (tool === "search_web" || tool.includes("search")) {
+  if (trace.tier === "host" || tool.startsWith("host_")) {
+    badge = "host";
+    if (tool === "host_run_powershell") {
+      const cmd = trace.args?.command ? ` (${trace.args.command.slice(0, 24)})` : "";
+      title = `Ran host PowerShell${cmd}`;
+    } else if (tool === "host_read_file") {
+      const p = trace.args?.path || trace.args?.filePath || "";
+      const filename = p ? p.split(/[\\/]/).pop() || p : "";
+      title = filename ? `Host Read ${filename}` : "Host Read File";
+    } else if (tool === "host_write_file") {
+      const p = trace.args?.path || trace.args?.filePath || "";
+      const filename = p ? p.split(/[\\/]/).pop() || p : "";
+      title = filename ? `Host Wrote ${filename}` : "Host Wrote File";
+    } else if (tool === "host_list_dir") {
+      title = "Host List Dir";
+    } else if (tool === "host_delete_path") {
+      title = "Host Delete Path";
+    } else {
+      title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  } else if (tool === "search_web" || tool.includes("search")) {
     const q = trace.args?.query ? ` for "${trace.args.query.slice(0, 30)}"` : "";
     title = `Searched the web${q}`;
     badge = "browser";
@@ -232,9 +257,16 @@ export function formatHumanReadableTrace(trace: { tool: string; durationMs?: num
   } else if (tool === "git_commit" || tool.includes("git")) {
     title = "Committed changes to repository";
     badge = "workspace";
+  } else if (trace.tier === "workspace" || tool.startsWith("workspace_")) {
+    title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = "workspace";
+  } else if (trace.tier === "browser") {
+    title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = "browser";
   } else {
     // Humanize snake_case
     title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = trace.tier === "sandbox" ? "sandbox" : "sandbox";
   }
 
   return {

@@ -123,7 +123,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatScrollFollow.test.ts",
       "tests/agentGroundingAndHeadroom.test.ts",
       "tests/mobileUiPolish.test.ts",
-      "tests/artifactDeliveryAndPolish.test.ts"
+      "tests/artifactDeliveryAndPolish.test.ts",
+      "tests/chatUiHonestyAndCopy.test.ts"
     ]
   },
   // Threads store & Threads API
