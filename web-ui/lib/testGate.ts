@@ -56,10 +56,24 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("notifications"),
     tests: ["tests/notifications.test.ts"]
   },
-  // Host Mode & approvals & status
+  // Host Mode & approvals & status & Host Bridge
   {
-    match: (p) => p.includes("hostMode") || p.includes("host/approvals") || p.includes("host/status") || p.includes("Start-HostRunner"),
-    tests: ["tests/hostMode.test.ts", "tests/hostRunnerScript.test.ts"]
+    match: (p) =>
+      p.includes("hostMode") ||
+      p.includes("host/approvals") ||
+      p.includes("host/status") ||
+      p.includes("host-bridge") ||
+      p.includes("hostDaemon") ||
+      p.includes("build-host-runner") ||
+      p.includes("aiLifecycle") ||
+      p.includes("hostFourState"),
+    tests: [
+      "tests/hostMode.test.ts",
+      "tests/hostFourState.test.ts",
+      "tests/hostRunnerScript.test.ts",
+      "tests/hostDaemon.test.ts",
+      "tests/aiLifecycle.test.ts"
+    ]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
@@ -118,8 +132,17 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/threadsLaunchTask.test.ts",
       "tests/sessionIntegrity.test.ts",
-      "tests/chatReasoningAndProgress.test.ts"
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/permissions.test.ts"
     ]
+  },
+  // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
+  {
+    match: (p) =>
+      p.includes("permissions") ||
+      p.includes("deploy/k8s/mcp-runner") ||
+      p.includes("deploy/k8s/web-ui"),
+    tests: ["tests/permissions.test.ts"]
   },
   // Unified Agent UI (Material 3) components & design tokens
   {
@@ -512,6 +535,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.startsWith("scripts/start-strata") ||
     normalizedPath.startsWith("scripts/stop-strata") ||
+    normalizedPath.startsWith("scripts/Start-HostRunner") ||
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("tests/e2e/") ||
     normalizedPath.startsWith("docs/") ||
@@ -519,8 +543,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.endsWith("script.py") ||
     normalizedPath.endsWith(".py")
   ) {
-    // Only exception: docs/architecture.drawio is covered
+    // Exceptions: covered files in otherwise ignored paths
     if (normalizedPath.includes("architecture.drawio")) return false;
+    if (normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") || normalizedPath.startsWith("deploy/k8s/web-ui.yaml")) return false;
     return true;
   }
   return false;

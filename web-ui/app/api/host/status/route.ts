@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ThreadStore } from "@/lib/threads/threadStore";
-import { checkHostRunnerHealth } from "@/lib/hostMode";
+import { determineHostRunnerState } from "@/lib/hostMode";
 
 export async function GET(req: Request) {
   try {
@@ -18,9 +18,16 @@ export async function GET(req: Request) {
       }
     }
 
-    const runnerAvailable = await checkHostRunnerHealth();
+    const hostStatus = await determineHostRunnerState(hostAccess);
 
-    return NextResponse.json({ hostAccess, runnerAvailable });
+    return NextResponse.json({
+      hostAccess,
+      runnerState: hostStatus.runnerState,
+      runnerAvailable: hostStatus.runnerState === "READY",
+      reason: hostStatus.reason,
+      expectedSha: hostStatus.expectedSha,
+      actualSha: hostStatus.actualSha
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Failed to get host status" }, { status: 500 });
   }
