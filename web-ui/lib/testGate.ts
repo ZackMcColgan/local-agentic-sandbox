@@ -138,7 +138,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/sessionIntegrity.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
       "tests/permissions.test.ts",
-      "tests/chatPersistenceDecoupling.test.ts"
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts"
     ]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
@@ -224,7 +225,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/llmProvider.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
-      "tests/chatPersistenceDecoupling.test.ts"
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control
@@ -422,7 +424,12 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts"]
+    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts"]
+  },
+  // CHAT-8 live streaming visibility (server snapshots + client poll loop)
+  {
+    match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
+    tests: ["tests/chatLiveVisibility.test.ts"]
   },
   {
     match: (p) =>

@@ -35,7 +35,7 @@ export interface ThreadMessage {
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
   selectedModel?: string;
-  status?: "completed" | "incomplete" | "error";
+  status?: "completed" | "incomplete" | "error" | "streaming";
 }
 
 export interface ThreadCompactionBoundary {

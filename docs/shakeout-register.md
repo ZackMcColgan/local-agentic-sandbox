@@ -351,3 +351,34 @@
   - Honest pause markers keyed on stop reason for `budget`, `web-research-cap`, `backstop`.
 - **Severity:** **P1** (turns truncated mid-task with a misleading limit marker; driver hit its limit literally).
 - **Status:** **IN PROGRESS** (Nov 5, 2026 - implementation + unit/behavioral tests, gate green 314/314; live acceptance pending deploy).
+
+---
+
+### [CHAT-8] Turns Invisible Live on Other Devices Until Completion
+- **Feature:** Chat Live Visibility / Cross-Device Mid-Turn Rendering
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts` (assistant message persisted only at turn end: done / error / abort)
+  - `web-ui/lib/threads/threadStore.ts` (`ThreadMessage.status` union)
+  - `web-ui/app/page.tsx` (thread load + polling loop)
+  - `web-ui/components/ChatStream.tsx` (`ChatMessage.status` union, turn-status badge rendering)
+- **Discovery:** Owner report + fix-phase audit, Nov 5, 2026. A turn running on one device shows nothing on any other device viewing the same thread: the server writes no assistant message to the ThreadStore until the turn ends (`done`/`error`/`abort` persistence), and clients only load thread messages once on thread switch (plus task-status polling for Build-mode runs, not chat turns).
+- **Steps to Reproduce:**
+  1. Start a long chat turn on device A.
+  2. On device B (or a second browser/profile), open the same thread.
+  3. Observe device B during the turn.
+- **Expected Behavior:**
+  1. The server writes throttled (~1/sec) ThreadStore snapshots of the streaming assistant content with message status `streaming` while the turn runs.
+  2. A client viewing a thread whose latest assistant message is `streaming` polls `GET /api/threads/[id]` every ~1.5s and re-renders partial content until the status flips to a terminal state.
+  3. The turn stays honestly "live" server-side while running (not reconciled to stopped by a mid-turn GET).
+- **Actual Behavior:**
+  1. Mid-turn `GET /api/threads/[id]` returns no assistant message (or the stale previous one) until the turn completes.
+  2. No chat-turn polling existed on the client; only task (Build-mode) polling.
+  3. Plain chat turns never registered the thread id in `activeExecutionSet`, so a mid-turn GET could reconcile an active thread to `stopped` and flag the last assistant message `isStopped`.
+- **Resolution:**
+  - `web-ui/lib/streamSnapshot.ts`: `ThrottledStreamSnapshot.maybeWrite()` writes `{ id: assistantMessageId, role: "assistant", content: accumulatedStreamedTokens, status: "streaming" }` into the ThreadStore at most once per `STREAM_SNAPSHOT_INTERVAL_MS` (1000 ms), keyed by the same message id so terminal persistence overwrites it (upsert).
+  - `web-ui/app/api/chat/route.ts`: registers `activeThreadId` in `activeExecutionSet` for the duration of the turn (delete in `finally`), and calls `maybeWrite(accumulatedStreamedTokens)` in both the tool-round loop and the synthesis loop.
+  - `web-ui/lib/threads/threadStore.ts` + `web-ui/components/ChatStream.tsx`: `status` unions extended with `"streaming"`; honest cyan "Streaming" badge rendered.
+  - `web-ui/app/page.tsx`: while the latest assistant message of the selected thread is `streaming`, recursive `setTimeout` poll of `GET /api/threads/[id]` every `STREAM_POLL_INTERVAL_MS` (1500 ms), re-rendering messages until the status flips.
+  - Two-client API test proves partial content visible mid-turn and convergence on terminal status.
+- **Severity:** **P1** (core cross-device visibility degraded; a live turn appears frozen/hung on second client).
+- **Status:** **IN PROGRESS** (Nov 5, 2026 - registered during fix phase; implementation + tests pending live verification).

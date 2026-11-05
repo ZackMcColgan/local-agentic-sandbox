@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
+import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
   recordTurnOutputWrite,
@@ -292,7 +293,14 @@ export async function POST(req: NextRequest) {
       } catch (err: any) {
         console.warn("[ChatRoute] Turn start persistence warning:", err.message);
       }
+
+      // CHAT-8: keep the thread honestly live while the turn runs so mid-turn
+      // GETs do not reconcile it to stopped, and snapshots can surface partial content.
+      activeExecutionSet.add(activeThreadId);
     }
+
+    // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
+    const streamSnapshot = new ThrottledStreamSnapshot(threadStore, activeThreadId, assistantMessageId);
 
     const threadOutputsDir = activeThreadId ? path.join(threadsDir, activeThreadId, "files") : null;
     const threadOutputsRelPath = activeThreadId ? `${activeThreadId}/files` : null;
@@ -808,6 +816,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               const textChunk = chunk.message.content;
               fullRoundContent += textChunk;
               accumulatedStreamedTokens += textChunk;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
               await sendEvent({ type: "token", content: textChunk });
             }
             if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
@@ -1356,6 +1365,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
               accumulatedStreamedTokens += chunk.message.content;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
               await sendEvent({ type: "token", content: chunk.message.content });
             }
           }
@@ -1513,6 +1523,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         });
       } finally {
         clearInterval(heartbeatInterval);
+        if (activeThreadId) {
+          activeExecutionSet.delete(activeThreadId);
+        }
         req.signal.removeEventListener("abort", cleanupSignal);
         if (!abortController.signal.aborted) {
           abortController.abort();

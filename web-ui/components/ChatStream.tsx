@@ -105,7 +105,7 @@ export interface ChatMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
-  status?: "completed" | "incomplete" | "error";
+  status?: "completed" | "incomplete" | "error" | "streaming";
 }
 
 export interface UiHostApproval {
@@ -2015,7 +2015,7 @@ export function ChatStream({
               ) : (
                 /* Assistant Message View */
                 <div className="w-full max-w-[840px] space-y-3">
-                  {((!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined) || m.status === "incomplete" || m.status === "error") && (
+                  {((!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined) || m.status === "incomplete" || m.status === "error" || m.status === "streaming") && (
                     <div className="flex flex-wrap items-center gap-2">
                       {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
                         <div
@@ -2025,6 +2025,15 @@ export function ChatStream({
                           <span>
                             History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
                           </span>
+                        </div>
+                      )}
+                      {m.status === "streaming" && (
+                        <div
+                          data-testid="message-status-badge"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-300 dark:border-cyan-800 text-[11px] font-mono font-medium text-cyan-800 dark:text-cyan-300 w-fit"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                          <span>Streaming</span>
                         </div>
                       )}
                       {m.status === "incomplete" && (
