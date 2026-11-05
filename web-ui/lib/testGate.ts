@@ -137,7 +137,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/threadsLaunchTask.test.ts",
       "tests/sessionIntegrity.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
-      "tests/permissions.test.ts"
+      "tests/permissions.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts"
     ]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
@@ -222,7 +223,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/conversationCompaction.test.ts",
       "tests/llmProvider.test.ts",
       "tests/chatFilePaging.test.ts",
-      "tests/chatTurnHonesty.test.ts"
+      "tests/chatTurnHonesty.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control

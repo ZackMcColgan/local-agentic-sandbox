@@ -117,9 +117,11 @@ interface TraceItem {
 
 async function connectMcpClient(url: string, name: string) {
   const sseUrl = normalizeMcpUrl(url);
+  let transport: SSEClientTransport | null = null;
+  let client: Client | null = null;
   try {
-    const transport = new SSEClientTransport(new URL(sseUrl));
-    const client = new Client(
+    transport = new SSEClientTransport(new URL(sseUrl));
+    client = new Client(
       { name, version: "1.0.0" },
       { capabilities: {} }
     );
@@ -129,6 +131,12 @@ async function connectMcpClient(url: string, name: string) {
     return { client, transport, tools: toolsResult.tools };
   } catch (err: any) {
     console.warn(`[Orchestrator] Could not connect to MCP at ${sseUrl}:`, err.message);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
+    if (transport) {
+      try { await transport.close(); } catch {}
+    }
     return null;
   }
 }
@@ -203,12 +211,22 @@ export async function POST(req: NextRequest) {
       mode: requestedMode,
       reasoning_effort: requestedReasoning,
       attachments,
-      approvalContinuationId
+      approvalContinuationId,
+      userMessageId: requestedUserMessageId,
+      assistantMessageId: requestedAssistantMessageId
     } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 });
     }
+
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const userPrompt = lastUserMsg?.content || "";
+    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
+    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
+
+    const userMessageId = requestedUserMessageId || lastUserMsg?.id || `msg-${Date.now()}-u`;
+    const assistantMessageId = requestedAssistantMessageId || `msg-${Date.now()}-a`;
 
     const mode: AgentMode = requestedMode || "auto";
 
@@ -235,6 +253,45 @@ export async function POST(req: NextRequest) {
 
     const activeThreadId = typeof requestedThreadId === "string" && requestedThreadId.trim() ? requestedThreadId.trim() : null;
     const threadsDir = resolveThreadsDir();
+    const threadStore = new ThreadStore(threadsDir);
+    let threadData: any = null;
+    let threadHostAccess = false;
+
+    if (activeThreadId) {
+      try {
+        threadData = await threadStore.getThread(activeThreadId);
+        if (!threadData) {
+          threadData = threadStore.createThread({
+            id: activeThreadId,
+            title: userPrompt.slice(0, 40) || "New thread"
+          });
+        }
+        if (threadData?.hostAccess) {
+          threadHostAccess = true;
+        }
+
+        // Turn Start (PIN 2 User Message): save user message immediately to threadStore
+        if (lastUserMsg && userPrompt.trim()) {
+          const alreadyPresent = (threadData.messages || []).some(
+            (m: any) => m.id === userMessageId || (m.role === "user" && m.content === userPrompt)
+          );
+          if (!alreadyPresent) {
+            const userMsgToSave = {
+              id: userMessageId,
+              role: "user" as const,
+              content: userPrompt,
+              attachments: attachments && attachments.length > 0 ? attachments : undefined,
+              timestamp: lastUserMsg.timestamp || new Date().toISOString()
+            };
+            threadStore.addMessage(activeThreadId, userMsgToSave);
+            threadData = await threadStore.getThread(activeThreadId);
+          }
+        }
+      } catch (err: any) {
+        console.warn("[ChatRoute] Turn start persistence warning:", err.message);
+      }
+    }
+
     const threadOutputsDir = activeThreadId ? path.join(threadsDir, activeThreadId, "files") : null;
     const threadOutputsRelPath = activeThreadId ? `${activeThreadId}/files` : null;
     if (threadOutputsDir) {
@@ -307,15 +364,49 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       }
     }
 
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-    const userPrompt = lastUserMsg?.content || "";
-    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
-    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
-
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
     const encoder = new TextEncoder();
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
+
+    let accumulatedStreamedTokens = "";
+    let assistantPersisted = false;
+    const turnCreatedFiles: string[] = [];
+    const turnPreImages = new Map<string, string>();
+    const turnHostDiffs: TurnFileDiff[] = [];
+    const traces: TraceItem[] = [];
+    let accumulatedThoughts: string[] = [];
+
+    const persistAssistantOnAbort = () => {
+      if (!activeThreadId || assistantPersisted) return;
+      assistantPersisted = true;
+      try {
+        const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+        const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+        const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+
+        const abortContent = accumulatedStreamedTokens.trim()
+          ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn incomplete: Stream aborted or disconnected.]`
+          : `⚠️ [Turn incomplete: Stream aborted or disconnected.]`;
+
+        const abortedMsg = {
+          id: assistantMessageId,
+          role: "assistant" as const,
+          content: abortContent,
+          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+          traces: traces.length > 0 ? (traces as any) : undefined,
+          attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+          modelUsed: activeModel,
+          selectedModel: requestedModel || activeModel,
+          timestamp: new Date().toISOString(),
+          status: "incomplete" as const
+        };
+        threadStore.addMessage(activeThreadId, abortedMsg);
+      } catch (err) {
+        console.warn("[ChatRoute] Failed to persist aborted assistant message:", err);
+      }
+    };
 
     let aborted = false;
     const abortController = new AbortController();
@@ -325,6 +416,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       if (!abortController.signal.aborted) {
         abortController.abort();
       }
+      persistAssistantOnAbort();
     };
     req.signal.addEventListener("abort", cleanupSignal);
 
@@ -353,11 +445,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
       });
     }, 10_000);
+    if (typeof heartbeatInterval.unref === "function") {
+      heartbeatInterval.unref();
+    }
 
     // Run async orchestrator pipeline in background feeding SSE stream
     (async () => {
-      const traces: TraceItem[] = [];
-      let accumulatedThoughts: string[] = [];
       let oracleSnippet = "";
       let oracleCitations: string[] = [];
 
@@ -370,9 +463,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // 1. Gated Oracle Codebase & Semantic Memory Lookup with 2500ms timeout
         if (!approvalContinuationId && userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
           try {
-            const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) =>
-              setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
-            );
+            let timer: any = null;
+            const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) => {
+              timer = setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500);
+              if (typeof timer?.unref === "function") timer.unref();
+            });
             const ragPromise = (async () => {
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
@@ -382,6 +477,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             })();
 
             const lookupResult = await Promise.race([ragPromise, timeoutPromise]);
+            if (timer) clearTimeout(timer);
             if (lookupResult.contextSnippet) {
               oracleSnippet = lookupResult.contextSnippet;
               oracleCitations = lookupResult.citations;
@@ -425,10 +521,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
-        const threadStore = new ThreadStore();
-        let threadData: any = null;
-        let threadHostAccess = false;
-        if (activeThreadId) {
+        if (activeThreadId && !threadData) {
           try {
             threadData = await threadStore.getThread(activeThreadId);
             if (threadData?.hostAccess) {
@@ -501,8 +594,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
           conversationMessages[sysIdx].content += profileContext + hostDirective;
         }
-
-        const turnHostDiffs: TurnFileDiff[] = [];
 
         // Handle single-use approval continuation buffer
         if (approvalContinuationId) {
@@ -594,8 +685,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
-        const turnCreatedFiles: string[] = [];
-        const turnPreImages = new Map<string, string>();
         let round = 0;
         const MAX_TOOL_ROUNDS = 8;
         let consecutiveFailures = 0;
@@ -605,8 +694,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let honestAbortInjected = false;
         let searchNudges = 0;
         let lastRoundTools: string[] = [];
-
-        let accumulatedThoughts: string[] = [];
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
@@ -697,6 +784,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (chunk.message?.content) {
               const textChunk = chunk.message.content;
               fullRoundContent += textChunk;
+              accumulatedStreamedTokens += textChunk;
               await sendEvent({ type: "token", content: textChunk });
             }
             if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
@@ -1242,6 +1330,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             }
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
+              accumulatedStreamedTokens += chunk.message.content;
               await sendEvent({ type: "token", content: chunk.message.content });
             }
           }
@@ -1289,6 +1378,27 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           modelUsed: activeModel
         });
 
+        if (activeThreadId && !assistantPersisted) {
+          const assistantMsgToSave = {
+            id: assistantMessageId,
+            role: "assistant" as const,
+            content: cleanedContent,
+            thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+            traces: traces.length > 0 ? (traces as any) : undefined,
+            attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+            diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+            modelUsed: activeModel,
+            selectedModel: requestedModel || activeModel,
+            timestamp: new Date().toISOString(),
+            compactedThisTurn: turnCompacted || undefined,
+            tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
+            tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+            status: turnStatus || ("completed" as const)
+          };
+          threadStore.addMessage(activeThreadId, assistantMsgToSave);
+          assistantPersisted = true;
+        }
+
         await sendEvent({
           type: "done",
           status: turnStatus,
@@ -1329,6 +1439,36 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           ? "LLM engine is stopped. Start it from Settings or the status bar."
           : (err.message || "Internal orchestrator error");
 
+        if (activeThreadId && !assistantPersisted) {
+          assistantPersisted = true;
+          try {
+            const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+            const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+            const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+
+            const errorContent = accumulatedStreamedTokens.trim()
+              ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn error: ${friendlyMessage}]`
+              : `⚠️ [Turn error: ${friendlyMessage}]`;
+
+            const errorMsg = {
+              id: assistantMessageId,
+              role: "assistant" as const,
+              content: errorContent,
+              thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+              traces: traces.length > 0 ? (traces as any) : undefined,
+              attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+              diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+              modelUsed: activeModel,
+              selectedModel: requestedModel || activeModel,
+              timestamp: new Date().toISOString(),
+              status: "error" as const
+            };
+            threadStore.addMessage(activeThreadId, errorMsg);
+          } catch (errSave) {
+            console.warn("[ChatRoute] Failed to persist error assistant message in catch:", errSave);
+          }
+        }
+
         await sendEvent({
           type: "error",
           error: friendlyMessage
@@ -1338,6 +1478,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         req.signal.removeEventListener("abort", cleanupSignal);
         if (!abortController.signal.aborted) {
           abortController.abort();
+        }
+
+        if (activeThreadId && !assistantPersisted && (aborted || req.signal.aborted || abortController.signal.aborted)) {
+          persistAssistantOnAbort();
         }
         for (const session of activeSessions) {
           try {

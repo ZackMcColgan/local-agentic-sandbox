@@ -798,22 +798,27 @@ export function ChatStream({
   const readStreamResponse = async (
     res: Response,
     targetThreadId?: string,
-    startTime: number = performance.now()
+    startTime: number = performance.now(),
+    providedAssistantMsgId?: string
   ) => {
-    const assistantMsgId = `assistant-${Date.now()}`;
+    const assistantMsgId = providedAssistantMsgId || activeAssistantMsgIdRef.current || `assistant-${Date.now()}`;
     activeAssistantMsgIdRef.current = assistantMsgId;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: assistantMsgId,
-        role: "assistant",
-        content: "",
-        thought: "",
-        traces: [],
-        modelUsed: activeModel,
-        selectedModel: activeModel
-      }
-    ]);
+    setMessages((prev) => {
+      const exists = prev.some((m) => m.id === assistantMsgId);
+      if (exists) return prev;
+      return [
+        ...prev,
+        {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: activeModel,
+          selectedModel: activeModel
+        }
+      ];
+    });
 
     const reader = res.body?.getReader();
     if (!reader) {
@@ -1038,6 +1043,8 @@ export function ChatStream({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     const startTime = performance.now();
+    const assistantMsgId = `assistant-${Date.now()}`;
+    activeAssistantMsgIdRef.current = assistantMsgId;
 
     try {
       const res = await fetch("/api/chat", {
@@ -1046,6 +1053,7 @@ export function ChatStream({
         signal: abortController.signal,
         body: JSON.stringify({
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          assistantMessageId: assistantMsgId,
           model: activeModel,
           mode: agentMode,
           reasoning_effort: reasoningEffort,
@@ -1063,7 +1071,7 @@ export function ChatStream({
         throw new Error(errMessage);
       }
 
-      await readStreamResponse(res, targetThreadId, startTime);
+      await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Approval continuation aborted by user");
@@ -1361,10 +1369,12 @@ export function ChatStream({
             signal: abortController.signal,
             body: JSON.stringify({
               messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+              userMessageId: userMsgId,
+              assistantMessageId: assistantMsgId,
               model: activeModel,
               mode: agentMode,
               reasoning_effort: reasoningEffort,
-              threadId,
+              threadId: activeThreadId || threadId,
               attachments: currentAttachments.map(a => ({
                 name: a.name,
                 type: a.type,
@@ -1391,7 +1401,7 @@ export function ChatStream({
         throw new Error(errMessage);
       }
 
-      await readStreamResponse(res, activeThreadId || threadId, startTime);
+      await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Chat stream aborted by user");
