@@ -350,7 +350,7 @@
   - Web-research extension preserved: a round whose tools are exclusively research tools continues while `webResearchCalls < MAX_WEB_RESEARCH_CALLS` (100).
   - Honest pause markers keyed on stop reason for `budget`, `web-research-cap`, `backstop`.
 - **Severity:** **P1** (turns truncated mid-task with a misleading limit marker; driver hit its limit literally).
-- **Status:** **IN PROGRESS** (Nov 5, 2026 - implementation + unit/behavioral tests, gate green 314/314; live acceptance pending deploy).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit e0c4caf, deployed as image `local-agentic-sandbox-web-ui:v-e0c4caf-905758`. Fresh-thread acceptance on `thread-1793911038074-jjan`: Step 0 inventory turn completed in ONE turn (~1150s wall, 10 tool traces, single `done` event, status `completed`, no ⚠️ marker). Gate 314/314 at commit; full gate 326/326 after CHAT-8).
 
 ---
 
@@ -381,4 +381,4 @@
   - `web-ui/app/page.tsx`: while the latest assistant message of the selected thread is `streaming`, recursive `setTimeout` poll of `GET /api/threads/[id]` every `STREAM_POLL_INTERVAL_MS` (1500 ms), re-rendering messages until the status flips.
   - Two-client API test proves partial content visible mid-turn and convergence on terminal status.
 - **Severity:** **P1** (core cross-device visibility degraded; a live turn appears frozen/hung on second client).
-- **Status:** **IN PROGRESS** (Nov 5, 2026 - registered during fix phase; implementation + tests pending live verification).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit 4bc71fc, deployed as image `local-agentic-sandbox-web-ui:v-4bc71fc-mw436dvd`. Dedicated suite `tests/chatLiveVisibility.test.ts` 8/8; gate 326/326. Two-client live acceptance on `thread-1793917113300-ip48`: persistent client streamed 143,982 SSE bytes to `done`; second client saw 73 `streaming` snapshots growing 1 → 11,162 chars via 1.5s polls, single transition streaming→completed, final 11,329 chars, exactly one upserted assistant message, no ⚠️ marker).
