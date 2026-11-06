@@ -273,13 +273,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 3. Action: Add Message
     if (body.action === "addMessage" && body.message) {
-      const updated = threadStore.addMessage(thread.id, body.message);
+      const updated = getThreadStore().addMessage(thread.id, body.message);
       return NextResponse.json({ thread: updated || thread });
     }
 
     // 4. Action: Restore Compaction
     if (body.action === "restoreCompaction") {
-      threadStore.clearCompactionBoundary(thread);
+      getThreadStore().clearCompactionBoundary(thread);
       return NextResponse.json({ thread });
     }
 
@@ -303,7 +303,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     if (thread?.taskId) {
       cancelTask(thread.taskId);
     }
-    const ok = await threadStore.deleteThread(id);
+    const ok = await getThreadStore().deleteThread(id);
     return NextResponse.json({ success: ok });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

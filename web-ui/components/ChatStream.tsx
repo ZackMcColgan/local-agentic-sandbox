@@ -1266,19 +1266,19 @@ export function ChatStream({
     }
 
     if (action === "enqueue") {
-      let targetThreadId = activeThreadId || threadId;
-      if (!targetThreadId && onEnsureThread) {
-        targetThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
-        if (targetThreadId) {
-          activeThreadIdRef.current = targetThreadId;
-          setActiveThreadId(targetThreadId);
+      let currentActiveThreadId = activeThreadIdRef.current || activeThreadState || threadId;
+      if (!currentActiveThreadId && onEnsureThread) {
+        currentActiveThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+        if (currentActiveThreadId) {
+          activeThreadIdRef.current = currentActiveThreadId;
+          setActiveThreadId(currentActiveThreadId);
         }
       }
 
       // If midTurnAction is "steer", POST to /api/threads/[id]/steer
-      if (midTurnAction === "steer" && targetThreadId) {
+      if (midTurnAction === "steer" && currentActiveThreadId) {
         try {
-          const steerRes = await fetch(`/api/threads/${encodeURIComponent(targetThreadId)}/steer`, {
+          const steerRes = await fetch(`/api/threads/${encodeURIComponent(currentActiveThreadId)}/steer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: prompt })
@@ -1296,8 +1296,8 @@ export function ChatStream({
       }
 
       // Default: Queue client-side
-      if (typeof window !== "undefined" && targetThreadId) {
-        const q = chatQueueRef.current || new ChatQueue(window.localStorage, targetThreadId);
+      if (typeof window !== "undefined" && currentActiveThreadId) {
+        const q = chatQueueRef.current || new ChatQueue(window.localStorage, currentActiveThreadId);
         chatQueueRef.current = q;
         q.enqueue(prompt);
         setQueueItems(q.items());
