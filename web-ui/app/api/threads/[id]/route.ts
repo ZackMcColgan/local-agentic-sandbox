@@ -1,14 +1,16 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
+import { ThreadStore, activeExecutionSet, getActiveTurn, clearTurnActive, resolveThreadsDir } from "@/lib/threads/threadStore";
 import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest } from "@/lib/subagents/types";
 import { unloadAllModels } from "@/lib/subagents/residency";
 import { getSharedRunLedger } from "@/lib/ledger/runLedger";
 
-const threadStore = new ThreadStore();
+// Store is created per request so a runtime THREADS_DIR change (tests, container env
+// refresh) is always honored — mirrors the chat route's per-request store.
+const getThreadStore = () => new ThreadStore(resolveThreadsDir());
 const supervisor = new OvernightSupervisor();
 
 function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
@@ -69,7 +71,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
       console.log(`[threads/[id]] task ${taskId} finished with status: ${result.status}`);
 
       if (result.status === "completed") {
-        const currentThread = await threadStore.getThread(activeThreadId);
+        const currentThread = await getThreadStore().getThread(activeThreadId);
         if (currentThread) {
           const lastMilestone = result.milestones?.[result.milestones.length - 1];
           const targetFile = lastMilestone?.plannedFiles?.[0];
@@ -114,7 +116,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
             taskId,
             timestamp: new Date().toISOString()
           });
-          threadStore.saveThread(currentThread);
+          getThreadStore().saveThread(currentThread);
         }
       }
     } catch (err: any) {
@@ -131,8 +133,14 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const thread = await threadStore.getThread(id);
+    const thread = await getThreadStore().getThread(id);
     if (!thread) {
+      // CHAT-PRESENCE: a turn may have just started before the thread file lands.
+      // Still answer 200 with the presence marker so a fresh watcher sees activity.
+      const presence = getActiveTurn(id);
+      if (presence) {
+        return NextResponse.json({ thread: null, task: null, activeTurn: presence });
+      }
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
 
@@ -145,7 +153,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     }
 
-    return NextResponse.json({ thread, task });
+    return NextResponse.json({ thread, task, activeTurn: getActiveTurn(id) });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -154,7 +162,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const thread = await threadStore.getThread(id);
+    const thread = await getThreadStore().getThread(id);
     if (!thread) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
@@ -164,6 +172,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     // 1. Action: Stop / Cancel Run
     if (body.action === "stop" || body.action === "cancel") {
       thread.status = "stopped";
+      clearTurnActive(thread.id);
       if (thread.taskId) {
         cancelTask(thread.taskId);
         activeExecutionSet.delete(thread.taskId);
@@ -185,7 +194,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         }
       }
 
-      threadStore.saveThread(thread);
+      getThreadStore().saveThread(thread);
       return NextResponse.json({ status: "stopped", thread });
     }
 
@@ -198,7 +207,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           supervisor.pauseTask(task, "User paused run");
           getSharedRunLedger().pauseRun(task.taskId);
           thread.status = "paused";
-          threadStore.saveThread(thread);
+          getThreadStore().saveThread(thread);
           return NextResponse.json({ status: "paused", thread, task });
         }
       }
@@ -221,7 +230,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           supervisor.resumeTask(task.taskId);
           activeExecutionSet.add(task.taskId);
           thread.status = "active";
-          threadStore.saveThread(thread);
+          getThreadStore().saveThread(thread);
 
           launchTaskExecution(thread.id, task);
 
@@ -245,7 +254,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           thread.taskId = restarted.taskId;
           thread.status = "active";
           activeExecutionSet.add(restarted.taskId);
-          threadStore.saveThread(thread);
+          getThreadStore().saveThread(thread);
 
           launchTaskExecution(thread.id, restarted);
 
@@ -258,7 +267,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     // 2. Action: Rename Thread
     if (body.action === "rename" && body.title) {
       thread.title = body.title;
-      threadStore.saveThread(thread);
+      getThreadStore().saveThread(thread);
       return NextResponse.json({ thread });
     }
 
@@ -277,7 +286,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     // 5. Action: Toggle Host Access
     if (body.action === "setHostAccess") {
       thread.hostAccess = Boolean(body.hostAccess);
-      threadStore.saveThread(thread);
+      getThreadStore().saveThread(thread);
       return NextResponse.json({ thread });
     }
 
@@ -290,7 +299,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const thread = await threadStore.getThread(id);
+    const thread = await getThreadStore().getThread(id);
     if (thread?.taskId) {
       cancelTask(thread.taskId);
     }

@@ -102,6 +102,37 @@ export function resolveThreadsDir(): string {
 // In-memory set of actively executing task/thread IDs in the current Node process
 export const activeExecutionSet = new Set<string>();
 
+/**
+ * CHAT-PRESENCE: turn-presence marker. Visible in GET responses from the moment a
+ * turn starts — before any token or streaming snapshot exists — so cross-device
+ * watchers see "a turn is running" immediately. Cleared on done/error/abort/stop.
+ */
+export interface ActiveTurnInfo {
+  threadId: string;
+  startedAt: string;
+  status: "streaming";
+}
+
+const activeTurnRegistry = new Map<string, ActiveTurnInfo>();
+
+export function markTurnActive(threadId: string): void {
+  if (!activeTurnRegistry.has(threadId)) {
+    activeTurnRegistry.set(threadId, {
+      threadId,
+      startedAt: new Date().toISOString(),
+      status: "streaming"
+    });
+  }
+}
+
+export function getActiveTurn(threadId: string): ActiveTurnInfo | null {
+  return activeTurnRegistry.get(threadId) ?? null;
+}
+
+export function clearTurnActive(threadId: string): void {
+  activeTurnRegistry.delete(threadId);
+}
+
 export class ThreadStore {
   private threadsDir: string;
   private supervisor: OvernightSupervisor;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -297,6 +297,9 @@ export async function POST(req: NextRequest) {
       // CHAT-8: keep the thread honestly live while the turn runs so mid-turn
       // GETs do not reconcile it to stopped, and snapshots can surface partial content.
       activeExecutionSet.add(activeThreadId);
+      // CHAT-PRESENCE: register the turn marker before the first token exists, so
+      // cross-device watchers see the running turn immediately.
+      markTurnActive(activeThreadId);
     }
 
     // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
@@ -427,6 +430,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         abortController.abort();
       }
       persistAssistantOnAbort();
+      if (activeThreadId) clearTurnActive(activeThreadId);
     };
     req.signal.addEventListener("abort", cleanupSignal);
 
@@ -1525,6 +1529,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
         if (activeThreadId) {
           activeExecutionSet.delete(activeThreadId);
+          clearTurnActive(activeThreadId);
         }
         req.signal.removeEventListener("abort", cleanupSignal);
         if (!abortController.signal.aborted) {
