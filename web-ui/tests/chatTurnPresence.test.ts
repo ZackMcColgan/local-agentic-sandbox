@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +12,7 @@ import http from "node:http";
  * a switchable scenario, so every test hits the same cached provider config.
  */
 type Scenario =
-  | { kind: "thinking-then-content"; thinkChunkMs: number; content: string }
+  | { kind: "thinking-then-content"; thinkChunkMs: number; content: string; contentChunks?: string[]; chunkDelayMs?: number }
   | { kind: "thinking-only-then-empty-done"; thinkChunkMs: number }
   | { kind: "engine-error"; delayMs: number };
 
@@ -73,7 +73,14 @@ const engine = await new Promise<{ url: string; close: () => void }>((resolve) =
       await sleep(scenario.thinkChunkMs);
     }
     if (scenario.kind === "thinking-then-content") {
-      writeContent(scenario.content);
+      if (scenario.contentChunks && scenario.contentChunks.length > 0) {
+        for (const c of scenario.contentChunks) {
+          writeContent(c);
+          if (scenario.chunkDelayMs) await sleep(scenario.chunkDelayMs);
+        }
+      } else {
+        writeContent(scenario.content);
+      }
     }
     writeDone();
     res.end();
@@ -215,7 +222,13 @@ describe("CHAT-PRESENCE — turn-presence marker lifecycle (behavioral)", () => 
   });
 
   it("watcher merge still reconciles: presence + streaming snapshot coexist, then converge", async () => {
-    scenario = { kind: "thinking-then-content", thinkChunkMs: 400, content: "streamed answer" };
+    scenario = {
+      kind: "thinking-then-content",
+      thinkChunkMs: 200,
+      content: "streamed answer",
+      contentChunks: ["streamed ", "answer ", "in ", "chunks ", "over ", "time"],
+      chunkDelayMs: 400
+    };
     const { threadId, assistantId } = uniqueThread("presence-merge");
     const res = await CHAT_POST(chatRequest(threadId, assistantId, "Probe merge coexist") as any);
     const consume = (async () => { await drain(res); })();
@@ -230,10 +243,10 @@ describe("CHAT-PRESENCE — turn-presence marker lifecycle (behavioral)", () => 
         sawStreamingSnapshot = asst;
         break;
       }
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 200));
     }
+    await consume;
     assert.ok(sawStreamingSnapshot, "watcher must see a streaming snapshot while presence is active");
-    await drain(res);
     const after = await getThreadResponse(threadId);
     assert.equal(after.activeTurn, null, "presence clears at done");
     const finals = (after.thread.messages || []).filter((m: any) => m.role === "assistant");
@@ -248,9 +261,14 @@ describe("CHAT-PRESENCE — turn-presence marker lifecycle (behavioral)", () => 
     assert.equal(data.thread, null);
     clearTurnActive(threadId);
   });
-});
 
-engine.close();
+  after(() => {
+    engine.close();
+    try {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    } catch {}
+  });
+});
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
