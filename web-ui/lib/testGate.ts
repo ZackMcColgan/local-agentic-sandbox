@@ -443,6 +443,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatQueue"),
     tests: ["tests/chatQueue.test.ts"]
   },
+  // CHAT-STEER mid-turn server steer mailbox
+  {
+    match: (p) => p.includes("app/api/threads") && p.includes("steer"),
+    tests: ["tests/chatSteer.test.ts"]
+  },
   {
     match: (p) =>
       p.includes("components/Navbar") ||

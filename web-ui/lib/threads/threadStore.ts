@@ -153,6 +153,61 @@ export class ThreadStore {
     return path.join(this.threadsDir, `${threadId}.json`);
   }
 
+  getSteerFilePath(threadId: string): string {
+    return path.join(this.threadsDir, `${threadId}.steer.json`);
+  }
+
+  appendSteer(threadId: string, text: string): number {
+    const trimmed = text.trim();
+    if (!trimmed) return this.getPendingSteers(threadId).length;
+    const steerFile = this.getSteerFilePath(threadId);
+    let pending: string[] = [];
+    try {
+      if (fs.existsSync(steerFile)) {
+        const raw = fs.readFileSync(steerFile, "utf8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) pending = parsed.filter((s) => typeof s === "string");
+      }
+    } catch {}
+    pending.push(trimmed);
+    try {
+      fs.writeFileSync(steerFile, JSON.stringify(pending, null, 2), { encoding: "utf8", mode: 0o660 });
+    } catch {}
+    return pending.length;
+  }
+
+  getPendingSteers(threadId: string): string[] {
+    const steerFile = this.getSteerFilePath(threadId);
+    try {
+      if (fs.existsSync(steerFile)) {
+        const raw = fs.readFileSync(steerFile, "utf8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter((s) => typeof s === "string");
+      }
+    } catch {}
+    return [];
+  }
+
+  consumeSteers(threadId: string): string[] {
+    const steerFile = this.getSteerFilePath(threadId);
+    const pending = this.getPendingSteers(threadId);
+    if (fs.existsSync(steerFile)) {
+      try {
+        fs.unlinkSync(steerFile);
+      } catch {}
+    }
+    return pending;
+  }
+
+  clearSteers(threadId: string): void {
+    const steerFile = this.getSteerFilePath(threadId);
+    if (fs.existsSync(steerFile)) {
+      try {
+        fs.unlinkSync(steerFile);
+      } catch {}
+    }
+  }
+
   /**
    * Seeds the approved Mockup 1 & 3 initial threads if no threads exist yet.
    */
