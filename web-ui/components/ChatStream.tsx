@@ -57,7 +57,7 @@ import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
-import { resolveTurnStatusPhase } from "../lib/chatStatus";
+import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
 import {
@@ -278,6 +278,14 @@ export function ChatStream({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStoppingTask, setIsStoppingTask] = useState(false);
+  const [activeThreadState, setActiveThreadId] = useState<string | undefined>(threadId);
+  const activeThreadIdRef = useRef<string | undefined>(threadId);
+  const activeThreadId = activeThreadIdRef.current || activeThreadState || threadId;
+
+  useEffect(() => {
+    setActiveThreadId(threadId);
+    activeThreadIdRef.current = threadId;
+  }, [threadId]);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -402,9 +410,13 @@ export function ChatStream({
   }, [threadId]);
 
   const handleToggleHostAccess = async () => {
-    let targetThreadId = threadId;
+    let targetThreadId = activeThreadId || threadId;
     if (!targetThreadId && onEnsureThread) {
       targetThreadId = (await onEnsureThread("New session")) || undefined;
+      if (targetThreadId) {
+        activeThreadIdRef.current = targetThreadId;
+        setActiveThreadId(targetThreadId);
+      }
     }
     if (!targetThreadId) {
       return;
@@ -735,10 +747,11 @@ export function ChatStream({
   };
 
   const handleManualCompact = async () => {
-    if (!threadId || isCompactingManually) return;
+    const currentThreadId = activeThreadId || threadId;
+    if (!currentThreadId || isCompactingManually) return;
     setIsCompactingManually(true);
     try {
-      const res = await fetch(`/api/threads/${threadId}/compact`, {
+      const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
@@ -760,9 +773,10 @@ export function ChatStream({
   };
 
   const handleRestoreCompaction = async () => {
-    if (!threadId) return;
+    const currentThreadId = activeThreadId || threadId;
+    if (!currentThreadId) return;
     try {
-      const res = await fetch(`/api/threads/${threadId}`, {
+      const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "restoreCompaction" })
@@ -777,9 +791,10 @@ export function ChatStream({
   };
 
   const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
-    if (!threadId) return;
+    const currentThreadId = activeThreadId || threadId;
+    if (!currentThreadId) return;
     try {
-      const res = await fetch(`/api/threads/${threadId}`, {
+      const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action })
@@ -939,7 +954,7 @@ export function ChatStream({
                 const idx = prev.findIndex((a) => a.id === approval.id);
                 const item: UiHostApproval = {
                   id: approval.id,
-                  threadId: approval.threadId || targetThreadId,
+                  threadId: approval.threadId || targetThreadId || activeThreadId || threadId,
                   tool: approval.tool,
                   args: approval.args || {},
                   riskReason: approval.riskReason || "Destructive action requires approval",
@@ -957,7 +972,8 @@ export function ChatStream({
             }
           } else if (event.type === "done") {
             const durationMs = Math.round(performance.now() - startTime);
-            const parsed = parseThinkingAndContent(event.content || accumulatedRawContent);
+            const mergedRaw = mergeStreamedTokens(accumulatedRawContent, event.content);
+            const parsed = parseThinkingAndContent(mergedRaw);
             const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
             const finalModel = event.model || currentModel;
             const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
@@ -970,9 +986,10 @@ export function ChatStream({
                 ? "incomplete"
                 : undefined);
 
-            if (targetThreadId && !activeSimulation) {
+            const effectiveThreadId = targetThreadId || activeThreadId || threadId;
+            if (effectiveThreadId && !activeSimulation) {
               try {
-                fetch(`/api/threads/${targetThreadId}`, {
+                fetch(`/api/threads/${effectiveThreadId}`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -1035,7 +1052,7 @@ export function ChatStream({
   };
 
   const runApprovalContinuation = async (approvalId: string) => {
-    const targetThreadId = threadId;
+    const targetThreadId = activeThreadId || threadId;
     setIsLoading(true);
     setStreamStatus("Continuing after host approval...");
     setErrorMsg(null);
@@ -1306,9 +1323,13 @@ export function ChatStream({
     const currentAttachments = [...attachedFiles];
     setAttachedFiles([]);
 
-    let activeThreadId = threadId;
+    let activeThreadId = activeThreadIdRef.current || activeThreadState || threadId;
     if (!activeThreadId && onEnsureThread) {
       activeThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+      if (activeThreadId) {
+        activeThreadIdRef.current = activeThreadId;
+        setActiveThreadId(activeThreadId);
+      }
     }
 
     const userMsgId = `user-${Date.now()}`;
@@ -1869,7 +1890,7 @@ export function ChatStream({
                     New thread
                   </button>
                 )}
-                {threadId && (
+                {(activeThreadId || threadId) && (
                   <button
                     type="button"
                     onClick={handleManualCompact}
