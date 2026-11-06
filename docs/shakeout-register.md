@@ -328,7 +328,7 @@
 
 ## Part 4 - Chat Runtime Fix-Phase Register (Nov 5, 2026)
 
-**Round:** Fix phase on branch `feature/chat-runtime-fixes` (Part 1-3 defects below moved to punch-list `argon-cto/punchlist/punch-list.md`, IDs CHAT-1..CHAT-6). This section carries the defects registered here: CHAT-7 (new, Nov 5) and CHAT-8 (new, Nov 5), plus the CHAT-6 truth-up written under the punch-list entry.
+**Round:** Fix phase on branch `feature/chat-runtime-fixes` (Part 1-3 defects below moved to punch-list `argon-cto/punchlist/punch-list.md`, IDs CHAT-1..CHAT-6). This section carries the defects registered here: CHAT-7 (new, Nov 5) and CHAT-8 (new, Nov 5), plus the CHAT-6 truth-up written under the punch-list entry. **CHAT-5 disposition (Nov 6, 2026):** closed via branch `feature/chat5-thread-identity` commit `18ddd43` (deployed `v-18ddd43-mw4arfie`) — behavior (a) SUPERSEDED-with-evidence (already present in HEAD), behavior (b) FIXED (`mergeStreamedTokens` merge instead of done-event replacement); full evidence in punch-list `CHAT-5` and its PR.
 
 ### [CHAT-7] Tool Loop Governed by a Fixed 8-Round Ceiling
 - **Feature:** Chat Tool-Loop Continuation (`/api/chat`)

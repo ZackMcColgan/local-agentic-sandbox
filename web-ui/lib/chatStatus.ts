@@ -118,3 +118,36 @@ export function extractDoneTurnStatus(event: {
       : undefined)
   );
 }
+
+/**
+ * Merges accumulated streamed tokens with server final event content,
+ * ensuring tokens streamed during prior rounds are never discarded (CHAT-5).
+ */
+export function mergeStreamedTokens(accumulatedRaw: string, eventContent?: string): string {
+  const acc = (accumulatedRaw || "").trim();
+  const evt = (eventContent || "").trim();
+
+  if (!evt) return acc;
+  if (!acc) return evt;
+  if (acc === evt) return evt;
+
+  // If one is already a complete superset of the other, return the superset
+  if (evt.includes(acc)) return evt;
+  if (acc.includes(evt)) return acc;
+
+  // If eventContent is an incomplete/pause banner, append it
+  if (evt.startsWith("⚠️ [Turn")) {
+    return `${acc}\n\n${evt}`;
+  }
+
+  // Check if evt overlaps with the end of acc
+  const maxOverlap = Math.min(acc.length, evt.length);
+  for (let len = maxOverlap; len > 0; len--) {
+    if (acc.endsWith(evt.slice(0, len))) {
+      return acc + evt.slice(len);
+    }
+  }
+
+  // Otherwise, join them cleanly with a double newline
+  return `${acc}\n\n${evt}`;
+}

@@ -127,7 +127,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/artifactDeliveryAndPolish.test.ts",
       "tests/chatUiHonestyAndCopy.test.ts",
       "tests/chatFilePaging.test.ts",
-      "tests/chatTurnHonesty.test.ts"
+      "tests/chatTurnHonesty.test.ts",
+      "tests/chatStreamTokenPreservation.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -424,7 +425,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts"]
+    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts", "tests/chatStreamTokenPreservation.test.ts"]
   },
   // CHAT-8 live streaming visibility (server snapshots + client poll loop)
   {
