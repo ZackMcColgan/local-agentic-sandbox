@@ -425,12 +425,23 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts", "tests/chatStreamTokenPreservation.test.ts"]
+    tests: [
+      "tests/chatStreaming.test.ts",
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatStreamTokenPreservation.test.ts",
+      "tests/chatQueue.test.ts"
+    ]
   },
   // CHAT-8 live streaming visibility (server snapshots + client poll loop)
   {
     match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
     tests: ["tests/chatLiveVisibility.test.ts"]
+  },
+  // CHAT-QUEUE client-side message queue
+  {
+    match: (p) => p.includes("lib/chatQueue"),
+    tests: ["tests/chatQueue.test.ts"]
   },
   {
     match: (p) =>

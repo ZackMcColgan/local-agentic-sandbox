@@ -60,6 +60,7 @@ import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
+import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
   parseSimulateCommand,
   createSimulatedChatResponse,
@@ -546,6 +547,28 @@ export function ChatStream({
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
+
+  // CHAT-QUEUE: Client-side message queue during active turns
+  const turnActiveRef = useRef<boolean>(false);
+  useEffect(() => {
+    turnActiveRef.current = isGeneratingOrRunning;
+  }, [isGeneratingOrRunning]);
+
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const chatQueueRef = useRef<ChatQueue | null>(null);
+
+  // Sync / instantiate queue for current thread
+  useEffect(() => {
+    const tid = activeThreadId || threadId;
+    if (typeof window !== "undefined" && tid) {
+      const q = new ChatQueue(window.localStorage, tid);
+      chatQueueRef.current = q;
+      setQueueItems(q.items());
+    } else {
+      chatQueueRef.current = null;
+      setQueueItems([]);
+    }
+  }, [activeThreadId, threadId]);
 
   useEffect(() => {
     return () => {
@@ -1206,8 +1229,44 @@ export function ChatStream({
   };
 
   const handleSend = async (textToSend?: string) => {
-    const prompt = (textToSend || input).trim();
-    if ((!prompt && attachedFiles.length === 0) || isGeneratingOrRunning) return;
+    const rawPrompt = (textToSend !== undefined ? textToSend : input);
+    const prompt = rawPrompt.trim();
+    const hasAttachments = attachedFiles.length > 0;
+
+    const action = decideSendAction({
+      running: isGeneratingOrRunning,
+      hasAttachments,
+      text: prompt
+    });
+
+    if (action === "blocked-attachments") {
+      if (isGeneratingOrRunning && hasAttachments) {
+        setErrorMsg("Attachments cannot be queued while a turn is active. Please wait or send text only.");
+      }
+      return;
+    }
+
+    if (action === "enqueue") {
+      let targetThreadId = activeThreadId || threadId;
+      if (!targetThreadId && onEnsureThread) {
+        targetThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+        if (targetThreadId) {
+          activeThreadIdRef.current = targetThreadId;
+          setActiveThreadId(targetThreadId);
+        }
+      }
+      if (typeof window !== "undefined" && targetThreadId) {
+        const q = chatQueueRef.current || new ChatQueue(window.localStorage, targetThreadId);
+        chatQueueRef.current = q;
+        q.enqueue(prompt);
+        setQueueItems(q.items());
+        setInput("");
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+      }
+      return;
+    }
+
+    if (!prompt && !hasAttachments) return;
 
     // Check if this is a simulation command (/simulate <scenario> [speed])
     const simCmd = parseSimulateCommand(prompt);
@@ -1380,6 +1439,7 @@ export function ChatStream({
     abortControllerRef.current = abortController;
     const assistantMsgId = `assistant-${Date.now()}`;
     activeAssistantMsgIdRef.current = assistantMsgId;
+    let turnEndedNormally = false;
 
     try {
       const res = isSimulating && simKey
@@ -1423,6 +1483,7 @@ export function ChatStream({
       }
 
       await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
+      turnEndedNormally = true;
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Chat stream aborted by user");
@@ -1448,6 +1509,18 @@ export function ChatStream({
       setStreamStatus(null);
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
+
+      // Drain exactly ONE queued item on normal DONE (never on abort/error)
+      if (turnEndedNormally && chatQueueRef.current) {
+        const nextItem = drainNextForTurnEnd(chatQueueRef.current, "done");
+        if (nextItem) {
+          setQueueItems(chatQueueRef.current.items());
+          // Schedule next turn via handleSend
+          setTimeout(() => {
+            handleSend(nextItem.text);
+          }, 50);
+        }
+      }
     }
   };
 
@@ -2833,6 +2906,54 @@ export function ChatStream({
       {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
       <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
         
+        {/* CHAT-QUEUE: Queue Chips above composer with per-item × and clear all */}
+        {queueItems.length > 0 && (
+          <div data-testid="chat-queue-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto overflow-x-auto scrollbar-none">
+            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
+              <span>Queue ({queueItems.length}):</span>
+            </span>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {queueItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  data-testid="chat-queue-chip"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-medium text-emerald-950 dark:text-emerald-200 shrink-0 max-w-[220px]"
+                >
+                  <span className="truncate" title={item.text}>
+                    {idx + 1}. {item.text}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove queued item ${idx + 1}`}
+                    onClick={() => {
+                      if (chatQueueRef.current) {
+                        chatQueueRef.current.remove(item.id);
+                        setQueueItems(chatQueueRef.current.items());
+                      }
+                    }}
+                    className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-950 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              data-testid="chat-queue-clear-all"
+              onClick={() => {
+                if (chatQueueRef.current) {
+                  chatQueueRef.current.clearAll();
+                  setQueueItems([]);
+                }
+              }}
+              className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
         {/* Attachment Chips above input */}
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
