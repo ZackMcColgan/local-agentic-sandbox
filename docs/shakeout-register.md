@@ -323,3 +323,62 @@
   - Wired floating Jump to Bottom button and user send actions to explicitly re-pin follow mode.
 - **Severity:** **P2** (Viewport reading ergonomics degraded during long responses).
 - **Status:** **FIXED** (2026-11-01; commit a7cf59a; verified via Playwright unit and live browser acceptance tests).
+
+---
+
+## Part 4 - Chat Runtime Fix-Phase Register (Nov 5, 2026)
+
+**Round:** Fix phase on branch `feature/chat-runtime-fixes` (Part 1-3 defects below moved to punch-list `argon-cto/punchlist/punch-list.md`, IDs CHAT-1..CHAT-6). This section carries the defects registered here: CHAT-7 (new, Nov 5) and CHAT-8 (new, Nov 5), plus the CHAT-6 truth-up written under the punch-list entry.
+
+### [CHAT-7] Tool Loop Governed by a Fixed 8-Round Ceiling
+- **Feature:** Chat Tool-Loop Continuation (`/api/chat`)
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts` (`MAX_TOOL_ROUNDS` loop)
+  - `web-ui/lib/contextBudget.ts` (`canContinueToolLoop`, `runChatToolLoop`)
+- **Discovery:** Owner + sandbox chat driver, Nov 5, 2026. A multi-step inventory turn (git status + log + progress file + uncommitted inventory) needed ~9-12 tool rounds and hit the ceiling mid-task, ending with a `⚠️ [Tool execution limit reached (8 rounds).]` marker while work remained.
+- **Steps to Reproduce:**
+  1. Ask the chat agent for a multi-step inventory that needs more than 8 tool calls (host git status + git log + read a progress file + inventory uncommitted work).
+  2. Observe the turn end at exactly 8 rounds with the limit marker and an unfinished summary.
+- **Expected Behavior:** Tool rounds continue while context headroom remains; a turn ends when it has no more tool calls to make, when the context budget is exhausted, or only at a runaway backstop - never at an ordinary 8-round wall.
+- **Actual Behavior:** `MAX_TOOL_ROUNDS = 8` hard-capped every turn; `canContinueToolLoop` returned only a boolean and did not consult token headroom.
+- **Resolution:**
+  - Continuation governed by context headroom (`estimateTokens(conversationMessages) <= budgetTokens`); the 8-round wall removed from the route entirely.
+  - `TOOL_ROUND_BACKSTOP = 1000` as a runaway guard only; at the last permitted round `forceSynthesis` is set so tools are omitted and the model synthesizes.
+  - `canContinueToolLoop` returns `ToolLoopDecision { canContinue, stopReason?, forceSynthesis? }` with stop reasons `completed` / `budget` / `backstop` / `web-research-cap`.
+  - Round-0 guard: `lastRoundTools = []` must NOT stop round 0 (route initializes it before any round runs). Regression test added.
+  - Grounding enforcement passes `awaitingToolRound: true` so an injected directive is not swallowed by the `completed` stop.
+  - Web-research extension preserved: a round whose tools are exclusively research tools continues while `webResearchCalls < MAX_WEB_RESEARCH_CALLS` (100).
+  - Honest pause markers keyed on stop reason for `budget`, `web-research-cap`, `backstop`.
+- **Severity:** **P1** (turns truncated mid-task with a misleading limit marker; driver hit its limit literally).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit e0c4caf, deployed as image `local-agentic-sandbox-web-ui:v-e0c4caf-905758`. Fresh-thread acceptance on `thread-1793911038074-jjan`: Step 0 inventory turn completed in ONE turn (~1150s wall, 10 tool traces, single `done` event, status `completed`, no ⚠️ marker). Gate 314/314 at commit; full gate 326/326 after CHAT-8).
+
+---
+
+### [CHAT-8] Turns Invisible Live on Other Devices Until Completion
+- **Feature:** Chat Live Visibility / Cross-Device Mid-Turn Rendering
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts` (assistant message persisted only at turn end: done / error / abort)
+  - `web-ui/lib/threads/threadStore.ts` (`ThreadMessage.status` union)
+  - `web-ui/app/page.tsx` (thread load + polling loop)
+  - `web-ui/components/ChatStream.tsx` (`ChatMessage.status` union, turn-status badge rendering)
+- **Discovery:** Owner report + fix-phase audit, Nov 5, 2026. A turn running on one device shows nothing on any other device viewing the same thread: the server writes no assistant message to the ThreadStore until the turn ends (`done`/`error`/`abort` persistence), and clients only load thread messages once on thread switch (plus task-status polling for Build-mode runs, not chat turns).
+- **Steps to Reproduce:**
+  1. Start a long chat turn on device A.
+  2. On device B (or a second browser/profile), open the same thread.
+  3. Observe device B during the turn.
+- **Expected Behavior:**
+  1. The server writes throttled (~1/sec) ThreadStore snapshots of the streaming assistant content with message status `streaming` while the turn runs.
+  2. A client viewing a thread whose latest assistant message is `streaming` polls `GET /api/threads/[id]` every ~1.5s and re-renders partial content until the status flips to a terminal state.
+  3. The turn stays honestly "live" server-side while running (not reconciled to stopped by a mid-turn GET).
+- **Actual Behavior:**
+  1. Mid-turn `GET /api/threads/[id]` returns no assistant message (or the stale previous one) until the turn completes.
+  2. No chat-turn polling existed on the client; only task (Build-mode) polling.
+  3. Plain chat turns never registered the thread id in `activeExecutionSet`, so a mid-turn GET could reconcile an active thread to `stopped` and flag the last assistant message `isStopped`.
+- **Resolution:**
+  - `web-ui/lib/streamSnapshot.ts`: `ThrottledStreamSnapshot.maybeWrite()` writes `{ id: assistantMessageId, role: "assistant", content: accumulatedStreamedTokens, status: "streaming" }` into the ThreadStore at most once per `STREAM_SNAPSHOT_INTERVAL_MS` (1000 ms), keyed by the same message id so terminal persistence overwrites it (upsert).
+  - `web-ui/app/api/chat/route.ts`: registers `activeThreadId` in `activeExecutionSet` for the duration of the turn (delete in `finally`), and calls `maybeWrite(accumulatedStreamedTokens)` in both the tool-round loop and the synthesis loop.
+  - `web-ui/lib/threads/threadStore.ts` + `web-ui/components/ChatStream.tsx`: `status` unions extended with `"streaming"`; honest cyan "Streaming" badge rendered.
+  - `web-ui/app/page.tsx`: while the latest assistant message of the selected thread is `streaming`, recursive `setTimeout` poll of `GET /api/threads/[id]` every `STREAM_POLL_INTERVAL_MS` (1500 ms), re-rendering messages until the status flips.
+  - Two-client API test proves partial content visible mid-turn and convergence on terminal status.
+- **Severity:** **P1** (core cross-device visibility degraded; a live turn appears frozen/hung on second client).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit 4bc71fc, deployed as image `local-agentic-sandbox-web-ui:v-4bc71fc-mw436dvd`. Dedicated suite `tests/chatLiveVisibility.test.ts` 8/8; gate 326/326. Two-client live acceptance on `thread-1793917113300-ip48`: persistent client streamed 143,982 SSE bytes to `done`; second client saw 73 `streaming` snapshots growing 1 → 11,162 chars via 1.5s polls, single transition streaming→completed, final 11,329 chars, exactly one upserted assistant message, no ⚠️ marker).

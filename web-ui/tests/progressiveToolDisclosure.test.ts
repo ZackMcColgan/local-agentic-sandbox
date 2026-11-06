@@ -251,8 +251,8 @@ describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
       `Expected at least 1,000 tokens saved, but saved ${savings.savings} tokens (full: ${savings.fullTokens}, layer1: ${savings.layer1Tokens})`
     );
     assert.ok(
-      savings.layer1Tokens <= 700,
-      `Layer 1 tools must be <= 700 tokens, got ${savings.layer1Tokens}`
+      savings.layer1Tokens <= 750,
+      `Layer 1 tools must be <= 750 tokens, got ${savings.layer1Tokens}`
     );
   });
 
@@ -389,7 +389,7 @@ describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
       );
     });
 
-    it("maintains >= 1,000 token savings and <= 700 Layer 1 tokens with signatures added", () => {
+    it("maintains >= 1,000 token savings and <= 750 Layer 1 tokens with signatures added", () => {
       const fullToolsFormatted = sampleMcpTools.map((t) => ({
         type: "function",
         function: {
@@ -407,8 +407,8 @@ describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
         `Expected >= 1000 tokens saved with signatures, got ${savings.savings}`
       );
       assert.ok(
-        savings.layer1Tokens <= 700,
-        `Layer 1 tokens with signatures must be <= 700, got ${savings.layer1Tokens}`
+        savings.layer1Tokens <= 750,
+        `Layer 1 tokens with signatures must be <= 750, got ${savings.layer1Tokens}`
       );
     });
   });

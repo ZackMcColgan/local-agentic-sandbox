@@ -17,12 +17,32 @@ export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the context window]";
 
 export const TOOL_TRUNCATION_MARKER = "...[truncated]";
-export const MAX_TOOL_OUTPUT_CHARS = 2000;
+export const MAX_TOOL_OUTPUT_CHARS = 64000;
 
 export const FINAL_ROUND_SYNTHESIS_DIRECTIVE =
   "You have gathered enough information. Synthesize your final answer now using only the tool results above. Do not call more tools.";
 
 export const MAX_WEB_RESEARCH_CALLS = 100;
+
+/**
+ * CHAT-7: rounds are governed by remaining context headroom, not a fixed ceiling.
+ * TOOL_ROUND_BACKSTOP is the runaway-guard: an absolute round limit that exists
+ * only to stop a pathological loop, never as a normal work ceiling.
+ */
+export const TOOL_ROUND_BACKSTOP = 1000;
+
+export type ToolLoopStopReason = "completed" | "budget" | "backstop" | "web-research-cap";
+
+export interface ToolLoopDecision {
+  canContinue: boolean;
+  /** Set when canContinue is false — why the loop stopped (CHAT-7 honest pause markers). */
+  stopReason?: ToolLoopStopReason;
+  /**
+   * Set when canContinue is true but this is the last permitted round:
+   * tools must be omitted from the payload and synthesis forced.
+   */
+  forceSynthesis?: boolean;
+}
 
 export const WEB_RESEARCH_TOOL_NAMES = new Set(["search_web", "fetch_webpage_markdown"]);
 
@@ -480,7 +500,7 @@ export function fitContextWindow(
 }
 
 /**
- * Clamps raw tool output to maxChars (default 2000) ending with a truncation marker.
+ * Clamps raw tool output to maxChars (default 64000) ending with structured paging metadata.
  */
 export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
   if (typeof raw !== "string") {
@@ -489,8 +509,10 @@ export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): 
   if (raw.length <= maxChars) {
     return raw;
   }
-  const keepChars = Math.max(0, maxChars - TOOL_TRUNCATION_MARKER.length);
-  return raw.slice(0, keepChars) + TOOL_TRUNCATION_MARKER;
+  const totalChars = raw.length;
+  const marker = `\n...[TRUNCATED: Output was ${totalChars} chars, showing first ${maxChars} chars. Use start_line/end_line or offset/limit to read remaining chunks.]`;
+  const keepChars = Math.max(0, maxChars - marker.length);
+  return raw.slice(0, keepChars) + marker;
 }
 
 export interface RunChatToolLoopOptions {
@@ -529,7 +551,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     conversationMessages,
     activeModel = "qwen3.8:27b-q3_k_m",
     effectiveReasoningEffort = "medium",
-    maxToolRounds = 8,
+    maxToolRounds = TOOL_ROUND_BACKSTOP,
     maxContentTokens = CHAT_CONTEXT_BUDGET_TOKENS,
     executeTool
   } = options;
@@ -542,11 +564,28 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   let round = 0;
   let finalContent = "";
   let hasExecutedWebSearch = false;
+  let lastRoundTools: string[] = [];
+  let webResearchCalls = 0;
+  let groundingRoundPending = false;
   const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
   const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
-  while (round < maxToolRounds) {
+  while (true) {
+    // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
+    // as an explicit (optional) backstop override rather than a normal work ceiling.
+    const decision = canContinueToolLoop({
+      round,
+      contextTokens: estimateTokens(conversationMessages),
+      budgetTokens: maxContentTokens,
+      lastRoundTools,
+      webResearchCalls,
+      roundBackstop: maxToolRounds,
+      awaitingToolRound: groundingRoundPending
+    });
+    if (!decision.canContinue) break;
+    groundingRoundPending = false;
+
     const compaction = compactConversationHistory(conversationMessages, {
       maxContentTokens
     });
@@ -555,7 +594,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       conversationMessages.push(...compaction.messages);
     }
 
-    const isFinalRound = round === maxToolRounds - 1;
+    const isFinalRound = decision.forceSynthesis === true;
     if (isFinalRound) {
       mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
@@ -604,6 +643,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
         round < maxToolRounds - 1
       ) {
         hasExecutedWebSearch = true;
+        groundingRoundPending = true;
         mergeSystemDirective(
           conversationMessages,
           "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Invoke 'search_web' now."
@@ -628,13 +668,17 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
 
     for (const toolCall of toolCallsFromMessage) {
       const toolResult = await executeTool(toolCall);
+      const toolName = toolCall.function?.name || toolCall.name;
+      if (isWebResearchTool(toolName)) webResearchCalls++;
+      const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
       conversationMessages.push({
         role: "tool",
-        name: toolCall.function?.name || "tool",
-        content: clampToolOutput(JSON.stringify(toolResult))
+        name: toolName,
+        content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))
       });
     }
 
+    lastRoundTools = toolCallsFromMessage.map((tc: any) => tc.function?.name || tc.name || "");
     round++;
   }
 
@@ -642,24 +686,57 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
 }
 
 
+/**
+ * CHAT-7: budget-governed tool-round continuation.
+ *
+ * Rounds continue while the conversation still fits the context budget. When headroom
+ * is gone, the loop stops and synthesis is handed to the route's post-tool synthesis
+ * pass — except for exclusively web-research rounds, which may keep extending while
+ * the web-research call budget (MAX_WEB_RESEARCH_CALLS) still has room (Round-1 item 2
+ * semantics preserved). TOOL_ROUND_BACKSTOP is the runaway guard.
+ *
+ * "completed" means the previous round produced no tool calls, so the turn is done.
+ * It must NEVER fire on round 0: route.ts starts with lastRoundTools = [] before any
+ * round has run, and stopping there would execute zero tool rounds.
+ */
 export function canContinueToolLoop(options: {
   round: number;
-  maxToolRounds: number;
+  contextTokens: number;
+  budgetTokens?: number;
   lastRoundTools?: string[];
   webResearchCalls: number;
-}): boolean {
-  const { round, maxToolRounds, lastRoundTools = [], webResearchCalls } = options;
-  if (round < maxToolRounds) {
-    return true;
+  roundBackstop?: number;
+  /**
+   * A directive (e.g. grounding enforcement) was injected demanding a tool round next.
+   * While set, an empty lastRoundTools must NOT be read as "turn completed".
+   */
+  awaitingToolRound?: boolean;
+}): ToolLoopDecision {
+  const { round, contextTokens, lastRoundTools = [], webResearchCalls } = options;
+  const budgetTokens = options.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+  const backstop = options.roundBackstop ?? TOOL_ROUND_BACKSTOP;
+
+  if (round >= backstop) {
+    return { canContinue: false, stopReason: "backstop" };
   }
-  // Rounds beyond maxToolRounds are permitted ONLY while the previous round's calls
-  // were exclusively web-research tools AND webResearchCalls < MAX_WEB_RESEARCH_CALLS.
-  if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
-    return false;
+
+  // A round that ran and produced no tool calls => the turn has completed.
+  if (round > 0 && lastRoundTools.length === 0 && !options.awaitingToolRound) {
+    return { canContinue: false, stopReason: "completed" };
   }
-  if (!lastRoundTools || lastRoundTools.length === 0) {
-    return false;
+
+  if (contextTokens > budgetTokens) {
+    const allResearch = lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
+    if (allResearch && webResearchCalls < MAX_WEB_RESEARCH_CALLS) {
+      return { canContinue: true, forceSynthesis: false };
+    }
+    return {
+      canContinue: false,
+      stopReason: webResearchCalls >= MAX_WEB_RESEARCH_CALLS ? "web-research-cap" : "budget"
+    };
   }
-  const isAllResearch = lastRoundTools.every((t) => isWebResearchTool(t));
-  return isAllResearch;
+
+  // Headroom remains: keep gathering. The last permitted round under an explicit
+  // (tight) backstop is a synthesis round with tools omitted.
+  return { canContinue: true, forceSynthesis: round >= backstop - 1 };
 }

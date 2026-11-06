@@ -390,7 +390,11 @@ export const HOST_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Absolute path on the host machine." }
+          path: { type: "string", description: "Absolute path on the host machine." },
+          start_line: { type: "number", description: "Optional start line (1-indexed)." },
+          end_line: { type: "number", description: "Optional end line (1-indexed)." },
+          offset: { type: "number", description: "Optional line offset." },
+          limit: { type: "number", description: "Optional line count limit." }
         },
         required: ["path"]
       }

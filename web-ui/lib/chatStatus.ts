@@ -1,3 +1,5 @@
+import { cleanResidualToolTags } from "./toolParser";
+
 export const TURN_PHASE_PREPARING = "Preparing context & tools" as const;
 export const TURN_PHASE_REASONING = "Reasoning" as const;
 export const TURN_PHASE_WRITING = "Writing answer" as const;
@@ -49,4 +51,70 @@ export function resolveTurnStatusPhase(input: TurnStatusInput): string | null {
     return TURN_PHASE_REASONING;
   }
   return TURN_PHASE_PREPARING;
+}
+
+export interface TurnCompletionResult {
+  cleanedContent: string;
+  turnStatus: "completed" | "incomplete" | undefined;
+  isIncomplete: boolean | undefined;
+}
+
+/**
+ * Pure turn completion evaluator implementing Never-Silent Turns (CHAT-1)
+ * and message incomplete status flagging (CHAT-3).
+ */
+export function evaluateTurnCompletion({
+  content,
+  round,
+  maxToolRounds,
+  tracesCount
+}: {
+  content?: string;
+  round: number;
+  maxToolRounds: number;
+  tracesCount: number;
+}): TurnCompletionResult {
+  let cleanedContent = cleanResidualToolTags(content || "");
+  let turnStatus: "completed" | "incomplete" | undefined = undefined;
+
+  if (!cleanedContent) {
+    turnStatus = "incomplete";
+    if (round >= maxToolRounds) {
+      cleanedContent = `⚠️ [Turn paused: Tool execution limit reached (${round} rounds). Traces captured above; synthesis returned no text.]`;
+    } else if (tracesCount > 0) {
+      cleanedContent = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]`;
+    } else if (content?.trim()) {
+      cleanedContent = content.trim();
+      turnStatus = undefined;
+    } else {
+      cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+      turnStatus = undefined;
+    }
+  } else if (round >= maxToolRounds) {
+    turnStatus = "incomplete";
+    cleanedContent = `${cleanedContent}\n\n⚠️ [Turn paused: Tool execution limit reached (${round} rounds).]`;
+  }
+
+  return {
+    cleanedContent,
+    turnStatus,
+    isIncomplete: turnStatus === "incomplete" ? true : undefined
+  };
+}
+
+/**
+ * Extracts turn status from SSE done event fields or content markers.
+ */
+export function extractDoneTurnStatus(event: {
+  status?: "completed" | "incomplete" | "error";
+  isIncomplete?: boolean;
+  content?: string;
+}): "completed" | "incomplete" | "error" | undefined {
+  return (
+    event.status ||
+    (event.isIncomplete ? "incomplete" : undefined) ||
+    (event.content?.includes("⚠️ [Turn paused:") || event.content?.includes("⚠️ [Turn incomplete:")
+      ? "incomplete"
+      : undefined)
+  );
 }

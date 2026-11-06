@@ -11,6 +11,7 @@ import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
+import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   Layers,
@@ -424,6 +425,38 @@ export default function Home() {
 
     loadSelectedThread();
   }, [selectedThreadId]);
+
+  // CHAT-8: live mid-turn visibility — poll the selected thread while its latest
+  // assistant message is "streaming", re-rendering partial content until the
+  // status flips to a terminal state.
+  const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
+  const isThreadLiveStreaming = isLiveStreamingMessage(latestAssistantMessage);
+  useEffect(() => {
+    if (!selectedThreadId || !isThreadLiveStreaming) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const pollLiveThread = async () => {
+      try {
+        const res = await fetch(`/api/threads/${selectedThreadId}`);
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (Array.isArray(data?.thread?.messages)) {
+          setMessages(data.thread.messages);
+          const lastAssistant = [...data.thread.messages].reverse().find((m: ChatMessage) => m.role === "assistant");
+          if (isLiveStreamingMessage(lastAssistant) && active) {
+            timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
+          }
+        }
+      } catch (err) {
+        console.warn("Live thread poll notice:", err);
+      }
+    };
+    timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [selectedThreadId, isThreadLiveStreaming]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
   useEffect(() => {

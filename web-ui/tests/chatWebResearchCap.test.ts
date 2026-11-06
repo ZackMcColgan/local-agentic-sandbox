@@ -7,7 +7,8 @@ import {
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   WEB_RESEARCH_TOOL_NAMES,
   filterToolsForWebBudget,
-  canContinueToolLoop
+  canContinueToolLoop,
+  CHAT_CONTEXT_BUDGET_TOKENS
 } from "../lib/contextBudget.js";
 
 describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
@@ -59,22 +60,85 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
     );
   });
 
-  it("canContinueToolLoop allows rounds beyond 8 only for exclusively web-research rounds within budget", () => {
+  it("canContinueToolLoop allows rounds beyond the legacy 8-round ceiling while headroom or research extension holds", () => {
     assert.equal(typeof canContinueToolLoop, "function", "canContinueToolLoop must be exported");
 
-    // Round < 8: always continues
-    assert.equal(canContinueToolLoop({ round: 0, maxToolRounds: 8, lastRoundTools: ["workspace_write_file"], webResearchCalls: 0 }), true);
-    assert.equal(canContinueToolLoop({ round: 7, maxToolRounds: 8, lastRoundTools: ["workspace_write_file"], webResearchCalls: 0 }), true);
+    // CHAT-7 port: continuation is governed by context headroom, not a round counter.
+    // Headroom present => rounds continue with tools (covers rounds 0 and 7).
+    assert.equal(
+      canContinueToolLoop({
+        round: 0,
+        contextTokens: 1000,
+        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        lastRoundTools: ["workspace_write_file"],
+        webResearchCalls: 0
+      }).canContinue,
+      true
+    );
+    assert.equal(
+      canContinueToolLoop({
+        round: 7,
+        contextTokens: 1000,
+        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        lastRoundTools: ["workspace_write_file"],
+        webResearchCalls: 0
+      }).canContinue,
+      true
+    );
 
-    // Round 8 with non-research tools in last round: strictly stops
-    assert.equal(canContinueToolLoop({ round: 8, maxToolRounds: 8, lastRoundTools: ["workspace_write_file"], webResearchCalls: 5 }), false);
-    assert.equal(canContinueToolLoop({ round: 8, maxToolRounds: 8, lastRoundTools: ["search_web", "workspace_write_file"], webResearchCalls: 5 }), false);
+    // Budget exhausted with non-research tools in the last round: strictly stops.
+    const over = CHAT_CONTEXT_BUDGET_TOKENS + 5000;
+    const nonResearch = canContinueToolLoop({
+      round: 8,
+      contextTokens: over,
+      budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+      lastRoundTools: ["workspace_write_file"],
+      webResearchCalls: 5
+    });
+    assert.equal(nonResearch.canContinue, false);
+    assert.equal(nonResearch.stopReason, "budget");
 
-    // Round 8 with research-only tools in last round and webResearchCalls < 100: continues
-    assert.equal(canContinueToolLoop({ round: 8, maxToolRounds: 8, lastRoundTools: ["search_web"], webResearchCalls: 8 }), true);
-    assert.equal(canContinueToolLoop({ round: 15, maxToolRounds: 8, lastRoundTools: ["fetch_webpage_markdown"], webResearchCalls: 15 }), true);
+    const mixed = canContinueToolLoop({
+      round: 8,
+      contextTokens: over,
+      budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+      lastRoundTools: ["search_web", "workspace_write_file"],
+      webResearchCalls: 5
+    });
+    assert.equal(mixed.canContinue, false);
+    assert.equal(mixed.stopReason, "budget");
 
-    // Round 8+ when webResearchCalls >= 100: stops
-    assert.equal(canContinueToolLoop({ round: 100, maxToolRounds: 8, lastRoundTools: ["search_web"], webResearchCalls: 100 }), false);
+    // Budget exhausted but research-only rounds under the call budget keep extending.
+    assert.equal(
+      canContinueToolLoop({
+        round: 8,
+        contextTokens: over,
+        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        lastRoundTools: ["search_web"],
+        webResearchCalls: 8
+      }).canContinue,
+      true
+    );
+    assert.equal(
+      canContinueToolLoop({
+        round: 15,
+        contextTokens: over,
+        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        lastRoundTools: ["fetch_webpage_markdown"],
+        webResearchCalls: 15
+      }).canContinue,
+      true
+    );
+
+    // Rounds past the ceiling stop once the web-research call budget is spent.
+    const capped = canContinueToolLoop({
+      round: 100,
+      contextTokens: over,
+      budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+      lastRoundTools: ["search_web"],
+      webResearchCalls: MAX_WEB_RESEARCH_CALLS
+    });
+    assert.equal(capped.canContinue, false);
+    assert.equal(capped.stopReason, "web-research-cap");
   });
 });

@@ -35,6 +35,7 @@ export interface ThreadMessage {
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
   selectedModel?: string;
+  status?: "completed" | "incomplete" | "error" | "streaming";
 }
 
 export interface ThreadCompactionBoundary {
@@ -482,17 +483,21 @@ export class ThreadStore {
     const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
     try {
       fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
+      try { fs.chmodSync(tempFile, 0o660); } catch {}
       fs.renameSync(tempFile, targetFile);
+      try { fs.chmodSync(targetFile, 0o660); } catch {}
     } catch (err) {
       if (fs.existsSync(tempFile)) {
         try { fs.unlinkSync(tempFile); } catch {}
       }
       // Fallback to direct write if rename fails across partitions
       fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
+      try { fs.chmodSync(targetFile, 0o660); } catch {}
     }
   }
 
   createThread(params: {
+    id?: string;
     title?: string;
     model?: string;
     reasoningEffort?: "low" | "medium" | "xhigh";
@@ -502,7 +507,7 @@ export class ThreadStore {
     scope?: TaskScope;
     isTest?: boolean;
   }): Thread {
-    const threadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const title = params.title || (params.initialPrompt && params.initialPrompt.trim() ? params.initialPrompt.trim().slice(0, 40) : "New thread");
     const thread: Thread = {
       id: threadId,
@@ -543,7 +548,18 @@ export class ThreadStore {
     if (!thread) return null;
 
     thread.messages = thread.messages || [];
-    thread.messages.push(message);
+    const existingIdx = thread.messages.findIndex((m) => m.id === message.id);
+    if (existingIdx >= 0) {
+      const cleanMessage = Object.fromEntries(
+        Object.entries(message).filter(([_, v]) => v !== undefined)
+      ) as Partial<ThreadMessage>;
+      thread.messages[existingIdx] = {
+        ...thread.messages[existingIdx],
+        ...cleanMessage
+      };
+    } else {
+      thread.messages.push(message);
+    }
 
     if (message.role === "user") {
       if (
@@ -567,6 +583,10 @@ export class ThreadStore {
 
     this.saveThread(thread);
     return thread;
+  }
+
+  upsertMessage(threadId: string, message: ThreadMessage): Thread | null {
+    return this.addMessage(threadId, message);
   }
 
   async deleteThread(threadId: string): Promise<boolean> {

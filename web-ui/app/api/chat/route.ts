@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
+import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
   recordTurnOutputWrite,
@@ -46,9 +47,11 @@ import {
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
   isLiveRealTimeIntent,
   canContinueToolLoop,
+  TOOL_ROUND_BACKSTOP,
   estimateTokens,
   CHAT_CONTEXT_BUDGET_TOKENS
 } from "@/lib/contextBudget";
+import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -117,9 +120,11 @@ interface TraceItem {
 
 async function connectMcpClient(url: string, name: string) {
   const sseUrl = normalizeMcpUrl(url);
+  let transport: SSEClientTransport | null = null;
+  let client: Client | null = null;
   try {
-    const transport = new SSEClientTransport(new URL(sseUrl));
-    const client = new Client(
+    transport = new SSEClientTransport(new URL(sseUrl));
+    client = new Client(
       { name, version: "1.0.0" },
       { capabilities: {} }
     );
@@ -129,6 +134,12 @@ async function connectMcpClient(url: string, name: string) {
     return { client, transport, tools: toolsResult.tools };
   } catch (err: any) {
     console.warn(`[Orchestrator] Could not connect to MCP at ${sseUrl}:`, err.message);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
+    if (transport) {
+      try { await transport.close(); } catch {}
+    }
     return null;
   }
 }
@@ -203,12 +214,22 @@ export async function POST(req: NextRequest) {
       mode: requestedMode,
       reasoning_effort: requestedReasoning,
       attachments,
-      approvalContinuationId
+      approvalContinuationId,
+      userMessageId: requestedUserMessageId,
+      assistantMessageId: requestedAssistantMessageId
     } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 });
     }
+
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const userPrompt = lastUserMsg?.content || "";
+    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
+    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
+
+    const userMessageId = requestedUserMessageId || lastUserMsg?.id || `msg-${Date.now()}-u`;
+    const assistantMessageId = requestedAssistantMessageId || `msg-${Date.now()}-a`;
 
     const mode: AgentMode = requestedMode || "auto";
 
@@ -235,6 +256,52 @@ export async function POST(req: NextRequest) {
 
     const activeThreadId = typeof requestedThreadId === "string" && requestedThreadId.trim() ? requestedThreadId.trim() : null;
     const threadsDir = resolveThreadsDir();
+    const threadStore = new ThreadStore(threadsDir);
+    let threadData: any = null;
+    let threadHostAccess = false;
+
+    if (activeThreadId) {
+      try {
+        threadData = await threadStore.getThread(activeThreadId);
+        if (!threadData) {
+          threadData = threadStore.createThread({
+            id: activeThreadId,
+            title: userPrompt.slice(0, 40) || "New thread"
+          });
+        }
+        if (threadData?.hostAccess) {
+          threadHostAccess = true;
+        }
+
+        // Turn Start (PIN 2 User Message): save user message immediately to threadStore
+        if (lastUserMsg && userPrompt.trim()) {
+          const alreadyPresent = (threadData.messages || []).some(
+            (m: any) => m.id === userMessageId || (m.role === "user" && m.content === userPrompt)
+          );
+          if (!alreadyPresent) {
+            const userMsgToSave = {
+              id: userMessageId,
+              role: "user" as const,
+              content: userPrompt,
+              attachments: attachments && attachments.length > 0 ? attachments : undefined,
+              timestamp: lastUserMsg.timestamp || new Date().toISOString()
+            };
+            threadStore.addMessage(activeThreadId, userMsgToSave);
+            threadData = await threadStore.getThread(activeThreadId);
+          }
+        }
+      } catch (err: any) {
+        console.warn("[ChatRoute] Turn start persistence warning:", err.message);
+      }
+
+      // CHAT-8: keep the thread honestly live while the turn runs so mid-turn
+      // GETs do not reconcile it to stopped, and snapshots can surface partial content.
+      activeExecutionSet.add(activeThreadId);
+    }
+
+    // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
+    const streamSnapshot = new ThrottledStreamSnapshot(threadStore, activeThreadId, assistantMessageId);
+
     const threadOutputsDir = activeThreadId ? path.join(threadsDir, activeThreadId, "files") : null;
     const threadOutputsRelPath = activeThreadId ? `${activeThreadId}/files` : null;
     if (threadOutputsDir) {
@@ -307,15 +374,49 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       }
     }
 
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-    const userPrompt = lastUserMsg?.content || "";
-    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
-    const priorUserPrompt: string = typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
-
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
     const encoder = new TextEncoder();
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
+
+    let accumulatedStreamedTokens = "";
+    let assistantPersisted = false;
+    const turnCreatedFiles: string[] = [];
+    const turnPreImages = new Map<string, string>();
+    const turnHostDiffs: TurnFileDiff[] = [];
+    const traces: TraceItem[] = [];
+    let accumulatedThoughts: string[] = [];
+
+    const persistAssistantOnAbort = () => {
+      if (!activeThreadId || assistantPersisted) return;
+      assistantPersisted = true;
+      try {
+        const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+        const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+        const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+
+        const abortContent = accumulatedStreamedTokens.trim()
+          ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn incomplete: Stream aborted or disconnected.]`
+          : `⚠️ [Turn incomplete: Stream aborted or disconnected.]`;
+
+        const abortedMsg = {
+          id: assistantMessageId,
+          role: "assistant" as const,
+          content: abortContent,
+          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+          traces: traces.length > 0 ? (traces as any) : undefined,
+          attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+          modelUsed: activeModel,
+          selectedModel: requestedModel || activeModel,
+          timestamp: new Date().toISOString(),
+          status: "incomplete" as const
+        };
+        threadStore.addMessage(activeThreadId, abortedMsg);
+      } catch (err) {
+        console.warn("[ChatRoute] Failed to persist aborted assistant message:", err);
+      }
+    };
 
     let aborted = false;
     const abortController = new AbortController();
@@ -325,6 +426,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       if (!abortController.signal.aborted) {
         abortController.abort();
       }
+      persistAssistantOnAbort();
     };
     req.signal.addEventListener("abort", cleanupSignal);
 
@@ -353,11 +455,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
       });
     }, 10_000);
+    if (typeof heartbeatInterval.unref === "function") {
+      heartbeatInterval.unref();
+    }
 
     // Run async orchestrator pipeline in background feeding SSE stream
     (async () => {
-      const traces: TraceItem[] = [];
-      let accumulatedThoughts: string[] = [];
       let oracleSnippet = "";
       let oracleCitations: string[] = [];
 
@@ -370,9 +473,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // 1. Gated Oracle Codebase & Semantic Memory Lookup with 2500ms timeout
         if (!approvalContinuationId && userPrompt.trim() && shouldConsultLocalOracle(userPrompt)) {
           try {
-            const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) =>
-              setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500)
-            );
+            let timer: any = null;
+            const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>((resolve) => {
+              timer = setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500);
+              if (typeof timer?.unref === "function") timer.unref();
+            });
             const ragPromise = (async () => {
               const oracleResult = await searchOracleCodebase(userPrompt);
               return {
@@ -382,6 +487,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             })();
 
             const lookupResult = await Promise.race([ragPromise, timeoutPromise]);
+            if (timer) clearTimeout(timer);
             if (lookupResult.contextSnippet) {
               oracleSnippet = lookupResult.contextSnippet;
               oracleCitations = lookupResult.citations;
@@ -425,10 +531,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
-        const threadStore = new ThreadStore();
-        let threadData: any = null;
-        let threadHostAccess = false;
-        if (activeThreadId) {
+        if (activeThreadId && !threadData) {
           try {
             threadData = await threadStore.getThread(activeThreadId);
             if (threadData?.hostAccess) {
@@ -501,8 +604,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
           conversationMessages[sysIdx].content += profileContext + hostDirective;
         }
-
-        const turnHostDiffs: TurnFileDiff[] = [];
 
         // Handle single-use approval continuation buffer
         if (approvalContinuationId) {
@@ -594,10 +695,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         });
 
         let currentAssistantMessage: any = { role: "assistant", content: "" };
-        const turnCreatedFiles: string[] = [];
-        const turnPreImages = new Map<string, string>();
         let round = 0;
-        const MAX_TOOL_ROUNDS = 8;
+        // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
+        // TOOL_ROUND_BACKSTOP is only the runaway guard.
+        let toolLoopStopReason: ToolLoopStopReason | undefined = undefined;
+        let budgetExhaustedAtTokens = 0;
+        let groundingDirectivePending = false;
         let consecutiveFailures = 0;
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
@@ -606,12 +709,26 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let searchNudges = 0;
         let lastRoundTools: string[] = [];
 
-        let accumulatedThoughts: string[] = [];
-
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
-        while (canContinueToolLoop({ round, maxToolRounds: MAX_TOOL_ROUNDS, lastRoundTools, webResearchCalls })) {
+        while (true) {
           if (aborted || req.signal.aborted) break;
+
+          const continuation = canContinueToolLoop({
+            round,
+            contextTokens: estimateTokens(conversationMessages),
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            lastRoundTools,
+            webResearchCalls,
+            roundBackstop: TOOL_ROUND_BACKSTOP,
+            awaitingToolRound: groundingDirectivePending
+          });
+          if (!continuation.canContinue) {
+            toolLoopStopReason = continuation.stopReason;
+            budgetExhaustedAtTokens = estimateTokens(conversationMessages);
+            break;
+          }
+          groundingDirectivePending = false;
 
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
@@ -649,8 +766,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             round
           });
 
-          const canExtendForResearch = round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls < MAX_WEB_RESEARCH_CALLS && (lastRoundTools.length === 0 || lastRoundTools.every(t => isWebResearchTool(t)));
-          const isFinalRound = (round === MAX_TOOL_ROUNDS - 1 && !canExtendForResearch) || (round >= MAX_TOOL_ROUNDS - 1 && webResearchCalls >= MAX_WEB_RESEARCH_CALLS);
+          // CHAT-7: forced synthesis only on the last permitted round (backstop boundary).
+          // Budget-exhausted research-extension rounds keep tools — they are still gathering data.
+          const isFinalRound = continuation.forceSynthesis === true;
           // Final round forced synthesis: prompt model to synthesize answer and omit tools
           if (isFinalRound) {
             mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
@@ -697,6 +815,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (chunk.message?.content) {
               const textChunk = chunk.message.content;
               fullRoundContent += textChunk;
+              accumulatedStreamedTokens += textChunk;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
               await sendEvent({ type: "token", content: textChunk });
             }
             if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
@@ -728,10 +848,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (
               isLiveRealTimeIntent(userPrompt) &&
               webResearchCalls === 0 &&
-              round < MAX_TOOL_ROUNDS - 1 &&
+              round < TOOL_ROUND_BACKSTOP - 1 &&
+              estimateTokens(conversationMessages) <= CHAT_CONTEXT_BUDGET_TOKENS &&
               !groundingEnforced
             ) {
               groundingEnforced = true;
+              groundingDirectivePending = true;
               mergeSystemDirective(
                 conversationMessages,
                 `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
@@ -1089,10 +1211,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               trace: traceItem
             });
 
+            const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
             conversationMessages.push({
               role: "tool",
               name: toolName,
-              content: clampToolOutput(JSON.stringify(result))
+              content: isFileReadTool ? JSON.stringify(result) : clampToolOutput(JSON.stringify(result))
             });
 
             if (
@@ -1219,6 +1342,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
 
           let synthContent = "";
+          let synthThinking = "";
           const synthOptions = resolveRoundModelOptions({
             model: activeModel,
             requestedEffort: effectiveReasoningEffort,
@@ -1234,10 +1358,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             reasoning_effort: synthOptions.reasoning_effort,
             options: synthOptions
           })) {
+            if (chunk.message?.thinking) {
+              synthThinking += chunk.message.thinking;
+              await sendEvent({ type: "thinking", content: chunk.message.thinking });
+            }
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
+              accumulatedStreamedTokens += chunk.message.content;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
               await sendEvent({ type: "token", content: chunk.message.content });
             }
+          }
+
+          if (synthThinking.trim()) {
+            accumulatedThoughts.push(synthThinking.trim());
           }
 
           if (synthContent.trim()) {
@@ -1248,15 +1382,38 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         // Clean residual tool tags
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
+        let turnStatus: "completed" | "incomplete" | undefined = undefined;
+
+        // CHAT-7 honest pause markers keyed on the loop's stop reason.
+        const loopPaused =
+          toolLoopStopReason === "budget" ||
+          toolLoopStopReason === "backstop" ||
+          toolLoopStopReason === "web-research-cap";
+        const pauseNote =
+          toolLoopStopReason === "budget"
+            ? `⚠️ [Turn paused: Context budget exhausted (${budgetExhaustedAtTokens} tokens > ${CHAT_CONTEXT_BUDGET_TOKENS} budget) after ${round} tool rounds.]`
+            : toolLoopStopReason === "web-research-cap"
+            ? `⚠️ [Turn paused: Tool execution limit reached (${webResearchCalls} web research calls / ${round} rounds).]`
+            : toolLoopStopReason === "backstop"
+            ? `⚠️ [Turn paused: Tool execution limit reached (${TOOL_ROUND_BACKSTOP} rounds).]`
+            : "";
 
         if (!cleanedContent) {
-          if (traces.length > 0) {
-            cleanedContent = `Executed ${traces.map(t => t.tool).join(", ")}.`;
+          turnStatus = "incomplete";
+          if (loopPaused) {
+            cleanedContent = `${pauseNote} Traces captured above; synthesis returned no text.`;
+          } else if (traces.length > 0) {
+            cleanedContent = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]`;
           } else if (currentAssistantMessage.content?.trim()) {
             cleanedContent = currentAssistantMessage.content.trim();
+            turnStatus = undefined;
           } else {
             cleanedContent = "I am ready to assist you. What would you like to build or explore?";
+            turnStatus = undefined;
           }
+        } else if (loopPaused) {
+          turnStatus = "incomplete";
+          cleanedContent = `${cleanedContent}\n\n${pauseNote}`;
         }
 
         // Gather turn attachments using exact write tracking
@@ -1269,8 +1426,31 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           modelUsed: activeModel
         });
 
+        if (activeThreadId && !assistantPersisted) {
+          const assistantMsgToSave = {
+            id: assistantMessageId,
+            role: "assistant" as const,
+            content: cleanedContent,
+            thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+            traces: traces.length > 0 ? (traces as any) : undefined,
+            attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+            diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+            modelUsed: activeModel,
+            selectedModel: requestedModel || activeModel,
+            timestamp: new Date().toISOString(),
+            compactedThisTurn: turnCompacted || undefined,
+            tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
+            tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+            status: turnStatus || ("completed" as const)
+          };
+          threadStore.addMessage(activeThreadId, assistantMsgToSave);
+          assistantPersisted = true;
+        }
+
         await sendEvent({
           type: "done",
+          status: turnStatus,
+          isIncomplete: turnStatus === "incomplete" ? true : undefined,
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           content: cleanedContent,
@@ -1307,15 +1487,52 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           ? "LLM engine is stopped. Start it from Settings or the status bar."
           : (err.message || "Internal orchestrator error");
 
+        if (activeThreadId && !assistantPersisted) {
+          assistantPersisted = true;
+          try {
+            const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
+            const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
+            const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+
+            const errorContent = accumulatedStreamedTokens.trim()
+              ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn error: ${friendlyMessage}]`
+              : `⚠️ [Turn error: ${friendlyMessage}]`;
+
+            const errorMsg = {
+              id: assistantMessageId,
+              role: "assistant" as const,
+              content: errorContent,
+              thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+              traces: traces.length > 0 ? (traces as any) : undefined,
+              attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+              diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
+              modelUsed: activeModel,
+              selectedModel: requestedModel || activeModel,
+              timestamp: new Date().toISOString(),
+              status: "error" as const
+            };
+            threadStore.addMessage(activeThreadId, errorMsg);
+          } catch (errSave) {
+            console.warn("[ChatRoute] Failed to persist error assistant message in catch:", errSave);
+          }
+        }
+
         await sendEvent({
           type: "error",
           error: friendlyMessage
         });
       } finally {
         clearInterval(heartbeatInterval);
+        if (activeThreadId) {
+          activeExecutionSet.delete(activeThreadId);
+        }
         req.signal.removeEventListener("abort", cleanupSignal);
         if (!abortController.signal.aborted) {
           abortController.abort();
+        }
+
+        if (activeThreadId && !assistantPersisted && (aborted || req.signal.aborted || abortController.signal.aborted)) {
+          persistAssistantOnAbort();
         }
         for (const session of activeSessions) {
           try {

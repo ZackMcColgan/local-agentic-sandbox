@@ -361,15 +361,28 @@ async function handleToolExecution(tool: string, args: any, res: http.ServerResp
     }
 
     const content = fs.readFileSync(resolvedPath, "utf8");
-    const originalLength = content.length;
-    const truncated = originalLength > MAX_OUTPUT_CHARS;
-    const outputContent = truncated ? content.slice(0, MAX_OUTPUT_CHARS) : content;
+    const allLines = content.split(/\r?\n/);
 
+    const start_line = typeof args?.start_line === "number" ? args.start_line : (args?.start_line !== undefined && args?.start_line !== null ? parseInt(String(args.start_line), 10) : undefined);
+    const end_line = typeof args?.end_line === "number" ? args.end_line : (args?.end_line !== undefined && args?.end_line !== null ? parseInt(String(args.end_line), 10) : undefined);
+    const offset = typeof args?.offset === "number" ? args.offset : (args?.offset !== undefined && args?.offset !== null ? parseInt(String(args.offset), 10) : undefined);
+    const limit = typeof args?.limit === "number" ? args.limit : (args?.limit !== undefined && args?.limit !== null ? parseInt(String(args.limit), 10) : undefined);
+
+    const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
+    const end = end_line ? Math.min(allLines.length, end_line) : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
+
+    const slice = allLines.slice(start - 1, end);
+    const formatted = slice.map((line, idx) => `${start + idx} | ${line}`).join("\n");
     return {
       success: true,
-      content: outputContent,
-      truncated,
-      originalLength
+      path: rawPath,
+      total_lines: allLines.length,
+      total_bytes: stats.size,
+      showing_lines: `${start}-${end}`,
+      has_more: end < allLines.length,
+      next_start_line: end < allLines.length ? end + 1 : null,
+      truncated: false,
+      content: formatted
     };
   }
 

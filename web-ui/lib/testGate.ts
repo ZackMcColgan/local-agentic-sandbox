@@ -72,7 +72,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostFourState.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
-      "tests/aiLifecycle.test.ts"
+      "tests/aiLifecycle.test.ts",
+      "tests/chatFilePaging.test.ts"
     ]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
@@ -124,7 +125,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/agentGroundingAndHeadroom.test.ts",
       "tests/mobileUiPolish.test.ts",
       "tests/artifactDeliveryAndPolish.test.ts",
-      "tests/chatUiHonestyAndCopy.test.ts"
+      "tests/chatUiHonestyAndCopy.test.ts",
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -134,7 +137,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/threadsLaunchTask.test.ts",
       "tests/sessionIntegrity.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
-      "tests/permissions.test.ts"
+      "tests/permissions.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts"
     ]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
@@ -217,7 +222,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/agentGroundingAndHeadroom.test.ts",
       "tests/progressiveToolDisclosure.test.ts",
       "tests/conversationCompaction.test.ts",
-      "tests/llmProvider.test.ts"
+      "tests/llmProvider.test.ts",
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control
@@ -415,7 +424,12 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts"]
+    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts"]
+  },
+  // CHAT-8 live streaming visibility (server snapshots + client poll loop)
+  {
+    match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
+    tests: ["tests/chatLiveVisibility.test.ts"]
   },
   {
     match: (p) =>

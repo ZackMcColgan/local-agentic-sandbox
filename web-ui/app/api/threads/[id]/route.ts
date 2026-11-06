@@ -264,35 +264,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 3. Action: Add Message
     if (body.action === "addMessage" && body.message) {
-      thread.messages = thread.messages || [];
-      const existingIdx = thread.messages.findIndex((m) => m.id === body.message.id);
-      if (existingIdx >= 0) {
-        thread.messages[existingIdx] = { ...thread.messages[existingIdx], ...body.message };
-      } else {
-        thread.messages.push(body.message);
-      }
-      if (body.message.role === "user") {
-        if (
-          !thread.title ||
-          thread.title.toLowerCase() === "new thread" ||
-          thread.title.toLowerCase() === "untitled thread" ||
-          thread.title.toLowerCase() === "new task" ||
-          thread.title.toLowerCase() === "new session"
-        ) {
-          const content = body.message.content || "";
-          if (content.trim()) {
-            const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
-            thread.title = content.trim().slice(0, maxLen);
-          }
-        }
-      } else if (body.message.role === "assistant") {
-        if (thread.status !== "active") {
-          thread.status = "completed";
-        }
-      }
-      thread.updatedAt = new Date().toISOString();
-      threadStore.saveThread(thread);
-      return NextResponse.json({ thread });
+      const updated = threadStore.addMessage(thread.id, body.message);
+      return NextResponse.json({ thread: updated || thread });
     }
 
     // 4. Action: Restore Compaction
