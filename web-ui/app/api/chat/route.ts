@@ -718,6 +718,29 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         while (true) {
           if (aborted || req.signal.aborted) break;
 
+          // CHAT-STEER: consume pending steers at every round boundary
+          if (activeThreadId) {
+            const steers = threadStore.consumeSteers(activeThreadId);
+            if (steers.length > 0) {
+              for (const s of steers) {
+                const steerContent = `[Steer from user, mid-turn] ${s}`;
+                conversationMessages.push({
+                  role: "user",
+                  content: steerContent
+                });
+                try {
+                  threadStore.addMessage(activeThreadId, {
+                    id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    role: "user",
+                    content: steerContent,
+                    timestamp: new Date().toISOString()
+                  });
+                } catch {}
+              }
+              await sendEvent({ type: "steer", texts: steers });
+            }
+          }
+
           const continuation = canContinueToolLoop({
             round,
             contextTokens: estimateTokens(conversationMessages),
@@ -1320,6 +1343,29 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
+        // CHAT-STEER: consume pending steers once more immediately before final synthesis
+        if (activeThreadId) {
+          const steers = threadStore.consumeSteers(activeThreadId);
+          if (steers.length > 0) {
+            for (const s of steers) {
+              const steerContent = `[Steer from user, mid-turn] ${s}`;
+              conversationMessages.push({
+                role: "user",
+                content: steerContent
+              });
+              try {
+                threadStore.addMessage(activeThreadId, {
+                  id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  role: "user",
+                  content: steerContent,
+                  timestamp: new Date().toISOString()
+                });
+              } catch {}
+            }
+            await sendEvent({ type: "steer", texts: steers });
+          }
+        }
+
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
         if (
           shouldRunPostToolSynthesis({
@@ -1451,6 +1497,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           assistantPersisted = true;
         }
 
+        // CHAT-STEER: unconsumed steers returning in done payload
+        const unconsumedSteers = activeThreadId ? threadStore.consumeSteers(activeThreadId) : [];
+
         await sendEvent({
           type: "done",
           status: turnStatus,
@@ -1467,6 +1516,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           compactedThisTurn: turnCompacted || undefined,
           tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
           tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+          pendingSteers: unconsumedSteers.length > 0 ? unconsumedSteers : undefined,
           trace_session: {
             sessionId: tracer.getSessionId(),
             traceId: tracer.getTraceId()
@@ -1530,6 +1580,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         if (activeThreadId) {
           activeExecutionSet.delete(activeThreadId);
           clearTurnActive(activeThreadId);
+          threadStore.clearSteers(activeThreadId);
         }
         req.signal.removeEventListener("abort", cleanupSignal);
         if (!abortController.signal.aborted) {

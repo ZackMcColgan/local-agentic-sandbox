@@ -274,6 +274,7 @@ export function ChatStream({
   // Composer Mode state (Chat | Build)
   const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
+  const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">("queue");
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -1056,6 +1057,24 @@ export function ChatStream({
                 status: finalStatus
               }))
             );
+
+            // CHAT-STEER: unconsumed pending steers returned at turn end are auto-queued
+            if (Array.isArray(event.pendingSteers) && event.pendingSteers.length > 0 && chatQueueRef.current) {
+              for (const s of event.pendingSteers) {
+                chatQueueRef.current.enqueue(s);
+              }
+              setQueueItems(chatQueueRef.current.items());
+            }
+          } else if (event.type === "steer") {
+            // Render mid-turn consumed steer into messages in place
+            if (Array.isArray(event.texts) && event.texts.length > 0) {
+              const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
+                id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                role: "user",
+                content: `[Steer from user, mid-turn] ${t}`
+              }));
+              setMessages((prev) => [...prev, ...steerMessages]);
+            }
           } else if (event.type === "error") {
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
@@ -1255,6 +1274,28 @@ export function ChatStream({
           setActiveThreadId(targetThreadId);
         }
       }
+
+      // If midTurnAction is "steer", POST to /api/threads/[id]/steer
+      if (midTurnAction === "steer" && targetThreadId) {
+        try {
+          const steerRes = await fetch(`/api/threads/${encodeURIComponent(targetThreadId)}/steer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: prompt })
+          });
+          if (!steerRes.ok) {
+            const errJson = await steerRes.json().catch(() => ({}));
+            throw new Error(errJson.error || "Failed to deliver steer");
+          }
+          setInput("");
+          if (textareaRef.current) textareaRef.current.style.height = "auto";
+        } catch (steerErr: any) {
+          setErrorMsg(steerErr.message || "Failed to deliver steer to turn");
+        }
+        return;
+      }
+
+      // Default: Queue client-side
       if (typeof window !== "undefined" && targetThreadId) {
         const q = chatQueueRef.current || new ChatQueue(window.localStorage, targetThreadId);
         chatQueueRef.current = q;
@@ -3031,6 +3072,42 @@ export function ChatStream({
             </button>
 
             <div className="flex items-center gap-2">
+              {/* Mid-Turn Action Selector (Queue vs Steer) when turn is active */}
+              {isGeneratingOrRunning && (
+                <div
+                  role="radiogroup"
+                  aria-label="Mid-Turn Action Selector"
+                  className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-850 text-[11px] font-medium select-none"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={midTurnAction === "queue"}
+                    onClick={() => setMidTurnAction("queue")}
+                    className={`px-2.5 py-0.5 rounded-full transition-all ${
+                      midTurnAction === "queue"
+                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    Queue
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={midTurnAction === "steer"}
+                    onClick={() => setMidTurnAction("steer")}
+                    className={`px-2.5 py-0.5 rounded-full transition-all ${
+                      midTurnAction === "steer"
+                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    Steer
+                  </button>
+                </div>
+              )}
+
               {/* Composer Mode Toggle (Chat | Build) */}
               <div
                 role="radiogroup"
