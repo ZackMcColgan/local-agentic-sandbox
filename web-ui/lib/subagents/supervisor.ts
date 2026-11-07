@@ -1500,7 +1500,18 @@ export class OvernightSupervisor {
         });
         console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
       } catch (gErr: any) {
-        console.warn(`[supervisor] GitOps branch switch warning:`, gErr?.message || gErr);
+        const errMsg = gErr?.message || String(gErr);
+        console.error(`[supervisor] GitOps bootstrap failed:`, errMsg);
+        task.status = "failed";
+        task.errorSummary = errMsg;
+        task.completedAt = new Date().toISOString();
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: errMsg
+        });
+        this.saveCheckpoint(task);
+        return task;
       }
     }
 
@@ -1723,6 +1734,46 @@ export class OvernightSupervisor {
             role: "gitops",
             message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
           });
+
+          // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+          const pushCheck = await gitOps.isPushConfigured();
+          if (!pushCheck.configured) {
+            task.pushStatus = "completed — local only, push not configured";
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: "completed — local only, push not configured"
+            });
+            console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
+          } else {
+            try {
+              const pushRes = await gitOps.pushBranch(task.branchName);
+              if (pushRes && pushRes.success) {
+                task.pushStatus = "pushed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
+                });
+              } else {
+                task.pushStatus = "completed — local only, push failed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: "completed — local only, push failed"
+                });
+              }
+            } catch (pErr: any) {
+              const pErrMsg = pErr?.message || String(pErr);
+              task.pushStatus = `failed: ${pErrMsg}`;
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "gitops",
+                message: `failed: ${pErrMsg}`
+              });
+              console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
+            }
+          }
 
           // Check if autoDeployOnGreen is enabled
           if (task.autoDeployOnGreen) {

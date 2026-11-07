@@ -39,6 +39,7 @@ export interface OvernightTaskEntry {
   goal: string;
   status: "completed" | "parked" | "failed" | "cancelled" | "stopped" | "active";
   branch: string;
+  pushStatus?: string;
   gitHeadSha: string;
   startedAt: string;
   completedAt?: string;
@@ -89,6 +90,7 @@ export interface MorningReportInput {
   taskId: string;
   goal: string;
   branch: string;
+  pushStatus?: string;
   gitHeadSha: string;
   status: "completed" | "parked" | "failed" | "cancelled" | "active";
   startedAt: string;
@@ -351,6 +353,7 @@ export function generateOvernightMorningReport(
       goal: task.goal,
       status: outcome.status,
       branch: task.branch || task.branchName || "feat/overnight",
+      pushStatus: task.pushStatus,
       gitHeadSha: lastCheckpoint?.gitHeadSha || "HEAD",
       startedAt: task.startedAt || new Date().toISOString(),
       completedAt: task.completedAt || task.updatedAt,
@@ -430,14 +433,15 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
   ];
 
   for (const t of report.tasks) {
+    const pushSuffix = t.pushStatus ? `<br/>*(${t.pushStatus})*` : "";
     const statusBadge =
       t.status === "completed"
-        ? "✅ Completed"
+        ? `✅ Completed${pushSuffix}`
         : t.status === "parked"
-        ? "⚠️ Parked"
+        ? `⚠️ Parked${pushSuffix}`
         : t.status === "failed"
-        ? "❌ Failed"
-        : `🔄 ${t.status}`;
+        ? `❌ Failed${pushSuffix}`
+        : `🔄 ${t.status}${pushSuffix}`;
     const artLinks =
       t.artifacts.length > 0
         ? t.artifacts.map((a) => `[${a.name}](${a.previewUrl})`).join(", ")
@@ -588,10 +592,11 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
       ? "🛑 **Status: CANCELLED**"
       : "🔄 **Status: ACTIVE**";
 
+  const pushDisplay = report.pushStatus ? ` | Push: \`${report.pushStatus}\`` : "";
   const lines: string[] = [
     `# Autonomous Morning Report: ${report.taskId}`,
     "",
-    `${statusBadge} | Branch: \`${report.branch}\` | Duration: ${report.durationFormatted}`,
+    `${statusBadge} | Branch: \`${report.branch}\`${pushDisplay} | Duration: ${report.durationFormatted}`,
     `Git HEAD: \`${report.gitHeadSha}\` | Started: ${report.startedAt}${report.completedAt ? ` | Finished: ${report.completedAt}` : ""}`,
     "",
     `### Goal`,

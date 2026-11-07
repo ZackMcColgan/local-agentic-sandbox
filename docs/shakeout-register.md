@@ -527,4 +527,31 @@
   5. Checkpoints are pinned to persistent volume `/workspace/.agent/checkpoints`.
   6. Builder thinking is captured in full without 180-char truncation.
 - **Severity:** **P0** (blocks build mode observability, causes disappearing builds on refresh, and truncates thinking).
-- **Status:** **REGISTERED** (Nov 7, 2026).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `a34483e`, deployed as `local-agentic-sandbox-web-ui:v-a34483e`. Verified by `buildLaunchVisibility.test.ts` 5/5 passing, live cluster endpoints `:3001` and `:80` rehydrating tasks).
+
+---
+
+### [BUILD-1] Build Work Trapped in Pod (Push, Bootstrap & Honest Completion)
+- **Feature:** Build Mode / Remote Push, Workspace Bootstrap & Honest Completion
+- **Affected Components:**
+  - `web-ui/lib/git/workerGitOps.ts` (`createAndSwitchBranch`, `isPushConfigured`, `pushBranch`, timeout: 120s)
+  - `web-ui/lib/subagents/supervisor.ts` (`executeTaskWithRecovery` bootstrap guard & terminal push execution)
+  - `web-ui/lib/subagents/morningReport.ts` (`pushStatus` tracking in `OvernightTaskEntry` & `MorningReport` markdown formatters)
+  - `web-ui/lib/subagents/types.ts` (`TaskManifest.pushStatus`)
+  - `docs/credentials-needed.md` (Credential & network egress specification)
+- **Discovery:** Argon orchestrator brief & owner report: "Build work doesn't leave the pod. Tasks completed locally without pushing branch or opening PR to remote forge."
+- **Step 1 In-Pod Diagnosis (Verbatim):**
+  - `git ls-remote origin`: fails with exit code 128 when executed in `/` (not a git repo). In `/workspace`, `origin` remote points to `/workspace/.agent/origin-develop.bundle` (local bundle file) and resolves `06fb0bdc540b9e3fb61b486e3f7b759ef229353a refs/heads/develop`.
+  - `git fetch origin develop`: succeeds inside `/workspace` from bundle.
+  - Network Egress: Air-gapped cluster policy (`egress_policy: "BLOCKED"`, network: `ai-mesh`). Connections to `github.com` hang/timeout.
+  - Environment Credentials: No `GITHUB_TOKEN`, `GH_TOKEN`, SSH keys, or git write credentials exist in the container environment.
+  - Push to Bundle: `git push -u origin HEAD` fails with exit code 1 (`error: failed to push some refs to '/workspace/.agent/origin-develop.bundle'`) because git bundles are read-only snapshot archives.
+  - Honest Verdict: Remote push is not configured and egress is blocked. In this air-gapped environment, task completion must honestly declare local-only status and never hallucinate a remote push or PR.
+- **Expected Behavior:**
+  1. Terminal path calls `isPushConfigured()` and `pushBranch()`. If push is not configured or fails, task status / morning report declares `completed — local only, push not configured` or `failed: <push error>`. Zero false success or hallucinated PR URLs.
+  2. Workspace bootstrap at launch checks for dirty working tree via `git status --porcelain`. If dirty, terminates immediately with `Bootstrap failed: dirty working tree in workspace`.
+  3. Clean bootstrap fetches `origin/develop` and checks out task branch with 120s timeout.
+- **Actual Behavior:** Prior to fix, `pushBranch` was never called upon milestone completion; bootstrap lacked dirty working tree verification and continued on failure; no push status or local-only distinction was reported in Morning Report.
+- **Severity:** **P0** (blocks build mode deliverables from exiting pod honestly).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — verified by `buildPushHonesty.test.ts` 5/5 passing, test gate 60/60 passing).
+

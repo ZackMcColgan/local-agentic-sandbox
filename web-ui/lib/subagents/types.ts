@@ -143,6 +143,7 @@ export interface TaskManifest {
   branchName: string;
   branch?: string;
   builderThinking?: string;
+  pushStatus?: string;
   status: TaskStatus;
   milestones: Milestone[];
   currentMilestoneIndex: number;
