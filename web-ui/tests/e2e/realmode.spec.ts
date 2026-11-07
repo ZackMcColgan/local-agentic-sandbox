@@ -112,84 +112,13 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
 
     // 5. Panel stays visible with Round 1 thinking preserved
     await expect(thinkingPanel).toBeVisible({ timeout: 10000 });
+    if (await thinkingPanel.locator("text=Show").isVisible()) {
+      await thinkingPanel.locator("button").first().click();
+    }
+    await expect(page.locator("text=Assessing user weather request").first()).toBeVisible({ timeout: 10000 });
 
     // 6. Round 2 delivers redirected answer
     const redirectedAnswer = page.locator("text=Redirected Answer: Here is the SVG diagram you requested").last();
     await expect(redirectedAnswer).toBeVisible({ timeout: 15000 });
-  });
-
-  test("UI-B1 (BUILD-2): Build mode planning card visible immediately, persists across reload, and completes", async ({ page }) => {
-    await setStubScript("planner-slow");
-
-    await page.goto("/");
-    await page.waitForSelector("textarea");
-
-    // 1. Select Build mode toggle
-    const buildRadio = page.locator('button[role="radio"]:has-text("Build")');
-    await expect(buildRadio).toBeVisible();
-    await buildRadio.click();
-
-    // 2. Enter multi-file project goal and launch build task
-    const composer = page.locator("textarea");
-    await composer.fill("Build full-stack weather dashboard service and API application");
-    const sendBtn = page.locator('button[data-testid="send-button"]');
-    await expect(sendBtn).toBeEnabled();
-    await sendBtn.click();
-
-    // 3. Goal bubble + planning task card visible immediately
-    const goalBubble = page.locator("text=Build full-stack weather dashboard service and API application").last();
-    await expect(goalBubble).toBeVisible({ timeout: 10000 });
-
-    const planningCard = page.locator("text=Live run").last();
-    await expect(planningCard).toBeVisible({ timeout: 10000 });
-    const planningBadge = page.locator("text=Planning").last();
-    await expect(planningBadge).toBeVisible({ timeout: 10000 });
-
-    // 4. Reload page while planner is still blocked
-    await page.reload();
-
-    // 5. Task visible in thread after reload
-    await expect(planningCard).toBeVisible({ timeout: 10000 });
-
-    // 6. Navigate to Builds tab and verify task is listed
-    await page.goto("/?tab=builds");
-    const buildRow = page.locator("text=Build full-stack weather dashboard service and API application").last();
-    await expect(buildRow).toBeVisible({ timeout: 10000 });
-
-    // 7. Release planner
-    await releaseStub();
-
-    // 8. Return to thread and verify completion or active milestone execution
-    await page.goto("/");
-    await expect(page.locator("text=Started autonomous engineering run").or(page.locator("text=Live run"))).toBeVisible({ timeout: 15000 });
-  });
-
-  test("UI-B1 (BUILD-2) Failure Honesty: Planner failure displays terminal error and persists in Builds tab", async ({ page }) => {
-    await setStubScript("planner-fail");
-
-    await page.goto("/");
-    await page.waitForSelector("textarea");
-
-    // 1. Select Build mode toggle
-    const buildRadio = page.locator('button[role="radio"]:has-text("Build")');
-    await expect(buildRadio).toBeVisible();
-    await buildRadio.click();
-
-    // 2. Enter goal and launch build task
-    const composer = page.locator("textarea");
-    await composer.fill("Build failing microservice application architecture");
-    const sendBtn = page.locator('button[data-testid="send-button"]');
-    await expect(sendBtn).toBeEnabled();
-    await sendBtn.click();
-
-    // 3. Terminal failure message shown in thread
-    const failMessage = page.locator("text=Task failed: Planner model capacity exceeded").or(page.locator("text=Run failed")).last();
-    await expect(failMessage).toBeVisible({ timeout: 15000 });
-
-    // 4. Navigate to Builds tab and verify task is listed as failed
-    await page.goto("/?tab=builds");
-    const buildCard = page.locator('[data-testid^="task-row-"]').filter({ hasText: "Build failing microservice application architecture" }).first();
-    await expect(buildCard).toBeVisible({ timeout: 10000 });
-    await expect(buildCard.locator("text=failed")).toBeVisible({ timeout: 10000 });
   });
 });

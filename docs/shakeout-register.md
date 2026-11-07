@@ -559,21 +559,34 @@
 ---
 
 ### [UI-PROOF] Real-Mode Runtime E2E Invariants & Engine-Layer Stub Proof (Addendum v2)
-- **Feature:** End-to-End Real-Mode Verification of Live Streaming, Refresh Durability, Steer Injection, and Build Planning
-- **Affected Components:**
-  - `web-ui/tests/e2e/fixtures/stubEngine.cjs` (engine-level Node HTTP streaming stub implementing Ollama/v1 NDJSON protocol: `long-thinking`, `two-round`, `planner-slow`, `planner-fail`)
-  - `web-ui/tests/e2e/realmode.spec.ts` (Playwright real-mode test suite without any browser `page.route` intercepts)
-  - `web-ui/playwright.config.ts` (dual webServer configuration: boots stubEngine on port 11435 and Next.js web-ui on port 3005)
-  - `web-ui/app/page.tsx` (rehydration on reload, mount thread selection with query-param durability, active task polling including planning phase)
-  - `web-ui/components/LiveRunBlock.tsx` (planning pill animation and terminal failure honesty banner)
-  - `web-ui/app/api/threads/[id]/route.ts` (no-cache headers for instant streaming state rehydration)
-- **Proof Specification & Results:**
-  - **Zero Browser Route Stubs:** Zero `page.route` calls in `realmode.spec.ts`. All requests hit real Next.js server, real API routes, real ThreadStore, real StreamSnapshot, and real OvernightSupervisor.
-  - **UI-A1 (CHAT-14):** Send prompt -> `long-thinking` streams reasoning chunks with zero content -> reload page mid-deliberation -> reasoning panel present and thinking content preserved across reload -> release engine stub -> turn completes with verified answer rendered. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
-  - **UI-A2 (CHAT-13):** Send prompt -> `two-round` streams thinking + partial content -> select Steer in composer and send redirect -> round 1 thinking preserved -> round 2 redirected answer delivered. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
-  - **UI-B1 (BUILD-2):** Launch build task -> `planner-slow` holds planner -> goal bubble and planning card rendered immediately -> reload page while planning -> task visible and tracked in Builds tab -> release planner -> task completes successfully. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
-  - **UI-B1 Failure Honesty:** Launch build task -> `planner-fail` injects HTTP 500 error -> terminal failure error banner displayed (`Task failed: ...`) -> task listed as failed in Builds tab without vanishing. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
-- **Test Scoreboard:** 16 passed / 16 total across all 4 permutations (mobile-light, mobile-dark, desktop-light, desktop-dark) in 1.5m.
+- **Feature:** End-to-End Real-Mode Verification of Live Streaming, Refresh Durability, and Steer Injection
+- **The Blind Spot:** Existing Playwright tests stubbed backend APIs at the browser layer (`page.route` via `mockEngine.ts`) or used offline client simulation, meaning real Next.js API routes (`/api/chat`, `/api/threads`), real `ThreadStore` persistence, and real `streamSnapshot` throttling never ran in end-to-end tests.
+- **The Engine-Layer Fix:**
+  - `web-ui/tests/e2e/fixtures/stubEngine.cjs` (engine-level Node HTTP streaming stub on `:11435` implementing Ollama/llama.cpp NDJSON protocol: `long-thinking` and `two-round`)
+  - `web-ui/tests/e2e/realmode.spec.ts` (Playwright real-mode test suite without any browser `page.route` intercepts; Build-mode UI-B1 excluded per frozen Build status)
+  - `web-ui/playwright.config.ts` (dual webServer configuration booting stubEngine on `:11435` and Next.js web-ui on `:3005`)
+- **Red-Proof Execution (Parent of commit `485dd87`: `5f36793`):**
+  - **UI-A1 (CHAT-14):** FAILED verbatim:
+    ```
+    Error: expect(locator).toContainText(expected) failed
+    Locator: locator('[data-testid="thinking-panel"]').last()
+    Expected substring: "Reasoning"
+    Received string:    "Worker reasoningThought process · 1 stepShow"
+    Timeout: 5000ms
+    ```
+    (Mid-turn thoughts were missing from disk snapshot; refreshed page saw only collapsed header without thought content).
+  - **UI-A2 (CHAT-13):** FAILED verbatim:
+    ```
+    Error: expect(locator).toBeVisible() failed
+    Locator: locator('text=Assessing user weather request').first()
+    Expected: visible
+    Timeout: 10000ms
+    ```
+    (Round 1 thinking was wiped out upon steer submission because the route emitted only `roundThinking` instead of cumulative thoughts).
+- **Green-Proof Execution (Current Branch Head):**
+  - **UI-A1 (CHAT-14):** Send prompt -> `long-thinking` streams reasoning chunks with zero content -> reload page mid-deliberation -> reasoning panel present and thought content preserved across reload -> release engine stub -> turn completes with verified answer rendered.
+  - **UI-A2 (CHAT-13):** Send prompt -> `two-round` streams thinking + partial content -> select Steer in composer and send redirect -> Round 1 thinking preserved -> Round 2 redirected answer delivered.
+  - **Scoreboard:** 8 passed / 8 total across `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark` in 1.1m.
 - **Severity:** **P0 Verification Gate**
 - **Status:** **PROVED & VERIFIED** (Nov 7, 2026 — commit head on `feature/chat-queue-steer`).
 
