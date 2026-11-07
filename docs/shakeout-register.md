@@ -492,7 +492,7 @@
 - **Expected Behavior:** When steering mid-turn, the assistant message's thinking panel remains visible, continues in streaming state, and displays all accumulated thinking across rounds without resetting.
 - **Actual Behavior:** Steering appends a steer bubble after the assistant message, causing the assistant message to no longer be in the last-message position. The reasoning panel keys on last-message position and disappears. Furthermore, interrupt-steer starts a new round while live thought events only carried roundThinking, resetting visible thinking.
 - **Severity:** **P1**
-- **Status:** **REGISTERED** (Nov 7, 2026).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `485dd87`, deployed as `local-agentic-sandbox-web-ui:v-485dd87`. Verified by `chatThinkingPreservation.test.ts` 4/4 passing).
 
 ---
 
@@ -506,4 +506,25 @@
 - **Expected Behavior:** Thinking of an in-progress turn is part of the server-side record continuously. A refreshed page or second device polling a streaming turn receives the cumulative thinking and renders the reasoning panel in streaming state.
 - **Actual Behavior:** Mid-turn snapshots never carried thinking; pure-thinking phases wrote zero snapshots; refreshed clients saw no thinking panel.
 - **Severity:** **P1**
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `485dd87`, deployed as `local-agentic-sandbox-web-ui:v-485dd87`. Verified by `chatThinkingPreservation.test.ts` 4/4 passing).
+
+---
+
+### [BUILD-2] Build Launch Lacks Visibility, Persist-First Durability, Task Listing & Full Thinking
+- **Feature:** Build Mode / Task Execution Lifecycle & Builds View (`POST /api/threads`, `GET /api/tasks`, `BuildsView`)
+- **Affected Components:**
+  - `web-ui/app/api/threads/route.ts` (`action: "launchTask"` awaited `generatePlanSpec` synchronously before persisting thread or checkpoint; no 201 until planner finishes)
+  - `web-ui/lib/subagents/morningReport.ts` (`getCanonicalCheckpointDir` fell back to ephemeral `/app/web-ui/.agent/checkpoints` rather than persistent PVC `/workspace/.agent/checkpoints`)
+  - `web-ui/components/BuildsView.tsx` (only rendered single `activeTask` rather than full list of tasks from `GET /api/tasks`)
+  - `web-ui/lib/subagents/supervisor.ts` & `web-ui/app/api/threads/route.ts` (truncated builder reasoning to 180-200 chars in journal)
+- **Discovery:** Owner report (Nov 7 ~10:26 CT): "launch visibility: started a build from phone... after refresh, zero builds appear."
+- **Forensic Verdict (Step 0):** `(ii) 'launchTask threw before persisting checkpoint'` (with contributing cause (iii) `'checkpoint persisted but in wrong directory / lost on restart'`).
+- **Expected Behavior:**
+  1. `POST /api/threads` (`launchTask`) creates thread and task manifest with status `"planning"`, saves checkpoint immediately, and returns HTTP 201 `{ thread, task: manifest, started: true }` immediately while planner runs in background.
+  2. If planner throws, task transitions to `"failed"`, checkpoint updates to `"failed"`, and thread receives terminal assistant message with error.
+  3. `GET /api/tasks` lists all disk checkpoints across restarts including planning, active, parked, and completed tasks.
+  4. `BuildsView` renders multiple tasks from `GET /api/tasks`, displaying status, branch, goal, and timestamps.
+  5. Checkpoints are pinned to persistent volume `/workspace/.agent/checkpoints`.
+  6. Builder thinking is captured in full without 180-char truncation.
+- **Severity:** **P0** (blocks build mode observability, causes disappearing builds on refresh, and truncates thinking).
 - **Status:** **REGISTERED** (Nov 7, 2026).

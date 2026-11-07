@@ -264,7 +264,15 @@ export function repairAndParsePlanJson(rawText: string): { milestones: any[] } |
   return null;
 }
 
+let customPlanSpecGenerator: ((input: PlanSpecInput) => Promise<PlanSpec>) | null = null;
+export function setPlanSpecGenerator(fn: ((input: PlanSpecInput) => Promise<PlanSpec>) | null) {
+  customPlanSpecGenerator = fn;
+}
+
 export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> {
+  if (customPlanSpecGenerator) {
+    return customPlanSpecGenerator(input);
+  }
   const taskId = input.taskId || `task-${Date.now()}`;
   const goal = input.goal;
   const toolchain: ToolchainType = input.toolchain || "node:22";

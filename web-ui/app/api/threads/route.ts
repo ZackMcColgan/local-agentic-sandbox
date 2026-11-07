@@ -37,8 +37,8 @@ export async function POST(req: Request) {
       const enableGitOps = body.enableGitOps !== false;
       const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
       const effectiveModel = body.model || process.env.MODEL_NAME || "swift-15-27b-mtp";
-      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel });
 
+      // Persist-first launch: create manifest with status "planning" and write checkpoint before planner runs
       const manifest: TaskManifest = {
         taskId,
         goal,
@@ -48,9 +48,8 @@ export async function POST(req: Request) {
         autoDeployOnGreen,
         toolchain,
         scope,
-        complexity: planSpec.complexity,
-        status: "active",
-        milestones: planSpec.milestones,
+        status: "planning",
+        milestones: [],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
@@ -58,7 +57,7 @@ export async function POST(req: Request) {
           {
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
+            message: `Planning engineering task for goal: ${goal}`
           }
         ],
         startedAt: new Date().toISOString(),
@@ -144,8 +143,12 @@ export async function POST(req: Request) {
         model: effectiveModel,
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
-          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
+          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || (manifest.status !== "active" && manifest.status !== "planning")) {
             return;
+          }
+          manifest.builderThinking = totalThinking;
+          if (manifest.milestones && manifest.milestones[manifest.currentMilestoneIndex]) {
+            manifest.milestones[manifest.currentMilestoneIndex].builderThinking = totalThinking;
           }
           const now = Date.now();
           // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
@@ -184,6 +187,53 @@ export async function POST(req: Request) {
         }
       });
       (async () => {
+        console.log(`[threads] decomposing goal for task ${taskId}`);
+        try {
+          const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel });
+          manifest.complexity = planSpec.complexity;
+          manifest.milestones = planSpec.milestones;
+          manifest.status = "active";
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "planner",
+            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
+          });
+          supervisor.saveCheckpoint(manifest);
+
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            const lastAsst = currentThread.messages.slice().reverse().find(m => m.role === "assistant" && m.taskId === taskId);
+            if (lastAsst) {
+              lastAsst.content = `Started autonomous engineering run (${planSpec.milestones.length} milestones).`;
+            }
+            threadStore.saveThread(currentThread);
+          }
+        } catch (planErr: any) {
+          console.error(`[threads] Planning failed for task ${taskId}:`, planErr);
+          manifest.status = "failed";
+          manifest.parkedReason = planErr?.message || String(planErr);
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "planner",
+            message: `Planning failed: ${manifest.parkedReason}`
+          });
+          supervisor.saveCheckpoint(manifest);
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            currentThread.status = "failed";
+            currentThread.messages.push({
+              id: `msg-${Date.now()}-err`,
+              role: "assistant",
+              content: `Task failed: ${manifest.parkedReason}`,
+              taskId,
+              timestamp: new Date().toISOString()
+            });
+            threadStore.saveThread(currentThread);
+          }
+          activeExecutionSet.delete(taskId);
+          return;
+        }
+
         console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
         try {
           const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });

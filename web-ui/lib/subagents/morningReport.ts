@@ -487,6 +487,7 @@ export function getCanonicalCheckpointDir(): string {
   }
 
   const candidates = [
+    fs.existsSync("/workspace") ? path.resolve("/workspace/.agent/checkpoints") : null,
     fs.existsSync(path.resolve(process.cwd(), "../workspace"))
       ? path.resolve(process.cwd(), "../workspace/.agent/checkpoints")
       : null,

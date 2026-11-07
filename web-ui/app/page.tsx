@@ -47,6 +47,7 @@ export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TaskManifest | null>(null);
+  const [tasks, setTasks] = useState<TaskManifest[]>([]);
   const [morningReport, setMorningReport] = useState<MorningReport | null>(null);
   const [overnightReport, setOvernightReport] = useState<OvernightMorningReport | null>(null);
 
@@ -356,6 +357,9 @@ export default function Home() {
       const res = await fetch("/api/tasks?active=true");
       if (res.ok) {
         const data = await res.json();
+        if (data.tasks) {
+          setTasks(data.tasks);
+        }
         if (data.activeTask) {
           if (!selectedThreadId && data.activeTask.status === "active") {
             setActiveTask(data.activeTask);
@@ -1134,6 +1138,7 @@ export default function Home() {
           <BuildsView
             onOpenDrawer={() => setIsDrawerOpen(true)}
             activeTask={activeTask}
+            tasks={tasks}
             onStopTask={handleStopRun}
             onSelectThread={handleSelectThread}
             onDeployRun={handleDeployRun}

@@ -40,6 +40,8 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: AGENT_CHECKPOINT_DIR
+              value: "/workspace/.agent/checkpoints"
             - name: PORT
               value: "3000"
             - name: LLM_BASE_URL

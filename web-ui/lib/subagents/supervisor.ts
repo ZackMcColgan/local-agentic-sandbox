@@ -1109,7 +1109,15 @@ export function cancelTask(taskId: string): boolean {
  * handles automatic crash recovery, and performs stall detection.
  */
 export class OvernightSupervisor {
-  readonly checkpointDirectory: string;
+  private customCheckpointDirectory?: string;
+  get checkpointDirectory(): string {
+    return (
+      this.customCheckpointDirectory ||
+      process.env.AGENT_CHECKPOINT_DIR ||
+      process.env.CHECKPOINT_DIR ||
+      getCanonicalCheckpointDir()
+    );
+  }
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
@@ -1137,11 +1145,7 @@ export class OvernightSupervisor {
   }
 
   constructor(options?: SupervisorOptions) {
-    this.checkpointDirectory =
-      options?.checkpointDirectory ||
-      process.env.AGENT_CHECKPOINT_DIR ||
-      process.env.CHECKPOINT_DIR ||
-      getCanonicalCheckpointDir();
+    this.customCheckpointDirectory = options?.checkpointDirectory;
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
@@ -1479,10 +1483,10 @@ export class OvernightSupervisor {
         repoDir: repoRoot
       });
 
+    const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
-      task.enableGitOps === true ||
-      (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")));
+      (!isTestEnv && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
@@ -1571,11 +1575,12 @@ export class OvernightSupervisor {
               }
 
               if (res.thinking) {
-                const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
+                milestone.builderThinking = res.thinking;
+                task.builderThinking = res.thinking;
                 task.journal.push({
                   timestamp: new Date().toISOString(),
                   role: "builder",
-                  message: `Builder reasoning: ${sample}${res.thinking.length > 180 ? "..." : ""}`
+                  message: `Builder reasoning: ${res.thinking}`
                 });
               }
 
