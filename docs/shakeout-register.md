@@ -382,3 +382,36 @@
   - Two-client API test proves partial content visible mid-turn and convergence on terminal status.
 - **Severity:** **P1** (core cross-device visibility degraded; a live turn appears frozen/hung on second client).
 - **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit 4bc71fc, deployed as image `local-agentic-sandbox-web-ui:v-4bc71fc-mw436dvd`. Dedicated suite `tests/chatLiveVisibility.test.ts` 8/8; gate 326/326. Two-client live acceptance on `thread-1793917113300-ip48`: persistent client streamed 143,982 SSE bytes to `done`; second client saw 73 `streaming` snapshots growing 1 → 11,162 chars via 1.5s polls, single transition streaming→completed, final 11,329 chars, exactly one upserted assistant message, no ⚠️ marker).
+
+---
+
+### [FEATURE-1] Chat Message Queue During Active Turns
+- **Feature:** Client-Side Message Queue (Composer Non-Blocking Follow-ups)
+- **Affected Components:**
+  - `web-ui/lib/chatQueue.ts` (pure module with `StorageLike`, FIFO operations, `decideSendAction`, `drainNextForTurnEnd`)
+  - `web-ui/components/ChatStream.tsx` (send-while-running enqueues text; queue chips rendered above composer with per-item `×` and `Clear all`; drains exactly one item on normal `DONE` via `turnActiveRef`)
+  - `web-ui/tests/chatQueue.test.ts` (17 behavioral tests)
+- **Status:** **IMPLEMENTED / VERIFIED LIVE** (Nov 6, 2026 — commit 0520a2a, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`).
+
+---
+
+### [FEATURE-2] Mid-Turn Steering Mailbox & Stream Events
+- **Feature:** Mid-Turn Steering Mailbox & Transcript Injection
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`appendSteer`, `consumeSteers`, `getPendingSteers`, `clearSteers` sidecar mailbox)
+  - `web-ui/app/api/threads/[id]/steer/route.ts` (`POST /api/threads/[id]/steer`)
+  - `web-ui/app/api/chat/route.ts` (consumes steer mailbox at every round boundary & pre-synthesis; persists as `[Steer from user, mid-turn]`; emits `{ type: "steer", texts }`; returns unconsumed in `done` as `pendingSteers`)
+  - `web-ui/components/ChatStream.tsx` (Queue vs Steer toggle during active turns; transcript renders `steer` events; auto-queues unconsumed `pendingSteers`)
+  - `web-ui/tests/chatSteer.test.ts` (8 behavioral tests)
+- **Status:** **IMPLEMENTED / VERIFIED LIVE** (Nov 6, 2026 — commit f1fab48, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`).
+
+---
+
+### [CHAT-9 / INV-B] Turn Presence for Instant Cross-Device Visibility
+- **Feature:** Active-Turn Presence Registry (Pre-Token Blind Window Elimination)
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`markTurnActive`, `getActiveTurn`, `clearTurnActive`)
+  - `web-ui/app/api/threads/[id]/route.ts` (`GET` returns `activeTurn` presence info even before thread file exists)
+  - `web-ui/app/api/chat/route.ts` (sets presence immediately on turn start; clears on done/abort/error)
+  - `web-ui/tests/chatTurnPresence.test.ts` (7 behavioral tests)
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 6, 2026 — commit 9f9b61e, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`. Live probe verified watcher presence within 114ms of turn start, reducing pre-token blind window from ~18s to <0.2s).
