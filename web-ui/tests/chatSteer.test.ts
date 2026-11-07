@@ -65,6 +65,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
   describe("POST /api/threads/[id]/steer endpoint", () => {
     it("appends steer and returns pendingCount", async () => {
       process.env.THREADS_DIR = tmpDir;
+      store.createThread({ id: "t-endpoint", title: "Steer Endpoint Test Thread" });
       const req = new NextRequest("http://localhost/api/threads/t-endpoint/steer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,6 +79,21 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       assert.equal(json.pendingCount, 1);
 
       assert.deepEqual(store.getPendingSteers("t-endpoint"), ["Please focus on tests"]);
+    });
+
+    it("[CHAT-11] rejects steer to nonexistent thread with 404 and does not write orphan sidecar", async () => {
+      process.env.THREADS_DIR = tmpDir;
+      const req = new NextRequest("http://localhost/api/threads/nonexistent-thread-999999/steer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Orphan steer attempt" })
+      });
+
+      const res = await STEER_POST(req, { params: Promise.resolve({ id: "nonexistent-thread-999999" }) });
+      assert.equal(res.status, 404);
+      const json = await res.json();
+      assert.ok(json.error);
+      assert.deepEqual(store.getPendingSteers("nonexistent-thread-999999"), []);
     });
 
     it("rejects empty text with 400", async () => {

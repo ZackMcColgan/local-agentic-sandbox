@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ThreadStore, resolveThreadsDir } from "@/lib/threads/threadStore";
+import { ThreadStore, resolveThreadsDir, getActiveTurn, activeExecutionSet } from "@/lib/threads/threadStore";
 
 export async function POST(
   req: NextRequest,
@@ -18,6 +18,11 @@ export async function POST(
     }
 
     const store = new ThreadStore(resolveThreadsDir());
+    const existingThread = await store.getThread(id);
+    if (!existingThread && !getActiveTurn(id) && !activeExecutionSet.has(id)) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+    }
+
     const pendingCount = store.appendSteer(id, text);
 
     return NextResponse.json({ success: true, pendingCount }, { status: 200 });
