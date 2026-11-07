@@ -1305,7 +1305,7 @@ export function ChatStream({
           const steerRes = await fetch(`/api/threads/${encodeURIComponent(currentActiveThreadId)}/steer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: prompt })
+            body: JSON.stringify({ text: prompt, interrupt: true })
           });
           if (!steerRes.ok) {
             const errJson = await steerRes.json().catch(() => ({}));

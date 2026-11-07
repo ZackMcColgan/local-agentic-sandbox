@@ -120,9 +120,33 @@ const activeTurnRegistry: Map<string, ActiveTurnInfo> =
   g.__sandboxActiveTurnRegistry || (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
 const activeTurnAbortControllers: Map<string, AbortController> =
   g.__sandboxActiveTurnAbortControllers || (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
+const activeRoundAbortControllers: Map<string, AbortController> =
+  g.__sandboxActiveRoundAbortControllers || (g.__sandboxActiveRoundAbortControllers = new Map<string, AbortController>());
 
 export function registerTurnAbortController(threadId: string, controller: AbortController): void {
   activeTurnAbortControllers.set(threadId, controller);
+}
+
+export function registerRoundAbortController(threadId: string, controller: AbortController): void {
+  activeRoundAbortControllers.set(threadId, controller);
+}
+
+export function clearRoundAbortController(threadId: string, controller?: AbortController): void {
+  if (!controller || activeRoundAbortControllers.get(threadId) === controller) {
+    activeRoundAbortControllers.delete(threadId);
+  }
+}
+
+export function interruptActiveTurnStream(threadId: string): boolean {
+  const controller = activeRoundAbortControllers.get(threadId);
+  if (controller) {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+    activeRoundAbortControllers.delete(threadId);
+    return true;
+  }
+  return false;
 }
 
 export function abortActiveTurn(threadId: string): boolean {

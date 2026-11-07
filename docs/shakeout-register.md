@@ -480,3 +480,15 @@
 - **Severity:** **P1** (violates turn honesty and model attribution; spoofs `modelUsed` with an arbitrary nonexistent model name).
 - **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `67fb713`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1 returning `sseEvents: ["error"]`, `asstStatus: "error"`, `⚠️ [Turn error: Model "totally-nonexistent-model-xyz-999" is not available on the active inference engine.]`).
 
+
+---
+
+### [CHAT-13 / INTERRUPT-STEER] Immediate Mid-Stream Round Interrupt for Steers
+- **Feature:** Mid-Turn Steering (`POST /api/threads/[id]/steer` with `interrupt: true`)
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`registerRoundAbortController`, `clearRoundAbortController`, `interruptActiveTurnStream`)
+  - `web-ui/app/api/threads/[id]/steer/route.ts` (accepts `{ text, interrupt?: boolean }`; triggers `interruptActiveTurnStream(id)` and returns `interrupted: boolean`)
+  - `web-ui/app/api/chat/route.ts` (creates a per-round `roundAbortController` combined via `AbortSignal.any([turnAbortController.signal, roundAbortController.signal])`; when interrupted by a steer without an explicit turn stop, preserves partial round output/thinking in `conversationMessages` and immediately advances to the next loop round to consume the steer)
+  - `web-ui/components/ChatStream.tsx` (sends `interrupt: true` when submitting a mid-turn Steer)
+  - `web-ui/tests/chatSteer.test.ts` (behavioral test verifying in-flight stream interruption, partial context preservation, immediate steer injection, and clean `completed` terminal status)
+- **Status:** **IMPLEMENTED / VERIFIED** (Nov 7, 2026).

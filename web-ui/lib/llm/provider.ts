@@ -805,12 +805,14 @@ export class LlamaCppProvider implements LLMProvider {
     let maxTokens: number;
     if (typeof req.options?.max_tokens === "number") {
       maxTokens = req.options.max_tokens;
-    } else if (effort || typeof req.options?.num_predict === "number") {
+    } else if (effort) {
       const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
       let thinkingBudget = 4096;
       if (effort === "fast" || effort === "low") thinkingBudget = 1024;
       else if (effort === "deep" || effort === "xhigh") thinkingBudget = 8192;
       maxTokens = requestedPredict + thinkingBudget;
+    } else if (typeof req.options?.num_predict === "number") {
+      maxTokens = req.options.num_predict;
     } else {
       maxTokens = 6144;
     }

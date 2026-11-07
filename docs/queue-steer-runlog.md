@@ -187,3 +187,46 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
    - Verified via Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1.
 - **Targeted Suites:** **77 / 77 passed** (`chatTurnHonesty`, `chatLiveVisibility`, `chatStreamTokenPreservation`, `chatSteer`, `chatTurnPresence`, `chatQueue`, `chatPersistenceDecoupling`).
 
+---
+
+## Phase 10 — Job 4: Build Mode Analysis, Fix-Up, and End-to-End Proof (`101871e`)
+
+### 1. 7-Question Architecture & Live Stack Analysis
+- **Q1 (Wiring):** `POST /api/threads` (`action: "launchTask" | "build"`) -> `generatePlanSpec` -> `OvernightSupervisor.executeTaskWithRecovery` -> `createProductionStepExecutor` -> `WorkerPool` (`BuilderWorker`, `CriticWorker`) -> `WorkerGitOps` -> `ThreadStore` & `RunLedger`. Fixed hardcoded `"swift-15-27b-mtp"` fallbacks across `workerPool.ts`, `planner.ts`, `supervisor.ts`, `scheduler.ts`, and `app/api/threads/route.ts` to honor `process.env.MODEL_NAME` (`qwen3.8-flash-next-gyro-gyro-s`).
+- **Q2 (Token Economics):** Fixed `LlamaCppProvider.generate` (`web-ui/lib/llm/provider.ts:808-814`) so `req.options.num_predict` always adds `thinkingBudget` (`4096` default, matching `OllamaProvider.generate`), preventing reasoning tokens from starving Critic (`512 + 4096 = 4608`), Planner (`2048 + 4096 = 6144`), or Builder (`4096 + 4096 = 8192`) output.
+- **Q3 (Single-Slot Contention):** Verified live (`job4-build-smoke-probe.log`): `WorkerPool` enforces `maxConcurrency = 1`; concurrent Chat turns during an active Build task queue cleanly inside Strata's HTTP server without error or deadlock (`Concurrent Chat Turn finished — done: true, error: null, content: CONTENTION_OK`).
+- **Q4 (Workspace & Fresh-Pull GitOps):** Updated `WorkerGitOps.createAndSwitchBranch` (`web-ui/lib/git/workerGitOps.ts`) to fetch `origin/develop` and branch from `origin/develop` (`git checkout -f -B <branchName> origin/develop`) when `origin` remote is configured, and seeded `/workspace` in the cluster PVC with `origin/develop` (`06fb0bdc540b9e3fb61b486e3f7b759ef229353a`).
+- **Q5–Q7 (Lifecycle Honesty, Morning Report, Scheduler):** Verified terminal state reconciliation (`completed`, `parked`, `paused`, `stopped`), idempotent `stageAndCommit` audit logging, `/api/morning-report` artifact/SHA reporting, and `UnattendedScheduler` model wiring.
+- **Worth-It Gate Verdict:** **WORTH FIXING AND PROVING TONIGHT.**
+
+### 2. End-to-End Proof Run (`task-1794049952744`, `thread-1794049952748-hnzm`)
+- Deployed `local-agentic-sandbox-web-ui:v-101871e` and launched the proof task with zero mid-run intervention.
+- Branched `feat/task-179404995274` from `origin/develop` (`06fb0bdc540b9e3fb61b486e3f7b759ef229353a`), generated `docs/build-mode-e2e-proof.md`, committed `618643a7a66b01885139e839eb84919dd835dbb0`, transitioned `thread.status` and `task.status` to `"completed"` in `1m 14s`, and verified full entry in `GET /api/morning-report`.
+- **Verdict:** **`BUILD PROVEN (clean)`**
+
+
+
+---
+
+## Phase 11 — Job 5: Graduation Probe (`GRADUATION BLOCKED`) & `INTERRUPT-STEER` Implementation
+
+### 1. Graduation Probe (`thread-1794050126335-i74n`)
+- Dispatched a 1-chunk survey job on `thread-1794050126335-i74n` asking the sandbox chat agent to inspect the steer implementation and write a 10-line design note for `INTERRUPT-STEER`.
+- The sandbox chat agent executed 19 tool calls and completed cleanly (`status: "completed"`), producing a 10-point design note (`interrupt-steer-survey.md`).
+- **Verdict:** **`GRADUATION BLOCKED`** — three concrete self-hosting capability gaps diagnosed from live probe evidence:
+  1. **Container `/workspace` PVC vs. Host Checkout Isolation:** In Chat mode without Host Mode, `workspace_*` tools execute inside `mcp-runner` against the cluster `/workspace` PVC (tracking `origin/develop` `06fb0bd`) rather than the host checkout (`C:\Users\zackm\Desktop\repos\local-agentic-sandbox` on `feature/chat-queue-steer`), so unmerged branch files (`steer/route.ts`) are not visible in `/workspace` until pushed/fetched.
+  2. **Cross-Pod UID/Umask Mismatch on `/workspace` Subdirectories:** `web-ui` runs as `uid=1001` (`nextjs`) while `mcp-runner` runs as `uid=10001, gid=10001`. When `web-ui` runs `git checkout` in `/workspace`, newly created subdirectories (`/workspace/docs`) are created with mode `0755` (`uid=1001, gid=10001`), preventing `mcp-runner` (`uid=10001`) from creating new files inside `/workspace/docs` without `0775` group-write permissions.
+  3. **Host Mode Interactive Approval Gate:** In Host Mode (`host_*` tools), `host_run_powershell` and `host_write_file` gate command/write execution behind interactive human approval or the host-runner daemon (`:8765`), preventing unattended test+commit loops from inside a chat turn.
+
+### 2. `INTERRUPT-STEER` Implementation & Behavioral Verification
+- **`web-ui/lib/threads/threadStore.ts`:** Added `activeRoundAbortControllers` on `globalThis` and exported `registerRoundAbortController`, `clearRoundAbortController`, and `interruptActiveTurnStream(threadId)`.
+- **`web-ui/app/api/threads/[id]/steer/route.ts`:** Accepted `{ text, interrupt?: boolean }`, invoked `interruptActiveTurnStream(id)` when `interrupt === true`, and returned `{ success: true, pendingCount, interrupted }`.
+- **`web-ui/app/api/chat/route.ts`:** Registered a per-round `roundAbortController` combined via `AbortSignal.any([turnAbortController.signal, roundAbortController.signal])`. When interrupted by a steer without an explicit turn stop, partial round text and thinking are preserved in `conversationMessages`, `groundingDirectivePending = true` allows the loop to continue, and the next iteration immediately consumes the steer and dispatches the redirected LLM request.
+- **`web-ui/components/ChatStream.tsx`:** Updated mid-turn Steer submission to pass `interrupt: true`.
+- **`web-ui/tests/chatSteer.test.ts`:** Added behavioral test verifying in-flight stream interruption, partial context preservation, immediate steer consumption, and clean `completed` status (**11 / 11 passed**).
+
+---
+
+## Phase 12 — Job 6: House-Rule Improvements & Final Verification
+- Added bounded-retry (`max 2 identical runs, max 3 strategies -> BLOCKED`), targeted-test-first, paging discipline, and single-writer rules to `AGENTS.md`, `GEMINI.md`, and `SYSTEM_PROMPT` in `web-ui/app/api/chat/route.ts`.
+- Verified `web-ui/tests/repoHygiene.test.ts` passes **5 / 5**.

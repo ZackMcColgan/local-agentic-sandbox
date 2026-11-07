@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -373,6 +373,10 @@ CRITICAL INSTRUCTIONS:
   - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
 - REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
   - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.
+- EXECUTION & RETRY DISCIPLINE (HOUSE RULES):
+  - Bounded retries: maximum 2 identical runs of any command or tool call, and maximum 3 distinct strategies per subproblem; if still failing, stop and report BLOCKED with the exact error and command.
+  - Targeted tests first: run only the specific test file(s) for the modified module before running any broader test gate.
+  - Paging discipline: use startLine/endLine when reading large files instead of re-reading entire files repeatedly.
 ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
@@ -853,6 +857,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             hasCompletedToolCalls: traces.length > 0
           });
 
+          const roundAbortController = new AbortController();
+          if (activeThreadId) {
+            registerRoundAbortController(activeThreadId, roundAbortController);
+          }
+
           const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
@@ -860,7 +869,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            signal: turnAbortController.signal,
+            signal: AbortSignal.any([turnAbortController.signal, roundAbortController.signal]),
             reasoning_effort: roundOptions.reasoning_effort,
             options: roundOptions
           };
@@ -873,25 +882,48 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
-          for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
-            if (chunk.message?.thinking) {
-              roundThinking += chunk.message.thinking;
-              await sendEvent({ type: "thought", thought: roundThinking });
+          try {
+            for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
+              if (chunk.message?.thinking) {
+                roundThinking += chunk.message.thinking;
+                await sendEvent({ type: "thought", thought: roundThinking });
+              }
+              if (chunk.message?.content) {
+                const textChunk = chunk.message.content;
+                fullRoundContent += textChunk;
+                accumulatedStreamedTokens += textChunk;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens);
+                await sendEvent({ type: "token", content: textChunk });
+              }
+              if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+                toolCallsFromMessage.push(...chunk.message.tool_calls);
+              }
             }
-            if (chunk.message?.content) {
-              const textChunk = chunk.message.content;
-              fullRoundContent += textChunk;
-              accumulatedStreamedTokens += textChunk;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
-              await sendEvent({ type: "token", content: textChunk });
+          } catch (roundErr: any) {
+            if (!roundAbortController.signal.aborted || turnAbortController.signal.aborted) {
+              throw roundErr;
             }
-            if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
-              toolCallsFromMessage.push(...chunk.message.tool_calls);
+          } finally {
+            if (activeThreadId) {
+              clearRoundAbortController(activeThreadId, roundAbortController);
             }
           }
 
           if (roundThinking.trim()) {
             accumulatedThoughts.push(roundThinking.trim());
+          }
+
+          if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
+            if (fullRoundContent.trim()) {
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+            }
+            reasoningSpan.end("ok");
+            groundingDirectivePending = true;
+            round++;
+            continue;
           }
 
           reasoningSpan.end("ok");
@@ -1645,6 +1677,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           activeExecutionSet.delete(activeThreadId);
           clearTurnActive(activeThreadId);
           clearTurnAbortController(activeThreadId);
+          clearRoundAbortController(activeThreadId);
           threadStore.clearSteers(activeThreadId);
         }
         req.signal.removeEventListener("abort", cleanupClientSignal);

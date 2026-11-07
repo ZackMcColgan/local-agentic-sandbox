@@ -324,5 +324,138 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const foundInTranscript = (thread?.messages || []).some((m) => m.content.includes("late arrival"));
       assert.equal(foundInTranscript, false, "Unconsumed steer must not be in transcript");
     });
+
+    it("INTERRUPT-STEER: POST /api/threads/[id]/steer with interrupt=true aborts in-flight round stream without stopping turn and immediately applies steer", async () => {
+      const threadId = `t-steer-interrupt-${Date.now()}`;
+      process.env.THREADS_DIR = tmpDir;
+
+      let roundCount = 0;
+      let recordedRequests: any[] = [];
+      let round1FirstTokenReceivedResolve!: () => void;
+      const round1FirstTokenReceived = new Promise<void>((r) => {
+        round1FirstTokenReceivedResolve = r;
+      });
+
+      roundHandler = (parsed, res) => {
+        recordedRequests.push(parsed);
+        roundCount++;
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        if (roundCount === 1) {
+          // Write initial partial token and then hold the HTTP stream open (simulating a long 60s generation)
+          res.write(
+            JSON.stringify({
+              message: {
+                thinking: "Starting long analysis...",
+                content: "Initial partial response before interrupt."
+              }
+            }) + "\n"
+          );
+          // Do NOT call res.end() here — wait for roundAbortController to abort the request!
+          res.on("close", () => {
+            try {
+              res.end();
+            } catch {}
+          });
+        } else {
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "Redirected response incorporating immediate interrupt steer!"
+              }
+            }) + "\n"
+          );
+          res.write(JSON.stringify({ message: {}, done: true }) + "\n");
+          res.end();
+        }
+      };
+
+      const { POST: CHAT_POST } = await import("../app/api/chat/route");
+      const chatReq = new NextRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          userMessageId: "u-int",
+          assistantMessageId: "a-int",
+          messages: [{ role: "user", content: "Write a very long essay", id: "u-int" }],
+          model: "swift-15-27b-mtp",
+          enableTools: false
+        })
+      });
+
+      const chatRes = await CHAT_POST(chatReq);
+      const reader = chatRes.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const events: any[] = [];
+
+      // Start reading SSE stream concurrently
+      const streamDonePromise = (async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value);
+          const parts = buf.split("\n\n");
+          buf = parts.pop() || "";
+          for (const p of parts) {
+            if (p.startsWith("data:")) {
+              try {
+                const evt = JSON.parse(p.slice(5));
+                events.push(evt);
+                if (evt.type === "token" && String(evt.content || "").includes("Initial partial response")) {
+                  round1FirstTokenReceivedResolve();
+                }
+              } catch {}
+            }
+          }
+        }
+      })();
+
+      // Wait until round 1 stream has emitted the first partial token and is stalled waiting for more
+      await round1FirstTokenReceived;
+
+      // Send interrupt steer via POST /api/threads/[id]/steer with interrupt: true
+      const steerReq = new NextRequest(`http://localhost/api/threads/${threadId}/steer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Switch to concise bullet points now", interrupt: true })
+      });
+      const steerRes = await STEER_POST(steerReq, { params: Promise.resolve({ id: threadId }) });
+      assert.equal(steerRes.status, 200);
+      const steerJson = await steerRes.json();
+      assert.equal(steerJson.success, true);
+      assert.equal(steerJson.interrupted, true, "Must report interrupted=true when active round stream was aborted");
+
+      await streamDonePromise;
+
+      // 1. Must have emitted steer event and completed turn cleanly (not aborted/incomplete!)
+      const steerEvent = events.find((e) => e.type === "steer");
+      assert.ok(steerEvent, "Must emit steer event after interrupting round 1");
+      assert.deepEqual(steerEvent.texts, ["Switch to concise bullet points now"]);
+
+      const doneEvent = events.find((e) => e.type === "done");
+      assert.ok(doneEvent, "Turn must complete with done event (not abort)");
+
+      // 2. Round 2 request must contain both the partial round 1 assistant text and the steer
+      assert.equal(recordedRequests.length, 2, "Must have made 2 LLM requests (interrupted round 1 + steered round 2)");
+      const round2Messages = recordedRequests[1].messages || [];
+      const partialAssistantInRound2 = round2Messages.find(
+        (m: any) => m.role === "assistant" && m.content.includes("Initial partial response before interrupt.")
+      );
+      assert.ok(partialAssistantInRound2, "Partial content from interrupted round 1 must be preserved in round 2 context");
+      const steerInRound2 = round2Messages.find(
+        (m: any) => m.role === "user" && m.content.includes("[Steer from user, mid-turn] Switch to concise bullet points now")
+      );
+      assert.ok(steerInRound2, "Interrupt steer must be injected into round 2 messages");
+
+      // 3. Thread must be persisted as completed (NOT incomplete/stopped) with final steered answer
+      const thread = await store.getThread(threadId);
+      assert.ok(thread);
+      assert.equal(thread.status, "completed");
+      const assistantMsg = thread.messages.find((m) => m.id === "a-int");
+      assert.ok(assistantMsg);
+      assert.equal(assistantMsg.status, "completed");
+      assert.ok(assistantMsg.content.includes("Redirected response incorporating immediate interrupt steer!"));
+    });
   });
 });

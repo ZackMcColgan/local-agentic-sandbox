@@ -602,7 +602,8 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             signal: options?.signal,
             onThinkingChunk: options?.onThinkingChunk,
             scope: this.scope,
-            options: { temperature: 0.2, num_predict: 8192 }
+            reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
           });
           newContent = stripCodeFence(result.text);
           if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
@@ -690,6 +691,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
         scope: this.scope,
+        reasoningEffort: "balanced",
         options: { temperature: 0.2, num_predict: 8192 }
       });
       newContent = stripCodeFence(result.text);
@@ -746,7 +748,8 @@ Please fix the syntax error and output the complete, valid file content for "${t
           keepAlive: this.keepAlive,
           signal: options?.signal,
           scope: this.scope,
-          options: { temperature: 0.2, num_predict: 8192 }
+          reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -1138,6 +1141,7 @@ Respond strictly in JSON:
         keepAlive: this.keepAlive,
         signal: options?.signal,
         scope: this.scope,
+        reasoningEffort: "balanced",
         options: { temperature: 0.1, num_predict: 2048 }
       });
       verdictText = result.text;
