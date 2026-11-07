@@ -5,11 +5,21 @@ import crypto from "crypto";
 import { spawn, execSync } from "child_process";
 import { isDestructiveHostAction } from "./classifier";
 import { getBridgeManifest } from "./manifest";
+import {
+  executeGitVerb,
+  resolveDefaultGitOpsLogPath,
+  type BridgeGitConfig,
+  type GitCapability,
+  type MergeGrant
+} from "./gitOps";
 
 export interface HostServerOptions {
   port?: number;
   sharedSecret?: string;
   host?: string;
+  allowUnattendedGit?: boolean;
+  gitRepoAllowlist?: Record<string, string>;
+  gitOpsLogPath?: string;
 }
 
 const MAX_OUTPUT_CHARS = 65536;
@@ -52,6 +62,28 @@ export function createHostServer(options: HostServerOptions = {}) {
   }
 
   const manifest = getBridgeManifest(__dirname);
+
+  // Resolve Git config
+  let fileConfig: any = {};
+  const configPath = path.join(__dirname, "config.json");
+  if (fs.existsSync(configPath)) {
+    try {
+      fileConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    } catch {}
+  }
+
+  const gitConfig: BridgeGitConfig = {
+    allowUnattendedGit:
+      options.allowUnattendedGit !== undefined
+        ? options.allowUnattendedGit
+        : (process.env.HOST_RUNNER_ALLOW_UNATTENDED_GIT === "true" || fileConfig.allowUnattendedGit === true),
+    gitRepoAllowlist:
+      options.gitRepoAllowlist ||
+      fileConfig.gitRepoAllowlist || {
+        "local-agentic-sandbox": path.resolve(__dirname, "..")
+      },
+    gitOpsLogPath: options.gitOpsLogPath || fileConfig.gitOpsLogPath || resolveDefaultGitOpsLogPath()
+  };
 
   const server = http.createServer(async (req, res) => {
     // Zero CORS headers - NEVER set Access-Control-Allow-* headers.
@@ -113,9 +145,38 @@ export function createHostServer(options: HostServerOptions = {}) {
           status: "ok",
           protocolVersion: manifest.protocolVersion,
           bridgeSourceSha256: manifest.bridgeSourceSha256,
-          pid: process.pid
+          pid: process.pid,
+          allowUnattendedGit: gitConfig.allowUnattendedGit
         })
       );
+      return;
+    }
+
+    // 3b. GET /git-ops/logs route
+    if (req.method === "GET" && url.pathname === "/git-ops/logs") {
+      const authHeader = req.headers["x-host-runner-secret"];
+      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+
+      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      let logs: any[] = [];
+      if (gitConfig.gitOpsLogPath && fs.existsSync(gitConfig.gitOpsLogPath)) {
+        try {
+          const lines = fs.readFileSync(gitConfig.gitOpsLogPath, "utf8").split(/\r?\n/).filter(Boolean);
+          const slice = lines.slice(-limit);
+          logs = slice.map((l) => {
+            try { return JSON.parse(l); } catch { return { raw: l }; }
+          });
+        } catch {}
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ logs }));
       return;
     }
 
@@ -195,7 +256,14 @@ export function createHostServer(options: HostServerOptions = {}) {
         }
 
         try {
-          const result = await handleToolExecution(tool, toolArgs, res);
+          const result = await handleToolExecution(
+            tool,
+            toolArgs,
+            res,
+            body.capability,
+            gitConfig,
+            body.mergeGrant
+          );
           if (result !== undefined && !res.writableEnded) {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify(result));
@@ -233,7 +301,18 @@ export function createHostServer(options: HostServerOptions = {}) {
   };
 }
 
-async function handleToolExecution(tool: string, args: any, res: http.ServerResponse): Promise<any> {
+async function handleToolExecution(
+  tool: string,
+  args: any,
+  res: http.ServerResponse,
+  capability?: GitCapability,
+  gitConfig?: BridgeGitConfig,
+  mergeGrant?: MergeGrant
+): Promise<any> {
+  if (tool.startsWith("host_git_")) {
+    return await executeGitVerb(tool, args, capability, gitConfig, mergeGrant);
+  }
+
   let effectiveCwd = process.cwd();
   if (args && args.cwd && typeof args.cwd === "string" && args.cwd.trim()) {
     if (!fs.existsSync(args.cwd) || !fs.statSync(args.cwd).isDirectory()) {

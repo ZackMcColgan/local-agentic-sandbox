@@ -62,6 +62,7 @@ import {
 import { compactConversationHistory } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
+  UNATTENDED_GIT_TOOLS_DEFINITIONS,
   executeHostTool,
   isDestructiveHostAction,
   createPendingApproval,
@@ -69,9 +70,11 @@ import {
   checkHostRunnerHealth,
   determineHostRunnerState,
   shouldAdvertiseHostTools,
+  shouldAdvertiseUnattendedGitTools,
   getHostStateDirective,
   generateHostFileDiff
 } from "@/lib/hostMode";
+import { getHostSettings } from "@/lib/hostSettings";
 import { notify } from "@/lib/notifications";
 import {
   loadUserProfile,
@@ -555,10 +558,32 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           toolClientMap.set(ht.name, { client: null as any, tier: "host" });
         }
 
+        // Unattended Git Tool Admission: requires Key (a) Settings ON + explicit capability + READY runner
+        const hostSettings = getHostSettings();
+        const threadGitCapability = threadData?.gitCapability;
+        const includeUnattendedGit = shouldAdvertiseUnattendedGitTools(
+          hostSettings.allowUnattendedHostGit,
+          threadGitCapability,
+          hostStatus.runnerState
+        );
+
+        const gitTools = includeUnattendedGit
+          ? UNATTENDED_GIT_TOOLS_DEFINITIONS.map((gt) => ({
+              name: gt.function.name,
+              description: gt.function.description,
+              inputSchema: gt.function.parameters
+            }))
+          : [];
+
+        for (const gt of gitTools) {
+          toolClientMap.set(gt.name, { client: null as any, tier: "host" });
+        }
+
         const allTools = [
           ...(sandboxSession?.tools || []),
           ...(browserSession?.tools || []),
-          ...hostTools
+          ...hostTools,
+          ...gitTools
         ];
 
         const toolRegistry = buildToolRegistry(allTools);
@@ -1141,7 +1166,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 };
               } else {
                 try {
-                  result = await executeHostTool(toolName, toolArgs);
+                  result = await executeHostTool(
+                    toolName,
+                    toolArgs,
+                    undefined,
+                    threadData?.gitCapability,
+                    threadData?.mergeGrant
+                  );
                   const hostDiff = generateHostFileDiff(toolName, toolArgs, result);
                   if (hostDiff) {
                     turnHostDiffs.push(hostDiff);
