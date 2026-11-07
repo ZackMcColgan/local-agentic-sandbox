@@ -23,6 +23,9 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
         runId: "run-test-1",
         commandRunner: async (file, args) => {
           executed.push([file, ...args].join(" "));
+          if (args[0] === "status") {
+            return { exitCode: 0, stdout: "", stderr: "" };
+          }
           return { exitCode: 0, stdout: "Switched to branch feat/task-123456789012\n", stderr: "" };
         }
       });
