@@ -274,7 +274,15 @@ export function ChatStream({
   // Composer Mode state (Chat | Build)
   const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
-  const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">("queue");
+  const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">(() => {
+    if (typeof window !== "undefined" && threadId) {
+      const saved = window.localStorage.getItem(`chat-followup-action:${threadId}`);
+      if (saved === "queue" || saved === "steer") return saved;
+    }
+    return "queue";
+  });
+  const [pendingSteers, setPendingSteers] = useState<string[]>([]);
+  const [isSubmittingSteer, setIsSubmittingSteer] = useState(false);
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -558,18 +566,30 @@ export function ChatStream({
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const chatQueueRef = useRef<ChatQueue | null>(null);
 
-  // Sync / instantiate queue for current thread
+  // Sync / instantiate queue for current thread and persist follow-up action
   useEffect(() => {
     const tid = activeThreadId || threadId;
     if (typeof window !== "undefined" && tid) {
       const q = new ChatQueue(window.localStorage, tid);
       chatQueueRef.current = q;
       setQueueItems(q.items());
+      const saved = window.localStorage.getItem(`chat-followup-action:${tid}`);
+      if (saved === "queue" || saved === "steer") {
+        setMidTurnAction(saved);
+      }
     } else {
       chatQueueRef.current = null;
       setQueueItems([]);
     }
   }, [activeThreadId, threadId]);
+
+  const handleSelectMidTurnAction = (action: "queue" | "steer") => {
+    setMidTurnAction(action);
+    const tid = activeThreadId || threadId;
+    if (typeof window !== "undefined" && tid) {
+      window.localStorage.setItem(`chat-followup-action:${tid}`, action);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -1058,7 +1078,8 @@ export function ChatStream({
               }))
             );
 
-            // CHAT-STEER: unconsumed pending steers returned at turn end are auto-queued
+            // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
+            setPendingSteers([]);
             if (Array.isArray(event.pendingSteers) && event.pendingSteers.length > 0 && chatQueueRef.current) {
               for (const s of event.pendingSteers) {
                 chatQueueRef.current.enqueue(s);
@@ -1066,8 +1087,9 @@ export function ChatStream({
               setQueueItems(chatQueueRef.current.items());
             }
           } else if (event.type === "steer") {
-            // Render mid-turn consumed steer into messages in place
+            // Render mid-turn consumed steer into messages in place and remove from pendingSteers
             if (Array.isArray(event.texts) && event.texts.length > 0) {
+              setPendingSteers((prev) => prev.filter((p) => !event.texts.includes(p)));
               const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
                 id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 role: "user",
@@ -1277,6 +1299,8 @@ export function ChatStream({
 
       // If midTurnAction is "steer", POST to /api/threads/[id]/steer
       if (midTurnAction === "steer" && currentActiveThreadId) {
+        setIsSubmittingSteer(true);
+        setErrorMsg(null);
         try {
           const steerRes = await fetch(`/api/threads/${encodeURIComponent(currentActiveThreadId)}/steer`, {
             method: "POST",
@@ -1287,10 +1311,15 @@ export function ChatStream({
             const errJson = await steerRes.json().catch(() => ({}));
             throw new Error(errJson.error || "Failed to deliver steer");
           }
+          setPendingSteers((prev) => [...prev, prompt]);
           setInput("");
           if (textareaRef.current) textareaRef.current.style.height = "auto";
         } catch (steerErr: any) {
           setErrorMsg(steerErr.message || "Failed to deliver steer to turn");
+          // Requirement 4: On steer POST failure, restore text into composer - never silently eaten
+          setInput(prompt);
+        } finally {
+          setIsSubmittingSteer(false);
         }
         return;
       }
@@ -2947,6 +2976,31 @@ export function ChatStream({
       {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
       <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
         
+        {/* CHAT-STEER: Pending Steer indicator above composer */}
+        {pendingSteers.length > 0 && (
+          <div data-testid="chat-steer-pending-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-sky-100 dark:border-sky-950/60 max-w-[840px] mx-auto overflow-x-auto scrollbar-none">
+            <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
+              <span>Steer pending ({pendingSteers.length}):</span>
+            </span>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {pendingSteers.map((st, idx) => (
+                <div
+                  key={idx}
+                  data-testid="chat-steer-pending-chip"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-[11px] font-medium text-sky-950 dark:text-sky-200 shrink-0 max-w-[280px]"
+                >
+                  <span className="truncate" title={st}>
+                    {st}
+                  </span>
+                  <span className="text-[9px] text-sky-600 dark:text-sky-400 italic shrink-0">
+                    (lands at next step)
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* CHAT-QUEUE: Queue Chips above composer with per-item × and clear all */}
         {queueItems.length > 0 && (
           <div data-testid="chat-queue-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto overflow-x-auto scrollbar-none">
@@ -3083,7 +3137,7 @@ export function ChatStream({
                     type="button"
                     role="radio"
                     aria-checked={midTurnAction === "queue"}
-                    onClick={() => setMidTurnAction("queue")}
+                    onClick={() => handleSelectMidTurnAction("queue")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "queue"
                         ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
@@ -3096,10 +3150,10 @@ export function ChatStream({
                     type="button"
                     role="radio"
                     aria-checked={midTurnAction === "steer"}
-                    onClick={() => setMidTurnAction("steer")}
+                    onClick={() => handleSelectMidTurnAction("steer")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "steer"
-                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                        ? "bg-white dark:bg-zinc-900 text-sky-700 dark:text-sky-300 font-semibold shadow-xs"
                         : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                     }`}
                   >
@@ -3156,8 +3210,8 @@ export function ChatStream({
                 </label>
               )}
 
-              {/* Send / Stop Morphed Button */}
-              {isGeneratingOrRunning ? (
+              {/* Action Buttons Deck */}
+              {isGeneratingOrRunning && (
                 <button
                   type="button"
                   onClick={handleStop}
@@ -3168,14 +3222,33 @@ export function ChatStream({
                 >
                   <Square className="h-3.5 w-3.5 fill-current stroke-none" />
                 </button>
-              ) : (
+              )}
+
+              {/* Send Button: Always visible and enabled whenever input text is present, even during an active run */}
+              {(!isGeneratingOrRunning || input.trim().length > 0) && (
                 <button
                   type="submit"
-                  disabled={!input.trim() && attachedFiles.length === 0}
+                  disabled={isSubmittingSteer || (!input.trim() && attachedFiles.length === 0)}
                   data-testid="send-button"
-                  className="h-9 w-9 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
-                  title="Send message"
-                  aria-label="Send message"
+                  className={`h-9 w-9 rounded-full text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
+                    isGeneratingOrRunning && midTurnAction === "steer"
+                      ? "bg-sky-600 hover:bg-sky-700"
+                      : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                  title={
+                    isGeneratingOrRunning
+                      ? midTurnAction === "steer"
+                        ? "Submit steer to current turn"
+                        : "Enqueue message for after turn"
+                      : "Send message"
+                  }
+                  aria-label={
+                    isGeneratingOrRunning
+                      ? midTurnAction === "steer"
+                        ? "Submit steer"
+                        : "Enqueue message"
+                      : "Send message"
+                  }
                 >
                   <Send className="h-3.5 w-3.5 text-white fill-white ml-0.5" />
                 </button>
