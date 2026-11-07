@@ -106,9 +106,9 @@ export class WorkerGitOps {
     this.assertSafeBranchName(branchName);
     let baseSha: string | undefined;
 
-    // Workspace bootstrap safety check: ensure working tree is clean
-    const statusRes = await this.commandRunner("git", ["status", "--porcelain"]);
-    this.recordAudit("git status --porcelain", statusRes);
+    // Workspace bootstrap safety check: ensure working tree is clean (no modified/staged tracked files)
+    const statusRes = await this.commandRunner("git", ["status", "--porcelain", "-uno"]);
+    this.recordAudit("git status --porcelain -uno", statusRes);
     const porcelainOut = statusRes.stdout.trim();
     if (statusRes.exitCode === 0 && porcelainOut.length > 0 && porcelainOut !== "ok") {
       throw new Error(`Bootstrap failed: dirty working tree in workspace:\n${porcelainOut}`);
