@@ -38,3 +38,12 @@ Before declaring any UI task complete:
 - [ ] Automated visual test run (`npm run test:ui`).
 - [ ] All 4 visual permutations inspected with `view_file` (Desktop Light, Mobile Light, Desktop Dark, Mobile Dark).
 - [ ] Container deployed and verified on localhost and LAN endpoints (`:3001` and `:80`).
+
+---
+
+## 4. Execution & Retry Discipline (House Rules)
+- **Bounded Retries**: Maximum **2 identical runs** of any command or tool call; maximum **3 distinct strategies** per subproblem. If still failing, stop and report `BLOCKED: <exact error and command>` rather than looping.
+- **Targeted Tests First**: Run only the targeted test file(s) covering the modified module during iteration (`npx tsx --test tests/<suite>.test.ts`), then run `npm run test:gate` once before committing.
+- **Large File Paging**: When reading large files, use explicit line ranges (`startLine` / `endLine`) rather than reading whole files repeatedly.
+- **Single Writer Discipline**: Maintain one writer in the repository checkout at a time; never overlap concurrent edits or git operations on the same working tree.
+- **No Unbounded Polling**: Never spin in an unbounded sleep/poll loop against a dead endpoint or hung process; verify health with a bounded timeout and fail fast with concrete diagnostics.

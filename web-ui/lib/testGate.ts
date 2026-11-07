@@ -128,7 +128,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatUiHonestyAndCopy.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
-      "tests/chatStreamTokenPreservation.test.ts"
+      "tests/chatStreamTokenPreservation.test.ts",
+      "tests/chatSteerSubmitUx.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -425,12 +426,28 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts", "tests/chatLiveVisibility.test.ts", "tests/chatStreamTokenPreservation.test.ts"]
+    tests: [
+      "tests/chatStreaming.test.ts",
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatStreamTokenPreservation.test.ts",
+      "tests/chatQueue.test.ts"
+    ]
   },
   // CHAT-8 live streaming visibility (server snapshots + client poll loop)
   {
     match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
     tests: ["tests/chatLiveVisibility.test.ts"]
+  },
+  // CHAT-QUEUE client-side message queue
+  {
+    match: (p) => p.includes("lib/chatQueue"),
+    tests: ["tests/chatQueue.test.ts"]
+  },
+  // CHAT-STEER mid-turn server steer mailbox
+  {
+    match: (p) => p.includes("app/api/threads") && p.includes("steer"),
+    tests: ["tests/chatSteer.test.ts"]
   },
   {
     match: (p) =>

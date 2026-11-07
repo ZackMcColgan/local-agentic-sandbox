@@ -111,7 +111,7 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
     assert.match(src, /activeExecutionSet\.add\(activeThreadId\)/, "route must register the thread id as live execution");
     assert.match(src, /activeExecutionSet\.delete\(activeThreadId\)/, "route must unregister in cleanup");
-    const writes = src.match(/streamSnapshot\.maybeWrite\(accumulatedStreamedTokens\)/g);
+    const writes = src.match(/streamSnapshot\.maybeWrite\(/g);
     assert.ok(writes && writes.length >= 2, "both the tool-round loop and the synthesis loop must snapshot");
   });
 

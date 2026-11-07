@@ -18,7 +18,7 @@ test.describe("Simulation Mode & State Invariants Suite", () => {
     await page.route("**/api/tasks**", async (route) => {
       const url = route.request().url();
       // Allow initial idle mount hydration check
-      if (url.includes("active=true") && route.request().method() === "GET") {
+      if (route.request().method() === "GET") {
         await route.fulfill({
           status: 200,
           contentType: "application/json",

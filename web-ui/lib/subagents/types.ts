@@ -89,6 +89,7 @@ export interface Milestone {
   synthetic?: boolean;
   /** Model that generated the builder output (absent when synthetic). */
   builderModel?: string;
+  builderThinking?: string;
   criticScore?: number;
   criticVerdict?: "PASS" | "FAIL";
   criticCritique?: string;
@@ -122,7 +123,7 @@ export interface CheckpointState {
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
+export type TaskStatus = "planning" | "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
 
 export interface TaskJournalEntry {
   timestamp: string;
@@ -141,6 +142,8 @@ export interface TaskManifest {
   complexity?: TaskComplexity;
   branchName: string;
   branch?: string;
+  builderThinking?: string;
+  pushStatus?: string;
   status: TaskStatus;
   milestones: Milestone[];
   currentMilestoneIndex: number;

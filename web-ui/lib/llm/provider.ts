@@ -95,10 +95,12 @@ export class OllamaProvider implements LLMProvider {
   engine: LLMEngine = "ollama";
 
   async *streamChat(baseUrl: string, payload: LLMChatRequest): AsyncGenerator<LLMStreamChunk> {
+    const { signal, ...bodyPayload } = payload;
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, stream: true })
+      body: JSON.stringify({ ...bodyPayload, stream: true }),
+      signal
     });
 
     if (!res.ok) {
@@ -116,7 +118,22 @@ export class OllamaProvider implements LLMProvider {
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        if (signal?.aborted) {
+          throw new DOMException("The operation was aborted", "AbortError");
+        }
+        const { done, value } = await (signal
+          ? Promise.race([
+              reader.read(),
+              new Promise<never>((_, reject) => {
+                if (signal.aborted) {
+                  reject(new DOMException("The operation was aborted", "AbortError"));
+                  return;
+                }
+                const onAbort = () => reject(new DOMException("The operation was aborted", "AbortError"));
+                signal.addEventListener("abort", onAbort, { once: true });
+              })
+            ])
+          : reader.read());
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -484,6 +501,7 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async *streamChat(baseUrl: string, payload: LLMChatRequest): AsyncGenerator<LLMStreamChunk> {
+    const signal = payload.signal;
     const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl).replace(/\/$/, "");
     const targetUrl = `${effectiveBase}/v1/chat/completions`;
 
@@ -575,7 +593,22 @@ export class LlamaCppProvider implements LLMProvider {
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        if (signal?.aborted) {
+          throw new DOMException("The operation was aborted", "AbortError");
+        }
+        const { done, value } = await (signal
+          ? Promise.race([
+              reader.read(),
+              new Promise<never>((_, reject) => {
+                if (signal.aborted) {
+                  reject(new DOMException("The operation was aborted", "AbortError"));
+                  return;
+                }
+                const onAbort = () => reject(new DOMException("The operation was aborted", "AbortError"));
+                signal.addEventListener("abort", onAbort, { once: true });
+              })
+            ])
+          : reader.read());
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");

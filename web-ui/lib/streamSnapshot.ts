@@ -17,6 +17,7 @@ export interface StreamingSnapshotMessage {
   id: string;
   role: "assistant";
   content: string;
+  thought?: string;
   status: "streaming";
   timestamp: string;
 }
@@ -37,19 +38,22 @@ export class ThrottledStreamSnapshot {
   ) {}
 
   /**
-   * Writes a snapshot of the accumulated streamed content, throttled to at
+   * Writes a snapshot of the accumulated streamed content and thinking, throttled to at
    * most one write per interval. Returns true when a write landed.
    */
-  maybeWrite(content: string): boolean {
+  maybeWrite(content: string, thought?: string): boolean {
     if (!this.threadId) return false;
-    if (!content || !content.trim()) return false;
+    const hasContent = Boolean(content && content.trim());
+    const hasThought = Boolean(thought && thought.trim());
+    if (!hasContent && !hasThought) return false;
     const now = this.clock();
     if (now - this.lastWriteMs < this.intervalMs) return false;
     this.lastWriteMs = now;
     this.sink.addMessage(this.threadId, {
       id: this.messageId,
       role: "assistant",
-      content,
+      content: content || "",
+      thought: hasThought ? thought : undefined,
       status: "streaming",
       timestamp: new Date().toISOString()
     });

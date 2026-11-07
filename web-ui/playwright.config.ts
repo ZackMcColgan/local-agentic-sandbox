@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 const PORT = process.env.PORT || "3005";
+const STUB_PORT = process.env.STUB_ENGINE_PORT || "11435";
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
@@ -9,7 +10,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report" }],
@@ -75,11 +76,36 @@ export default defineConfig({
   ...(process.env.PLAYWRIGHT_BASE_URL
     ? {}
     : {
-        webServer: {
-          command: `npm run start -- -p ${PORT}`,
-          url: `http://127.0.0.1:${PORT}`,
-          reuseExistingServer: !process.env.CI,
-          timeout: 60000,
-        },
+        webServer: [
+          {
+            command: "node tests/e2e/fixtures/stubEngine.cjs",
+            url: `http://127.0.0.1:${STUB_PORT}/api/version`,
+            reuseExistingServer: false,
+            timeout: 30000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              PORT: STUB_PORT,
+              STUB_ENGINE_PORT: STUB_PORT,
+            },
+          },
+          {
+            command: `npm run start -- -p ${PORT}`,
+            url: `http://127.0.0.1:${PORT}`,
+            reuseExistingServer: false,
+            timeout: 60000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              PORT,
+              LLM_BASE_URL: `http://127.0.0.1:${STUB_PORT}`,
+              OLLAMA_BASE_URL: `http://127.0.0.1:${STUB_PORT}`,
+              DISABLE_GITOPS: "true",
+              DISABLE_GITOPS_DIRTY_CHECK: "true",
+              THREADS_DIR: ".tmp-e2e-threads",
+              AGENT_CHECKPOINT_DIR: ".tmp-e2e-checkpoints",
+            },
+          },
+        ],
       }),
 });

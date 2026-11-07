@@ -54,7 +54,8 @@ export function LiveRunBlock({
   });
 
   const status = String(task.status || "active");
-  const isRunning = status === "active" || status === "in_progress";
+  const isPlanning = status === "planning";
+  const isRunning = status === "active" || status === "in_progress" || isPlanning;
   const isPaused = status === "paused";
   const isCrashed = status === "crashed";
   const isStopped = status === "cancelled" || status === "stopped";
@@ -132,7 +133,13 @@ export function LiveRunBlock({
             <span className="text-base font-bold text-slate-900 dark:text-zinc-100">
               Live run
             </span>
-            {isRunning && (
+            {isPlanning && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 flex items-center gap-1.5 border border-amber-200/60 dark:border-amber-800/60">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Planning</span>
+              </span>
+            )}
+            {!isPlanning && isRunning && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-200/60 dark:border-emerald-800/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Running</span>
@@ -439,6 +446,18 @@ export function LiveRunBlock({
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
+        </div>
+      )}
+
+      {/* Failed Run Terminal Message */}
+      {isFailed && (
+        <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/70 bg-rose-50/80 dark:bg-rose-950/40 flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
+              Task failed: {task.parkedReason || task.errorSummary || "Planning or execution failure"}
+            </p>
+          </div>
         </div>
       )}
 
