@@ -28,6 +28,12 @@ describe("E2E Canary Git Safety Battery (Part 3)", () => {
   const originalPath = process.env.PATH;
 
   before(() => {
+    // Git author environment variables for headless CI
+    process.env.GIT_AUTHOR_NAME = "Canary Runner";
+    process.env.GIT_AUTHOR_EMAIL = "canary@runner.local";
+    process.env.GIT_COMMITTER_NAME = "Canary Runner";
+    process.env.GIT_COMMITTER_EMAIL = "canary@runner.local";
+
     // 1. Setup sacrificial directory tree
     if (fs.existsSync(CANARY_BASE)) {
       try {
@@ -147,6 +153,10 @@ process.exit(1);
 
   after(() => {
     delete process.env.GH_BIN_PATH;
+    delete process.env.GIT_AUTHOR_NAME;
+    delete process.env.GIT_AUTHOR_EMAIL;
+    delete process.env.GIT_COMMITTER_NAME;
+    delete process.env.GIT_COMMITTER_EMAIL;
     process.env.PATH = originalPath;
     try {
       fs.rmSync(CANARY_BASE, { recursive: true, force: true });
@@ -220,6 +230,8 @@ process.exit(1);
     // Simulate remote commit from bare remote using a separate clone
     const cloneTemp = path.join(CANARY_BASE, "temp-clone");
     execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, { stdio: "ignore" });
+    execSync("git config user.name 'Canary Runner'", { cwd: cloneTemp, stdio: "ignore" });
+    execSync("git config user.email 'canary@runner.local'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git checkout feature/canary-workflow", { cwd: cloneTemp, stdio: "ignore" });
     fs.writeFileSync(path.join(cloneTemp, "remote-update.txt"), "Remote commit\n", "utf8");
     execSync("git add remote-update.txt", { cwd: cloneTemp, stdio: "ignore" });
@@ -242,6 +254,8 @@ process.exit(1);
     // Make conflicting remote commit
     const cloneTemp = path.join(CANARY_BASE, "temp-clone2");
     execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, { stdio: "ignore" });
+    execSync("git config user.name 'Canary Runner'", { cwd: cloneTemp, stdio: "ignore" });
+    execSync("git config user.email 'canary@runner.local'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git checkout feature/canary-workflow", { cwd: cloneTemp, stdio: "ignore" });
     fs.writeFileSync(path.join(cloneTemp, "remote-diverge.txt"), "Remote conflict\n", "utf8");
     execSync("git add remote-diverge.txt", { cwd: cloneTemp, stdio: "ignore" });
