@@ -1,7 +1,7 @@
 # Chat Runtime Shakeout: Queue + Steer Run Log
 
 **Date:** 2026-11-06  
-**Agent:** Antigravity  
+**Agent:** Autonomous Agent  
 **Branch:** `feature/chat-queue-steer` (tracking `origin/feature/chat-queue-steer`, based on `origin/develop` @ `06fb0bd`)  
 
 ---
