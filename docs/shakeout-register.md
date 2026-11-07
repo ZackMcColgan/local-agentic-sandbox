@@ -415,3 +415,61 @@
   - `web-ui/app/api/chat/route.ts` (sets presence immediately on turn start; clears on done/abort/error)
   - `web-ui/tests/chatTurnPresence.test.ts` (7 behavioral tests)
 - **Status:** **FIXED / VERIFIED LIVE** (Nov 6, 2026 — commit 9f9b61e, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`. Live probe verified watcher presence within 114ms of turn start, reducing pre-token blind window from ~18s to <0.2s).
+
+---
+
+## Part 5 - Overnight Shakeout Battery Register (Nov 7, 2026)
+
+### [CHAT-10] Server Restart Mid-Turn Leaves Orphaned Streaming Assistant Message and Flips Thread Status to Completed
+- **Feature:** Chat Turn Persistence & Server Restart Reconciliation
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`addMessage`, `reconcileThread`)
+  - `web-ui/app/api/chat/route.ts` (turn-start thread status activation)
+- **Discovery:** Overnight Shakeout Battery Probe D4 (`shakeout-batch2.log`, Nov 7, 2026). Restarting `deployment/web-ui` while a chat turn was streaming on `thread-d4-1794048774348` left the thread's assistant message stuck in `status: "streaming"` permanently while `thread.status` flipped to `"completed"`.
+- **Steps to Reproduce:**
+  1. Start a chat turn on an existing thread or let `ThrottledStreamSnapshot` write a `status: "streaming"` assistant snapshot.
+  2. Restart the `web-ui` server process (clearing in-memory `activeExecutionSet` and `activeTurnRegistry`) before the turn reaches a terminal state.
+  3. Query `GET /api/threads/<id>`.
+- **Expected Behavior:**
+  1. While a message with `status: "streaming"` is written via `addMessage`, `thread.status` remains `"active"` (never flipped to `"completed"` mid-stream).
+  2. When `reconcileThread` runs on a thread that is no longer live in `activeExecutionSet` or `getActiveTurn(thread.id)`, any trailing assistant message still marked `status: "streaming"` is reconciled to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"` appended, and `thread.status` is set to `"stopped"`.
+- **Actual Behavior:**
+  1. `ThreadStore.addMessage` unconditionally executed `if (thread.status !== "active") { thread.status = "completed"; }` for any assistant message, including `status: "streaming"` snapshots on threads whose previous turn had finished (`status: "completed"` or `"stopped"`).
+  2. Because `thread.status` became `"completed"` during streaming, `reconcileThread` (which only checked `if (thread.status === "active")`) skipped the thread after pod restart, and even for `"active"` threads never transitioned `lastMsg.status === "streaming"` out of `"streaming"`. Clients polling `GET /api/threads/[id]` saw `status: "streaming"` forever.
+- **Severity:** **P1** (causes infinite 1.5s client polling and permanently stuck "Streaming" badge after pod rollout/restart).
+- **Status:** **OPEN** (registered prior to fix).
+
+---
+
+### [CHAT-11] Mid-Turn Steer Endpoint Accepts Nonexistent Thread IDs with 200 OK and Writes Orphan Sidecars
+- **Feature:** Mid-Turn Steering API (`POST /api/threads/[id]/steer`)
+- **Affected Components:**
+  - `web-ui/app/api/threads/[id]/steer/route.ts`
+- **Discovery:** Overnight Shakeout Battery Probe C3 (`shakeout-batch1.log`, Nov 7, 2026). Sending `POST /api/threads/nonexistent-thread-999999/steer` returned HTTP `200` (`{"success":true,"pendingCount":1}`) and created an orphan `.steer.json` file on disk.
+- **Steps to Reproduce:**
+  1. Send `POST /api/threads/nonexistent-thread-999999/steer` with `{"text": "orphan steer"}`.
+  2. Observe HTTP status code and `THREADS_DIR` contents.
+- **Expected Behavior:**
+  If the target thread ID neither exists in `ThreadStore` nor has a live turn in `getActiveTurn(id)` / `activeExecutionSet`, `POST /api/threads/[id]/steer` rejects with HTTP `404 Not Found` and writes no `.steer.json` file.
+- **Actual Behavior:**
+  `POST /api/threads/[id]/steer` called `store.appendSteer(id, text)` unconditionally without verifying thread existence or active turn state.
+- **Severity:** **P2** (dishonest 200 response for nonexistent thread and orphan sidecar file creation).
+- **Status:** **OPEN** (registered prior to fix).
+
+---
+
+### [CHAT-12] Requesting an Unavailable Model Name on `/api/chat` Silently Runs Resident Model and Spoofs `modelUsed`
+- **Feature:** Chat Model Dispatch & Turn Honesty (`POST /api/chat`)
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts`
+- **Discovery:** Overnight Shakeout Battery Probe E1 (`shakeout-batch1.log`, Nov 7, 2026). Sending `POST /api/chat` with `model: "totally-nonexistent-model-xyz-999"` succeeded with HTTP 200, streamed a normal completion from the resident Strata GGUF model, and persisted `modelUsed: "totally-nonexistent-model-xyz-999"` on the assistant message.
+- **Steps to Reproduce:**
+  1. Send `POST /api/chat` with `{"model": "totally-nonexistent-model-xyz-999", "messages": [{"role": "user", "content": "Say hi"}]}`.
+  2. Inspect the SSE stream events and persisted assistant message in `GET /api/threads/<id>`.
+- **Expected Behavior:**
+  When the caller explicitly requests a model ID that is not `"auto"`, not the configured `DEFAULT_MODEL` / legacy default alias, and not a known profile in `PRESET_MODEL_PROFILES`, the route fails honestly by throwing an explicit model-unavailable error (`Model "<id>" is not available on the active inference engine.`), emitting an SSE `error` event and persisting the assistant message with `status: "error"` and `"⚠️ [Turn error: ...]"`.
+- **Actual Behavior:**
+  Because single-slot `llama-server` / Strata ignores the `model` field in `/v1/chat/completions`, `route.ts` passed the bogus model ID straight through and recorded the bogus string as `modelUsed`.
+- **Severity:** **P1** (violates turn honesty and model attribution; spoofs `modelUsed` with an arbitrary nonexistent model name).
+- **Status:** **OPEN** (registered prior to fix).
+

@@ -424,37 +424,56 @@ export class ThreadStore {
   reconcileThread(thread: Thread): boolean {
     let changed = false;
 
-    // S2: Reconcile active status against live activeExecutionSet
-    if (thread.status === "active") {
-      const isLive =
-        activeExecutionSet.has(thread.id) ||
-        (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
+    const isLive =
+      activeExecutionSet.has(thread.id) ||
+      Boolean(getActiveTurn(thread.id)) ||
+      (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
 
-      if (!isLive) {
-        let isTaskPaused = false;
-        if (thread.taskId) {
-          try {
-            const checkpointFile = this.supervisor.getCheckpointFilePath(thread.taskId);
-            if (fs.existsSync(checkpointFile)) {
-              const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
-              if (data && data.status === "paused") {
-                isTaskPaused = true;
-              }
+    // S2: Reconcile active status against live activeExecutionSet / activeTurnRegistry
+    if (thread.status === "active" && !isLive) {
+      let isTaskPaused = false;
+      if (thread.taskId) {
+        try {
+          const checkpointFile = this.supervisor.getCheckpointFilePath(thread.taskId);
+          if (fs.existsSync(checkpointFile)) {
+            const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+            if (data && data.status === "paused") {
+              isTaskPaused = true;
             }
-          } catch {}
-        }
-
-        if (isTaskPaused) {
-          thread.status = "paused";
-        } else {
-          thread.status = "stopped";
-        }
-        changed = true;
-        if (thread.messages && thread.messages.length > 0) {
-          const lastMsg = thread.messages[thread.messages.length - 1];
-          if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
-            lastMsg.isStopped = !isTaskPaused;
           }
+        } catch {}
+      }
+
+      if (isTaskPaused) {
+        thread.status = "paused";
+      } else {
+        thread.status = "stopped";
+      }
+      changed = true;
+      if (thread.messages && thread.messages.length > 0) {
+        const lastMsg = thread.messages[thread.messages.length - 1];
+        if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
+          lastMsg.isStopped = !isTaskPaused;
+        }
+      }
+    }
+
+    // CHAT-10: Reconcile any orphaned 'streaming' assistant message when turn is no longer live (e.g. after server restart)
+    if (!isLive && thread.messages && thread.messages.length > 0) {
+      for (const msg of thread.messages) {
+        if (msg.role === "assistant" && msg.status === "streaming") {
+          msg.status = "incomplete";
+          msg.isStopped = true;
+          if (!msg.content || !msg.content.includes("⚠️ [Turn incomplete:")) {
+            const trimmed = (msg.content || "").trim();
+            msg.content = trimmed
+              ? `${trimmed}\n\n⚠️ [Turn incomplete: Server restarted or turn interrupted.]`
+              : `⚠️ [Turn incomplete: Server restarted or turn interrupted.]`;
+          }
+          if (thread.status === "active" || thread.status === "completed") {
+            thread.status = "stopped";
+          }
+          changed = true;
         }
       }
     }
@@ -688,7 +707,11 @@ export class ThreadStore {
         }
       }
     } else if (message.role === "assistant") {
-      if (thread.status !== "active") {
+      if (message.status === "streaming") {
+        thread.status = "active";
+      } else if (message.status === "incomplete" || message.status === "error") {
+        thread.status = "stopped";
+      } else {
         thread.status = "completed";
       }
     }

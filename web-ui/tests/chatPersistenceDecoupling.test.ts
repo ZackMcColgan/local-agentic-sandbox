@@ -644,6 +644,62 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         await new Promise((r) => setTimeout(r, 100));
       }
     });
+
+    it("4. [CHAT-10] Server restart mid-turn reconciles orphaned 'streaming' assistant message to 'incomplete' and keeps thread.status 'active' during streaming", async () => {
+      const store = new ThreadStore(tmpThreadsDir);
+      const threadId = `thread-restart-d4-${Date.now()}`;
+      store.createThread({ id: threadId, title: "Restart Recovery Thread" });
+
+      // Complete a first turn so thread.status becomes "completed"
+      store.addMessage(threadId, {
+        id: "u-turn-1",
+        role: "user",
+        content: "First turn",
+        timestamp: new Date().toISOString()
+      });
+      store.addMessage(threadId, {
+        id: "a-turn-1",
+        role: "assistant",
+        content: "First answer",
+        status: "completed",
+        timestamp: new Date().toISOString()
+      });
+
+      // Now simulate Turn 2 starting and writing a streaming snapshot (as ThrottledStreamSnapshot does)
+      store.addMessage(threadId, {
+        id: "u-turn-2",
+        role: "user",
+        content: "Second turn before pod restart",
+        timestamp: new Date().toISOString()
+      });
+      const duringStream = store.addMessage(threadId, {
+        id: "a-turn-2",
+        role: "assistant",
+        content: "Partial output before server restart...",
+        status: "streaming",
+        timestamp: new Date().toISOString()
+      });
+      assert.ok(duringStream);
+      assert.equal(duringStream.status, "active", "thread.status must remain 'active' when a 'streaming' assistant message is added");
+
+      // Now simulate server restart: activeExecutionSet and activeTurnRegistry do NOT contain threadId
+      // When getThread is called after restart, reconcileThread must mark the orphaned streaming message as incomplete
+      const reconciled = await store.getThread(threadId);
+      assert.ok(reconciled);
+      assert.equal(reconciled.status, "stopped", "Orphaned active thread must reconcile to 'stopped'");
+      const asst2 = reconciled.messages.find((m) => m.id === "a-turn-2");
+      assert.ok(asst2);
+      assert.equal(asst2.status, "incomplete", "Orphaned streaming message must reconcile to 'incomplete' (not stay 'streaming' forever)");
+      assert.equal(asst2.isStopped, true);
+      assert.ok(
+        asst2.content.includes("⚠️ [Turn incomplete:"),
+        "Reconciled streaming message must include honest incomplete marker"
+      );
+      assert.ok(
+        asst2.content.includes("Partial output before server restart..."),
+        "Partial streamed content before restart must be preserved"
+      );
+    });
   });
 
   describe("Requirement 3: ChatStream Component Wiring Integration", () => {
