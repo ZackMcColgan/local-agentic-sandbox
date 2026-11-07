@@ -42,25 +42,26 @@ if ($DryRun) {
     return
 }
 
-# Check if kind-gateway is already running with matching config and port
-$inspectRaw = docker inspect kind-gateway 2>$null
-if ($LASTEXITCODE -eq 0 -and $inspectRaw) {
-    try {
-        $info = $inspectRaw | ConvertFrom-Json
-        $isRunning = $info[0].State.Running
-        $labels = $info[0].Config.Labels
-        $existingHash = $labels."config-hash"
-        $existingPort = $labels."gateway-port"
+# Check if kind-gateway container exists
+$exists = & docker ps -a -q -f name=^kind-gateway$
+if ($exists) {
+    $inspectJson = & docker inspect kind-gateway 2>$null | Out-String
+    if ($inspectJson) {
+        try {
+            $info = $inspectJson | ConvertFrom-Json
+            $isRunning = $info[0].State.Running
+            $labels = $info[0].Config.Labels
+            $existingHash = $labels."config-hash"
+            $existingPort = $labels."gateway-port"
 
-        if ($isRunning -and $existingHash -eq $confHash -and "$existingPort" -eq "$Port") {
-            Write-Host "ALREADY RUNNING"
-            return
-        }
-    } catch {}
+            if ($isRunning -and $existingHash -eq $confHash -and "$existingPort" -eq "$Port") {
+                Write-Host "ALREADY RUNNING"
+                return
+            }
+        } catch {}
+    }
+    & docker rm -f kind-gateway 2>$null | Out-Null
 }
-
-# Remove stale or mismatched container
-docker rm -f kind-gateway 2>$null | Out-Null
 
 # Run container
 $containerId = & docker @dockerArgs
