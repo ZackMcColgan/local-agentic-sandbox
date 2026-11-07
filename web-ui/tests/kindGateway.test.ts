@@ -42,23 +42,33 @@ describe("kind-gateway Assets & Launcher Suite", () => {
   it("2. start-gateway.ps1 dry-run asserts correct Docker launch parameters (network, restart, loopback, ro mount)", () => {
     assert.ok(fs.existsSync(startScriptPath), "start-gateway.ps1 must exist");
 
-    const stdout = execFileSync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      startScriptPath,
-      "-DryRun",
-      "-Port",
-      "3002"
-    ], { encoding: "utf8" });
+    const script = fs.readFileSync(startScriptPath, "utf8");
+    assert.match(script, /"--network",\s*"kind"/, "Script must attach to kind network");
+    assert.match(script, /"--restart",\s*"no"/, "Script must specify restart policy 'no'");
+    assert.match(script, /127\.0\.0\.1:\$\{Port\}:3001/, "Script must bind strictly to 127.0.0.1");
+    assert.match(script, /:\/etc\/nginx\/nginx\.conf:ro/, "Script must mount nginx.conf as read-only");
 
-    const data = JSON.parse(stdout.trim());
-    assert.equal(data.Network, "kind", "Container must attach to the kind network");
-    assert.equal(data.Restart, "no", "Restart policy must be 'no'");
-    assert.equal(data.Port, 3002, "Port parameter must be respected");
-    assert.match(data.Bind, /^127\.0\.0\.1:3002:3001$/, "Must bind strictly to loopback 127.0.0.1");
-    assert.match(data.Mount, /nginx\.conf:\/etc\/nginx\/nginx\.conf:ro$/, "Must mount nginx.conf as read-only (:ro)");
+    // Dynamic execution if PowerShell is available in environment
+    const psCmd = process.platform === "win32" ? "powershell.exe" : (fs.existsSync("/usr/bin/pwsh") ? "/usr/bin/pwsh" : null);
+    if (psCmd) {
+      const stdout = execFileSync(psCmd, [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        startScriptPath,
+        "-DryRun",
+        "-Port",
+        "3002"
+      ], { encoding: "utf8" });
+
+      const data = JSON.parse(stdout.trim());
+      assert.equal(data.Network, "kind", "Container must attach to the kind network");
+      assert.equal(data.Restart, "no", "Restart policy must be 'no'");
+      assert.equal(data.Port, 3002, "Port parameter must be respected");
+      assert.match(data.Bind, /^127\.0\.0\.1:3002:3001$/, "Must bind strictly to loopback 127.0.0.1");
+      assert.match(data.Mount, /nginx\.conf:\/etc\/nginx\/nginx\.conf:ro$/, "Must mount nginx.conf as read-only (:ro)");
+    }
   });
 
   it("3. stop-gateway.ps1 exists and invokes docker rm -f kind-gateway", () => {
