@@ -20,7 +20,8 @@ import {
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
   AGENT_MODES,
-  isReasoningEffortSupported
+  isReasoningEffortSupported,
+  getModelProfile
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
@@ -244,10 +245,18 @@ export async function POST(req: NextRequest) {
     // 1. Resolve Active Model via Tri-Mode Dispatcher
     let activeModel = requestedModel;
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
+    let invalidRequestedModel: string | null = null;
 
-    if (!activeModel || activeModel === "auto" || activeModel === "Swift-1.5-Qwen3.8-27B-IQ3_XS" || (process.env.MODEL_NAME && activeModel === "swift-15-27b-mtp")) {
+    if (!activeModel || activeModel === "auto" || activeModel === "Swift-1.5-Qwen3.8-27B-IQ3_XS" || activeModel === "swift-15-27b-mtp") {
       // Zero VRAM eviction: auto, flash, and pro modes route directly to configured DEFAULT_MODEL
       activeModel = DEFAULT_MODEL;
+    } else if (
+      activeModel !== DEFAULT_MODEL &&
+      activeModel !== DEFAULT_PRIMARY_MODEL &&
+      activeModel !== DEFAULT_SUBAGENT_MODEL &&
+      !getModelProfile(activeModel)
+    ) {
+      invalidRequestedModel = activeModel;
     }
 
     // Resolve honest effective reasoning effort
@@ -494,6 +503,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       let oracleCitations: string[] = [];
 
       try {
+        if (invalidRequestedModel) {
+          throw new Error(`Model "${invalidRequestedModel}" is not available on the active inference engine.`);
+        }
+
         await sendEvent({
           type: "status",
           status: "Preparing context & tools..."

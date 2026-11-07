@@ -645,6 +645,54 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       }
     });
 
+    it("5. [CHAT-12] Requesting an unavailable/unregistered model name fails honestly with status 'error' instead of spoofing modelUsed", async () => {
+      process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
+      process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${serverPort}`;
+      const store = new ThreadStore(tmpThreadsDir);
+      const threadId = `thread-bad-model-${Date.now()}`;
+      store.createThread({ id: threadId, title: "Bad Model Thread" });
+
+      let llmCalled = false;
+      roundHandler = (_parsed, res) => {
+        llmCalled = true;
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        res.write(JSON.stringify({ message: { content: "Should not run" }, done: true }) + "\n");
+        res.end();
+      };
+
+      const req = new NextRequest("http://localhost:3000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          userMessageId: "u-bad-model",
+          assistantMessageId: "a-bad-model",
+          messages: [{ role: "user", content: "Say hi", id: "u-bad-model" }],
+          model: "totally-nonexistent-model-xyz-999"
+        })
+      });
+
+      const res = await POST(req as any);
+      if (res.body) {
+        const reader = res.body.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
+
+      assert.equal(llmCalled, false, "LLM backend must not be invoked with an unregistered/nonexistent model name");
+      const thread = await store.getThread(threadId);
+      assert.ok(thread);
+      const asst = thread.messages.find((m) => m.id === "a-bad-model");
+      assert.ok(asst, "Assistant error message must be persisted");
+      assert.equal(asst.status, "error");
+      assert.ok(
+        asst.content.includes("⚠️ [Turn error:") && asst.content.includes("totally-nonexistent-model-xyz-999"),
+        `Expected honest model error in content, got: ${asst.content}`
+      );
+    });
+
     it("4. [CHAT-10] Server restart mid-turn reconciles orphaned 'streaming' assistant message to 'incomplete' and keeps thread.status 'active' during streaming", async () => {
       const store = new ThreadStore(tmpThreadsDir);
       const threadId = `thread-restart-d4-${Date.now()}`;
