@@ -2,6 +2,7 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { execSync } from "child_process";
 import {
   executeGitVerb,
@@ -14,7 +15,9 @@ import {
   shouldAdvertiseUnattendedGitTools
 } from "../lib/hostMode";
 
-const CANARY_BASE = "C:\\AI\\host-e2e-sandbox";
+const CANARY_BASE = process.platform === "win32"
+  ? "C:\\AI\\host-e2e-sandbox"
+  : path.join(os.tmpdir(), "host-e2e-sandbox");
 const WORKING_REPO = path.join(CANARY_BASE, "working-repo");
 const BARE_REMOTE = path.join(CANARY_BASE, "remote.git");
 const CANARY_BIN = path.join(CANARY_BASE, "bin");
@@ -126,13 +129,19 @@ process.exit(1);
 `;
     fs.writeFileSync(path.join(CANARY_BIN, "fake-gh.js"), fakeGhScript, "utf8");
 
-    // On Windows, create gh.cmd
-    const cmdScript = `@node "${path.join(CANARY_BIN, "fake-gh.js")}" %*\n`;
-    const ghCmdPath = path.join(CANARY_BIN, "gh.cmd");
-    fs.writeFileSync(ghCmdPath, cmdScript, "utf8");
+    // Setup gh executable for Windows (.cmd) and POSIX
+    const isWin = process.platform === "win32";
+    const ghPath = path.join(CANARY_BIN, isWin ? "gh.cmd" : "gh");
+    if (isWin) {
+      const cmdScript = `@node "${path.join(CANARY_BIN, "fake-gh.js")}" %*\n`;
+      fs.writeFileSync(ghPath, cmdScript, "utf8");
+    } else {
+      const shScript = `#!/usr/bin/env node\nrequire("${path.join(CANARY_BIN, "fake-gh.js")}");\n`;
+      fs.writeFileSync(ghPath, shScript, { mode: 0o755 });
+    }
 
     // Point GH_BIN_PATH and PATH to stubbed gh
-    process.env.GH_BIN_PATH = ghCmdPath;
+    process.env.GH_BIN_PATH = ghPath;
     process.env.PATH = `${CANARY_BIN}${path.delimiter}${originalPath}`;
   });
 
