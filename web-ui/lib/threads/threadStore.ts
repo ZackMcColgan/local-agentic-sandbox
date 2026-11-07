@@ -99,8 +99,89 @@ export function resolveThreadsDir(): string {
   return resolvedDir || path.resolve("/tmp/.agent/threads");
 }
 
-// In-memory set of actively executing task/thread IDs in the current Node process
-export const activeExecutionSet = new Set<string>();
+// In-memory set of actively executing task/thread IDs in the current Node process.
+// Attached to globalThis so Next.js / tsx module path aliases (@/lib/... vs ../lib/...) share the exact same singleton state.
+const g = globalThis as any;
+export const activeExecutionSet: Set<string> =
+  g.__sandboxActiveExecutionSet || (g.__sandboxActiveExecutionSet = new Set<string>());
+
+/**
+ * CHAT-PRESENCE: turn-presence marker. Visible in GET responses from the moment a
+ * turn starts — before any token or streaming snapshot exists — so cross-device
+ * watchers see "a turn is running" immediately. Cleared on done/error/abort/stop.
+ */
+export interface ActiveTurnInfo {
+  threadId: string;
+  startedAt: string;
+  status: "streaming";
+}
+
+const activeTurnRegistry: Map<string, ActiveTurnInfo> =
+  g.__sandboxActiveTurnRegistry || (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
+const activeTurnAbortControllers: Map<string, AbortController> =
+  g.__sandboxActiveTurnAbortControllers || (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
+const activeRoundAbortControllers: Map<string, AbortController> =
+  g.__sandboxActiveRoundAbortControllers || (g.__sandboxActiveRoundAbortControllers = new Map<string, AbortController>());
+
+export function registerTurnAbortController(threadId: string, controller: AbortController): void {
+  activeTurnAbortControllers.set(threadId, controller);
+}
+
+export function registerRoundAbortController(threadId: string, controller: AbortController): void {
+  activeRoundAbortControllers.set(threadId, controller);
+}
+
+export function clearRoundAbortController(threadId: string, controller?: AbortController): void {
+  if (!controller || activeRoundAbortControllers.get(threadId) === controller) {
+    activeRoundAbortControllers.delete(threadId);
+  }
+}
+
+export function interruptActiveTurnStream(threadId: string): boolean {
+  const controller = activeRoundAbortControllers.get(threadId);
+  if (controller) {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+    activeRoundAbortControllers.delete(threadId);
+    return true;
+  }
+  return false;
+}
+
+export function abortActiveTurn(threadId: string): boolean {
+  const controller = activeTurnAbortControllers.get(threadId);
+  if (controller) {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+    activeTurnAbortControllers.delete(threadId);
+    return true;
+  }
+  return false;
+}
+
+export function clearTurnAbortController(threadId: string): void {
+  activeTurnAbortControllers.delete(threadId);
+}
+
+export function markTurnActive(threadId: string): void {
+  if (!activeTurnRegistry.has(threadId)) {
+    activeTurnRegistry.set(threadId, {
+      threadId,
+      startedAt: new Date().toISOString(),
+      status: "streaming"
+    });
+  }
+}
+
+export function getActiveTurn(threadId: string): ActiveTurnInfo | null {
+  return activeTurnRegistry.get(threadId) ?? null;
+}
+
+export function clearTurnActive(threadId: string): void {
+  activeTurnRegistry.delete(threadId);
+}
 
 export class ThreadStore {
   private threadsDir: string;
@@ -120,6 +201,61 @@ export class ThreadStore {
 
   getFilePath(threadId: string): string {
     return path.join(this.threadsDir, `${threadId}.json`);
+  }
+
+  getSteerFilePath(threadId: string): string {
+    return path.join(this.threadsDir, `${threadId}.steer.json`);
+  }
+
+  appendSteer(threadId: string, text: string): number {
+    const trimmed = text.trim();
+    if (!trimmed) return this.getPendingSteers(threadId).length;
+    const steerFile = this.getSteerFilePath(threadId);
+    let pending: string[] = [];
+    try {
+      if (fs.existsSync(steerFile)) {
+        const raw = fs.readFileSync(steerFile, "utf8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) pending = parsed.filter((s) => typeof s === "string");
+      }
+    } catch {}
+    pending.push(trimmed);
+    try {
+      fs.writeFileSync(steerFile, JSON.stringify(pending, null, 2), { encoding: "utf8", mode: 0o660 });
+    } catch {}
+    return pending.length;
+  }
+
+  getPendingSteers(threadId: string): string[] {
+    const steerFile = this.getSteerFilePath(threadId);
+    try {
+      if (fs.existsSync(steerFile)) {
+        const raw = fs.readFileSync(steerFile, "utf8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter((s) => typeof s === "string");
+      }
+    } catch {}
+    return [];
+  }
+
+  consumeSteers(threadId: string): string[] {
+    const steerFile = this.getSteerFilePath(threadId);
+    const pending = this.getPendingSteers(threadId);
+    if (fs.existsSync(steerFile)) {
+      try {
+        fs.unlinkSync(steerFile);
+      } catch {}
+    }
+    return pending;
+  }
+
+  clearSteers(threadId: string): void {
+    const steerFile = this.getSteerFilePath(threadId);
+    if (fs.existsSync(steerFile)) {
+      try {
+        fs.unlinkSync(steerFile);
+      } catch {}
+    }
   }
 
   /**
@@ -312,37 +448,56 @@ export class ThreadStore {
   reconcileThread(thread: Thread): boolean {
     let changed = false;
 
-    // S2: Reconcile active status against live activeExecutionSet
-    if (thread.status === "active") {
-      const isLive =
-        activeExecutionSet.has(thread.id) ||
-        (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
+    const isLive =
+      activeExecutionSet.has(thread.id) ||
+      Boolean(getActiveTurn(thread.id)) ||
+      (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
 
-      if (!isLive) {
-        let isTaskPaused = false;
-        if (thread.taskId) {
-          try {
-            const checkpointFile = this.supervisor.getCheckpointFilePath(thread.taskId);
-            if (fs.existsSync(checkpointFile)) {
-              const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
-              if (data && data.status === "paused") {
-                isTaskPaused = true;
-              }
+    // S2: Reconcile active status against live activeExecutionSet / activeTurnRegistry
+    if (thread.status === "active" && !isLive) {
+      let isTaskPaused = false;
+      if (thread.taskId) {
+        try {
+          const checkpointFile = this.supervisor.getCheckpointFilePath(thread.taskId);
+          if (fs.existsSync(checkpointFile)) {
+            const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+            if (data && data.status === "paused") {
+              isTaskPaused = true;
             }
-          } catch {}
-        }
-
-        if (isTaskPaused) {
-          thread.status = "paused";
-        } else {
-          thread.status = "stopped";
-        }
-        changed = true;
-        if (thread.messages && thread.messages.length > 0) {
-          const lastMsg = thread.messages[thread.messages.length - 1];
-          if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
-            lastMsg.isStopped = !isTaskPaused;
           }
+        } catch {}
+      }
+
+      if (isTaskPaused) {
+        thread.status = "paused";
+      } else {
+        thread.status = "stopped";
+      }
+      changed = true;
+      if (thread.messages && thread.messages.length > 0) {
+        const lastMsg = thread.messages[thread.messages.length - 1];
+        if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
+          lastMsg.isStopped = !isTaskPaused;
+        }
+      }
+    }
+
+    // CHAT-10: Reconcile any orphaned 'streaming' assistant message when turn is no longer live (e.g. after server restart)
+    if (!isLive && thread.messages && thread.messages.length > 0) {
+      for (const msg of thread.messages) {
+        if (msg.role === "assistant" && msg.status === "streaming") {
+          msg.status = "incomplete";
+          msg.isStopped = true;
+          if (!msg.content || !msg.content.includes("⚠️ [Turn incomplete:")) {
+            const trimmed = (msg.content || "").trim();
+            msg.content = trimmed
+              ? `${trimmed}\n\n⚠️ [Turn incomplete: Server restarted or turn interrupted.]`
+              : `⚠️ [Turn incomplete: Server restarted or turn interrupted.]`;
+          }
+          if (thread.status === "active" || thread.status === "completed") {
+            thread.status = "stopped";
+          }
+          changed = true;
         }
       }
     }
@@ -576,7 +731,11 @@ export class ThreadStore {
         }
       }
     } else if (message.role === "assistant") {
-      if (thread.status !== "active") {
+      if (message.status === "streaming") {
+        thread.status = "active";
+      } else if (message.status === "incomplete" || message.status === "error") {
+        thread.status = "stopped";
+      } else {
         thread.status = "completed";
       }
     }
@@ -629,7 +788,9 @@ export class ThreadStore {
   }
 
   buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-    const rawMessages = thread.messages || [];
+    const rawMessages = (thread.messages || []).filter(
+      (m) => !(m.role === "assistant" && m.status === "streaming" && !m.content)
+    );
     if (!thread.compaction || !thread.compaction.throughMessageId) {
       return rawMessages.map((m) => ({
         role: m.role,

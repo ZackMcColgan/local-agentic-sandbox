@@ -830,7 +830,7 @@ export async function runMilestoneTestRunner(
 export function createProductionStepExecutor(
   options?: ProductionStepExecutorOptions
 ): StepExecutor {
-  const modelToUse = options?.model || "swift-15-27b-mtp";
+  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp";
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
@@ -1109,7 +1109,15 @@ export function cancelTask(taskId: string): boolean {
  * handles automatic crash recovery, and performs stall detection.
  */
 export class OvernightSupervisor {
-  readonly checkpointDirectory: string;
+  private customCheckpointDirectory?: string;
+  get checkpointDirectory(): string {
+    return (
+      this.customCheckpointDirectory ||
+      process.env.AGENT_CHECKPOINT_DIR ||
+      process.env.CHECKPOINT_DIR ||
+      getCanonicalCheckpointDir()
+    );
+  }
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
@@ -1137,11 +1145,7 @@ export class OvernightSupervisor {
   }
 
   constructor(options?: SupervisorOptions) {
-    this.checkpointDirectory =
-      options?.checkpointDirectory ||
-      process.env.AGENT_CHECKPOINT_DIR ||
-      process.env.CHECKPOINT_DIR ||
-      getCanonicalCheckpointDir();
+    this.customCheckpointDirectory = options?.checkpointDirectory;
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
@@ -1318,6 +1322,8 @@ export class OvernightSupervisor {
       const model =
         task.milestones?.find((m) => m.builderModel)?.builderModel ||
         process.env.CODER_MODEL ||
+        process.env.BUILDER_MODEL ||
+        process.env.MODEL_NAME ||
         "swift-15-27b-mtp";
 
       ledger.recordRunStart({
@@ -1477,10 +1483,10 @@ export class OvernightSupervisor {
         repoDir: repoRoot
       });
 
+    const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
-      task.enableGitOps === true ||
-      (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")));
+      (!isTestEnv && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
@@ -1494,7 +1500,18 @@ export class OvernightSupervisor {
         });
         console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
       } catch (gErr: any) {
-        console.warn(`[supervisor] GitOps branch switch warning:`, gErr?.message || gErr);
+        const errMsg = gErr?.message || String(gErr);
+        console.error(`[supervisor] GitOps bootstrap failed:`, errMsg);
+        task.status = "failed";
+        task.errorSummary = errMsg;
+        task.completedAt = new Date().toISOString();
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: errMsg
+        });
+        this.saveCheckpoint(task);
+        return task;
       }
     }
 
@@ -1569,11 +1586,12 @@ export class OvernightSupervisor {
               }
 
               if (res.thinking) {
-                const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
+                milestone.builderThinking = res.thinking;
+                task.builderThinking = res.thinking;
                 task.journal.push({
                   timestamp: new Date().toISOString(),
                   role: "builder",
-                  message: `Builder reasoning: ${sample}${res.thinking.length > 180 ? "..." : ""}`
+                  message: `Builder reasoning: ${res.thinking}`
                 });
               }
 
@@ -1716,6 +1734,46 @@ export class OvernightSupervisor {
             role: "gitops",
             message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
           });
+
+          // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+          const pushCheck = await gitOps.isPushConfigured();
+          if (!pushCheck.configured) {
+            task.pushStatus = "completed — local only, push not configured";
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: "completed — local only, push not configured"
+            });
+            console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
+          } else {
+            try {
+              const pushRes = await gitOps.pushBranch(task.branchName);
+              if (pushRes && pushRes.success) {
+                task.pushStatus = "pushed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
+                });
+              } else {
+                task.pushStatus = "completed — local only, push failed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: "completed — local only, push failed"
+                });
+              }
+            } catch (pErr: any) {
+              const pErrMsg = pErr?.message || String(pErr);
+              task.pushStatus = `failed: ${pErrMsg}`;
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "gitops",
+                message: `failed: ${pErrMsg}`
+              });
+              console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
+            }
+          }
 
           // Check if autoDeployOnGreen is enabled
           if (task.autoDeployOnGreen) {

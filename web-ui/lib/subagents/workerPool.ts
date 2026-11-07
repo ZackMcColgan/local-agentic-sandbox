@@ -602,7 +602,8 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             signal: options?.signal,
             onThinkingChunk: options?.onThinkingChunk,
             scope: this.scope,
-            options: { temperature: 0.2, num_predict: 8192 }
+            reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
           });
           newContent = stripCodeFence(result.text);
           if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
@@ -690,6 +691,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
         scope: this.scope,
+        reasoningEffort: "balanced",
         options: { temperature: 0.2, num_predict: 8192 }
       });
       newContent = stripCodeFence(result.text);
@@ -746,7 +748,8 @@ Please fix the syntax error and output the complete, valid file content for "${t
           keepAlive: this.keepAlive,
           signal: options?.signal,
           scope: this.scope,
-          options: { temperature: 0.2, num_predict: 8192 }
+          reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -1138,6 +1141,7 @@ Respond strictly in JSON:
         keepAlive: this.keepAlive,
         signal: options?.signal,
         scope: this.scope,
+        reasoningEffort: "balanced",
         options: { temperature: 0.1, num_predict: 2048 }
       });
       verdictText = result.text;
@@ -1316,11 +1320,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || "swift-15-27b-mtp",
-    builder: process.env.BUILDER_MODEL || "swift-15-27b-mtp",
-    critic: process.env.CRITIC_MODEL || "swift-15-27b-mtp",
-    explorer: process.env.EXPLORER_MODEL || "swift-15-27b-mtp",
-    recorder: process.env.RECORDER_MODEL || "swift-15-27b-mtp"
+    planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp"
   };
 }
 

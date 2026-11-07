@@ -20,6 +20,7 @@ describe("Phase 2 — Item 4: Model Roster Refresh Suite", () => {
     delete process.env.EXPLORER_MODEL;
     delete process.env.PLANNER_MODEL;
     delete process.env.RECORDER_MODEL;
+    delete process.env.MODEL_NAME;
 
     const roster = resolveModelRosterFromEnv();
     assert.equal(roster.builder, "swift-15-27b-mtp");
@@ -29,17 +30,39 @@ describe("Phase 2 — Item 4: Model Roster Refresh Suite", () => {
     assert.equal(roster.recorder, "swift-15-27b-mtp");
   });
 
+  it("resolveModelRosterFromEnv honors MODEL_NAME when role-specific env vars are unset", () => {
+    delete process.env.BUILDER_MODEL;
+    delete process.env.CRITIC_MODEL;
+    delete process.env.EXPLORER_MODEL;
+    delete process.env.PLANNER_MODEL;
+    delete process.env.RECORDER_MODEL;
+    process.env.MODEL_NAME = "qwen3.8-flash-next-gyro-gyro-s";
+
+    const roster = resolveModelRosterFromEnv();
+    assert.equal(roster.builder, "qwen3.8-flash-next-gyro-gyro-s");
+    assert.equal(roster.critic, "qwen3.8-flash-next-gyro-gyro-s");
+    assert.equal(roster.explorer, "qwen3.8-flash-next-gyro-gyro-s");
+    assert.equal(roster.planner, "qwen3.8-flash-next-gyro-gyro-s");
+    assert.equal(roster.recorder, "qwen3.8-flash-next-gyro-gyro-s");
+  });
+
   it("getModelForRole('builder') returns swift-15-27b-mtp", () => {
+    delete process.env.MODEL_NAME;
+    delete process.env.BUILDER_MODEL;
     const pool = new WorkerPool();
     assert.equal(pool.getModelForRole("builder"), "swift-15-27b-mtp");
   });
 
   it("getModelForRole('critic') returns swift-15-27b-mtp", () => {
+    delete process.env.MODEL_NAME;
+    delete process.env.CRITIC_MODEL;
     const pool = new WorkerPool();
     assert.equal(pool.getModelForRole("critic"), "swift-15-27b-mtp");
   });
 
   it("getModelForRole('explorer') returns swift-15-27b-mtp", () => {
+    delete process.env.MODEL_NAME;
+    delete process.env.EXPLORER_MODEL;
     const pool = new WorkerPool();
     assert.equal(pool.getModelForRole("explorer"), "swift-15-27b-mtp");
   });

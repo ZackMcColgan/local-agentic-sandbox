@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -20,7 +20,8 @@ import {
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
   AGENT_MODES,
-  isReasoningEffortSupported
+  isReasoningEffortSupported,
+  getModelProfile
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
@@ -86,8 +87,7 @@ import {
   HONEST_ABORT_DIRECTIVE
 } from "@/lib/grounding";
 
-const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
+const getLlmBaseUrl = () => process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
@@ -245,10 +245,18 @@ export async function POST(req: NextRequest) {
     // 1. Resolve Active Model via Tri-Mode Dispatcher
     let activeModel = requestedModel;
     let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
+    let invalidRequestedModel: string | null = null;
 
-    if (!activeModel || activeModel === "auto" || activeModel === "Swift-1.5-Qwen3.8-27B-IQ3_XS" || (process.env.MODEL_NAME && activeModel === "swift-15-27b-mtp")) {
+    if (!activeModel || activeModel === "auto" || activeModel === "Swift-1.5-Qwen3.8-27B-IQ3_XS" || activeModel === "swift-15-27b-mtp") {
       // Zero VRAM eviction: auto, flash, and pro modes route directly to configured DEFAULT_MODEL
       activeModel = DEFAULT_MODEL;
+    } else if (
+      activeModel !== DEFAULT_MODEL &&
+      activeModel !== DEFAULT_PRIMARY_MODEL &&
+      activeModel !== DEFAULT_SUBAGENT_MODEL &&
+      !getModelProfile(activeModel)
+    ) {
+      invalidRequestedModel = activeModel;
     }
 
     // Resolve honest effective reasoning effort
@@ -297,6 +305,25 @@ export async function POST(req: NextRequest) {
       // CHAT-8: keep the thread honestly live while the turn runs so mid-turn
       // GETs do not reconcile it to stopped, and snapshots can surface partial content.
       activeExecutionSet.add(activeThreadId);
+      // CHAT-PRESENCE: register the turn marker before the first token exists, so
+      // cross-device watchers see the running turn immediately.
+      markTurnActive(activeThreadId);
+
+      // Seed initial streaming assistant message immediately so GET /api/threads/[id]
+      // never sees a hole while the turn prepares tools/reasoning
+      try {
+        threadStore.addMessage(activeThreadId, {
+          id: assistantMessageId,
+          role: "assistant" as const,
+          content: "",
+          status: "streaming" as const,
+          modelUsed: activeModel,
+          selectedModel: requestedModel || activeModel,
+          timestamp: new Date().toISOString()
+        });
+      } catch (seedErr) {
+        console.warn("[ChatRoute] Warning writing initial streaming placeholder:", seedErr);
+      }
     }
 
     // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
@@ -346,6 +373,10 @@ CRITICAL INSTRUCTIONS:
   - If you did not call a search tool, state plainly that you do not have live data and offer to look it up. Never invent or hallucinate live metrics or web lookup results.
 - REAL-TIME & LIVE DATA RESEARCH GUIDANCE:
   - When the user asks about live, real-time, or current data (e.g. current weather, temperatures, latest news, breaking updates, package versions), invoke 'search_web' as your first action before producing your response.
+- EXECUTION & RETRY DISCIPLINE (HOUSE RULES):
+  - Bounded retries: maximum 2 identical runs of any command or tool call, and maximum 3 distinct strategies per subproblem; if still failing, stop and report BLOCKED with the exact error and command.
+  - Targeted tests first: run only the specific test file(s) for the modified module before running any broader test gate.
+  - Paging discipline: use startLine/endLine when reading large files instead of re-reading entire files repeatedly.
 ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
@@ -418,36 +449,47 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       }
     };
 
-    let aborted = false;
-    const abortController = new AbortController();
-    const cleanupSignal = () => {
-      aborted = true;
-      clearInterval(heartbeatInterval);
-      if (!abortController.signal.aborted) {
-        abortController.abort();
-      }
+    let clientDisconnected = false;
+    let explicitStopped = false;
+    const turnAbortController = new AbortController();
+
+    if (activeThreadId) {
+      registerTurnAbortController(activeThreadId, turnAbortController);
+    }
+
+    turnAbortController.signal.addEventListener("abort", () => {
+      explicitStopped = true;
       persistAssistantOnAbort();
+    });
+
+    const cleanupClientSignal = () => {
+      if (!clientDisconnected) {
+        clientDisconnected = true;
+        clearInterval(heartbeatInterval);
+        console.log(`[ChatRoute] Client SSE connection disconnected for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
+      }
     };
-    req.signal.addEventListener("abort", cleanupSignal);
+    req.signal.addEventListener("abort", cleanupClientSignal);
 
     const sendEvent = async (data: any) => {
-      if (aborted || req.signal.aborted) {
+      if (clientDisconnected || req.signal.aborted) {
         clearInterval(heartbeatInterval);
         return;
       }
       try {
-        await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        await Promise.race([
+          writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 500))
+        ]);
       } catch (err: any) {
         clearInterval(heartbeatInterval);
-        aborted = true;
-        if (!req.signal.aborted) {
-          console.warn("[SSE sendEvent error]:", err?.message || err);
-        }
+        clientDisconnected = true;
+        console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
       }
     };
 
     const heartbeatInterval = setInterval(() => {
-      if (aborted || req.signal.aborted) {
+      if (clientDisconnected || req.signal.aborted) {
         clearInterval(heartbeatInterval);
         return;
       }
@@ -465,6 +507,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       let oracleCitations: string[] = [];
 
       try {
+        if (invalidRequestedModel) {
+          throw new Error(`Model "${invalidRequestedModel}" is not available on the active inference engine.`);
+        }
+
         await sendEvent({
           type: "status",
           status: "Preparing context & tools..."
@@ -712,7 +758,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (true) {
-          if (aborted || req.signal.aborted) break;
+          if (turnAbortController.signal.aborted) break;
 
           const continuation = canContinueToolLoop({
             round,
@@ -729,6 +775,30 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             break;
           }
           groundingDirectivePending = false;
+
+          // CHAT-STEER: consume pending steers at round boundary only AFTER verifying round can continue,
+          // guaranteeing an LLM request will actually be dispatched with the steer!
+          if (activeThreadId) {
+            const steers = threadStore.consumeSteers(activeThreadId);
+            if (steers.length > 0) {
+              for (const s of steers) {
+                const steerContent = `[Steer from user, mid-turn] ${s}`;
+                conversationMessages.push({
+                  role: "user",
+                  content: steerContent
+                });
+                try {
+                  threadStore.addMessage(activeThreadId, {
+                    id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    role: "user",
+                    content: steerContent,
+                    timestamp: new Date().toISOString()
+                  });
+                } catch {}
+              }
+              await sendEvent({ type: "steer", texts: steers });
+            }
+          }
 
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
@@ -787,6 +857,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             hasCompletedToolCalls: traces.length > 0
           });
 
+          const roundAbortController = new AbortController();
+          if (activeThreadId) {
+            registerRoundAbortController(activeThreadId, roundAbortController);
+          }
+
           const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
@@ -794,7 +869,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            signal: abortController.signal,
+            signal: AbortSignal.any([turnAbortController.signal, roundAbortController.signal]),
             reasoning_effort: roundOptions.reasoning_effort,
             options: roundOptions
           };
@@ -807,25 +882,55 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
-          for await (const chunk of streamLlmChat(LLM_BASE_URL, llmPayload)) {
-            if (chunk.message?.thinking) {
-              roundThinking += chunk.message.thinking;
-              await sendEvent({ type: "thought", thought: roundThinking });
+          try {
+            for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
+              if (chunk.message?.thinking) {
+                roundThinking += chunk.message.thinking;
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
+                  : roundThinking;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                await sendEvent({ type: "thought", thought: currentCumulativeThought });
+              }
+              if (chunk.message?.content) {
+                const textChunk = chunk.message.content;
+                fullRoundContent += textChunk;
+                accumulatedStreamedTokens += textChunk;
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? (roundThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}` : accumulatedThoughts.join("\n\n"))
+                  : (roundThinking || undefined);
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                await sendEvent({ type: "token", content: textChunk });
+              }
+              if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+                toolCallsFromMessage.push(...chunk.message.tool_calls);
+              }
             }
-            if (chunk.message?.content) {
-              const textChunk = chunk.message.content;
-              fullRoundContent += textChunk;
-              accumulatedStreamedTokens += textChunk;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
-              await sendEvent({ type: "token", content: textChunk });
+          } catch (roundErr: any) {
+            if (!roundAbortController.signal.aborted || turnAbortController.signal.aborted) {
+              throw roundErr;
             }
-            if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
-              toolCallsFromMessage.push(...chunk.message.tool_calls);
+          } finally {
+            if (activeThreadId) {
+              clearRoundAbortController(activeThreadId, roundAbortController);
             }
           }
 
           if (roundThinking.trim()) {
             accumulatedThoughts.push(roundThinking.trim());
+          }
+
+          if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
+            if (fullRoundContent.trim()) {
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+            }
+            reasoningSpan.end("ok");
+            groundingDirectivePending = true;
+            round++;
+            continue;
           }
 
           reasoningSpan.end("ok");
@@ -882,7 +987,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           let searchBlocked = false;
 
           for (const toolCall of toolCalls) {
-            if (aborted || req.signal.aborted) break;
+            if (turnAbortController.signal.aborted) break;
             const toolName = toolCall.function.name;
             let toolArgs: Record<string, any> = {};
             if (typeof toolCall.function.arguments === "string") {
@@ -1315,16 +1420,47 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           });
         }
 
-        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
+        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, empty text, or late steers:
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-        if (
-          shouldRunPostToolSynthesis({
-            userPrompt,
-            assistantContent: currentAssistantMessage.content || "",
-            lingeringToolCallsCount: lingeringToolCalls.length,
-            traces
-          })
-        ) {
+        const pendingLateSteers = activeThreadId ? threadStore.getPendingSteers(activeThreadId) : [];
+
+        // Invariant: If late steers arrived and we have context (e.g. tools were used or model produced content),
+        // we MUST dispatch a model synthesis pass that incorporates the steer, OR if no request can run,
+        // we do NOT consume them so they return honestly in pendingSteers.
+        const shouldSynthesize =
+          !turnAbortController.signal.aborted &&
+          (pendingLateSteers.length > 0 ||
+            shouldRunPostToolSynthesis({
+              userPrompt,
+              assistantContent: currentAssistantMessage.content || "",
+              lingeringToolCallsCount: lingeringToolCalls.length,
+              traces
+            }));
+
+        if (shouldSynthesize) {
+          // CHAT-STEER: only consume and persist steers now that a model request is GUARANTEED to be dispatched!
+          if (activeThreadId) {
+            const steers = threadStore.consumeSteers(activeThreadId);
+            if (steers.length > 0) {
+              for (const s of steers) {
+                const steerContent = `[Steer from user, mid-turn] ${s}`;
+                conversationMessages.push({
+                  role: "user",
+                  content: steerContent
+                });
+                try {
+                  threadStore.addMessage(activeThreadId, {
+                    id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    role: "user",
+                    content: steerContent,
+                    timestamp: new Date().toISOString()
+                  });
+                } catch {}
+              }
+              await sendEvent({ type: "steer", texts: steers });
+            }
+          }
+
           const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
           conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({
@@ -1351,21 +1487,29 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             hasCompletedToolCalls: traces.length > 0
           });
 
-          for await (const chunk of streamLlmChat(LLM_BASE_URL, {
+          for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-            signal: abortController.signal,
+            signal: turnAbortController.signal,
             reasoning_effort: synthOptions.reasoning_effort,
             options: synthOptions
           })) {
             if (chunk.message?.thinking) {
               synthThinking += chunk.message.thinking;
+              const currentCumulativeThought = accumulatedThoughts.length > 0
+                ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}`
+                : synthThinking;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
               await sendEvent({ type: "thinking", content: chunk.message.thinking });
+              await sendEvent({ type: "thought", thought: currentCumulativeThought });
             }
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
               accumulatedStreamedTokens += chunk.message.content;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
+              const currentCumulativeThought = accumulatedThoughts.length > 0
+                ? (synthThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}` : accumulatedThoughts.join("\n\n"))
+                : (synthThinking || undefined);
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
               await sendEvent({ type: "token", content: chunk.message.content });
             }
           }
@@ -1426,6 +1570,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           modelUsed: activeModel
         });
 
+        if (explicitStopped || turnAbortController.signal.aborted) {
+          if (activeThreadId && !assistantPersisted) {
+            persistAssistantOnAbort();
+          }
+          return;
+        }
+
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
             id: assistantMessageId,
@@ -1445,7 +1596,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
           assistantPersisted = true;
+          if (clientDisconnected || req.signal.aborted) {
+            console.log(`[ChatRoute] Detached turn completed server-side for thread ${activeThreadId} (status: ${turnStatus || "completed"}).`);
+          }
         }
+
+        // CHAT-STEER: unconsumed steers returning in done payload
+        const unconsumedSteers = activeThreadId ? threadStore.consumeSteers(activeThreadId) : [];
 
         await sendEvent({
           type: "done",
@@ -1463,6 +1620,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           compactedThisTurn: turnCompacted || undefined,
           tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
           tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+          pendingSteers: unconsumedSteers.length > 0 ? unconsumedSteers : undefined,
           trace_session: {
             sessionId: tracer.getSessionId(),
             traceId: tracer.getTraceId()
@@ -1486,6 +1644,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const friendlyMessage = isEngineStopped
           ? "LLM engine is stopped. Start it from Settings or the status bar."
           : (err.message || "Internal orchestrator error");
+
+        if (explicitStopped || turnAbortController.signal.aborted) {
+          if (activeThreadId && !assistantPersisted) {
+            persistAssistantOnAbort();
+          }
+          return;
+        }
 
         if (activeThreadId && !assistantPersisted) {
           assistantPersisted = true;
@@ -1525,14 +1690,21 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
         if (activeThreadId) {
           activeExecutionSet.delete(activeThreadId);
+          clearTurnActive(activeThreadId);
+          clearTurnAbortController(activeThreadId);
+          clearRoundAbortController(activeThreadId);
+          threadStore.clearSteers(activeThreadId);
         }
-        req.signal.removeEventListener("abort", cleanupSignal);
-        if (!abortController.signal.aborted) {
-          abortController.abort();
-        }
+        req.signal.removeEventListener("abort", cleanupClientSignal);
 
-        if (activeThreadId && !assistantPersisted && (aborted || req.signal.aborted || abortController.signal.aborted)) {
+        if (activeThreadId && !assistantPersisted && explicitStopped) {
           persistAssistantOnAbort();
+        }
+        if (!assistantPersisted) {
+          assistantPersisted = true;
+        }
+        if (!turnAbortController.signal.aborted) {
+          turnAbortController.abort();
         }
         for (const session of activeSessions) {
           try {

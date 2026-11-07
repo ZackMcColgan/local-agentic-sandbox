@@ -382,3 +382,178 @@
   - Two-client API test proves partial content visible mid-turn and convergence on terminal status.
 - **Severity:** **P1** (core cross-device visibility degraded; a live turn appears frozen/hung on second client).
 - **Status:** **FIXED / VERIFIED LIVE** (Nov 5, 2026 — commit 4bc71fc, deployed as image `local-agentic-sandbox-web-ui:v-4bc71fc-mw436dvd`. Dedicated suite `tests/chatLiveVisibility.test.ts` 8/8; gate 326/326. Two-client live acceptance on `thread-1793917113300-ip48`: persistent client streamed 143,982 SSE bytes to `done`; second client saw 73 `streaming` snapshots growing 1 → 11,162 chars via 1.5s polls, single transition streaming→completed, final 11,329 chars, exactly one upserted assistant message, no ⚠️ marker).
+
+---
+
+### [FEATURE-1] Chat Message Queue During Active Turns
+- **Feature:** Client-Side Message Queue (Composer Non-Blocking Follow-ups)
+- **Affected Components:**
+  - `web-ui/lib/chatQueue.ts` (pure module with `StorageLike`, FIFO operations, `decideSendAction`, `drainNextForTurnEnd`)
+  - `web-ui/components/ChatStream.tsx` (send-while-running enqueues text; queue chips rendered above composer with per-item `×` and `Clear all`; drains exactly one item on normal `DONE` via `turnActiveRef`)
+  - `web-ui/tests/chatQueue.test.ts` (17 behavioral tests)
+- **Status:** **IMPLEMENTED / VERIFIED LIVE** (Nov 6, 2026 — commit 0520a2a, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`).
+
+---
+
+### [FEATURE-2] Mid-Turn Steering Mailbox & Stream Events
+- **Feature:** Mid-Turn Steering Mailbox & Transcript Injection
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`appendSteer`, `consumeSteers`, `getPendingSteers`, `clearSteers` sidecar mailbox)
+  - `web-ui/app/api/threads/[id]/steer/route.ts` (`POST /api/threads/[id]/steer`)
+  - `web-ui/app/api/chat/route.ts` (consumes steer mailbox at every round boundary & pre-synthesis; persists as `[Steer from user, mid-turn]`; emits `{ type: "steer", texts }`; returns unconsumed in `done` as `pendingSteers`)
+  - `web-ui/components/ChatStream.tsx` (Queue vs Steer toggle during active turns; transcript renders `steer` events; auto-queues unconsumed `pendingSteers`)
+  - `web-ui/tests/chatSteer.test.ts` (8 behavioral tests)
+- **Status:** **IMPLEMENTED / VERIFIED LIVE** (Nov 6, 2026 — commit f1fab48, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`).
+
+---
+
+### [CHAT-9 / INV-B] Turn Presence for Instant Cross-Device Visibility
+- **Feature:** Active-Turn Presence Registry (Pre-Token Blind Window Elimination)
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`markTurnActive`, `getActiveTurn`, `clearTurnActive`)
+  - `web-ui/app/api/threads/[id]/route.ts` (`GET` returns `activeTurn` presence info even before thread file exists)
+  - `web-ui/app/api/chat/route.ts` (sets presence immediately on turn start; clears on done/abort/error)
+  - `web-ui/tests/chatTurnPresence.test.ts` (7 behavioral tests)
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 6, 2026 — commit 9f9b61e, deployed image `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`. Live probe verified watcher presence within 114ms of turn start, reducing pre-token blind window from ~18s to <0.2s).
+
+---
+
+## Part 5 - Overnight Shakeout Battery Register (Nov 7, 2026)
+
+### [CHAT-10] Server Restart Mid-Turn Leaves Orphaned Streaming Assistant Message and Flips Thread Status to Completed
+- **Feature:** Chat Turn Persistence & Server Restart Reconciliation
+- **Affected Components:**
+  - `web-ui/lib/threads/threadStore.ts` (`addMessage`, `reconcileThread`)
+  - `web-ui/app/api/chat/route.ts` (turn-start thread status activation)
+- **Discovery:** Overnight Shakeout Battery Probe D4 (`shakeout-batch2.log`, Nov 7, 2026). Restarting `deployment/web-ui` while a chat turn was streaming on `thread-d4-1794048774348` left the thread's assistant message stuck in `status: "streaming"` permanently while `thread.status` flipped to `"completed"`.
+- **Steps to Reproduce:**
+  1. Start a chat turn on an existing thread or let `ThrottledStreamSnapshot` write a `status: "streaming"` assistant snapshot.
+  2. Restart the `web-ui` server process (clearing in-memory `activeExecutionSet` and `activeTurnRegistry`) before the turn reaches a terminal state.
+  3. Query `GET /api/threads/<id>`.
+- **Expected Behavior:**
+  1. While a message with `status: "streaming"` is written via `addMessage`, `thread.status` remains `"active"` (never flipped to `"completed"` mid-stream).
+  2. When `reconcileThread` runs on a thread that is no longer live in `activeExecutionSet` or `getActiveTurn(thread.id)`, any trailing assistant message still marked `status: "streaming"` is reconciled to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"` appended, and `thread.status` is set to `"stopped"`.
+- **Actual Behavior:**
+  1. `ThreadStore.addMessage` unconditionally executed `if (thread.status !== "active") { thread.status = "completed"; }` for any assistant message, including `status: "streaming"` snapshots on threads whose previous turn had finished (`status: "completed"` or `"stopped"`).
+  2. Because `thread.status` became `"completed"` during streaming, `reconcileThread` (which only checked `if (thread.status === "active")`) skipped the thread after pod restart, and even for `"active"` threads never transitioned `lastMsg.status === "streaming"` out of `"streaming"`. Clients polling `GET /api/threads/[id]` saw `status: "streaming"` forever.
+- **Resolution:**
+  - Updated `ThreadStore.addMessage` in `web-ui/lib/threads/threadStore.ts` so `message.status === "streaming"` keeps `thread.status = "active"`, `incomplete`/`error` sets `"stopped"`, and only completed assistant turns set `"completed"`.
+  - Updated `ThreadStore.reconcileThread` to reconcile any `status: "streaming"` assistant message on a non-live thread (`!activeExecutionSet.has(thread.id) && !getActiveTurn(thread.id)`) to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"`, and `thread.status = "stopped"`.
+- **Severity:** **P1** (causes infinite 1.5s client polling and permanently stuck "Streaming" badge after pod rollout/restart).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `7e7b40a`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by unit test 4 in `chatPersistenceDecoupling.test.ts` and live pod rollout mid-turn on `thread-1794048592462-otwu`: post-restart `GET` returned `threadStatus: "stopped"`, `activeTurn: null`, `asstStatus: "incomplete"`, `asstIsStopped: true`, and `⚠️ [Turn incomplete: Server restarted or turn interrupted.]`).
+
+---
+
+### [CHAT-11] Mid-Turn Steer Endpoint Accepts Nonexistent Thread IDs with 200 OK and Writes Orphan Sidecars
+- **Feature:** Mid-Turn Steering API (`POST /api/threads/[id]/steer`)
+- **Affected Components:**
+  - `web-ui/app/api/threads/[id]/steer/route.ts`
+- **Discovery:** Overnight Shakeout Battery Probe C3 (`shakeout-batch1.log`, Nov 7, 2026). Sending `POST /api/threads/nonexistent-thread-999999/steer` returned HTTP `200` (`{"success":true,"pendingCount":1}`) and created an orphan `.steer.json` file on disk.
+- **Steps to Reproduce:**
+  1. Send `POST /api/threads/nonexistent-thread-999999/steer` with `{"text": "orphan steer"}`.
+  2. Observe HTTP status code and `THREADS_DIR` contents.
+- **Expected Behavior:**
+  If the target thread ID neither exists in `ThreadStore` nor has a live turn in `getActiveTurn(id)` / `activeExecutionSet`, `POST /api/threads/[id]/steer` rejects with HTTP `404 Not Found` and writes no `.steer.json` file.
+- **Actual Behavior:**
+  `POST /api/threads/[id]/steer` called `store.appendSteer(id, text)` unconditionally without verifying thread existence or active turn state.
+- **Resolution:**
+  - Updated `POST` in `web-ui/app/api/threads/[id]/steer/route.ts` to check `store.getThread(id)`, `getActiveTurn(id)`, and `activeExecutionSet.has(id)` before calling `store.appendSteer(id, text)`, returning HTTP `404` (`{ error: "Thread not found" }`) when none match.
+- **Severity:** **P2** (dishonest 200 response for nonexistent thread and orphan sidecar file creation).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `69c5047`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by `chatSteer.test.ts` and live Probe C3 returning `{"status":404,"body":{"error":"Thread not found"}}`).
+
+---
+
+### [CHAT-12] Requesting an Unavailable Model Name on `/api/chat` Silently Runs Resident Model and Spoofs `modelUsed`
+- **Feature:** Chat Model Dispatch & Turn Honesty (`POST /api/chat`)
+- **Affected Components:**
+  - `web-ui/app/api/chat/route.ts`
+- **Discovery:** Overnight Shakeout Battery Probe E1 (`shakeout-batch1.log`, Nov 7, 2026). Sending `POST /api/chat` with `model: "totally-nonexistent-model-xyz-999"` succeeded with HTTP 200, streamed a normal completion from the resident Strata GGUF model, and persisted `modelUsed: "totally-nonexistent-model-xyz-999"` on the assistant message.
+- **Steps to Reproduce:**
+  1. Send `POST /api/chat` with `{"model": "totally-nonexistent-model-xyz-999", "messages": [{"role": "user", "content": "Say hi"}]}`.
+  2. Inspect the SSE stream events and persisted assistant message in `GET /api/threads/<id>`.
+- **Expected Behavior:**
+  When the caller explicitly requests a model ID that is not `"auto"`, not the configured `DEFAULT_MODEL` / legacy default alias, and not a known profile in `PRESET_MODEL_PROFILES`, the route fails honestly by throwing an explicit model-unavailable error (`Model "<id>" is not available on the active inference engine.`), emitting an SSE `error` event and persisting the assistant message with `status: "error"` and `"⚠️ [Turn error: ...]"`.
+- **Actual Behavior:**
+  Because single-slot `llama-server` / Strata ignores the `model` field in `/v1/chat/completions`, `route.ts` passed the bogus model ID straight through and recorded the bogus string as `modelUsed`.
+- **Resolution:**
+  - Updated `web-ui/app/api/chat/route.ts` to validate `requestedModel` against `"auto"`, `DEFAULT_MODEL`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_SUBAGENT_MODEL`, legacy aliases (`"Swift-1.5-Qwen3.8-27B-IQ3_XS"`, `"swift-15-27b-mtp"`), and `getModelProfile(activeModel)`. Unregistered model IDs fail fast with `Model "<id>" is not available on the active inference engine.`, persisting `status: "error"` and emitting an SSE `error` event without invoking the LLM backend.
+- **Severity:** **P1** (violates turn honesty and model attribution; spoofs `modelUsed` with an arbitrary nonexistent model name).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `67fb713`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1 returning `sseEvents: ["error"]`, `asstStatus: "error"`, `⚠️ [Turn error: Model "totally-nonexistent-model-xyz-999" is not available on the active inference engine.]`).
+
+
+---
+
+### [CHAT-13] Thinking Section Disappears When Steering Mid-Turn
+- **Feature:** Live Reasoning Panel & Mid-Turn Steer Visibility
+- **Affected Components:**
+  - `web-ui/components/ChatStream.tsx` (~L2225 panel visibility & streaming condition keyed to last-message position; ~L1089 steer event appends steer bubble after assistant)
+  - `web-ui/app/api/chat/route.ts` (~L889 sends thought: roundThinking per-round rather than cumulative)
+- **Discovery:** Owner report (deployed v-5f36793, phone, Nov 7 10:20 CT): "when steering the thinking section of the ui goes away."
+- **Expected Behavior:** When steering mid-turn, the assistant message's thinking panel remains visible, continues in streaming state, and displays all accumulated thinking across rounds without resetting.
+- **Actual Behavior:** Steering appends a steer bubble after the assistant message, causing the assistant message to no longer be in the last-message position. The reasoning panel keys on last-message position and disappears. Furthermore, interrupt-steer starts a new round while live thought events only carried roundThinking, resetting visible thinking.
+- **Severity:** **P1**
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `485dd87`, deployed as `local-agentic-sandbox-web-ui:v-485dd87`. Verified by `chatThinkingPreservation.test.ts` 4/4 passing).
+
+---
+
+### [CHAT-14] Thinking Panel Lost On Page Refresh Mid-Turn
+- **Feature:** Turn-Lifetime Thinking Persistence & Watcher Rehydration
+- **Affected Components:**
+  - `web-ui/lib/streamSnapshot.ts` (`StreamingSnapshotMessage` lacks `thought` field; `maybeWrite` only accepts `content` and early-returns when content is empty)
+  - `web-ui/app/api/chat/route.ts` (calls `streamSnapshot.maybeWrite` only from content token branches; thought chunks never trigger snapshots)
+  - `web-ui/components/ChatStream.tsx` (reasoning panel requires local `isLoading` or `m.thought`; after refresh watcher `isLoading` is false and polled message lacked thought)
+- **Discovery:** Owner report (deployed v-5f36793, phone, Nov 7 10:23 CT): "Thinking box is lost on refresh — I want the thinking to come back on refresh of the page." Screenshot: streaming turn after refresh shows only Streaming badge and empty space where reasoning panel was.
+- **Expected Behavior:** Thinking of an in-progress turn is part of the server-side record continuously. A refreshed page or second device polling a streaming turn receives the cumulative thinking and renders the reasoning panel in streaming state.
+- **Actual Behavior:** Mid-turn snapshots never carried thinking; pure-thinking phases wrote zero snapshots; refreshed clients saw no thinking panel.
+- **Severity:** **P1**
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `485dd87`, deployed as `local-agentic-sandbox-web-ui:v-485dd87`. Verified by `chatThinkingPreservation.test.ts` 4/4 passing).
+
+---
+
+### [BUILD-2] Build Launch Lacks Visibility, Persist-First Durability, Task Listing & Full Thinking
+- **Feature:** Build Mode / Task Execution Lifecycle & Builds View (`POST /api/threads`, `GET /api/tasks`, `BuildsView`)
+- **Affected Components:**
+  - `web-ui/app/api/threads/route.ts` (`action: "launchTask"` awaited `generatePlanSpec` synchronously before persisting thread or checkpoint; no 201 until planner finishes)
+  - `web-ui/lib/subagents/morningReport.ts` (`getCanonicalCheckpointDir` fell back to ephemeral `/app/web-ui/.agent/checkpoints` rather than persistent PVC `/workspace/.agent/checkpoints`)
+  - `web-ui/components/BuildsView.tsx` (only rendered single `activeTask` rather than full list of tasks from `GET /api/tasks`)
+  - `web-ui/lib/subagents/supervisor.ts` & `web-ui/app/api/threads/route.ts` (truncated builder reasoning to 180-200 chars in journal)
+- **Discovery:** Owner report (Nov 7 ~10:26 CT): "launch visibility: started a build from phone... after refresh, zero builds appear."
+- **Forensic Verdict (Step 0):** `(ii) 'launchTask threw before persisting checkpoint'` (with contributing cause (iii) `'checkpoint persisted but in wrong directory / lost on restart'`).
+- **Expected Behavior:**
+  1. `POST /api/threads` (`launchTask`) creates thread and task manifest with status `"planning"`, saves checkpoint immediately, and returns HTTP 201 `{ thread, task: manifest, started: true }` immediately while planner runs in background.
+  2. If planner throws, task transitions to `"failed"`, checkpoint updates to `"failed"`, and thread receives terminal assistant message with error.
+  3. `GET /api/tasks` lists all disk checkpoints across restarts including planning, active, parked, and completed tasks.
+  4. `BuildsView` renders multiple tasks from `GET /api/tasks`, displaying status, branch, goal, and timestamps.
+  5. Checkpoints are pinned to persistent volume `/workspace/.agent/checkpoints`.
+  6. Builder thinking is captured in full without 180-char truncation.
+- **Severity:** **P0** (blocks build mode observability, causes disappearing builds on refresh, and truncates thinking).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `a34483e`, deployed as `local-agentic-sandbox-web-ui:v-a34483e`. Verified by `buildLaunchVisibility.test.ts` 5/5 passing, live cluster endpoints `:3001` and `:80` rehydrating tasks).
+
+---
+
+### [BUILD-1] Build Work Trapped in Pod (Push, Bootstrap & Honest Completion)
+- **Feature:** Build Mode / Remote Push, Workspace Bootstrap & Honest Completion
+- **Affected Components:**
+  - `web-ui/lib/git/workerGitOps.ts` (`createAndSwitchBranch`, `isPushConfigured`, `pushBranch`, timeout: 120s)
+  - `web-ui/lib/subagents/supervisor.ts` (`executeTaskWithRecovery` bootstrap guard & terminal push execution)
+  - `web-ui/lib/subagents/morningReport.ts` (`pushStatus` tracking in `OvernightTaskEntry` & `MorningReport` markdown formatters)
+  - `web-ui/lib/subagents/types.ts` (`TaskManifest.pushStatus`)
+  - `docs/credentials-needed.md` (Credential & network egress specification)
+- **Discovery:** Argon orchestrator brief & owner report: "Build work doesn't leave the pod. Tasks completed locally without pushing branch or opening PR to remote forge."
+- **Step 1 In-Pod Diagnosis (Verbatim):**
+  - `git ls-remote origin`: fails with exit code 128 when executed in `/` (not a git repo). In `/workspace`, `origin` remote points to `/workspace/.agent/origin-develop.bundle` (local bundle file) and resolves `06fb0bdc540b9e3fb61b486e3f7b759ef229353a refs/heads/develop`.
+  - `git fetch origin develop`: succeeds inside `/workspace` from bundle.
+  - Network Egress: Air-gapped cluster policy (`egress_policy: "BLOCKED"`, network: `ai-mesh`). Connections to `github.com` hang/timeout.
+  - Environment Credentials: No `GITHUB_TOKEN`, `GH_TOKEN`, SSH keys, or git write credentials exist in the container environment.
+  - Push to Bundle: `git push -u origin HEAD` fails with exit code 1 (`error: failed to push some refs to '/workspace/.agent/origin-develop.bundle'`) because git bundles are read-only snapshot archives.
+  - Honest Verdict: Remote push is not configured and egress is blocked. In this air-gapped environment, task completion must honestly declare local-only status and never hallucinate a remote push or PR.
+- **Expected Behavior:**
+  1. Terminal path calls `isPushConfigured()` and `pushBranch()`. If push is not configured or fails, task status / morning report declares `completed — local only, push not configured` or `failed: <push error>`. Zero false success or hallucinated PR URLs.
+  2. Workspace bootstrap at launch checks for dirty working tree via `git status --porcelain`. If dirty, terminates immediately with `Bootstrap failed: dirty working tree in workspace`.
+  3. Clean bootstrap fetches `origin/develop` and checks out task branch with 120s timeout.
+- **Actual Behavior:** Prior to fix, `pushBranch` was never called upon milestone completion; bootstrap lacked dirty working tree verification and continued on failure; no push status or local-only distinction was reported in Morning Report.
+- **Severity:** **P0** (blocks build mode deliverables from exiting pod honestly).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `9f35f3d`, deployed as `local-agentic-sandbox-web-ui:v-d63c477`. Verified by `buildPushHonesty.test.ts` 5/5 passing, root gate 60/60 passing, and live in-pod re-proof task `task-1794073565196`).
+- **Re-Proof Verdict:** `VERDICT (BUILD-1 Re-Proof): PASS — Task executed live on pod (task-1794073565196); generated 1844-byte real TS code in isolated branch feat/task-179407356519; ran test verification; strictly avoided remote push/PR hallucination (prUrl undefined, local-only preserved).`
+
+
