@@ -2222,9 +2222,15 @@ export function ChatStream({
                   )}
 
                   {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
-                  {!isTaskHostMessage && (m.thought || (isLoading && idx === deduplicatedMessages.length - 1)) && (() => {
-                    const rawThought = m.thought || (isLoading && idx === deduplicatedMessages.length - 1 && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
-                    const isStreamingThis = isLoading && idx === deduplicatedMessages.length - 1;
+                  {!isTaskHostMessage && (() => {
+                    const isStreamingThis = Boolean(
+                      m.status === "streaming" ||
+                      (isLoading && m.id === activeAssistantMsgIdRef.current)
+                    );
+                    const shouldRenderThinking = Boolean(m.thought || isStreamingThis);
+                    if (!shouldRenderThinking) return null;
+
+                    const rawThought = m.thought || (isStreamingThis && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
 
                     return (
                       <div className="w-full">

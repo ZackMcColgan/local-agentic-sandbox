@@ -483,12 +483,27 @@
 
 ---
 
-### [CHAT-13 / INTERRUPT-STEER] Immediate Mid-Stream Round Interrupt for Steers
-- **Feature:** Mid-Turn Steering (`POST /api/threads/[id]/steer` with `interrupt: true`)
+### [CHAT-13] Thinking Section Disappears When Steering Mid-Turn
+- **Feature:** Live Reasoning Panel & Mid-Turn Steer Visibility
 - **Affected Components:**
-  - `web-ui/lib/threads/threadStore.ts` (`registerRoundAbortController`, `clearRoundAbortController`, `interruptActiveTurnStream`)
-  - `web-ui/app/api/threads/[id]/steer/route.ts` (accepts `{ text, interrupt?: boolean }`; triggers `interruptActiveTurnStream(id)` and returns `interrupted: boolean`)
-  - `web-ui/app/api/chat/route.ts` (creates a per-round `roundAbortController` combined via `AbortSignal.any([turnAbortController.signal, roundAbortController.signal])`; when interrupted by a steer without an explicit turn stop, preserves partial round output/thinking in `conversationMessages` and immediately advances to the next loop round to consume the steer)
-  - `web-ui/components/ChatStream.tsx` (sends `interrupt: true` when submitting a mid-turn Steer)
-  - `web-ui/tests/chatSteer.test.ts` (behavioral test verifying in-flight stream interruption, partial context preservation, immediate steer injection, and clean `completed` terminal status)
-- **Status:** **IMPLEMENTED / VERIFIED** (Nov 7, 2026).
+  - `web-ui/components/ChatStream.tsx` (~L2225 panel visibility & streaming condition keyed to last-message position; ~L1089 steer event appends steer bubble after assistant)
+  - `web-ui/app/api/chat/route.ts` (~L889 sends thought: roundThinking per-round rather than cumulative)
+- **Discovery:** Owner report (deployed v-5f36793, phone, Nov 7 10:20 CT): "when steering the thinking section of the ui goes away."
+- **Expected Behavior:** When steering mid-turn, the assistant message's thinking panel remains visible, continues in streaming state, and displays all accumulated thinking across rounds without resetting.
+- **Actual Behavior:** Steering appends a steer bubble after the assistant message, causing the assistant message to no longer be in the last-message position. The reasoning panel keys on last-message position and disappears. Furthermore, interrupt-steer starts a new round while live thought events only carried roundThinking, resetting visible thinking.
+- **Severity:** **P1**
+- **Status:** **REGISTERED** (Nov 7, 2026).
+
+---
+
+### [CHAT-14] Thinking Panel Lost On Page Refresh Mid-Turn
+- **Feature:** Turn-Lifetime Thinking Persistence & Watcher Rehydration
+- **Affected Components:**
+  - `web-ui/lib/streamSnapshot.ts` (`StreamingSnapshotMessage` lacks `thought` field; `maybeWrite` only accepts `content` and early-returns when content is empty)
+  - `web-ui/app/api/chat/route.ts` (calls `streamSnapshot.maybeWrite` only from content token branches; thought chunks never trigger snapshots)
+  - `web-ui/components/ChatStream.tsx` (reasoning panel requires local `isLoading` or `m.thought`; after refresh watcher `isLoading` is false and polled message lacked thought)
+- **Discovery:** Owner report (deployed v-5f36793, phone, Nov 7 10:23 CT): "Thinking box is lost on refresh — I want the thinking to come back on refresh of the page." Screenshot: streaming turn after refresh shows only Streaming badge and empty space where reasoning panel was.
+- **Expected Behavior:** Thinking of an in-progress turn is part of the server-side record continuously. A refreshed page or second device polling a streaming turn receives the cumulative thinking and renders the reasoning panel in streaming state.
+- **Actual Behavior:** Mid-turn snapshots never carried thinking; pure-thinking phases wrote zero snapshots; refreshed clients saw no thinking panel.
+- **Severity:** **P1**
+- **Status:** **REGISTERED** (Nov 7, 2026).

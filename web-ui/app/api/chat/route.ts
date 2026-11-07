@@ -886,13 +886,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
               if (chunk.message?.thinking) {
                 roundThinking += chunk.message.thinking;
-                await sendEvent({ type: "thought", thought: roundThinking });
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
+                  : roundThinking;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                await sendEvent({ type: "thought", thought: currentCumulativeThought });
               }
               if (chunk.message?.content) {
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
                 accumulatedStreamedTokens += textChunk;
-                streamSnapshot.maybeWrite(accumulatedStreamedTokens);
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? (roundThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}` : accumulatedThoughts.join("\n\n"))
+                  : (roundThinking || undefined);
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
                 await sendEvent({ type: "token", content: textChunk });
               }
               if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
@@ -1489,12 +1496,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           })) {
             if (chunk.message?.thinking) {
               synthThinking += chunk.message.thinking;
+              const currentCumulativeThought = accumulatedThoughts.length > 0
+                ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}`
+                : synthThinking;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
               await sendEvent({ type: "thinking", content: chunk.message.thinking });
+              await sendEvent({ type: "thought", thought: currentCumulativeThought });
             }
             if (chunk.message?.content) {
               synthContent += chunk.message.content;
               accumulatedStreamedTokens += chunk.message.content;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens);
+              const currentCumulativeThought = accumulatedThoughts.length > 0
+                ? (synthThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}` : accumulatedThoughts.join("\n\n"))
+                : (synthThinking || undefined);
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
               await sendEvent({ type: "token", content: chunk.message.content });
             }
           }
