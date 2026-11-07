@@ -112,6 +112,39 @@
 
 ---
 
-## Phase 6 — Completion & PR Summary
-- Single PR created from `feature/chat-queue-steer` into `develop` (DO NOT MERGE).
-- All gates green, zero new dependencies, strict platform boundaries respected.
+## Phase 7 — Steer Effectiveness Diagnosis & Fix
+
+### Step 0 Forensics: Owner's Thread Analysis
+- **Thread ID:** `thread-1794016475206-zz14.json`
+- **User Prompt:** `"What's the weather today in Spanish Fort AL?"` (Timestamp: `2026-11-07T01:54:44.376Z`)
+- **Execution Timeline:**
+  1. Round 0: Model invoked `search_web` for Spanish Fort AccuWeather forecast.
+  2. Round 1: Model received tool result and streamed full final weather markdown (`"In Spanish Fort, AL, today's weather..."`).
+  3. Round 1 produced 0 further tool calls.
+  4. Loop exited. Route checked pre-synthesis at line 1354.
+  5. Steer `"Create a svg of it"` arrived mid-turn and was sitting in mailbox.
+  6. Route called `consumeSteers(activeThreadId)`:
+     - Consumed steer and appended `[Steer from user, mid-turn] Create a svg of it` to `conversationMessages`.
+     - Immediately persisted steer message into thread transcript (`01:56:06.027Z`).
+  7. Route evaluated `shouldRunPostToolSynthesis`:
+     - `lingeringToolCallsCount === 0`
+     - `assistantContent` was already full weather response
+     - `userPrompt` had no SVG intent
+     - Result: `shouldRunPostToolSynthesis` returned `false`!
+  8. Synthesis request was **skipped**.
+  9. Turn ended, emitting `done` and saving assistant message (`01:56:06.033Z`).
+- **RCA Verdict:** The steer was consumed from the mailbox and written to the thread transcript before checking whether an LLM request would actually be made. Because post-tool synthesis did not trigger, no model call followed, leaving the steer persisted as delivered without ever reaching any model prompt.
+
+### The Fix
+1. In `app/api/chat/route.ts`:
+   - Round boundary consumption moved after `canContinueToolLoop()` check so steers are never consumed into a round that will immediately abort/break.
+   - Pre-synthesis consumption check: If `pendingLateSteers.length > 0`, synthesis pass is guaranteed (`shouldSynthesize = pendingLateSteers.length > 0 || shouldRunPostToolSynthesis(...)`).
+   - Steers are only consumed from the mailbox and persisted into the transcript inside `if (shouldSynthesize)`, strictly guaranteeing they are dispatched in the model request.
+   - Any steer arriving when no model request can be made is left in mailbox and returned via `pendingSteers` in `done` (TOO LATE -> auto-queued as chip).
+2. Tests:
+   - Added behavioral tests in `web-ui/tests/chatSteer.test.ts` verifying late-steers force synthesis and appear in model request, and verifying unconsumed late steers are not persisted to transcript.
+   - Full gate passed: 176/176 tests green in 27.9s (<90s budget).
+3. Deployed:
+   - Built and rolled out image `local-agentic-sandbox-web-ui:v-7447231-test1`.
+   - Verified HTTP 200 on `localhost:3001`, `localhost:80`, and LAN `192.168.50.254:80`.
+

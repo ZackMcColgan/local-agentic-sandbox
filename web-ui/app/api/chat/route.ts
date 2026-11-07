@@ -725,7 +725,24 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         while (true) {
           if (aborted || req.signal.aborted) break;
 
-          // CHAT-STEER: consume pending steers at every round boundary
+          const continuation = canContinueToolLoop({
+            round,
+            contextTokens: estimateTokens(conversationMessages),
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            lastRoundTools,
+            webResearchCalls,
+            roundBackstop: TOOL_ROUND_BACKSTOP,
+            awaitingToolRound: groundingDirectivePending
+          });
+          if (!continuation.canContinue) {
+            toolLoopStopReason = continuation.stopReason;
+            budgetExhaustedAtTokens = estimateTokens(conversationMessages);
+            break;
+          }
+          groundingDirectivePending = false;
+
+          // CHAT-STEER: consume pending steers at round boundary only AFTER verifying round can continue,
+          // guaranteeing an LLM request will actually be dispatched with the steer!
           if (activeThreadId) {
             const steers = threadStore.consumeSteers(activeThreadId);
             if (steers.length > 0) {
@@ -747,22 +764,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               await sendEvent({ type: "steer", texts: steers });
             }
           }
-
-          const continuation = canContinueToolLoop({
-            round,
-            contextTokens: estimateTokens(conversationMessages),
-            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
-            lastRoundTools,
-            webResearchCalls,
-            roundBackstop: TOOL_ROUND_BACKSTOP,
-            awaitingToolRound: groundingDirectivePending
-          });
-          if (!continuation.canContinue) {
-            toolLoopStopReason = continuation.stopReason;
-            budgetExhaustedAtTokens = estimateTokens(conversationMessages);
-            break;
-          }
-          groundingDirectivePending = false;
 
           const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
           if (compaction.compacted) {
@@ -1349,39 +1350,46 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           });
         }
 
-        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, or empty text:
-        // CHAT-STEER: consume pending steers once more immediately before final synthesis
-        if (activeThreadId) {
-          const steers = threadStore.consumeSteers(activeThreadId);
-          if (steers.length > 0) {
-            for (const s of steers) {
-              const steerContent = `[Steer from user, mid-turn] ${s}`;
-              conversationMessages.push({
-                role: "user",
-                content: steerContent
-              });
-              try {
-                threadStore.addMessage(activeThreadId, {
-                  id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  role: "user",
-                  content: steerContent,
-                  timestamp: new Date().toISOString()
-                });
-              } catch {}
-            }
-            await sendEvent({ type: "steer", texts: steers });
-          }
-        }
-
+        // Post-tool synthesis safety pass if lingering tool calls, missing artifact, empty text, or late steers:
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
-        if (
+        const pendingLateSteers = activeThreadId ? threadStore.getPendingSteers(activeThreadId) : [];
+
+        // Invariant: If late steers arrived and we have context (e.g. tools were used or model produced content),
+        // we MUST dispatch a model synthesis pass that incorporates the steer, OR if no request can run,
+        // we do NOT consume them so they return honestly in pendingSteers.
+        const shouldSynthesize =
+          pendingLateSteers.length > 0 ||
           shouldRunPostToolSynthesis({
             userPrompt,
             assistantContent: currentAssistantMessage.content || "",
             lingeringToolCallsCount: lingeringToolCalls.length,
             traces
-          })
-        ) {
+          });
+
+        if (shouldSynthesize) {
+          // CHAT-STEER: only consume and persist steers now that a model request is GUARANTEED to be dispatched!
+          if (activeThreadId) {
+            const steers = threadStore.consumeSteers(activeThreadId);
+            if (steers.length > 0) {
+              for (const s of steers) {
+                const steerContent = `[Steer from user, mid-turn] ${s}`;
+                conversationMessages.push({
+                  role: "user",
+                  content: steerContent
+                });
+                try {
+                  threadStore.addMessage(activeThreadId, {
+                    id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    role: "user",
+                    content: steerContent,
+                    timestamp: new Date().toISOString()
+                  });
+                } catch {}
+              }
+              await sendEvent({ type: "steer", texts: steers });
+            }
+          }
+
           const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, { model: activeModel });
           conversationMessages.push(currentAssistantMessage);
           conversationMessages.push({

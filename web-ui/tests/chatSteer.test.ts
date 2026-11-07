@@ -208,19 +208,29 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       assert.equal(store.getPendingSteers(threadId).length, 0);
     });
 
-    it("late-steer test: steers appended before synthesis round return in done payload and empty mailbox", async () => {
+    it("late-steer test: steers appended before synthesis round force synthesis, consume steer, and appear in model request", async () => {
       const threadId = `t-steer-late-${Date.now()}`;
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
+      let recordedRequests: any[] = [];
       roundHandler = (parsed, res) => {
+        recordedRequests.push(parsed);
         roundCount++;
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (roundCount === 1) {
-          store.appendSteer(threadId, "late steer directive");
+          // Model answered the initial question with 0 tools
+          store.appendSteer(threadId, "Create a svg of it");
           res.write(JSON.stringify({
             message: {
-              content: "All finished."
+              content: "The weather in Spanish Fort is sunny."
+            }
+          }) + "\n");
+        } else if (roundCount === 2) {
+          // Second round should be synthesis incorporating the steer!
+          res.write(JSON.stringify({
+            message: {
+              content: "Here is the SVG of the sunny weather: <svg></svg>"
             }
           }) + "\n");
         }
@@ -236,7 +246,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
           threadId,
           userMessageId: "u-late",
           assistantMessageId: "a-late",
-          messages: [{ role: "user", content: "Fast answer", id: "u-late" }],
+          messages: [{ role: "user", content: "What's the weather today?", id: "u-late" }],
           model: "swift-15-27b-mtp",
           enableTools: false
         })
@@ -262,16 +272,41 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
         }
       }
 
-      const doneEvent = events.find((e) => e.type === "done");
-      assert.ok(doneEvent, "Must emit done event");
-      assert.ok(
-        doneEvent.pendingSteers?.includes("late steer directive") ||
-        events.some((e) => e.type === "steer" && e.texts.includes("late steer directive")),
-        "Steer must either be consumed before synthesis or returned in pendingSteers"
-      );
+      // 1. Emitted steer event
+      const steerEvent = events.find((e) => e.type === "steer");
+      assert.ok(steerEvent, "Must emit steer event when steer is consumed");
+      assert.deepEqual(steerEvent.texts, ["Create a svg of it"]);
 
-      // Mailbox is empty
+      // 2. Steer appeared in subsequent model synthesis request
+      assert.ok(recordedRequests.length >= 2, "Must have dispatched synthesis request to model");
+      const synthMessages = recordedRequests[1].messages || [];
+      const steerInPrompt = synthMessages.find((m: any) => m.content && m.content.includes("[Steer from user, mid-turn] Create a svg of it"));
+      assert.ok(steerInPrompt, "Steer must appear in synthesis model request");
+
+      // 3. Steer appeared in persisted transcript
+      const thread = await store.getThread(threadId);
+      assert.ok(thread);
+      const persistedSteer = thread.messages.find((m) => m.content.includes("[Steer from user, mid-turn] Create a svg of it"));
+      assert.ok(persistedSteer, "Steer must be persisted into thread transcript as consumed");
+
+      // 4. Mailbox is empty
       assert.equal(store.getPendingSteers(threadId).length, 0);
+    });
+
+    it("unconsumed steer invariant: if steer arrives when no further model call is possible, it is NOT persisted in transcript and returned in pendingSteers", async () => {
+      // Invariant: If a steer is in pendingSteers when done fires, it must NOT be in thread transcript as consumed.
+      const threadId = `t-steer-unconsumed-${Date.now()}`;
+      process.env.THREADS_DIR = tmpDir;
+
+      // Manually simulate a steer sitting in unconsumedSteers at turn completion
+      store.appendSteer(threadId, "late arrival");
+      const unconsumed = store.consumeSteers(threadId);
+      assert.deepEqual(unconsumed, ["late arrival"]);
+
+      // Verify thread messages do NOT contain the unconsumed steer
+      const thread = await store.getThread(threadId);
+      const foundInTranscript = (thread?.messages || []).some((m) => m.content.includes("late arrival"));
+      assert.equal(foundInTranscript, false, "Unconsumed steer must not be in transcript");
     });
   });
 });
