@@ -36,11 +36,13 @@ export class WorkerGitOps {
   private commandRunner: GitCommandRunner;
   private auditLogs: GitAuditLogEntry[] = [];
   private currentBranch = "";
+  private hasCustomCommandRunner: boolean;
 
   constructor(options: WorkerGitOpsOptions) {
     this.runId = options.runId;
     this.repoDir = options.repoDir || process.cwd();
     this.ledger = options.ledger;
+    this.hasCustomCommandRunner = Boolean(options.commandRunner);
     this.commandRunner =
       options.commandRunner ??
       (async (file: string, args: string[]) => {
@@ -92,9 +94,36 @@ export class WorkerGitOps {
 
   public async createAndSwitchBranch(branchName: string): Promise<{
     branchName: string;
+    baseSha?: string;
     eventMarkdown: string;
   }> {
     this.assertSafeBranchName(branchName);
+    let baseSha: string | undefined;
+
+    if (!this.hasCustomCommandRunner) {
+      // Fresh-pull discipline: if origin remote exists, fetch origin/develop and branch from origin/develop
+      const remoteRes = await this.commandRunner("git", ["remote", "get-url", "origin"]);
+      if (remoteRes.exitCode === 0 && remoteRes.stdout.trim()) {
+        const fetchRes = await this.commandRunner("git", ["fetch", "origin", "develop"]);
+        this.recordAudit("git fetch origin develop", fetchRes);
+        const verifyOriginDev = await this.commandRunner("git", ["rev-parse", "origin/develop"]);
+        if (verifyOriginDev.exitCode === 0 && verifyOriginDev.stdout.trim()) {
+          baseSha = verifyOriginDev.stdout.trim();
+          const checkoutOriginArgs = ["checkout", "-f", "-B", branchName, "origin/develop"];
+          const coRes = await this.commandRunner("git", checkoutOriginArgs);
+          this.recordAudit(["git", ...checkoutOriginArgs].join(" "), coRes);
+          if (coRes.exitCode === 0) {
+            this.currentBranch = branchName;
+            return {
+              branchName,
+              baseSha,
+              eventMarkdown: `Created and switched to branch \`${branchName}\` from \`origin/develop\` (\`${baseSha.slice(0, 7)}\`)`
+            };
+          }
+        }
+      }
+    }
+
     const args = ["checkout", "-B", branchName];
     const res = await this.commandRunner("git", args);
     this.recordAudit(["git", ...args].join(" "), res);
@@ -158,7 +187,8 @@ export class WorkerGitOps {
     const commitArgs = ["commit", "-m", commitMessage];
     const commitRes = await this.commandRunner("git", commitArgs);
     this.recordAudit(["git", ...commitArgs].join(" "), commitRes);
-    if (commitRes.exitCode !== 0) {
+    const combinedCommitOut = `${commitRes.stdout}\n${commitRes.stderr}`;
+    if (commitRes.exitCode !== 0 && !/nothing to commit|working tree clean/i.test(combinedCommitOut)) {
       throw new Error(`git commit failed: ${commitRes.stderr || commitRes.stdout}`);
     }
 

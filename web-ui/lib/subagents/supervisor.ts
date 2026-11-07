@@ -830,7 +830,7 @@ export async function runMilestoneTestRunner(
 export function createProductionStepExecutor(
   options?: ProductionStepExecutorOptions
 ): StepExecutor {
-  const modelToUse = options?.model || "swift-15-27b-mtp";
+  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp";
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
@@ -1318,6 +1318,8 @@ export class OvernightSupervisor {
       const model =
         task.milestones?.find((m) => m.builderModel)?.builderModel ||
         process.env.CODER_MODEL ||
+        process.env.BUILDER_MODEL ||
+        process.env.MODEL_NAME ||
         "swift-15-27b-mtp";
 
       ledger.recordRunStart({

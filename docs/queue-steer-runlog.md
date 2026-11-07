@@ -148,3 +148,42 @@
    - Built and rolled out image `local-agentic-sandbox-web-ui:v-7447231-test1`.
    - Verified HTTP 200 on `localhost:3001`, `localhost:80`, and LAN `192.168.50.254:80`.
 
+
+---
+
+## Phase 8 — Turn-Lifetime Decoupling & CI Green (Jobs 0, 1, 2)
+
+### Job 0 & Job 1: Server-Side Turn Lifetime Decoupling (`614fa10`)
+- **Root Cause:** Previously, `req.signal` abort (triggered whenever a client refreshed the page, closed the tab, or put a phone to sleep) aborted the server-side turn and persisted `"⚠️ [Turn incomplete: Stream aborted or disconnected.]"`. Additionally, if a reload occurred during MCP setup / reasoning before the first content token arrived, no assistant placeholder existed on disk yet, causing a temporary visual hole on reload. Finally, in `POST /api/threads/[id]` (`action: "stop"`), reading `thread` before `abortActiveTurn(thread.id)` and saving that stale reference after `unloadAllModels()` could overwrite the aborted message state.
+- **Fix (`614fa10`):**
+  1. Decoupled `clientDisconnected` (SSE stream closed / `req.signal` aborted) from `turnAbortController` (explicit user Stop via `POST /api/threads/[id]` `{ action: "stop" }`). Client disconnects now log `[ChatRoute] Client SSE connection disconnected... Turn continuing detached server-side` and allow the tool loop, steer consumption, streaming snapshots, and final synthesis/persistence to run to natural completion.
+  2. Seeded an initial `status: "streaming"` assistant message placeholder at turn start (and filtered empty streaming placeholders out of `buildModelMessages` so LLM prompts stay clean), eliminating reload holes during pre-token phases.
+  3. Anchored `activeExecutionSet`, `activeTurnRegistry`, and `activeTurnAbortControllers` on `globalThis` and updated `POST /api/threads/[id]` (`action: "stop"`) to reload `updatedThread` after `abortActiveTurn(thread.id)`.
+  4. Raced `reader.read()` against `signal` abort in `OllamaProvider.streamChat` and `LlamaCppProvider.streamChat` so explicit Stop halts open HTTP streams immediately.
+- **Verification:**
+  - 7 targeted suites (`chatTurnHonesty`, `chatLiveVisibility`, `chatStreamTokenPreservation`, `chatSteer`, `chatTurnPresence`, `chatQueue`, `chatPersistenceDecoupling`): **74/74 passed** (0 failed).
+  - Deployed `local-agentic-sandbox-web-ui:v-614fa10` and verified live at mobile viewport (`390x844`):
+    - Mid-turn disconnect + reload shows `Streaming` badge immediately (zero hole) and completes naturally server-side (`thread-1794047006240-4mdb`).
+    - Explicit Stop (`thread-1794047022355-ydoh`) halts turn and renders `Incomplete` badge + `"⚠️ [Turn incomplete: Stream aborted or disconnected.]"`.
+
+### Job 2: Repo CI Green on PR #50
+- GitHub Actions Run `42362482744` on branch `feature/chat-queue-steer` (head `614fa10`) completed with **`success`** in `5m38s`.
+
+---
+
+## Phase 9 — Job 3: Overnight Chat Runtime Shakeout Battery (`7e7b40a`, `69c5047`, `67fb713`)
+
+Executed adversarial probes A–G against the deployed chat runtime, registered 3 newly uncovered defects (`CHAT-10`, `CHAT-11`, `CHAT-12`) in `docs/shakeout-register.md`, wrote failing behavioral tests first, committed 1 atomic fix per defect, deployed `local-agentic-sandbox-web-ui:v-67fb713`, and re-verified 100% pass across all probes:
+
+1. **`[CHAT-10]` (`7e7b40a` — Server Restart Mid-Turn Reconciliation):**
+   - Fixed `ThreadStore.addMessage` so `status: "streaming"` snapshots keep `thread.status = "active"` (instead of flipping `thread.status` to `"completed"` on existing threads) and `status: "incomplete" | "error"` sets `thread.status = "stopped"`.
+   - Fixed `ThreadStore.reconcileThread` so any orphaned `status: "streaming"` assistant message on a non-live thread is reconciled to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"`.
+   - Verified via unit test 4 in `chatPersistenceDecoupling.test.ts` and live `kubectl rollout restart deployment/web-ui` mid-turn on `thread-1794048592462-otwu`.
+2. **`[CHAT-11]` (`69c5047` — Steer to Nonexistent Thread 404):**
+   - Updated `POST /api/threads/[id]/steer` to verify `store.getThread(id) || getActiveTurn(id) || activeExecutionSet.has(id)` and return HTTP `404` (`{ error: "Thread not found" }`) instead of `200 OK` with an orphan `.steer.json` sidecar.
+   - Verified via `chatSteer.test.ts` and live Probe C3.
+3. **`[CHAT-12]` (`67fb713` — Honest Rejection of Unavailable Model Names):**
+   - Updated `POST /api/chat` to validate `requestedModel` against `"auto"`, `DEFAULT_MODEL`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_SUBAGENT_MODEL`, legacy default aliases, and `PRESET_MODEL_PROFILES`. Unknown model names fail fast with `Model "<id>" is not available on the active inference engine.`, emitting an SSE `error` event and persisting `status: "error"` without calling the LLM backend.
+   - Verified via Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1.
+- **Targeted Suites:** **77 / 77 passed** (`chatTurnHonesty`, `chatLiveVisibility`, `chatStreamTokenPreservation`, `chatSteer`, `chatTurnPresence`, `chatQueue`, `chatPersistenceDecoupling`).
+

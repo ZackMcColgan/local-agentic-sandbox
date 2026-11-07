@@ -36,7 +36,8 @@ export async function POST(req: Request) {
       const branchName = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
       const enableGitOps = body.enableGitOps !== false;
       const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
-      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: body.model });
+      const effectiveModel = body.model || process.env.MODEL_NAME || "swift-15-27b-mtp";
+      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel });
 
       const manifest: TaskManifest = {
         taskId,
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
         } else {
           thread = threadStore.createThread({
             title: goal.slice(0, 36),
-            model: body.model || "swift-15-27b-mtp",
+            model: effectiveModel,
             reasoningEffort: body.reasoningEffort || "medium",
             initialPrompt: goal,
             attachments: body.attachments,
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
       } else {
         thread = threadStore.createThread({
           title: goal.slice(0, 36),
-          model: body.model || "swift-15-27b-mtp",
+          model: effectiveModel,
           reasoningEffort: body.reasoningEffort || "medium",
           initialPrompt: goal,
           attachments: body.attachments,
@@ -140,7 +141,7 @@ export async function POST(req: Request) {
 
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool({ scope }),
-        model: body.model || "swift-15-27b-mtp",
+        model: effectiveModel,
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
           if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {

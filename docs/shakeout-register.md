@@ -436,8 +436,11 @@
 - **Actual Behavior:**
   1. `ThreadStore.addMessage` unconditionally executed `if (thread.status !== "active") { thread.status = "completed"; }` for any assistant message, including `status: "streaming"` snapshots on threads whose previous turn had finished (`status: "completed"` or `"stopped"`).
   2. Because `thread.status` became `"completed"` during streaming, `reconcileThread` (which only checked `if (thread.status === "active")`) skipped the thread after pod restart, and even for `"active"` threads never transitioned `lastMsg.status === "streaming"` out of `"streaming"`. Clients polling `GET /api/threads/[id]` saw `status: "streaming"` forever.
+- **Resolution:**
+  - Updated `ThreadStore.addMessage` in `web-ui/lib/threads/threadStore.ts` so `message.status === "streaming"` keeps `thread.status = "active"`, `incomplete`/`error` sets `"stopped"`, and only completed assistant turns set `"completed"`.
+  - Updated `ThreadStore.reconcileThread` to reconcile any `status: "streaming"` assistant message on a non-live thread (`!activeExecutionSet.has(thread.id) && !getActiveTurn(thread.id)`) to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"`, and `thread.status = "stopped"`.
 - **Severity:** **P1** (causes infinite 1.5s client polling and permanently stuck "Streaming" badge after pod rollout/restart).
-- **Status:** **OPEN** (registered prior to fix).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `7e7b40a`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by unit test 4 in `chatPersistenceDecoupling.test.ts` and live pod rollout mid-turn on `thread-1794048592462-otwu`: post-restart `GET` returned `threadStatus: "stopped"`, `activeTurn: null`, `asstStatus: "incomplete"`, `asstIsStopped: true`, and `⚠️ [Turn incomplete: Server restarted or turn interrupted.]`).
 
 ---
 
@@ -453,8 +456,10 @@
   If the target thread ID neither exists in `ThreadStore` nor has a live turn in `getActiveTurn(id)` / `activeExecutionSet`, `POST /api/threads/[id]/steer` rejects with HTTP `404 Not Found` and writes no `.steer.json` file.
 - **Actual Behavior:**
   `POST /api/threads/[id]/steer` called `store.appendSteer(id, text)` unconditionally without verifying thread existence or active turn state.
+- **Resolution:**
+  - Updated `POST` in `web-ui/app/api/threads/[id]/steer/route.ts` to check `store.getThread(id)`, `getActiveTurn(id)`, and `activeExecutionSet.has(id)` before calling `store.appendSteer(id, text)`, returning HTTP `404` (`{ error: "Thread not found" }`) when none match.
 - **Severity:** **P2** (dishonest 200 response for nonexistent thread and orphan sidecar file creation).
-- **Status:** **OPEN** (registered prior to fix).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `69c5047`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by `chatSteer.test.ts` and live Probe C3 returning `{"status":404,"body":{"error":"Thread not found"}}`).
 
 ---
 
@@ -470,6 +475,8 @@
   When the caller explicitly requests a model ID that is not `"auto"`, not the configured `DEFAULT_MODEL` / legacy default alias, and not a known profile in `PRESET_MODEL_PROFILES`, the route fails honestly by throwing an explicit model-unavailable error (`Model "<id>" is not available on the active inference engine.`), emitting an SSE `error` event and persisting the assistant message with `status: "error"` and `"⚠️ [Turn error: ...]"`.
 - **Actual Behavior:**
   Because single-slot `llama-server` / Strata ignores the `model` field in `/v1/chat/completions`, `route.ts` passed the bogus model ID straight through and recorded the bogus string as `modelUsed`.
+- **Resolution:**
+  - Updated `web-ui/app/api/chat/route.ts` to validate `requestedModel` against `"auto"`, `DEFAULT_MODEL`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_SUBAGENT_MODEL`, legacy aliases (`"Swift-1.5-Qwen3.8-27B-IQ3_XS"`, `"swift-15-27b-mtp"`), and `getModelProfile(activeModel)`. Unregistered model IDs fail fast with `Model "<id>" is not available on the active inference engine.`, persisting `status: "error"` and emitting an SSE `error` event without invoking the LLM backend.
 - **Severity:** **P1** (violates turn honesty and model attribution; spoofs `modelUsed` with an arbitrary nonexistent model name).
-- **Status:** **OPEN** (registered prior to fix).
+- **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `67fb713`, deployed as `local-agentic-sandbox-web-ui:v-67fb713`. Verified by Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1 returning `sseEvents: ["error"]`, `asstStatus: "error"`, `⚠️ [Turn error: Model "totally-nonexistent-model-xyz-999" is not available on the active inference engine.]`).
 

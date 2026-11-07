@@ -1316,11 +1316,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || "swift-15-27b-mtp",
-    builder: process.env.BUILDER_MODEL || "swift-15-27b-mtp",
-    critic: process.env.CRITIC_MODEL || "swift-15-27b-mtp",
-    explorer: process.env.EXPLORER_MODEL || "swift-15-27b-mtp",
-    recorder: process.env.RECORDER_MODEL || "swift-15-27b-mtp"
+    planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp"
   };
 }
 
