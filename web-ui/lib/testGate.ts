@@ -46,6 +46,16 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  // kind-gateway assets & launcher scripts
+  {
+    match: (p) => p.includes("kind-gateway") || p.includes("scripts/kind-gateway"),
+    tests: ["tests/kindGateway.test.ts"]
+  },
+  // Dev-proxy & LAN-bridge watchdog
+  {
+    match: (p) => p.includes("scripts/dev-proxy") || p.includes("scripts/lan-bridge"),
+    tests: ["tests/gatewayWatchdog.test.ts"]
+  },
   // Direct test file changed: run itself
   {
     match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
@@ -579,6 +589,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     // Exceptions: covered files in otherwise ignored paths
     if (normalizedPath.includes("architecture.drawio")) return false;
     if (normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") || normalizedPath.startsWith("deploy/k8s/web-ui.yaml")) return false;
+    if (normalizedPath.startsWith("scripts/dev-proxy") || normalizedPath.startsWith("scripts/lan-bridge")) return false;
     return true;
   }
   return false;
