@@ -556,4 +556,25 @@
 - **Status:** **FIXED / VERIFIED LIVE** (Nov 7, 2026 — commit `9f35f3d`, deployed as `local-agentic-sandbox-web-ui:v-d63c477`. Verified by `buildPushHonesty.test.ts` 5/5 passing, root gate 60/60 passing, and live in-pod re-proof task `task-1794073565196`).
 - **Re-Proof Verdict:** `VERDICT (BUILD-1 Re-Proof): PASS — Task executed live on pod (task-1794073565196); generated 1844-byte real TS code in isolated branch feat/task-179407356519; ran test verification; strictly avoided remote push/PR hallucination (prUrl undefined, local-only preserved).`
 
+---
+
+### [UI-PROOF] Real-Mode Runtime E2E Invariants & Engine-Layer Stub Proof (Addendum v2)
+- **Feature:** End-to-End Real-Mode Verification of Live Streaming, Refresh Durability, Steer Injection, and Build Planning
+- **Affected Components:**
+  - `web-ui/tests/e2e/fixtures/stubEngine.cjs` (engine-level Node HTTP streaming stub implementing Ollama/v1 NDJSON protocol: `long-thinking`, `two-round`, `planner-slow`, `planner-fail`)
+  - `web-ui/tests/e2e/realmode.spec.ts` (Playwright real-mode test suite without any browser `page.route` intercepts)
+  - `web-ui/playwright.config.ts` (dual webServer configuration: boots stubEngine on port 11435 and Next.js web-ui on port 3005)
+  - `web-ui/app/page.tsx` (rehydration on reload, mount thread selection with query-param durability, active task polling including planning phase)
+  - `web-ui/components/LiveRunBlock.tsx` (planning pill animation and terminal failure honesty banner)
+  - `web-ui/app/api/threads/[id]/route.ts` (no-cache headers for instant streaming state rehydration)
+- **Proof Specification & Results:**
+  - **Zero Browser Route Stubs:** Zero `page.route` calls in `realmode.spec.ts`. All requests hit real Next.js server, real API routes, real ThreadStore, real StreamSnapshot, and real OvernightSupervisor.
+  - **UI-A1 (CHAT-14):** Send prompt -> `long-thinking` streams reasoning chunks with zero content -> reload page mid-deliberation -> reasoning panel present and thinking content preserved across reload -> release engine stub -> turn completes with verified answer rendered. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
+  - **UI-A2 (CHAT-13):** Send prompt -> `two-round` streams thinking + partial content -> select Steer in composer and send redirect -> round 1 thinking preserved -> round 2 redirected answer delivered. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
+  - **UI-B1 (BUILD-2):** Launch build task -> `planner-slow` holds planner -> goal bubble and planning card rendered immediately -> reload page while planning -> task visible and tracked in Builds tab -> release planner -> task completes successfully. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
+  - **UI-B1 Failure Honesty:** Launch build task -> `planner-fail` injects HTTP 500 error -> terminal failure error banner displayed (`Task failed: ...`) -> task listed as failed in Builds tab without vanishing. (Passed on `mobile-light`, `mobile-dark`, `desktop-light`, `desktop-dark`).
+- **Test Scoreboard:** 16 passed / 16 total across all 4 permutations (mobile-light, mobile-dark, desktop-light, desktop-dark) in 1.5m.
+- **Severity:** **P0 Verification Gate**
+- **Status:** **PROVED & VERIFIED** (Nov 7, 2026 — commit head on `feature/chat-queue-steer`).
+
 

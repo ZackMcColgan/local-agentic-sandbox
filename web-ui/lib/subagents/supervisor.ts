@@ -1486,7 +1486,7 @@ export class OvernightSupervisor {
     const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
-      (!isTestEnv && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
+      (!isTestEnv && process.env.DISABLE_GITOPS !== "true" && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;

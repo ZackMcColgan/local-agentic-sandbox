@@ -153,7 +153,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     }
 
-    return NextResponse.json({ thread, task, activeTurn: getActiveTurn(id) });
+    return NextResponse.json(
+      { thread, task, activeTurn: getActiveTurn(id) },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+    );
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -326,9 +326,13 @@ export default function Home() {
             if (explicitThread) {
               const matched = data.threads.find((t: Thread) => t.id === explicitThread);
               if (matched) setSelectedThreadId(matched.id);
-            } else if (!isMobile) {
-              const active = data.threads.find((t: Thread) => t.status === "active") || data.threads[0];
-              setSelectedThreadId(active.id);
+            } else {
+              const active = data.threads.find((t: Thread) => t.status === "active" || t.status === "running");
+              if (active) {
+                setSelectedThreadId(active.id);
+              } else if (!isMobile && data.threads[0]) {
+                setSelectedThreadId(data.threads[0].id);
+              }
             }
           }
         }
@@ -361,7 +365,7 @@ export default function Home() {
           setTasks(data.tasks);
         }
         if (data.activeTask) {
-          if (!selectedThreadId && data.activeTask.status === "active") {
+          if (!selectedThreadId && (data.activeTask.status === "active" || data.activeTask.status === "planning")) {
             setActiveTask(data.activeTask);
           }
           if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
@@ -406,7 +410,10 @@ export default function Home() {
 
     const loadSelectedThread = async () => {
       try {
-        const res = await fetch(`/api/threads/${selectedThreadId}`);
+        const res = await fetch(`/api/threads/${selectedThreadId}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" }
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.thread) {
@@ -441,7 +448,10 @@ export default function Home() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const pollLiveThread = async () => {
       try {
-        const res = await fetch(`/api/threads/${selectedThreadId}`);
+        const res = await fetch(`/api/threads/${selectedThreadId}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" }
+        });
         if (!res.ok || !active) return;
         const data = await res.json();
         if (Array.isArray(data?.thread?.messages)) {
@@ -464,7 +474,7 @@ export default function Home() {
 
   // Real-time 2s polling while a task is running (Live run block updates)
   useEffect(() => {
-    if (!activeTask || activeTask.status !== "active") return;
+    if (!activeTask || (activeTask.status !== "active" && activeTask.status !== "planning")) return;
     if (activeTask.taskId?.startsWith("sim-")) return;
 
     const pollTask = async () => {
@@ -627,6 +637,9 @@ export default function Home() {
           });
           setSelectedThreadId(data.thread.id);
           setMessages(data.thread.messages || []);
+          try {
+            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+          } catch {}
         }
         if (data.task) {
           setActiveTask(data.task);
