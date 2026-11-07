@@ -327,7 +327,13 @@ export function generateHostFileDiff(
   return null;
 }
 
-export async function executeHostTool(tool: string, args: any, approvalId?: string): Promise<any> {
+export async function executeHostTool(
+  tool: string,
+  args: any,
+  approvalId?: string,
+  capability?: any,
+  mergeGrant?: any
+): Promise<any> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
   if (tool === "host_run_powershell") {
@@ -351,7 +357,12 @@ export async function executeHostTool(tool: string, args: any, approvalId?: stri
     res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ tool, args }),
+      body: JSON.stringify({
+        tool,
+        args,
+        capability,
+        mergeGrant
+      }),
       signal: AbortSignal.timeout(timeoutMs)
     });
   } catch (err: any) {
@@ -444,3 +455,162 @@ export const HOST_TOOLS_DEFINITIONS = [
     }
   }
 ];
+
+export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
+  {
+    type: "function",
+    function: {
+      name: "host_git_status",
+      description: "Query repository git status, current branch, tracked dirty status, and untracked files.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_fetch",
+      description: "Fetch all remote refs from origin without modifying the working tree.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_pull_ff",
+      description: "Fast-forward pull of current branch from origin. Refuses if tracked tree is dirty or diverged.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_branch_create",
+      description: "Create and switch to a new feature/* branch from a base ref (default origin/develop).",
+      parameters: {
+        type: "object",
+        properties: {
+          branch: { type: "string", description: "New branch name matching feature/*." },
+          baseRef: { type: "string", description: "Base ref (default origin/develop)." }
+        },
+        required: ["branch"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_checkout",
+      description: "Switch to an existing feature/* branch. Checkout of develop/main is forbidden.",
+      parameters: {
+        type: "object",
+        properties: {
+          branch: { type: "string", description: "Existing feature/* branch to check out." }
+        },
+        required: ["branch"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_add",
+      description: "Stage exact relative file paths. Wildcards, flags, and runtime directories are forbidden.",
+      parameters: {
+        type: "object",
+        properties: {
+          paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of exact relative file paths to stage."
+          }
+        },
+        required: ["paths"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_commit",
+      description: "Commit staged changes with a commit message.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string", description: "Non-empty commit message." }
+        },
+        required: ["message"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_push",
+      description: "Push the granted feature branch to origin. Direct push to develop/main/master is forbidden.",
+      parameters: {
+        type: "object",
+        properties: {
+          branch: { type: "string", description: "Granted feature branch to push." }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_pr_create",
+      description: "Create a GitHub PR from the feature branch into develop via host gh CLI.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Pull request title." },
+          body: { type: "string", description: "Pull request body." },
+          base: { type: "string", description: "Target base branch (default develop; main forbidden)." },
+          branch: { type: "string", description: "Source feature branch." }
+        },
+        required: ["title", "body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_pr_status",
+      description: "Check status, draft state, mergeability, and CI checks of a pull request via host gh CLI.",
+      parameters: {
+        type: "object",
+        properties: {
+          prNumber: { type: "number", description: "Pull request number." }
+        },
+        required: ["prNumber"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_git_pr_merge",
+      description: "Merge a pull request under an explicit Part 1.5 merge grant. Enforces all CI checks green.",
+      parameters: {
+        type: "object",
+        properties: {
+          prNumber: { type: "number", description: "Pull request number to merge." },
+          deleteSourceBranch: { type: "boolean", description: "Whether to delete remote branch after merge." }
+        },
+        required: ["prNumber"]
+      }
+    }
+  }
+];
+
+export function shouldAdvertiseUnattendedGitTools(
+  allowUnattendedHostGit: boolean,
+  capability?: { repo: string; branch: string } | null,
+  runnerHealthy?: boolean | HostRunnerState
+): boolean {
+  if (allowUnattendedHostGit !== true) return false;
+  if (!capability || !capability.repo || !capability.branch) return false;
+  if (runnerHealthy === true || runnerHealthy === "READY") return true;
+  return false;
+}
+
