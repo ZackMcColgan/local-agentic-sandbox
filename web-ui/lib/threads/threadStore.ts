@@ -99,8 +99,11 @@ export function resolveThreadsDir(): string {
   return resolvedDir || path.resolve("/tmp/.agent/threads");
 }
 
-// In-memory set of actively executing task/thread IDs in the current Node process
-export const activeExecutionSet = new Set<string>();
+// In-memory set of actively executing task/thread IDs in the current Node process.
+// Attached to globalThis so Next.js / tsx module path aliases (@/lib/... vs ../lib/...) share the exact same singleton state.
+const g = globalThis as any;
+export const activeExecutionSet: Set<string> =
+  g.__sandboxActiveExecutionSet || (g.__sandboxActiveExecutionSet = new Set<string>());
 
 /**
  * CHAT-PRESENCE: turn-presence marker. Visible in GET responses from the moment a
@@ -113,7 +116,30 @@ export interface ActiveTurnInfo {
   status: "streaming";
 }
 
-const activeTurnRegistry = new Map<string, ActiveTurnInfo>();
+const activeTurnRegistry: Map<string, ActiveTurnInfo> =
+  g.__sandboxActiveTurnRegistry || (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
+const activeTurnAbortControllers: Map<string, AbortController> =
+  g.__sandboxActiveTurnAbortControllers || (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
+
+export function registerTurnAbortController(threadId: string, controller: AbortController): void {
+  activeTurnAbortControllers.set(threadId, controller);
+}
+
+export function abortActiveTurn(threadId: string): boolean {
+  const controller = activeTurnAbortControllers.get(threadId);
+  if (controller) {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+    activeTurnAbortControllers.delete(threadId);
+    return true;
+  }
+  return false;
+}
+
+export function clearTurnAbortController(threadId: string): void {
+  activeTurnAbortControllers.delete(threadId);
+}
 
 export function markTurnActive(threadId: string): void {
   if (!activeTurnRegistry.has(threadId)) {
@@ -715,7 +741,9 @@ export class ThreadStore {
   }
 
   buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-    const rawMessages = thread.messages || [];
+    const rawMessages = (thread.messages || []).filter(
+      (m) => !(m.role === "assistant" && m.status === "streaming" && !m.content)
+    );
     if (!thread.compaction || !thread.compaction.throughMessageId) {
       return rawMessages.map((m) => ({
         role: m.role,

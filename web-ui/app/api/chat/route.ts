@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -86,8 +86,7 @@ import {
   HONEST_ABORT_DIRECTIVE
 } from "@/lib/grounding";
 
-const LLM_BASE_URL = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
+const getLlmBaseUrl = () => process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
@@ -300,6 +299,22 @@ export async function POST(req: NextRequest) {
       // CHAT-PRESENCE: register the turn marker before the first token exists, so
       // cross-device watchers see the running turn immediately.
       markTurnActive(activeThreadId);
+
+      // Seed initial streaming assistant message immediately so GET /api/threads/[id]
+      // never sees a hole while the turn prepares tools/reasoning
+      try {
+        threadStore.addMessage(activeThreadId, {
+          id: assistantMessageId,
+          role: "assistant" as const,
+          content: "",
+          status: "streaming" as const,
+          modelUsed: activeModel,
+          selectedModel: requestedModel || activeModel,
+          timestamp: new Date().toISOString()
+        });
+      } catch (seedErr) {
+        console.warn("[ChatRoute] Warning writing initial streaming placeholder:", seedErr);
+      }
     }
 
     // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
@@ -421,44 +436,47 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       }
     };
 
-    let aborted = false;
-    const abortController = new AbortController();
-    const cleanupSignal = () => {
-      aborted = true;
-      clearInterval(heartbeatInterval);
-      if (!abortController.signal.aborted) {
-        abortController.abort();
-      }
+    let clientDisconnected = false;
+    let explicitStopped = false;
+    const turnAbortController = new AbortController();
+
+    if (activeThreadId) {
+      registerTurnAbortController(activeThreadId, turnAbortController);
+    }
+
+    turnAbortController.signal.addEventListener("abort", () => {
+      explicitStopped = true;
       persistAssistantOnAbort();
-      if (activeThreadId) {
-        activeExecutionSet.delete(activeThreadId);
-        clearTurnActive(activeThreadId);
+    });
+
+    const cleanupClientSignal = () => {
+      if (!clientDisconnected) {
+        clientDisconnected = true;
+        clearInterval(heartbeatInterval);
+        console.log(`[ChatRoute] Client SSE connection disconnected for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
       }
     };
-    req.signal.addEventListener("abort", cleanupSignal);
+    req.signal.addEventListener("abort", cleanupClientSignal);
 
     const sendEvent = async (data: any) => {
-      if (aborted || req.signal.aborted) {
+      if (clientDisconnected || req.signal.aborted) {
         clearInterval(heartbeatInterval);
         return;
       }
       try {
-        await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        await Promise.race([
+          writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 500))
+        ]);
       } catch (err: any) {
         clearInterval(heartbeatInterval);
-        aborted = true;
-        if (activeThreadId) {
-          activeExecutionSet.delete(activeThreadId);
-          clearTurnActive(activeThreadId);
-        }
-        if (!req.signal.aborted) {
-          console.warn("[SSE sendEvent error]:", err?.message || err);
-        }
+        clientDisconnected = true;
+        console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
       }
     };
 
     const heartbeatInterval = setInterval(() => {
-      if (aborted || req.signal.aborted) {
+      if (clientDisconnected || req.signal.aborted) {
         clearInterval(heartbeatInterval);
         return;
       }
@@ -723,7 +741,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (true) {
-          if (aborted || req.signal.aborted) break;
+          if (turnAbortController.signal.aborted) break;
 
           const continuation = canContinueToolLoop({
             round,
@@ -829,7 +847,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               isArtifactTurn: isArtifactRequest
             }),
             keep_alive: -1,
-            signal: abortController.signal,
+            signal: turnAbortController.signal,
             reasoning_effort: roundOptions.reasoning_effort,
             options: roundOptions
           };
@@ -842,7 +860,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           let roundThinking = "";
           let toolCallsFromMessage: any[] = [];
 
-          for await (const chunk of streamLlmChat(LLM_BASE_URL, llmPayload)) {
+          for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
             if (chunk.message?.thinking) {
               roundThinking += chunk.message.thinking;
               await sendEvent({ type: "thought", thought: roundThinking });
@@ -917,7 +935,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           let searchBlocked = false;
 
           for (const toolCall of toolCalls) {
-            if (aborted || req.signal.aborted) break;
+            if (turnAbortController.signal.aborted) break;
             const toolName = toolCall.function.name;
             let toolArgs: Record<string, any> = {};
             if (typeof toolCall.function.arguments === "string") {
@@ -1358,13 +1376,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // we MUST dispatch a model synthesis pass that incorporates the steer, OR if no request can run,
         // we do NOT consume them so they return honestly in pendingSteers.
         const shouldSynthesize =
-          pendingLateSteers.length > 0 ||
-          shouldRunPostToolSynthesis({
-            userPrompt,
-            assistantContent: currentAssistantMessage.content || "",
-            lingeringToolCallsCount: lingeringToolCalls.length,
-            traces
-          });
+          !turnAbortController.signal.aborted &&
+          (pendingLateSteers.length > 0 ||
+            shouldRunPostToolSynthesis({
+              userPrompt,
+              assistantContent: currentAssistantMessage.content || "",
+              lingeringToolCallsCount: lingeringToolCalls.length,
+              traces
+            }));
 
         if (shouldSynthesize) {
           // CHAT-STEER: only consume and persist steers now that a model request is GUARANTEED to be dispatched!
@@ -1416,10 +1435,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             hasCompletedToolCalls: traces.length > 0
           });
 
-          for await (const chunk of streamLlmChat(LLM_BASE_URL, {
+          for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-            signal: abortController.signal,
+            signal: turnAbortController.signal,
             reasoning_effort: synthOptions.reasoning_effort,
             options: synthOptions
           })) {
@@ -1491,6 +1510,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           modelUsed: activeModel
         });
 
+        if (explicitStopped || turnAbortController.signal.aborted) {
+          if (activeThreadId && !assistantPersisted) {
+            persistAssistantOnAbort();
+          }
+          return;
+        }
+
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
             id: assistantMessageId,
@@ -1510,6 +1536,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
           assistantPersisted = true;
+          if (clientDisconnected || req.signal.aborted) {
+            console.log(`[ChatRoute] Detached turn completed server-side for thread ${activeThreadId} (status: ${turnStatus || "completed"}).`);
+          }
         }
 
         // CHAT-STEER: unconsumed steers returning in done payload
@@ -1556,6 +1585,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           ? "LLM engine is stopped. Start it from Settings or the status bar."
           : (err.message || "Internal orchestrator error");
 
+        if (explicitStopped || turnAbortController.signal.aborted) {
+          if (activeThreadId && !assistantPersisted) {
+            persistAssistantOnAbort();
+          }
+          return;
+        }
+
         if (activeThreadId && !assistantPersisted) {
           assistantPersisted = true;
           try {
@@ -1595,15 +1631,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         if (activeThreadId) {
           activeExecutionSet.delete(activeThreadId);
           clearTurnActive(activeThreadId);
+          clearTurnAbortController(activeThreadId);
           threadStore.clearSteers(activeThreadId);
         }
-        req.signal.removeEventListener("abort", cleanupSignal);
-        if (!abortController.signal.aborted) {
-          abortController.abort();
-        }
+        req.signal.removeEventListener("abort", cleanupClientSignal);
 
-        if (activeThreadId && !assistantPersisted && (aborted || req.signal.aborted || abortController.signal.aborted)) {
+        if (activeThreadId && !assistantPersisted && explicitStopped) {
           persistAssistantOnAbort();
+        }
+        if (!assistantPersisted) {
+          assistantPersisted = true;
+        }
+        if (!turnAbortController.signal.aborted) {
+          turnAbortController.abort();
         }
         for (const session of activeSessions) {
           try {

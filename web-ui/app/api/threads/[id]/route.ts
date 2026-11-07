@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { ThreadStore, activeExecutionSet, getActiveTurn, clearTurnActive, resolveThreadsDir } from "@/lib/threads/threadStore";
+import { ThreadStore, activeExecutionSet, getActiveTurn, clearTurnActive, abortActiveTurn, resolveThreadsDir } from "@/lib/threads/threadStore";
 import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest } from "@/lib/subagents/types";
@@ -171,31 +171,36 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 1. Action: Stop / Cancel Run
     if (body.action === "stop" || body.action === "cancel") {
-      thread.status = "stopped";
       clearTurnActive(thread.id);
-      if (thread.taskId) {
-        cancelTask(thread.taskId);
-        activeExecutionSet.delete(thread.taskId);
-        const task = await supervisor.resumeTaskFromCheckpoint(thread.taskId);
+      abortActiveTurn(thread.id);
+      const updatedThread = (await getThreadStore().getThread(id)) || thread;
+      updatedThread.status = "stopped";
+      if (updatedThread.taskId) {
+        cancelTask(updatedThread.taskId);
+        activeExecutionSet.delete(updatedThread.taskId);
+        const task = await supervisor.resumeTaskFromCheckpoint(updatedThread.taskId);
         if (task) {
           supervisor.parkTask(task, "User stopped run");
         }
       }
-      activeExecutionSet.delete(thread.id);
+      activeExecutionSet.delete(updatedThread.id);
 
       // Unload all models from LLM VRAM immediately
       await unloadAllModels();
 
       // Mark the last assistant message as stopped
-      for (let i = thread.messages.length - 1; i >= 0; i--) {
-        if (thread.messages[i].role === "assistant") {
-          thread.messages[i].isStopped = true;
+      for (let i = updatedThread.messages.length - 1; i >= 0; i--) {
+        if (updatedThread.messages[i].role === "assistant") {
+          updatedThread.messages[i].isStopped = true;
+          if (!updatedThread.messages[i].status || updatedThread.messages[i].status === "streaming") {
+            updatedThread.messages[i].status = "incomplete";
+          }
           break;
         }
       }
 
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ status: "stopped", thread });
+      getThreadStore().saveThread(updatedThread);
+      return NextResponse.json({ status: "stopped", thread: updatedThread });
     }
 
     // 1b. Action: Pause Run

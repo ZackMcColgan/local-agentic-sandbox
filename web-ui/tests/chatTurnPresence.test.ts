@@ -211,14 +211,14 @@ describe("CHAT-PRESENCE — turn-presence marker lifecycle (behavioral)", () => 
     const reader = res.body!.getReader();
     await reader.read();
     await reader.cancel();
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 12000;
     let cleared = false;
     while (Date.now() < deadline) {
       const data = await getThreadResponse(threadId);
       if (!data.activeTurn && !activeExecutionSet.has(threadId)) { cleared = true; break; }
       await new Promise((r) => setTimeout(r, 250));
     }
-    assert.ok(cleared, "presence and execution registration must clear on disconnect");
+    assert.ok(cleared, "presence and execution registration must clear when detached turn finishes");
   });
 
   it("watcher merge still reconciles: presence + streaming snapshot coexist, then converge", async () => {
