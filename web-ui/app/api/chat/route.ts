@@ -430,7 +430,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         abortController.abort();
       }
       persistAssistantOnAbort();
-      if (activeThreadId) clearTurnActive(activeThreadId);
+      if (activeThreadId) {
+        activeExecutionSet.delete(activeThreadId);
+        clearTurnActive(activeThreadId);
+      }
     };
     req.signal.addEventListener("abort", cleanupSignal);
 
@@ -444,6 +447,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       } catch (err: any) {
         clearInterval(heartbeatInterval);
         aborted = true;
+        if (activeThreadId) {
+          activeExecutionSet.delete(activeThreadId);
+          clearTurnActive(activeThreadId);
+        }
         if (!req.signal.aborted) {
           console.warn("[SSE sendEvent error]:", err?.message || err);
         }
