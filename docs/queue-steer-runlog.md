@@ -230,3 +230,43 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 ## Phase 12 — Job 6: House-Rule Improvements & Final Verification
 - Added bounded-retry (`max 2 identical runs, max 3 strategies -> BLOCKED`), targeted-test-first, paging discipline, and single-writer rules to `AGENTS.md`, `GEMINI.md`, and `SYSTEM_PROMPT` in `web-ui/app/api/chat/route.ts`.
 - Verified `web-ui/tests/repoHygiene.test.ts` passes **5 / 5**.
+
+---
+
+## Phase 13 — ANTIGRAVITY CAMPAIGN: Live Chat Stress Test & Host Mode Settings Default (Nov 8, 2026)
+
+### 1. Defect #0: Global Host Mode Switch Default ON & Read-Only Status Chip
+- **Directive:** Global Host switch in Settings menu (`[data-testid="host-access-toggle-btn"]`), default ON, persisted server-side at `host-settings.json` (no file = enabled). Thread header keeps ONLY a read-only status chip (`[data-testid="host-access-chip"]`), per-thread interactive toggle button removed. Health gate strictly maintained (switch ON + daemon down = UNAVAILABLE, no host tools). Subagent/scheduled contexts strictly prohibited from host tools.
+- **Implementation:**
+  - `web-ui/lib/hostSettings.ts`: Added `hostAccessEnabled: boolean` defaulting to `true`.
+  - `web-ui/app/api/settings/host/route.ts`: GET/POST handling for `hostAccessEnabled`.
+  - `web-ui/app/api/chat/route.ts`: Default thread host access to global setting; prohibited subagent/scheduled context check.
+  - `web-ui/app/api/host/status/route.ts`: Default `hostAccess` to global setting.
+  - `web-ui/lib/threads/threadStore.ts`: `createThread` sets `hostAccess` to `getHostSettings().hostAccessEnabled`.
+  - `web-ui/components/SettingsView.tsx`: Global Host Access toggle switch (`[data-testid="host-access-toggle-btn"]`) with status badge and persistence.
+  - `web-ui/components/ChatStream.tsx`: Replaced per-thread interactive toggle button with read-only status chip (`[data-testid="host-access-chip"]`).
+- **Tests & Gate:**
+  - `web-ui/tests/hostSettingsDefault.test.ts`: 5/5 pass.
+  - `npm run test:gate`: 473/473 pass in 38.997s (<90s budget).
+  - Next.js production build: clean exit code 0.
+- **PR & Deploy:**
+  - Branch: `feature/host-settings-default` (commit `383ac41`).
+  - PR: #57 (https://github.com/ZackMcColgan/local-agentic-sandbox/pull/57).
+  - Deployed Image: `local-agentic-sandbox-web-ui:v-383ac41-mw8440fz`.
+  - Rollback Armed Baseline: `local-agentic-sandbox-web-ui:v-2a1f40f-mw81k1uh`.
+- **Live Verification:** Verified on `http://192.168.50.254`. Brand-new threads default to `Host access ON`. Settings toggle persists across pod restart. 4 visual screenshot permutations verified across Desktop/Mobile and Dark/Light.
+
+### 2. Live Acceptance Battery — Double Green Proof Matrix
+
+| Scenario | Pass 1 Duration | Pass 1 Result | Pass 2 Duration | Pass 2 Result | Live Verification Details |
+|---|---|---|---|---|---|
+| **S1: Short-flow sanity** | 46.5s | PASS | 27.2s | PASS | Weather search + copy button clicked ("Copied") + contextual reasoning turn |
+| **S2: Artifact correctness** | 41.2s | PASS | 99.5s | PASS | Spanish Fort HTML with inline SVG -> 0 vector cards, code card + sandboxed iframe preview |
+| **S3: SVG regression** | 105.3s | PASS | 202.1s | PASS | Standalone SVG architecture -> pure vector diagram, 213 SVG DOM elements, vector controls |
+| **S4: Compaction & gist** | 44.3s | PASS | 15.1s | PASS | Seeded facts (Project-Zeus-77, ZEUS-9922, 8443), context compacted, gist preserved |
+| **S5: Beyond budget & resilience** | 420.1s | PASS | 390.4s | PASS | High-context Raft guide, mid-turn steer absorbed, mid-stream reload survived, 21K+ chars |
+| **S6: Multi-slice host job** | 54.3s | PASS | 57.3s | PASS | host_write_file + host_read_file + host_run_powershell, verified 74 bytes on disk |
+| **S7: Long-generation stability** | 174.9s | PASS | 180.8s | PASS | Deep-dive streaming spec, 17,059 chars (4,265 tokens), status completed, 0 silent drops |
+| **S8: Host-mode stress** | 156.9s | PASS | 171.9s | PASS | 70KB host read without clamp, s8-verify.txt written, 75K stdout clamped at 64KB |
+
+**FINAL VERDICT: 8/8 SCENARIOS GREEN — 2/2 CONSECUTIVE RUNS CLEAN — THE BAR ("4K / 100K") ACHIEVED**
