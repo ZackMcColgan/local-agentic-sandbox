@@ -223,3 +223,41 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     assert.ok(html.includes("This is a partially streamed message..."), "Content must be present at tap time");
   });
 });
+
+describe("Part 3 — User Message Copy Button Suite", () => {
+  it("ChatStream renders a copy button on every user message", () => {
+    const messages: any[] = [
+      {
+        id: "msg-user-1",
+        role: "user",
+        content: "What is the weather in Spanish Fort?"
+      },
+      {
+        id: "msg-asst-1",
+        role: "assistant",
+        content: "The weather is sunny."
+      }
+    ];
+
+    const html = renderToString(
+      React.createElement(ChatStream, {
+        onTracesUpdate: () => {},
+        activeModel: "qwen3.8:27b-q3_k_m",
+        reasoningEffort: "medium",
+        messages
+      })
+    );
+
+    // User message must have data-testid="copy-user-message-btn"
+    assert.ok(html.includes('data-testid="copy-user-message-btn"'), "Must render data-testid='copy-user-message-btn'");
+    assert.ok(html.includes("Copy"), "Must render Copy text/label on user message");
+
+    // Source verification: ensure copy button wires to copyToClipboard(m.content, m.id)
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+    assert.ok(src.includes('data-testid="copy-user-message-btn"'), "ChatStream must declare copy-user-message-btn");
+    assert.ok(
+      src.includes("copyToClipboard(m.content, m.id)"),
+      "User copy button must pass m.content and m.id to copyToClipboard"
+    );
+  });
+});
