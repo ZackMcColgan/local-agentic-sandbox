@@ -11,7 +11,10 @@ import {
   EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
   CHAT_CONTEXT_BUDGET_TOKENS,
   DEFAULT_CONTEXT_WINDOW_TOKENS,
-  resolveRoundModelOptions
+  resolveRoundModelOptions,
+  canContinueToolLoop,
+  fitConversationToBudget,
+  HIGH_WATER_BANKING_DIRECTIVE
 } from "../lib/contextBudget.js";
 
 describe("Chat Context-Budget Enforcement Suite", () => {
@@ -774,6 +777,164 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         `Expected estimatedTokens <= ${CHAT_CONTEXT_BUDGET_TOKENS - 4000}, got ${(result as any).estimatedTokens}`
       );
       assert.equal(result.length, messages.length, "All messages must be preserved without truncation or eviction");
+    });
+  });
+
+  describe("Part 2 — fitConversationToBudget Ladder & Downloads-Shape Loop Continuity", () => {
+    it("downloads-shape regression (<85K jumping >100K continues instead of budget stop)", () => {
+      // Setup a conversation that was ~80K tokens (<85K compaction threshold)
+      const systemMsg = { role: "system", content: "You are an autonomous engineering assistant. " + "S".repeat(2000) };
+      const messages: any[] = [systemMsg];
+      for (let i = 0; i < 4; i++) {
+        messages.push({ role: "user", content: `Query ${i + 1}: ` + "U".repeat(38000) });
+        messages.push({ role: "assistant", content: `Answer ${i + 1}: ` + "A".repeat(38000) });
+      }
+
+      // Add a large download tool output (+25,000 tokens / 100,000 chars)
+      messages.push({
+        role: "tool",
+        name: "host_read_file",
+        content: JSON.stringify({ status: "SUCCESS", data: "D".repeat(100000) })
+      });
+
+      const unfittedTokens = estimateTokens(messages);
+      assert.ok(unfittedTokens > 100000, `Unfitted tokens should exceed 100,000 budget, got ${unfittedTokens}`);
+
+      // With old behavior (checking before fitting), canContinueToolLoop would fail with budget stop
+      const naiveDecision = canContinueToolLoop({
+        round: 1,
+        contextTokens: unfittedTokens,
+        budgetTokens: 100000,
+        lastRoundTools: ["host_read_file"],
+        webResearchCalls: 0
+      });
+      assert.equal(naiveDecision.canContinue, false, "Naive pre-fit check wrongly stops the loop");
+      assert.equal(naiveDecision.stopReason, "budget");
+
+      // With fitConversationToBudget, the ladder fits messages back within budget
+      const fitResult = fitConversationToBudget(messages, { budgetTokens: 100000 });
+      assert.equal(fitResult.compacted, true, "fitConversationToBudget must compact/fit messages");
+      assert.ok(fitResult.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${fitResult.tokensAfter}`);
+      assert.equal(fitResult.messages[0].role, "system", "System message must be preserved at index 0");
+
+      // And checking canContinueToolLoop with the fitted tokens succeeds!
+      const fittedDecision = canContinueToolLoop({
+        round: 1,
+        contextTokens: fitResult.tokensAfter,
+        budgetTokens: 100000,
+        lastRoundTools: ["host_read_file"],
+        webResearchCalls: 0
+      });
+      assert.equal(fittedDecision.canContinue, true, "Fitted conversation must allow loop to continue");
+    });
+
+    it("ladder rung (a): compaction alone fits conversation when intermediate turns can be summarized", () => {
+      const messages: any[] = [
+        { role: "system", content: "System instructions" },
+        { role: "user", content: "Turn 1: " + "1".repeat(60000) },
+        { role: "assistant", content: "Turn 1 response: " + "A".repeat(60000) },
+        { role: "user", content: "Turn 2: " + "2".repeat(60000) },
+        { role: "assistant", content: "Turn 2 response: " + "B".repeat(60000) },
+        { role: "user", content: "Turn 3: " + "3".repeat(60000) },
+        { role: "assistant", content: "Turn 3 response: " + "C".repeat(60000) },
+        { role: "user", content: "Latest user goal" }
+      ];
+
+      const tokensBefore = estimateTokens(messages);
+      assert.ok(tokensBefore > 85000, `Initial tokens should exceed 85K threshold, got ${tokensBefore}`);
+
+      const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
+      assert.equal(res.compacted, true);
+      assert.ok(res.actions.includes("compaction"), "Should engage compaction rung");
+      assert.ok(res.tokensAfter <= 100000, `Tokens after must fit budget, got ${res.tokensAfter}`);
+      assert.equal(res.messages[0].role, "system");
+    });
+
+    it("ladder rung (b): older tool outputs elided when compaction alone is insufficient", () => {
+      const messages: any[] = [
+        { role: "system", content: "System instructions" },
+        { role: "user", content: "Analyze logs" },
+        { role: "assistant", content: "Running scan", tool_calls: [{ function: { name: "scan_1" } }] },
+        { role: "tool", name: "scan_1", content: "OLD_TOOL_1: " + "T".repeat(120000) },
+        { role: "assistant", content: "Running scan 2", tool_calls: [{ function: { name: "scan_2" } }] },
+        { role: "tool", name: "scan_2", content: "OLD_TOOL_2: " + "T".repeat(300000) },
+        { role: "assistant", content: "Running scan 3", tool_calls: [{ function: { name: "scan_3" } }] },
+        { role: "tool", name: "scan_3", content: "RECENT_TOOL: " + "R".repeat(160000) }
+      ];
+
+      const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
+      assert.equal(res.compacted, true);
+      assert.ok(res.actions.includes("elide_tool_outputs"), "Must engage elide_tool_outputs rung");
+      assert.equal(res.highWater, true, "Must flag highWater when older tool outputs are elided");
+      assert.ok(res.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${res.tokensAfter}`);
+      assert.equal(res.messages[0].role, "system");
+    });
+
+    it("ladder rung (c): oldest non-system turns dropped when tool elision is still insufficient", () => {
+      // Conversation with very large user and assistant text turns (no tools to elide)
+      const messages: any[] = [
+        { role: "system", content: "System prompt" },
+        { role: "user", content: "Gigantic user request 1: " + "U".repeat(150000) },
+        { role: "assistant", content: "Gigantic assistant reply 1: " + "A".repeat(150000) },
+        { role: "user", content: "Gigantic user request 2: " + "U".repeat(150000) },
+        { role: "assistant", content: "Gigantic assistant reply 2: " + "A".repeat(150000) },
+        { role: "user", content: "Current active goal" }
+      ];
+
+      const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
+      assert.equal(res.compacted, true);
+      assert.ok(res.actions.includes("drop_old_turns"), "Must engage drop_old_turns rung");
+      assert.equal(res.highWater, true, "Must flag highWater when old turns are dropped");
+      assert.ok(res.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${res.tokensAfter}`);
+      assert.equal(res.messages[0].role, "system", "System message must survive");
+      assert.equal(res.messages[res.messages.length - 1].content, "Current active goal", "Latest user query must survive");
+    });
+
+    it("ladder rung (d) & adversarial payload guarantee: 64K-char output + many medium outputs always fitted <= budget and system prompt preserved", () => {
+      // Adversarial payload: huge tool outputs and messages
+      const messages: any[] = [
+        { role: "system", content: "System prompt verbatim" },
+        { role: "user", content: "Adversarial stress test" },
+        { role: "assistant", content: "Working..." }
+      ];
+
+      for (let i = 0; i < 10; i++) {
+        messages.push({
+          role: "tool",
+          name: `tool_${i}`,
+          content: `Data_${i}: ` + "X".repeat(64000) // 10 x 16,000 tokens = 160,000 tokens
+        });
+      }
+
+      const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
+      assert.equal(res.compacted, true);
+      assert.ok(res.tokensAfter <= 100000, `Adversarial payload must fit <= 100,000 tokens, got ${res.tokensAfter}`);
+      assert.equal(res.messages[0].role, "system");
+      assert.equal(res.messages[0].content, "System prompt verbatim");
+    });
+
+    it("high-water banking directive is defined and guides banking via workspace_write_file", () => {
+      assert.ok(typeof HIGH_WATER_BANKING_DIRECTIVE === "string");
+      assert.ok(HIGH_WATER_BANKING_DIRECTIVE.includes("workspace_write_file") || HIGH_WATER_BANKING_DIRECTIVE.includes("Bank"));
+    });
+
+    it("route.ts invokes fitConversationToBudget BEFORE canContinueToolLoop and emits compaction event", () => {
+      const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+      assert.ok(routeSrc.includes("fitConversationToBudget"), "route.ts must import and call fitConversationToBudget");
+      assert.ok(routeSrc.includes('type: "compaction"'), "route.ts must emit streamed compaction event");
+
+      const fitIdx = routeSrc.indexOf("fitConversationToBudget(conversationMessages");
+      const canContinueIdx = routeSrc.indexOf("canContinueToolLoop({");
+      assert.ok(fitIdx !== -1, "fitConversationToBudget must be called in route.ts");
+      assert.ok(canContinueIdx !== -1, "canContinueToolLoop must be called in route.ts");
+      assert.ok(fitIdx < canContinueIdx, "fitConversationToBudget MUST execute before canContinueToolLoop in route while loop");
+    });
+
+    it("ChatStream handles streamed compaction events and renders persistent in-thread marker", () => {
+      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(chatStreamSrc.includes('event.type === "compaction"'), "ChatStream must handle event.type === 'compaction'");
+      assert.ok(chatStreamSrc.includes("compaction-turn-note"), "ChatStream must render compaction-turn-note");
+      assert.ok(chatStreamSrc.includes("compactedThisTurn"), "ChatStream must support compactedThisTurn property");
     });
   });
 });

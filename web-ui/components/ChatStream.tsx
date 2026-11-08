@@ -106,6 +106,7 @@ export interface ChatMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
 }
 
@@ -955,6 +956,26 @@ export function ChatStream({
                 );
               }
             }
+          } else if (event.type === "compaction") {
+            compactedThisTurn = true;
+            tokensBeforeCompaction = event.tokensBefore;
+            tokensAfterCompaction = event.tokensAfter;
+            setContextStats((prev) => ({
+              ...prev,
+              estimatedTokens: event.tokensAfter,
+              compactedThisTurn: true,
+              tokensBeforeCompaction: event.tokensBefore,
+              tokensAfterCompaction: event.tokensAfter
+            }));
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                compactedThisTurn: true,
+                tokensBeforeCompaction: event.tokensBefore,
+                tokensAfterCompaction: event.tokensAfter,
+                compactionActions: event.actions
+              }))
+            );
           } else if (event.type === "status") {
             setStreamStatus(event.status);
           } else if (event.type === "thought") {
@@ -1053,6 +1074,7 @@ export function ChatStream({
                       compactedThisTurn: finalCompacted || undefined,
                       tokensBeforeCompaction: finalTokensBefore,
                       tokensAfterCompaction: finalTokensAfter,
+                      compactionActions: event.compactionActions,
                       status: finalStatus
                     }
                   })
@@ -1074,6 +1096,7 @@ export function ChatStream({
                 compactedThisTurn: finalCompacted || undefined,
                 tokensBeforeCompaction: finalTokensBefore,
                 tokensAfterCompaction: finalTokensAfter,
+                compactionActions: event.compactionActions || msg.compactionActions,
                 status: finalStatus
               }))
             );

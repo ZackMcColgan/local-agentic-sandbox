@@ -50,7 +50,9 @@ import {
   canContinueToolLoop,
   TOOL_ROUND_BACKSTOP,
   estimateTokens,
-  CHAT_CONTEXT_BUDGET_TOKENS
+  CHAT_CONTEXT_BUDGET_TOKENS,
+  fitConversationToBudget,
+  HIGH_WATER_BANKING_DIRECTIVE
 } from "@/lib/contextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
@@ -643,6 +645,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let turnCompacted = prep.compactedThisTurn;
         let turnTokensBefore = prep.tokensBeforeCompaction;
         let turnTokensAfter = prep.tokensAfterCompaction;
+        let turnCompactionActions: string[] | undefined = undefined;
 
         const conversationMessages = [...prep.messages];
         if (conversationMessages.length > 0) {
@@ -785,6 +788,54 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         while (true) {
           if (turnAbortController.signal.aborted) break;
 
+          // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
+          const compaction = fitConversationToBudget(conversationMessages, {
+            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS
+          });
+          if (compaction.compacted) {
+            conversationMessages.length = 0;
+            conversationMessages.push(...compaction.messages);
+            turnCompacted = true;
+            turnTokensBefore = compaction.tokensBefore;
+            turnTokensAfter = compaction.tokensAfter;
+            turnCompactionActions = compaction.actions;
+
+            if (activeThreadId && threadData) {
+              try {
+                threadStore.compactThreadIncremental(threadData);
+              } catch {}
+            }
+
+            await sendEvent({
+              type: "compaction",
+              tokensBefore: compaction.tokensBefore,
+              tokensAfter: compaction.tokensAfter,
+              actions: compaction.actions
+            });
+
+            await sendEvent({
+              type: "meta",
+              model: activeModel,
+              mode,
+              reasoning_effort: effectiveReasoningEffort,
+              triage: triageComplexityResult,
+              citations: oracleCitations,
+              context: {
+                estimatedTokens: compaction.tokensAfter,
+                budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+                compactedThisTurn: true,
+                tokensBeforeCompaction: compaction.tokensBefore,
+                tokensAfterCompaction: compaction.tokensAfter,
+                compactionActions: compaction.actions
+              }
+            });
+          }
+
+          if (compaction.highWater) {
+            mergeSystemDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+          }
+
+          // 2. Measure fitted tokens for continuation
           const continuation = canContinueToolLoop({
             round,
             contextTokens: estimateTokens(conversationMessages),
@@ -823,37 +874,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               }
               await sendEvent({ type: "steer", texts: steers });
             }
-          }
-
-          const compaction = compactConversationHistory(conversationMessages, { maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS });
-          if (compaction.compacted) {
-            conversationMessages.length = 0;
-            conversationMessages.push(...compaction.messages);
-            turnCompacted = true;
-            turnTokensBefore = compaction.tokensBefore;
-            turnTokensAfter = compaction.tokensAfter;
-
-            if (activeThreadId && threadData) {
-              try {
-                threadStore.compactThreadIncremental(threadData);
-              } catch {}
-            }
-
-            await sendEvent({
-              type: "meta",
-              model: activeModel,
-              mode,
-              reasoning_effort: effectiveReasoningEffort,
-              triage: triageComplexityResult,
-              citations: oracleCitations,
-              context: {
-                estimatedTokens: compaction.tokensAfter,
-                budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
-                compactedThisTurn: true,
-                tokensBeforeCompaction: compaction.tokensBefore,
-                tokensAfterCompaction: compaction.tokensAfter
-              }
-            });
           }
 
           const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
@@ -1623,6 +1643,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             compactedThisTurn: turnCompacted || undefined,
             tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
             tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+            compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const)
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
@@ -1651,6 +1672,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           compactedThisTurn: turnCompacted || undefined,
           tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
           tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
+          compactionActions: turnCompacted ? turnCompactionActions : undefined,
           pendingSteers: unconsumedSteers.length > 0 ? unconsumedSteers : undefined,
           trace_session: {
             sessionId: tracer.getSessionId(),
