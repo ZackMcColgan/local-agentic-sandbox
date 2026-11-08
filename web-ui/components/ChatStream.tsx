@@ -2165,16 +2165,38 @@ export function ChatStream({
                       </ReactMarkdown>
                     </div>
                   </div>
-                  {m.timestamp && (
-                    <div className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 mr-1">
-                      {(() => {
-                        const d = new Date(m.timestamp);
-                        return isNaN(d.getTime())
-                          ? m.timestamp
-                          : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-                      })()}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-500">
+                    <button
+                      type="button"
+                      data-testid="copy-user-message-btn"
+                      onClick={() => copyToClipboard(m.content, m.id)}
+                      className="inline-flex items-center gap-1 hover:text-slate-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                      title={copiedMessageId === m.id ? "Copied" : "Copy prompt"}
+                      aria-label={copiedMessageId === m.id ? "Copied" : "Copy prompt"}
+                    >
+                      {copiedMessageId === m.id ? (
+                        <>
+                          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                    {m.timestamp && (
+                      <span>
+                        {(() => {
+                          const d = new Date(m.timestamp);
+                          return isNaN(d.getTime())
+                            ? m.timestamp
+                            : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                        })()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ) : (
                 /* Assistant Message View */
