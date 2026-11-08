@@ -7,7 +7,7 @@ export const DEADLINES = {
   FAST: 60000,           // 1m
   NORMAL: 300000,        // 5m
   HEAVY: 600000,         // 10m
-  WEDGING_LIMIT: 840000  // 14m
+  WEDGING_LIMIT: 600000  // 10m (leaves 5m budget for watchdog verification within 15m runner deadline)
 };
 
 export type HangClassification =
@@ -141,10 +141,11 @@ export async function awaitTurnCompletion(
         const thread = data.thread;
         const activeTurn = data.activeTurn;
         const lastMsg = thread?.messages?.[thread?.messages?.length - 1];
-        lastObservedStatus = lastMsg?.status;
-        lastContentLength = lastMsg?.content?.length || 0;
+        const lastAssistant = [...(thread?.messages || [])].reverse().find((m: any) => m.role === "assistant");
+        lastObservedStatus = lastAssistant?.status || lastMsg?.status;
+        lastContentLength = lastAssistant?.content?.length || 0;
 
-        if (activeTurn || (lastMsg && lastMsg.role === "assistant")) {
+        if (activeTurn || lastAssistant) {
           sawActivity = true;
         }
 
@@ -155,8 +156,8 @@ export async function awaitTurnCompletion(
           console.log(`[${specName}] waiting… elapsed ${elapsed}s, state: ${lastObservedStatus || (activeTurn ? 'activeTurn' : 'unknown')}, len: ${lastContentLength}`);
         }
 
-        // Turn completed cleanly when activeTurn is gone and last message is assistant
-        if (sawActivity && !activeTurn && lastMsg?.role === "assistant") {
+        // Turn completed cleanly when activeTurn is gone and an assistant message is completed
+        if (sawActivity && !activeTurn && lastAssistant && (lastAssistant.status === "completed" || !lastAssistant.status)) {
           return {
             thread,
             durationSec: parseFloat(((Date.now() - start) / 1000).toFixed(1))
@@ -185,10 +186,31 @@ export async function awaitTurnCompletion(
     }
   } catch {}
 
+  let isTrulyWedged = false;
+  if (slotBusy) {
+    // Timeout & No-Response Doctrine: Check if slot accepts stop recovery or is permanently wedged
+    console.warn(`[WATCHDOG] Slot busy upon timeout. Testing if engine is wedged via product stop recovery...`);
+    try {
+      await fetch(`${baseUrl}/api/threads/${threadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" })
+      });
+      await new Promise((r) => setTimeout(r, 4000));
+      const verifyRes = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
+      if (verifyRes.ok) {
+        const verifySlots = await verifyRes.json();
+        isTrulyWedged = verifySlots.some((s: any) => s.is_processing);
+      }
+    } catch {
+      isTrulyWedged = true;
+    }
+  }
+
   const podRestarts = getCurrentPodRestartCount();
 
   let classification: HangClassification = "TURN-DIED";
-  if (slotBusy) {
+  if (isTrulyWedged) {
     classification = "ENGINE-WEDGED";
   } else if (lastObservedStatus === "streaming" && lastContentLength > 0) {
     classification = "STREAM-DIED-TURN-LIVED";

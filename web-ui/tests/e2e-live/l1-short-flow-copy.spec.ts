@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L1: Short Flow & Copy Affordance", () => {
+test.describe("L1: Short Flow & Copy Affordance @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

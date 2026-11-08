@@ -11,6 +11,7 @@ export default defineConfig({
   workers: 1, // Single engine slot — parallel live tests would queue and lie
   globalTimeout: 75 * 60 * 1000, // §5: 75 minutes wall-clock hard abort
   timeout: 900000, // Default fallback 15 min
+  outputDir: "./test-results-live",
   reporter: [
     ["list"],
     ["json", { outputFile: "playwright-live-report/results.json" }]

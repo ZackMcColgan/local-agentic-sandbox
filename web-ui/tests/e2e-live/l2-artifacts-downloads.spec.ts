@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L2: Artifact Correctness & Downloads", () => {
+test.describe("L2: Artifact Correctness & Downloads @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

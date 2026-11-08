@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L6: Long-Generation Stability", () => {
+test.describe("L6: Long-Generation Stability @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

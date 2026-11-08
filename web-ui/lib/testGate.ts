@@ -583,12 +583,16 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
     normalizedPath.startsWith("scripts/test-acceptance") ||
+    normalizedPath.startsWith("scripts/test-all") ||
     normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.startsWith("scripts/start-strata") ||
     normalizedPath.startsWith("scripts/stop-strata") ||
     normalizedPath.startsWith("scripts/Start-HostRunner") ||
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("playwright.live.config") ||
+    normalizedPath.includes("test-results") ||
+    normalizedPath.includes("playwright-report") ||
+    normalizedPath.includes("playwright-live-report") ||
     normalizedPath.includes("tests/e2e/") ||
     normalizedPath.includes("tests/e2e-live/") ||
     normalizedPath.startsWith("docs/") ||

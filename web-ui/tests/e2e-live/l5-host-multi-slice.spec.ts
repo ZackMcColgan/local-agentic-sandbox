@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L5: Multi-Slice Host Job", () => {
+test.describe("L5: Multi-Slice Host Job @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

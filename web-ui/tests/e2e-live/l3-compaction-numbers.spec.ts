@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, getCurrentPodRestartCount, DEADLINES } from "./helpers";
 
-test.describe("L3: Compaction & Context Numbers", () => {
+test.describe("L3: Compaction & Context Numbers @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

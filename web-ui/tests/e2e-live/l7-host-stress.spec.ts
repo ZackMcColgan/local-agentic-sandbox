@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L7: Host-Mode Stress & Clamping Honesty", () => {
+test.describe("L7: Host-Mode Stress & Clamping Honesty @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });

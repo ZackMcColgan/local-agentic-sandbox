@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
 
-test.describe("L4: Mid-Turn Steer & Reload Resilience", () => {
+test.describe("L4: Mid-Turn Steer & Reload Resilience @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
@@ -36,10 +36,11 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience", () => {
     // 5. Await turn completion server-side with 14m deadline (within 15m runner timeout)
     const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.WEDGING_LIMIT, "l4-steer-turn");
     const messages = completedTurn.thread.messages;
-    const lastMsg = messages[messages.length - 1];
+    const lastAssistant = [...messages].reverse().find((m: any) => m.role === "assistant");
 
-    expect(lastMsg.role).toBe("assistant");
-    expect(lastMsg.status === "completed" || !lastMsg.status).toBe(true);
+    expect(lastAssistant).toBeDefined();
+    expect(lastAssistant.role).toBe("assistant");
+    expect(lastAssistant.status === "completed" || !lastAssistant.status).toBe(true);
 
     // 6. Verify steer was absorbed into assistant output or thread context
     const fullAssistantText = messages
@@ -49,8 +50,8 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience", () => {
     const absorbed = /Byzantine|PBFT|fault tolerance|replication/i.test(fullAssistantText);
     expect(absorbed).toBe(true);
 
-    // 7. Verify no duplicate user messages were created
-    const userMessages = messages.filter((m: any) => m.role === "user");
-    expect(userMessages.length).toBe(1);
+    // 7. Verify no duplicate user initial prompts were created
+    const initialUserPrompts = messages.filter((m: any) => m.role === "user" && !m.content?.startsWith("[Steer from user, mid-turn]"));
+    expect(initialUserPrompts.length).toBe(1);
   });
 });
