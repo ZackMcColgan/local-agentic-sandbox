@@ -66,10 +66,12 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("notifications"),
     tests: ["tests/notifications.test.ts"]
   },
-  // Host Mode & approvals & status & Host Bridge
+  // Host Mode & approvals & status & Host Bridge & Host Settings
   {
     match: (p) =>
       p.includes("hostMode") ||
+      p.includes("hostSettings") ||
+      p.includes("settings/host") ||
       p.includes("host/approvals") ||
       p.includes("host/status") ||
       p.includes("host-bridge") ||
@@ -79,6 +81,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("hostFourState"),
     tests: [
       "tests/hostMode.test.ts",
+      "tests/hostSettingsDefault.test.ts",
       "tests/hostFourState.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",

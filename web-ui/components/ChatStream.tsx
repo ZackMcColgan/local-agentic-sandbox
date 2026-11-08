@@ -307,7 +307,7 @@ export function ChatStream({
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   // Host Mode & Approvals state
-  const [hostAccess, setHostAccess] = useState<boolean>(Boolean(threadHostAccess));
+  const [hostAccess, setHostAccess] = useState<boolean>(threadHostAccess ?? true);
   const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
   const [runnerState, setRunnerState] = useState<HostRunnerState | null>(null);
   const [runnerReason, setRunnerReason] = useState<string | null>(null);
@@ -1935,25 +1935,22 @@ export function ChatStream({
             <EngineStatusPill onOpenSettings={onOpenModelSheet} />
           </div>
 
-          {/* Host Mode Toggle Button */}
-          <button
-            type="button"
-            data-testid="host-mode-toggle"
-            onClick={handleToggleHostAccess}
-            className={`min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border text-xs font-semibold transition-colors shrink-0 ${
-              hostAccess
-                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
-            }`}
-            title={hostAccess ? "Host access ON · Tap to turn off" : "Host access OFF · Tap to turn on"}
-            aria-label={hostAccess ? "Disable host access" : "Enable host access"}
-          >
-            <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span>Host</span>
-          </button>
-
-          {/* Host Status Chip (visible when hostAccess is ON) */}
-          {hostAccess && (() => {
+          {/* Host Read-Only Status Chip (controlled via global Settings switch) */}
+          {(() => {
+            if (!hostAccess) {
+              return (
+                <div
+                  data-testid="host-access-chip"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-slate-500/10 text-slate-600 dark:text-zinc-400 border border-slate-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
+                  title="Host access disabled in Settings"
+                  aria-label="Host offline"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+                  <span className="hidden sm:inline">Host offline</span>
+                  <span className="sm:hidden">Offline</span>
+                </div>
+              );
+            }
             if (runnerState === "READY" || (runnerState === null && runnerAvailable === true)) {
               return (
                 <div

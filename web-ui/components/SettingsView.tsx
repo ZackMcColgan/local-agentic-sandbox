@@ -79,6 +79,7 @@ export function SettingsView({
   const [notifTestMessage, setNotifTestMessage] = useState<string | null>(null);
 
   const [hostSettings, setHostSettingsState] = useState<{
+    hostAccessEnabled: boolean;
     allowUnattendedHostGit: boolean;
     runnerAvailable: boolean;
     recentActivity: Array<{
@@ -93,6 +94,7 @@ export function SettingsView({
       mergeSha?: string;
     }>;
   }>({
+    hostAccessEnabled: true,
     allowUnattendedHostGit: false,
     runnerAvailable: false,
     recentActivity: []
@@ -106,6 +108,24 @@ export function SettingsView({
         setHostSettingsState(json);
       }
     } catch {}
+  };
+
+  const handleToggleHostAccess = async () => {
+    const nextState = !hostSettings.hostAccessEnabled;
+    setHostSettingsState((prev) => ({ ...prev, hostAccessEnabled: nextState }));
+    try {
+      const res = await fetch("/api/settings/host", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostAccessEnabled: nextState })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHostSettingsState((prev) => ({ ...prev, hostAccessEnabled: json.hostAccessEnabled }));
+      }
+    } catch {
+      fetchHostSettings();
+    }
   };
 
   const handleToggleUnattendedGit = async () => {
@@ -700,6 +720,82 @@ export function SettingsView({
           </h2>
 
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 space-y-4">
+            {/* Primary Global Host Switch */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Host Access</span>
+                </div>
+                <p
+                  data-testid="host-access-status-reason"
+                  className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm"
+                >
+                  {hostSettings.hostAccessEnabled
+                    ? "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON."
+                    : "Host access is disabled. New chat threads will not offer host tools."}
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div
+                data-testid="host-access-status-badge"
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                  hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
+                    ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+                    : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
+                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
+                      ? "bg-emerald-500"
+                      : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
+                      ? "bg-amber-500"
+                      : "bg-slate-400 dark:bg-zinc-600"
+                  }`}
+                />
+                <span>
+                  {hostSettings.hostAccessEnabled
+                    ? hostSettings.runnerAvailable
+                      ? "Active"
+                      : "Runner Offline"
+                    : "Disabled"}
+                </span>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                Enable Host Access
+              </span>
+              <button
+                type="button"
+                role="switch"
+                data-testid="host-access-toggle-btn"
+                aria-checked={hostSettings.hostAccessEnabled}
+                onClick={handleToggleHostAccess}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  hostSettings.hostAccessEnabled
+                    ? "bg-emerald-600 dark:bg-emerald-500"
+                    : "bg-slate-300 dark:bg-zinc-700"
+                }`}
+                title="Toggle host access switch"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    hostSettings.hostAccessEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800" />
+
+            {/* Sub-item: Unattended Host Git */}
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">

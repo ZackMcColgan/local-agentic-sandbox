@@ -4,6 +4,7 @@ import { resolveSettingsDir } from "./notifications";
 import { getHostRunnerBaseUrl } from "./hostMode";
 
 export interface HostSettings {
+  hostAccessEnabled: boolean;
   allowUnattendedHostGit: boolean;
 }
 
@@ -18,12 +19,14 @@ export function getHostSettings(): HostSettings {
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       return {
+        hostAccessEnabled: typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
         allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit)
       };
     }
   } catch {}
 
   return {
+    hostAccessEnabled: true,
     allowUnattendedHostGit: false
   };
 }
