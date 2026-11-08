@@ -57,3 +57,5 @@ web-ui/temp-test-*
 .opencode-remote-session.json
 .agent/
 
+ playwright-live-report/
+web-ui/playwright-live-report/
