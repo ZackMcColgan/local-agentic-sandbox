@@ -31,6 +31,56 @@ describe("SVG Rendering & Sanitization Suite", () => {
     assert.equal(isSvgCode("echo 'hello'", "bash"), false);
   });
 
+  const sampleWeatherHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spanish Fort Weather</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: white; margin: 0; padding: 20px; }
+    .layout { display: flex; gap: 20px; }
+    .sidebar { width: 250px; background: #1e293b; padding: 15px; border-radius: 8px; }
+    .hourly { display: flex; gap: 10px; overflow-x: auto; }
+    .chart { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar">
+      <h2>Spanish Fort, AL</h2>
+      <p>Current: 72°F Sunny</p>
+    </div>
+    <div class="main">
+      <div class="hourly">
+        <div>1 PM: 72°F</div>
+        <div>2 PM: 74°F</div>
+        <div>3 PM: 73°F</div>
+      </div>
+      <div class="chart">
+        <svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+          <polyline fill="none" stroke="#38bdf8" stroke-width="2" points="0,80 100,50 200,60 300,30 400,40" />
+        </svg>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  it("1. Complete HTML document containing an inline SVG is NOT classified as SVG (isSvgCode is false)", () => {
+    assert.equal(isSvgCode(sampleWeatherHtml), false, "Full HTML document with no language must NOT be classified as SVG");
+    assert.equal(isSvgCode(sampleWeatherHtml, "html"), false, "Full HTML document with lang='html' must NOT be classified as SVG");
+    assert.equal(isSvgCode(sampleWeatherHtml, ""), false, "Full HTML document with lang='' must NOT be classified as SVG");
+    assert.equal(isSvgCode(sampleWeatherHtml, "xml"), false, "Full HTML document with lang='xml' must NOT be classified as SVG");
+    assert.equal(isSvgCode("<html><body><svg><rect/></svg></body></html>", "html"), false, "<html> tag starting doc must not be SVG");
+  });
+
+  it("2. Bare SVG, <?xml ...?> prolog SVG, and Drawio <mxfile> documents ARE classified as SVG", () => {
+    assert.equal(isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>"), true, "Bare <svg> must be true");
+    assert.equal(isSvgCode("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg viewBox='0 0 100 100'></svg>"), true, "XML prolog followed by <svg> must be true");
+    assert.equal(isSvgCode("<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>"), true, "Drawio <mxfile> must be true");
+    assert.equal(isSvgCode("<mxGraphModel><root><mxCell id='0'/></root></mxGraphModel>"), true, "Drawio <mxGraphModel> must be true");
+  });
+
   it("detects Draw.io XML diagrams with isDrawioXml", () => {
     assert.equal(isDrawioXml("<mxfile host='app.diagrams.net'><diagram></diagram></mxfile>"), true);
     assert.equal(isDrawioXml("<mxGraphModel><root></root></mxGraphModel>"), true);
@@ -364,6 +414,27 @@ Hope this helps!`;
 
     const svgs3 = extractSvgsFromMessage(msgDuplicate);
     assert.equal(svgs3.length, 0, "Must not duplicate SVG if already rendered inline in content");
+
+    // Case 4: 3. Deliverable level: HTML document with inline SVG does NOT extract as an SVG deliverable
+    const msgWithHtmlDeliverable = {
+      id: "msg-tool-html-write",
+      content: "I have created the weather page in spanish-fort-weather.html",
+      traces: [
+        {
+          tool: "workspace_write_file",
+          args: {
+            path: "spanish-fort-weather.html",
+            content: sampleWeatherHtml
+          },
+          result: {
+            content: [{ type: "text", text: '{"status":"SUCCESS","path":"spanish-fort-weather.html"}' }]
+          }
+        }
+      ]
+    };
+
+    const htmlSvgs = extractSvgsFromMessage(msgWithHtmlDeliverable);
+    assert.equal(htmlSvgs.length, 0, "HTML document deliverable with inline SVG must NOT produce an extracted SVG diagram");
   });
 });
 

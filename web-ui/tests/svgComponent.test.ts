@@ -315,6 +315,57 @@ describe("SVG Viewer Component Suite", () => {
     }
     assert.ok(svgElem.innerHTML.includes("App Server"), "Must render App Server inside SVG");
   });
+
+  it("3. Deliverable/routing level: HTML with inline SVG routes to HTML preview (no SvgViewer), bare SVG routes to SvgViewer", async () => {
+    const { CodeBlock } = await import("../components/ArtifactRenderers.js");
+    const sampleWeatherHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>body { background: #0f172a; color: white; }</style>
+</head>
+<body>
+  <div>Spanish Fort Weather</div>
+  <svg viewBox="0 0 100 100"><circle r="40"/></svg>
+</body>
+</html>`;
+
+    // 1. CodeBlock with HTML document containing inline SVG: must NOT render SvgViewer
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(CodeBlock, {
+          code: sampleWeatherHtml,
+          language: "html",
+          filename: "spanish-fort-weather.html"
+        })
+      );
+    });
+
+    const htmlText = container.textContent || "";
+    assert.equal(htmlText.includes("Vector Graphic"), false, "HTML document must NOT produce 'Vector Graphic' SvgViewer");
+    const iframeElem = container.querySelector("iframe");
+    assert.ok(iframeElem !== null, "HTML document must route to sandboxed HTML iframe preview");
+
+    // Clean up container for next render
+    root.unmount();
+    root = null;
+
+    // 2. CodeBlock with bare SVG: must render SvgViewer
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(CodeBlock, {
+          code: `<svg viewBox="0 0 100 100"><rect width="100" height="100"/></svg>`,
+          language: "svg",
+          filename: "chart.svg"
+        })
+      );
+    });
+
+    const svgText = container.textContent || "";
+    assert.ok(svgText.includes("chart.svg") || svgText.includes("Vector Graphic"), "Bare SVG must render SvgViewer title");
+    assert.ok(container.querySelector("svg") !== null, "Bare SVG must render SVG element in SvgViewer");
+  });
 });
 
 
