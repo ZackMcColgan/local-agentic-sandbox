@@ -428,6 +428,11 @@ export function isSvgCode(code: string, language?: string): boolean {
   const lang = (language || "").trim().toLowerCase();
   const trimmed = code.trim();
 
+  // Return false early when the trimmed content starts (case-insensitively) with <!DOCTYPE or <html
+  if (/^<!doctype\b/i.test(trimmed) || /^<html\b/i.test(trimmed)) {
+    return false;
+  }
+
   // Draw.io XML format
   if (isDrawioXml(trimmed)) {
     return true;
@@ -441,9 +446,9 @@ export function isSvgCode(code: string, language?: string): boolean {
     return /<svg[\s>]/i.test(trimmed) && /<\/svg>/i.test(trimmed);
   }
 
-  // Check if it's xml or html containing an <svg element
+  // Check if it's xml or html starting with <svg (after optional <?xml ...?> prolog)
   if (lang === "xml" || lang === "html" || lang === "" || lang === "bash") {
-    if (/<svg[\s>]/i.test(trimmed) && /<\/svg>/i.test(trimmed)) {
+    if (/^(<\?xml[^>]*\?>\s*)?<svg[\s>]/i.test(trimmed) && /<\/svg>/i.test(trimmed)) {
       return true;
     }
   }

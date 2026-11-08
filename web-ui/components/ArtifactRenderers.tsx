@@ -114,21 +114,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
     }
   };
 
-  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
-  if (isSvg) {
-    return (
-      <div className="my-3">
-        <SvgViewer
-          code={code}
-          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
-          initialTab="preview"
-          allowFullscreen={true}
-        />
-      </div>
-    );
-  }
-
-  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe
+  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe (defense-in-depth before SVG)
   if (isHtml) {
     return (
       <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
@@ -219,6 +205,20 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
             )}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
+  if (isSvg) {
+    return (
+      <div className="my-3">
+        <SvgViewer
+          code={code}
+          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
+          initialTab="preview"
+          allowFullscreen={true}
+        />
       </div>
     );
   }
