@@ -34,6 +34,7 @@ export interface ThreadMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  compactionActions?: string[];
   selectedModel?: string;
   status?: "completed" | "incomplete" | "error" | "streaming";
 }

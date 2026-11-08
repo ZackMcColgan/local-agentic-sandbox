@@ -22,6 +22,9 @@ export const MAX_TOOL_OUTPUT_CHARS = 64000;
 export const FINAL_ROUND_SYNTHESIS_DIRECTIVE =
   "You have gathered enough information. Synthesize your final answer now using only the tool results above. Do not call more tools.";
 
+export const HIGH_WATER_BANKING_DIRECTIVE =
+  "[CONTEXT BUDGET HIGH-WATER WARNING]: Context window utilization has exceeded 90%. Bank your intermediate progress and key deliverables now using workspace_write_file or finalize your answer before context limits are reached.";
+
 export const MAX_WEB_RESEARCH_CALLS = 100;
 
 /**
@@ -572,6 +575,18 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
   while (true) {
+    // Fit conversation to budget first through the compaction/elision ladder
+    const fitResult = fitConversationToBudget(conversationMessages, {
+      budgetTokens: maxContentTokens
+    });
+    if (fitResult.compacted) {
+      conversationMessages.length = 0;
+      conversationMessages.push(...fitResult.messages);
+    }
+    if (fitResult.highWater) {
+      mergeSystemDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+    }
+
     // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
     // as an explicit (optional) backstop override rather than a normal work ceiling.
     const decision = canContinueToolLoop({
@@ -585,14 +600,6 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     });
     if (!decision.canContinue) break;
     groundingRoundPending = false;
-
-    const compaction = compactConversationHistory(conversationMessages, {
-      maxContentTokens
-    });
-    if (compaction.compacted) {
-      conversationMessages.length = 0;
-      conversationMessages.push(...compaction.messages);
-    }
 
     const isFinalRound = decision.forceSynthesis === true;
     if (isFinalRound) {
@@ -739,4 +746,175 @@ export function canContinueToolLoop(options: {
   // Headroom remains: keep gathering. The last permitted round under an explicit
   // (tight) backstop is a synthesis round with tools omitted.
   return { canContinue: true, forceSynthesis: round >= backstop - 1 };
+}
+
+export type CompactionAction =
+  | "compaction"
+  | "elide_tool_outputs"
+  | "drop_old_turns"
+  | "truncate_oversize";
+
+export interface FitConversationResult {
+  messages: any[];
+  compacted: boolean;
+  actions: CompactionAction[];
+  tokensBefore: number;
+  tokensAfter: number;
+  highWater: boolean;
+}
+
+/**
+ * Ladder fitting for active tool loops:
+ * - Rung (a): Compaction alone if above 85% threshold or budget
+ * - Rung (b): Older tool outputs elided to EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+ * - Rung (c): Oldest non-system turns dropped (preserving system prompt and latest user query)
+ * - Rung (d): Truncate oversize payload (preserving system prompt)
+ */
+export function fitConversationToBudget(
+  messages: any[],
+  options?: {
+    budgetTokens?: number;
+    compactionThreshold?: number;
+    preserveRecentMessages?: number;
+  }
+): FitConversationResult {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return {
+      messages: [],
+      compacted: false,
+      actions: [],
+      tokensBefore: 0,
+      tokensAfter: 0,
+      highWater: false
+    };
+  }
+
+  const budgetTokens = options?.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+  const thresholdRatio = options?.compactionThreshold ?? 0.85;
+  const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
+  const initialTokens = estimateTokens(messages);
+  let workingMessages = messages.map((m) => ({ ...m }));
+  const actions: CompactionAction[] = [];
+
+  // Rung (a): Compaction alone if above threshold or budget
+  if (initialTokens >= thresholdTokens) {
+    const compactRes = compactConversationHistory(workingMessages, {
+      maxContentTokens: budgetTokens,
+      compactionThreshold: thresholdRatio,
+      preserveRecentMessages: options?.preserveRecentMessages ?? 4
+    });
+    if (compactRes.compacted) {
+      workingMessages = compactRes.messages;
+      actions.push("compaction");
+    }
+  }
+
+  const hasLeadingSystem = workingMessages[0]?.role === "system";
+
+  // Rung (b): Older tool outputs elided if still > budgetTokens
+  if (estimateTokens(workingMessages) > budgetTokens) {
+    let anyElided = false;
+    const lastToolIdx = workingMessages.map((m) => m.role).lastIndexOf("tool");
+    for (let i = hasLeadingSystem ? 1 : 0; i < workingMessages.length; i++) {
+      if (workingMessages[i]?.role === "tool" && i !== lastToolIdx) {
+        if (workingMessages[i].content !== EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER) {
+          workingMessages[i] = {
+            ...workingMessages[i],
+            content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+          };
+          anyElided = true;
+          if (estimateTokens(workingMessages) <= budgetTokens) {
+            break;
+          }
+        }
+      }
+    }
+    if (anyElided) {
+      actions.push("elide_tool_outputs");
+    }
+  }
+
+  // Rung (c): Drop oldest non-system turns if still > budgetTokens
+  if (estimateTokens(workingMessages) > budgetTokens) {
+    let anyDropped = false;
+    let latestUserIdx = -1;
+    for (let j = workingMessages.length - 1; j >= 0; j--) {
+      if (workingMessages[j]?.role === "user") {
+        latestUserIdx = j;
+        break;
+      }
+    }
+
+    let safety = workingMessages.length * 2;
+    while (estimateTokens(workingMessages) > budgetTokens && safety-- > 0) {
+      let candidateIdx = -1;
+      for (let i = hasLeadingSystem ? 1 : 0; i < workingMessages.length; i++) {
+        if (i === latestUserIdx) continue;
+        candidateIdx = i;
+        break;
+      }
+      if (candidateIdx === -1) break;
+      workingMessages.splice(candidateIdx, 1);
+      anyDropped = true;
+
+      latestUserIdx = -1;
+      for (let j = workingMessages.length - 1; j >= 0; j--) {
+        if (workingMessages[j]?.role === "user") {
+          latestUserIdx = j;
+          break;
+        }
+      }
+    }
+    if (anyDropped) {
+      actions.push("drop_old_turns");
+    }
+  }
+
+  // Rung (d): Truncate oversize message if still > budgetTokens (e.g. 64K-char payload)
+  let safetyD = 20;
+  while (estimateTokens(workingMessages) > budgetTokens && safetyD-- > 0) {
+    let longestIdx = -1;
+    let maxLen = 0;
+    for (let i = 0; i < workingMessages.length; i++) {
+      if (i === 0 && hasLeadingSystem && workingMessages.length > 1) continue;
+      const len = typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
+      if (len > maxLen) {
+        maxLen = len;
+        longestIdx = i;
+      }
+    }
+
+    if (longestIdx === -1 || maxLen <= TOOL_TRUNCATION_MARKER.length) {
+      break;
+    }
+
+    const currentTokens = estimateTokens(workingMessages);
+    const excessTokens = currentTokens - budgetTokens;
+    const excessChars = Math.max(1, excessTokens * 4);
+    const targetChars = Math.max(0, maxLen - excessChars - TOOL_TRUNCATION_MARKER.length);
+    const orig = workingMessages[longestIdx].content;
+    workingMessages[longestIdx] = {
+      ...workingMessages[longestIdx],
+      content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
+    };
+    if (!actions.includes("truncate_oversize")) {
+      actions.push("truncate_oversize");
+    }
+  }
+
+  const finalTokens = estimateTokens(workingMessages);
+  const highWater =
+    actions.includes("elide_tool_outputs") ||
+    actions.includes("drop_old_turns") ||
+    actions.includes("truncate_oversize") ||
+    finalTokens >= budgetTokens * 0.90;
+
+  return {
+    messages: workingMessages,
+    compacted: actions.length > 0,
+    actions,
+    tokensBefore: initialTokens,
+    tokensAfter: finalTokens,
+    highWater
+  };
 }
