@@ -350,6 +350,26 @@ describe("SVG Viewer Component Suite", () => {
     root.unmount();
     root = null;
 
+    // 1b. CodeBlock with HTML document and language='xml' (defense-in-depth routing order): must route to HTML preview
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(CodeBlock, {
+          code: sampleWeatherHtml,
+          language: "xml",
+          filename: "spanish-fort-weather.html"
+        })
+      );
+    });
+
+    const xmlHtmlText = container.textContent || "";
+    assert.equal(xmlHtmlText.includes("Vector Graphic"), false, "HTML doc labeled as xml must NOT produce SvgViewer");
+    assert.ok(container.querySelector("iframe") !== null, "HTML doc labeled as xml must route to iframe preview");
+
+    // Clean up container for next render
+    root.unmount();
+    root = null;
+
     // 2. CodeBlock with bare SVG: must render SvgViewer
     root = createRoot(container);
     await act(async () => {
