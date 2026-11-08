@@ -233,7 +233,7 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 
 ---
 
-## Phase 13 — ANTIGRAVITY CAMPAIGN: Live Chat Stress Test & Host Mode Settings Default (Nov 8, 2026)
+## Phase 13 — CAMPAIGN: Live Chat Stress Test & Host Mode Settings Default (Nov 8, 2026)
 
 ### 1. Defect #0: Global Host Mode Switch Default ON & Read-Only Status Chip
 - **Directive:** Global Host switch in Settings menu (`[data-testid="host-access-toggle-btn"]`), default ON, persisted server-side at `host-settings.json` (no file = enabled). Thread header keeps ONLY a read-only status chip (`[data-testid="host-access-chip"]`), per-thread interactive toggle button removed. Health gate strictly maintained (switch ON + daemon down = UNAVAILABLE, no host tools). Subagent/scheduled contexts strictly prohibited from host tools.
