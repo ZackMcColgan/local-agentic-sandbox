@@ -128,7 +128,6 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   };
-
   // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe (defense-in-depth before SVG)
   if (isHtml) {
     return (
