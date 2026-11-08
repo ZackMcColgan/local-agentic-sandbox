@@ -1,6 +1,4 @@
 import { test, expect, Page } from "@playwright/test";
-import fs from "fs";
-import path from "path";
 import {
   checkEngineWatchdog,
   createFreshSession,
@@ -9,14 +7,6 @@ import {
   getCurrentPodRestartCount,
   DEADLINES
 } from "./helpers";
-
-const SCRATCH_DIR = "C:\\AI\\scratch";
-const CORPUS_FILES = [
-  "l3-corpus-1.txt",
-  "l3-corpus-2.txt",
-  "l3-corpus-3.txt",
-  "l3-corpus-4.txt"
-];
 
 async function getInAppContextCounter(page: Page): Promise<string> {
   const pill = page.locator('[data-testid="context-meter-pill"]').first();
@@ -27,31 +17,6 @@ async function getInAppContextCounter(page: Page): Promise<string> {
 }
 
 test.describe("L3: Compaction & Context Numbers @full", () => {
-  test.beforeAll(() => {
-    if (!fs.existsSync(SCRATCH_DIR)) {
-      fs.mkdirSync(SCRATCH_DIR, { recursive: true });
-    }
-    // Prepare 4 corpus files, each ~95,000 characters (~23,750 tokens)
-    // 4 files * 95,000 chars = 380,000 chars (~95,000 tokens)
-    // Plus system prompt + seed prompt + assistant turns = >100,000 tokens total
-    for (let i = 0; i < CORPUS_FILES.length; i++) {
-      const filePath = path.join(SCRATCH_DIR, CORPUS_FILES[i]);
-      const block = `Section ${i + 1} telemetry stream and distributed consensus log payload block.\n` +
-        `Data: ${"0123456789abcdefghijklmnopqrstuvwxyz".repeat(2500)}\n`;
-      const fullContent = block.repeat(Math.ceil(95000 / block.length)).slice(0, 95000);
-      fs.writeFileSync(filePath, fullContent, "utf8");
-    }
-  });
-
-  test.afterAll(() => {
-    for (const file of CORPUS_FILES) {
-      try {
-        const p = path.join(SCRATCH_DIR, file);
-        if (fs.existsSync(p)) fs.unlinkSync(p);
-      } catch {}
-    }
-  });
-
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
@@ -74,22 +39,29 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     let counter = await getInAppContextCounter(page);
     console.log(`[L3] In-app context counter after Round 1 (seed): ${counter}`);
 
-    // 3. Rounds 2 through 5: Grow context through real chat turns retrieving large tool outputs via host_read_file
-    for (let i = 0; i < CORPUS_FILES.length; i++) {
-      const roundNum = i + 2;
-      const fileName = CORPUS_FILES[i];
-      const readPrompt = `Use host_read_file to inspect the file 'C:\\AI\\scratch\\${fileName}' and summarize its contents in exactly one sentence.`;
-      console.log(`[L3] Dispatching Round ${roundNum} (real tool retrieve: ${fileName})...`);
-      await sendPrompt(page, readPrompt);
+    // 3. Grow context through real chat turns only, making model produce/retrieve tool outputs through UI
+    // 5 growth rounds with ~82,000 characters (~20,500 tokens) per round:
+    // Round 2: ~21K tokens
+    // Round 3: ~42K tokens
+    // Round 4: ~63K tokens
+    // Round 5: ~84K tokens -> crosses 85K threshold (~86K tokens)
+    // Round 6: ~105K tokens -> crosses 100K budget (>100K tokens)
+    const telemetryFiller = "Telemetry log record and distributed consensus state sequence 0123456789. ".repeat(1100); // ~80,300 chars
 
-      await awaitTurnCompletion(page, url, threadId, DEADLINES.NORMAL, `l3-round${roundNum}-read`);
+    for (let roundIdx = 1; roundIdx <= 5; roundIdx++) {
+      const roundNum = roundIdx + 1;
+      const roundPrompt = `Use host_write_file to write 'C:\\AI\\scratch\\l3-telemetry-${roundIdx}.txt' with the word 'VERIFIED', then acknowledge telemetry block ${roundIdx} in exactly one concise sentence:\n${telemetryFiller}`;
+      console.log(`[L3] Dispatching Round ${roundNum} (real chat turn + tool execution)...`);
+      await sendPrompt(page, roundPrompt);
+
+      await awaitTurnCompletion(page, url, threadId, DEADLINES.NORMAL, `l3-round${roundNum}`);
       counter = await getInAppContextCounter(page);
       console.log(`[L3] In-app context counter after Round ${roundNum}: ${counter}`);
     }
 
-    // 4. Round 6: Recall turn — trigger compaction / recall seeded gist across compacted history
+    // 4. Recall turn — triggers compaction / recalls seeded gist across compacted history
     const recallPrompt = "What is the secret access token and port for Project-Zeus-77? Answer concisely.";
-    console.log(`[L3] Dispatching Round 6 (Recall turn across compacted context)...`);
+    console.log(`[L3] Dispatching Recall turn across compacted context...`);
     await sendPrompt(page, recallPrompt);
 
     const turnRecall = await awaitTurnCompletion(page, url, threadId, DEADLINES.HEAVY, "l3-turn-recall");
@@ -98,7 +70,7 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     expect(lastMsg.status === "completed" || !lastMsg.status).toBe(true);
 
     counter = await getInAppContextCounter(page);
-    console.log(`[L3] In-app context counter after Round 6 (recall): ${counter}`);
+    console.log(`[L3] In-app context counter after Recall turn: ${counter}`);
 
     // Gist recall assertion (normalizing non-breaking and standard hyphens)
     const normalizedContent = (lastMsg.content || "").replace(/[\u2010-\u2015]/g, "-");
