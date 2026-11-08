@@ -7,7 +7,6 @@ test.describe("L3: Compaction & Context Numbers", () => {
   });
 
   test("fills context across 85K threshold, verifies compaction pill with X -> Y numbers, recalls seeded gist, and checks pod restarts", async ({ page, baseURL }) => {
-    test.setTimeout(DEADLINES.HEAVY * 2);
     const url = baseURL || "http://192.168.50.254";
     const initialRestarts = getCurrentPodRestartCount();
 
@@ -24,7 +23,7 @@ test.describe("L3: Compaction & Context Numbers", () => {
     // 3. Programmatic filler rounds to cross 85K threshold
     // 85,000 tokens ~ 340,000 characters
     console.log(`[L3] Injecting programmatic filler rounds to cross 85K threshold...`);
-    const fillerBlock = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(1000); // ~57,000 chars (~14,250 tokens)
+    const fillerBlock = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(1000); // ~57,000 chars
 
     for (let i = 0; i < 6; i++) {
       const userMsg = {
@@ -67,8 +66,9 @@ test.describe("L3: Compaction & Context Numbers", () => {
     expect(lastMsg.role).toBe("assistant");
     expect(lastMsg.status === "completed" || !lastMsg.status).toBe(true);
 
-    // Gist recall assertion
-    expect(lastMsg.content).toContain("ZEUS-9922");
+    // Gist recall assertion (normalizing non-breaking and standard hyphens)
+    const normalizedContent = (lastMsg.content || "").replace(/[\u2010-\u2015]/g, "-");
+    expect(normalizedContent).toContain("ZEUS-9922");
 
     // 5. Verify UI compaction note with X -> Y numbers
     await page.goto(`${url}/?thread=${encodeURIComponent(threadId)}`, { waitUntil: "networkidle" });

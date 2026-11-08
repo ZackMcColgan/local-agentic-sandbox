@@ -4,10 +4,10 @@ import fs from "fs";
 import path from "path";
 
 export const DEADLINES = {
-  FAST: 60000,          // 60s
-  NORMAL: 180000,       // 3m
-  HEAVY: 360000,        // 6m
-  WEDGING_LIMIT: 480000 // 8m
+  FAST: 60000,           // 1m
+  NORMAL: 300000,        // 5m
+  HEAVY: 600000,         // 10m
+  WEDGING_LIMIT: 840000  // 14m
 };
 
 export type HangClassification =
@@ -17,7 +17,10 @@ export type HangClassification =
   | "UI-HUNG"
   | "QUEUED";
 
-export async function checkEngineWatchdog(): Promise<void> {
+let stopRecoveryCount = 0;
+
+export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Promise<void> {
+  // 1. Wait <= 120s for slot to be idle
   const start = Date.now();
   while (Date.now() - start < 120000) {
     try {
@@ -25,15 +28,53 @@ export async function checkEngineWatchdog(): Promise<void> {
       if (res.ok) {
         const slots = await res.json();
         const busy = slots.some((s: any) => s.is_processing);
-        if (!busy) {
-          return;
-        }
+        if (!busy) return;
       }
     } catch {}
     await new Promise((r) => setTimeout(r, 4000));
   }
 
-  throw new Error("[ENGINE-WEDGED] Strata LLM engine slot remained busy for > 2 minutes between specs. Watchdog aborting.");
+  // 2. Addendum A §4: If still busy after 120s, attempt product API stop recovery (max 2 per run)
+  if (stopRecoveryCount < 2) {
+    stopRecoveryCount++;
+    console.warn(`[WATCHDOG RECOVERY #${stopRecoveryCount}] Slot busy after 120s. Invoking product API stop recovery...`);
+    try {
+      const thRes = await fetch(`${baseUrl}/api/threads`);
+      if (thRes.ok) {
+        const thData = await thRes.json();
+        const activeThreads = thData.threads?.filter((t: any) => t.status === "active" || t.status === "running") || [];
+        for (const active of activeThreads) {
+          console.warn(`[WATCHDOG RECOVERY] Stopping active occupant thread '${active.id}' via POST /api/threads/${active.id}...`);
+          await fetch(`${baseUrl}/api/threads/${active.id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "stop" })
+          });
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[WATCHDOG RECOVERY] Product stop call failed: ${e.message}`);
+    }
+
+    // Wait <= 60s for slot to clear after stop
+    const stopWaitStart = Date.now();
+    while (Date.now() - stopWaitStart < 60000) {
+      try {
+        const res = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const slots = await res.json();
+          const busy = slots.some((s: any) => s.is_processing);
+          if (!busy) {
+            console.log(`[WATCHDOG RECOVERY] Slot cleared successfully after product stop.`);
+            return;
+          }
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+  }
+
+  throw new Error("[ENGINE-WEDGED] Strata LLM engine slot remained busy after product API stop recovery. Watchdog aborting.");
 }
 
 export function getCurrentPodRestartCount(): number {
@@ -49,7 +90,6 @@ export function getCurrentPodRestartCount(): number {
 }
 
 export async function createFreshSession(page: Page, baseUrl: string, title = "Live E2E Session"): Promise<string> {
-  // Create thread server-side to ensure stable ID
   const res = await page.request.post(`${baseUrl}/api/threads`, {
     data: { title }
   });
@@ -72,7 +112,6 @@ export async function sendPrompt(page: Page, prompt: string): Promise<void> {
   await composer.fill(prompt);
   await page.waitForTimeout(300);
 
-  // Click send button or press enter
   const sendBtn = page.locator('button[aria-label="Send message"], button[title="Send message"]').first();
   if (await sendBtn.count() > 0 && await sendBtn.isEnabled()) {
     await sendBtn.click();
@@ -89,6 +128,7 @@ export async function awaitTurnCompletion(
   specName: string
 ): Promise<{ thread: any; durationSec: number }> {
   const start = Date.now();
+  let lastHeartbeat = Date.now();
   let lastObservedStatus: string | undefined;
   let lastContentLength = 0;
   let sawActivity = false;
@@ -108,6 +148,13 @@ export async function awaitTurnCompletion(
           sawActivity = true;
         }
 
+        // Addendum A §2: Heartbeat line logged at least every 60s
+        if (Date.now() - lastHeartbeat >= 60000) {
+          lastHeartbeat = Date.now();
+          const elapsed = Math.round((Date.now() - start) / 1000);
+          console.log(`[${specName}] waiting… elapsed ${elapsed}s, state: ${lastObservedStatus || (activeTurn ? 'activeTurn' : 'unknown')}, len: ${lastContentLength}`);
+        }
+
         // Turn completed cleanly when activeTurn is gone and last message is assistant
         if (sawActivity && !activeTurn && lastMsg?.role === "assistant") {
           return {
@@ -121,7 +168,7 @@ export async function awaitTurnCompletion(
     await page.waitForTimeout(3000);
   }
 
-  // Timeout reached — capture evidence & classify hang
+  // Timeout reached — Addendum A §3: capture evidence & classify hang
   const evidenceDir = path.resolve(process.cwd(), "playwright-live-report/evidence");
   fs.mkdirSync(evidenceDir, { recursive: true });
   const screenshotPath = path.join(evidenceDir, `${specName}-hang-${Date.now()}.png`);

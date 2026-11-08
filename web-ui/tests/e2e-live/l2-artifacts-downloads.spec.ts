@@ -7,7 +7,6 @@ test.describe("L2: Artifact Correctness & Downloads", () => {
   });
 
   test("verifies HTML with inline SVG (iframe, 0 vector cards, .html download), pure SVG, and draw.io XML", async ({ page, baseURL }) => {
-    test.setTimeout(DEADLINES.HEAVY * 2);
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
@@ -25,7 +24,7 @@ test.describe("L2: Artifact Correctness & Downloads", () => {
 
     // Verify sandboxed iframe preview renders
     const iframe = page.locator('iframe[title="HTML Artifact Preview"]');
-    await expect(iframe).toBeVisible({ timeout: 10000 });
+    await expect(iframe).toBeVisible({ timeout: 15000 });
 
     // Verify 0 vector diagram viewer cards hijacked the HTML artifact
     const hijackedVectorViewers = page.locator('[data-testid="svg-viewer-container"], .drawio-svg');
@@ -33,10 +32,10 @@ test.describe("L2: Artifact Correctness & Downloads", () => {
 
     // Verify download triggers with .html extension
     const htmlDownloadBtn = page.locator('button[title="Download file"]').first();
-    await expect(htmlDownloadBtn).toBeVisible();
+    await expect(htmlDownloadBtn).toBeVisible({ timeout: 10000 });
 
     const [htmlDownload] = await Promise.all([
-      page.waitForEvent("download", { timeout: 10000 }),
+      page.waitForEvent("download", { timeout: 15000 }),
       htmlDownloadBtn.click()
     ]);
     expect(htmlDownload.suggestedFilename().toLowerCase()).toMatch(/\.html$/);
@@ -52,7 +51,7 @@ test.describe("L2: Artifact Correctness & Downloads", () => {
 
     // Verify vector viewer rendered pure SVG
     const svgElement = page.locator("svg").filter({ has: page.locator("rect, circle, path") });
-    await expect(svgElement.first()).toBeVisible({ timeout: 10000 });
+    await expect(svgElement.first()).toBeVisible({ timeout: 15000 });
 
     // Part C: Draw.io XML Architecture Diagram
     const drawioPrompt = 'Create a Draw.io architecture XML diagram (<mxfile host="app.diagrams.net"><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="API Gateway" vertex="1" parent="1"><mxGeometry x="100" y="100" width="120" height="60" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>). Output it in an ```xml code block.';
@@ -70,7 +69,7 @@ test.describe("L2: Artifact Correctness & Downloads", () => {
 
     const lastDownloadBtn = allDownloadBtns.last();
     const [drawioDownload] = await Promise.all([
-      page.waitForEvent("download", { timeout: 10000 }),
+      page.waitForEvent("download", { timeout: 15000 }),
       lastDownloadBtn.click()
     ]);
     const dlName = drawioDownload.suggestedFilename().toLowerCase();

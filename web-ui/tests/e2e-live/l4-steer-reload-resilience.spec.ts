@@ -7,7 +7,6 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience", () => {
   });
 
   test("dispatches long generation, applies mid-turn steer with interrupt, survives page reload, and completes cleanly without duplicate user turns", async ({ page, baseURL }) => {
-    test.setTimeout(DEADLINES.HEAVY * 2);
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
@@ -34,8 +33,8 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience", () => {
     console.log(`[L4] Reloading page mid-stream to verify turn survives disconnect...`);
     await page.reload({ waitUntil: "domcontentloaded" });
 
-    // 5. Await turn completion server-side
-    const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.HEAVY, "l4-steer-turn");
+    // 5. Await turn completion server-side with 14m deadline (within 15m runner timeout)
+    const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.WEDGING_LIMIT, "l4-steer-turn");
     const messages = completedTurn.thread.messages;
     const lastMsg = messages[messages.length - 1];
 

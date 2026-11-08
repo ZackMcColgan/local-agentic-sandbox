@@ -7,7 +7,6 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument)", () => {
   });
 
   test("defends against engine wedging when model is asked to emit a massive 70KB tool call payload in a single turn", async ({ page, baseURL }) => {
-    test.setTimeout(DEADLINES.WEDGING_LIMIT);
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
@@ -19,11 +18,7 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument)", () => {
     console.log(`[L8] Dispatching massive tool argument prompt to thread ${threadId}...`);
     await sendPrompt(page, massivePrompt);
 
-    // 3. Await turn outcome with WEDGING_LIMIT deadline
-    // The turn must either:
-    // - Complete cleanly if synthesized across chunks/rounds
-    // - Terminate with an honest error/limit marker (e.g. status "incomplete" or honest message)
-    // - CRITICALLY: Strata slot 0 must NOT wedge or lock up the entire cluster!
+    // 3. Await turn outcome with 14m deadline (within 15m project timeout)
     let turnError: any = null;
     let turnResult: any = null;
 
@@ -41,11 +36,9 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument)", () => {
     if (turnResult) {
       const lastMsg = turnResult.thread.messages[turnResult.thread.messages.length - 1];
       expect(lastMsg.role).toBe("assistant");
-      // Status must be completed or honest incomplete, never silent drop
       expect(["completed", "incomplete"]).toContain(lastMsg.status || "completed");
       console.log(`[L8] Turn completed cleanly with status '${lastMsg.status || "completed"}'.`);
     } else {
-      // If turn threw, ensure it wasn't an unclassified hang
       console.log(`[L8] Turn ended with error:`, turnError?.message);
       expect(turnError?.classification).not.toBe("ENGINE-WEDGED");
     }

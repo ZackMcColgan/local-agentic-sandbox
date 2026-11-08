@@ -9,7 +9,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1, // Single engine slot — parallel live tests would queue and lie
-  timeout: 900000, // 15 minutes max per scenario
+  globalTimeout: 75 * 60 * 1000, // §5: 75 minutes wall-clock hard abort
+  timeout: 900000, // Default fallback 15 min
   reporter: [
     ["list"],
     ["json", { outputFile: "playwright-live-report/results.json" }]
@@ -26,10 +27,44 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "live-desktop",
-      use: {
-        viewport: { width: 1280, height: 900 }
-      }
+      name: "L1-short-flow",
+      testMatch: /l1-short-flow-copy\.spec\.ts/,
+      timeout: 6 * 60 * 1000 // §1: 6 min
+    },
+    {
+      name: "L2-artifacts-downloads",
+      testMatch: /l2-artifacts-downloads\.spec\.ts/,
+      timeout: 8 * 60 * 1000 // §1: 8 min
+    },
+    {
+      name: "L3-compaction-numbers",
+      testMatch: /l3-compaction-numbers\.spec\.ts/,
+      timeout: 15 * 60 * 1000 // §1: 15 min
+    },
+    {
+      name: "L4-steer-reload-resilience",
+      testMatch: /l4-steer-reload-resilience\.spec\.ts/,
+      timeout: 15 * 60 * 1000 // §1: 15 min
+    },
+    {
+      name: "L5-host-multi-slice",
+      testMatch: /l5-host-multi-slice\.spec\.ts/,
+      timeout: 8 * 60 * 1000 // §1: 8 min
+    },
+    {
+      name: "L6-long-generation",
+      testMatch: /l6-long-generation\.spec\.ts/,
+      timeout: 12 * 60 * 1000 // §1: 12 min
+    },
+    {
+      name: "L7-host-stress",
+      testMatch: /l7-host-stress\.spec\.ts/,
+      timeout: 10 * 60 * 1000 // §1: 10 min
+    },
+    {
+      name: "L8-wedge-regression",
+      testMatch: /l8-wedge-regression\.spec\.ts/,
+      timeout: 15 * 60 * 1000 // §1: 15 min
     }
   ]
 });
