@@ -513,7 +513,9 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
 
     const origFetch = global.fetch;
     try {
-      // 1. Initial thread without hostAccess
+      // 1. Explicitly disabled hostAccess
+      thread.hostAccess = false;
+      threadStore.saveThread(thread);
       const req1 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
       const res1 = await hostStatusGet(req1);
       assert.equal(res1.status, 200);

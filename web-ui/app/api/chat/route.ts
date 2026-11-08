@@ -271,7 +271,8 @@ export async function POST(req: NextRequest) {
     const threadsDir = resolveThreadsDir();
     const threadStore = new ThreadStore(threadsDir);
     let threadData: any = null;
-    let threadHostAccess = false;
+    const hostSettings = getHostSettings();
+    let threadHostAccess = hostSettings.hostAccessEnabled;
 
     if (activeThreadId) {
       try {
@@ -279,11 +280,12 @@ export async function POST(req: NextRequest) {
         if (!threadData) {
           threadData = threadStore.createThread({
             id: activeThreadId,
-            title: userPrompt.slice(0, 40) || "New thread"
+            title: userPrompt.slice(0, 40) || "New thread",
+            hostAccess: threadHostAccess
           });
         }
-        if (threadData?.hostAccess) {
-          threadHostAccess = true;
+        if (typeof threadData?.hostAccess === "boolean") {
+          threadHostAccess = threadData.hostAccess;
         }
 
         // Turn Start (PIN 2 User Message): save user message immediately to threadStore
@@ -581,18 +583,22 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
         }
 
-        // 4. Host Mode Tools (if thread opt-in enabled AND runner is healthy)
+        // 4. Host Mode Tools (if host access enabled AND runner is healthy)
         if (activeThreadId && !threadData) {
           try {
             threadData = await threadStore.getThread(activeThreadId);
-            if (threadData?.hostAccess) {
-              threadHostAccess = true;
+            if (typeof threadData?.hostAccess === "boolean") {
+              threadHostAccess = threadData.hostAccess;
             }
           } catch {}
         }
 
+        const isProhibitedContext = Boolean(
+          threadData?.isSubagent ||
+          threadData?.isScheduled
+        );
         const hostStatus = await determineHostRunnerState(threadHostAccess);
-        const includeHostTools = shouldAdvertiseHostTools(threadHostAccess, hostStatus.runnerState);
+        const includeHostTools = !isProhibitedContext && shouldAdvertiseHostTools(threadHostAccess, hostStatus.runnerState);
 
         const hostTools = includeHostTools
           ? HOST_TOOLS_DEFINITIONS.map((ht) => ({

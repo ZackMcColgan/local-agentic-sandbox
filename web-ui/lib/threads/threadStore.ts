@@ -6,6 +6,7 @@ import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
 import { summarizeTurnHistory } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
+import { getHostSettings } from "../hostSettings";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
 
@@ -63,6 +64,8 @@ export interface Thread {
   workerInfo?: string;
   timeLabel?: string;
   isTest?: boolean;
+  isSubagent?: boolean;
+  isScheduled?: boolean;
 }
 
 export function resolveThreadsDir(): string {
@@ -662,9 +665,13 @@ export class ThreadStore {
     taskId?: string;
     scope?: TaskScope;
     isTest?: boolean;
+  isSubagent?: boolean;
+  isScheduled?: boolean;
+    hostAccess?: boolean;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const title = params.title || (params.initialPrompt && params.initialPrompt.trim() ? params.initialPrompt.trim().slice(0, 40) : "New thread");
+    const hostAccess = params.hostAccess !== undefined ? params.hostAccess : getHostSettings().hostAccessEnabled;
     const thread: Thread = {
       id: threadId,
       title,
@@ -673,6 +680,7 @@ export class ThreadStore {
       updatedAt: new Date().toISOString(),
       model: params.model || "swift-15-27b-mtp",
       reasoningEffort: params.reasoningEffort || "medium",
+      hostAccess,
       taskId: params.taskId,
       scope: params.scope,
       isTest: params.isTest ?? false,
