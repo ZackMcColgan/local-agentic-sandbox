@@ -106,6 +106,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/clipboard"),
     tests: ["tests/clipboard.test.ts"]
   },
+  // Artifact download naming, MIME inference, and download helpers
+  {
+    match: (p) => p.includes("lib/artifactDownload") || p.includes("lib/attachmentMime"),
+    tests: ["tests/artifactDownload.test.ts", "tests/svgComponent.test.ts"]
+  },
   // SVG utilities and SVG viewer component
   {
     match: (p) => p.includes("lib/svgUtils") || p.includes("components/SvgViewer"),

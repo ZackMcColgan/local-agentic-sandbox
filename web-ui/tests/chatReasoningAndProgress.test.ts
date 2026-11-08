@@ -98,6 +98,13 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.ok(src.includes("CodeBlock"), "LiveRunBlock must import and mount CodeBlock for non-SVG code deliverables");
       assert.ok(src.includes("codeSnippet"), "LiveRunBlock must extract code snippet from milestone diff or content");
     });
+
+    it("mounts sandboxed iframe preview when deliverable is an HTML document (e.g. spanish-fort-weather.html)", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      assert.ok(src.includes("isHtml"), "LiveRunBlock must detect HTML deliverable");
+      assert.ok(src.includes("iframe"), "LiveRunBlock must render sandboxed iframe for HTML deliverable preview");
+      assert.ok(src.includes("/api/files?path="), "Must load HTML deliverable via /api/files endpoint");
+    });
   });
 
   describe("Code Block Syntax, Line Numbers, Scroll & Copy Feedback", () => {
