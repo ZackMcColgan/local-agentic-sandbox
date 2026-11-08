@@ -324,6 +324,7 @@ export function LiveRunBlock({
           journalFile;
         if (!deliverableFile) return null;
         const isSvg = deliverableFile.toLowerCase().endsWith(".svg");
+        const isHtml = deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm");
         return (
           <div className="space-y-3 pt-1">
             <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
@@ -345,6 +346,30 @@ export function LiveRunBlock({
                   title={deliverableFile}
                   initialTab="preview"
                 />
+              </div>
+            ) : isHtml ? (
+              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm bg-white dark:bg-zinc-900">
+                <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
+                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{deliverableFile}</span>
+                  <a
+                    href={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px]"
+                    title="Open HTML in new tab"
+                  >
+                    <span>Open</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
+                  <iframe
+                    src={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    sandbox="allow-scripts"
+                    className="w-full h-64 border-0 rounded-xl bg-white"
+                    title={deliverableFile}
+                  />
+                </div>
               </div>
             ) : (() => {
               // Extract generated deliverable content from milestone diffSummary or state

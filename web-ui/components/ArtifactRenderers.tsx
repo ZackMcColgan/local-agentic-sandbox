@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Download } from "lucide-react";
 import { copyText } from "../lib/clipboard";
 import { SvgViewer } from "./SvgViewer";
 import { isSvgCode } from "../lib/svgUtils";
+import { inferAttachmentMimeType } from "../lib/attachmentMime";
 
 export function highlightTokens(code: string, language?: string): React.ReactNode[] {
   // Simple, ultra-clean zero-dependency token highlighting for key languages
@@ -114,21 +115,21 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
     }
   };
 
-  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
-  if (isSvg) {
-    return (
-      <div className="my-3">
-        <SvgViewer
-          code={code}
-          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
-          initialTab="preview"
-          allowFullscreen={true}
-        />
-      </div>
-    );
-  }
+  const handleDownload = () => {
+    const dlName = filename || (isHtml ? "index.html" : `snippet.${langDisplay || "txt"}`);
+    const mime = isHtml ? "text/html" : inferAttachmentMimeType(dlName);
+    const blob = new Blob([code], { type: `${mime};charset=utf-8` });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = dlName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  };
 
-  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe
+  // If this is standalone HTML, support Preview | Code tabs with sandboxed iframe (defense-in-depth before SVG)
   if (isHtml) {
     return (
       <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
@@ -181,6 +182,15 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
                 </>
               )}
             </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-white transition-colors"
+              title="Download file"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download</span>
+            </button>
           </div>
         </div>
 
@@ -219,6 +229,20 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
             )}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // If this is an SVG and user hasn't toggled away, SvgViewer handles preview + code
+  if (isSvg) {
+    return (
+      <div className="my-3">
+        <SvgViewer
+          code={code}
+          title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
+          initialTab="preview"
+          allowFullscreen={true}
+        />
       </div>
     );
   }
@@ -263,6 +287,15 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
                 <span>Copy</span>
               </>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-white transition-colors"
+            title="Download file"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Download</span>
           </button>
         </div>
       </div>

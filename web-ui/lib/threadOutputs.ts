@@ -9,43 +9,8 @@ export interface TurnAttachment {
   previewUrl: string;
 }
 
-export function inferAttachmentMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  switch (ext) {
-    case ".html":
-      return "text/html";
-    case ".svg":
-      return "image/svg+xml";
-    case ".drawio":
-    case ".xml":
-      return "application/xml";
-    case ".md":
-      return "text/markdown";
-    case ".txt":
-    case ".log":
-      return "text/plain";
-    case ".json":
-      return "application/json";
-    case ".csv":
-      return "text/csv";
-    case ".py":
-      return "text/x-python";
-    case ".js":
-    case ".ts":
-    case ".tsx":
-    case ".jsx":
-    case ".mjs":
-    case ".cjs":
-      return "application/javascript";
-    case ".css":
-      return "text/css";
-    case ".yaml":
-    case ".yml":
-      return "text/yaml";
-    default:
-      return "application/octet-stream";
-  }
-}
+import { inferAttachmentMimeType } from "./attachmentMime";
+export { inferAttachmentMimeType };
 
 export function getThreadOutputsWorkspaceRelPath(
   threadId: string | null | undefined,

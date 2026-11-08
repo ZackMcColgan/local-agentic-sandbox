@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
 import { copyText } from "../lib/clipboard";
+import { resolveArtifactDownload } from "../lib/artifactDownload";
 
 export interface SvgViewerProps {
   code?: string;
@@ -138,15 +139,12 @@ export function SvgViewer({
 
   const handleDownload = () => {
     if (!rawSvg) return;
-    const isXml = isDrawio && !rawSvg.startsWith("<svg");
-    const mime = isXml ? "application/xml;charset=utf-8" : "image/svg+xml;charset=utf-8";
-    const blob = new Blob([rawSvg], { type: mime });
+    const { filename, mime } = resolveArtifactDownload(title, rawSvg, isDrawio);
+    const blob = new Blob([rawSvg], { type: `${mime};charset=utf-8` });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    const cleanTitle = title.replace(/[^a-zA-Z0-9_.-]/g, "_").toLowerCase();
-    const ext = isXml ? ".drawio" : ".svg";
-    a.download = cleanTitle.endsWith(ext) || cleanTitle.endsWith(".svg") ? cleanTitle : `${cleanTitle}${ext}`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

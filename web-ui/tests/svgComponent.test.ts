@@ -87,6 +87,109 @@ describe("SVG Viewer Component Suite", () => {
     assert.ok(preElem.textContent?.includes("circle cx="), "Pre contains SVG code");
   });
 
+  it("handleDownload resolves correct filename and MIME for known extensions and legacy names", async () => {
+    let createdBlob: Blob | null = null;
+    let clickedDownloadName = "";
+
+    const origCreateObjectURL = (globalThis as any).URL.createObjectURL;
+    const origRevokeObjectURL = (globalThis as any).URL.revokeObjectURL;
+    (globalThis as any).URL.createObjectURL = (blob: Blob) => {
+      createdBlob = blob;
+      return "blob:mock-url";
+    };
+    (globalThis as any).URL.revokeObjectURL = () => {};
+
+    const origAppendChild = win.document.body.appendChild.bind(win.document.body);
+    win.document.body.appendChild = ((node: any) => {
+      if (node.tagName === "A" && node.download) {
+        clickedDownloadName = node.download;
+      }
+      return origAppendChild(node);
+    }) as any;
+
+    try {
+      // 1. Weather card HTML
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(SvgViewer, {
+            code: `<svg><text>Weather</text></svg>`,
+            title: "weather-card.html"
+          })
+        );
+      });
+
+      const buttons = Array.from(container.querySelectorAll("button"));
+      const dlBtn = buttons.find((b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download"));
+      assert.ok(dlBtn !== undefined, "Download button must exist");
+
+      await act(async () => {
+        dlBtn.click();
+      });
+
+      assert.equal(clickedDownloadName, "weather-card.html");
+      assert.equal((createdBlob as any)?.type, "text/html;charset=utf-8");
+
+      // 2. chart.drawio
+      root.unmount();
+      root = null;
+      createdBlob = null;
+      clickedDownloadName = "";
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(SvgViewer, {
+            code: `<mxfile><diagram>Test</diagram></mxfile>`,
+            title: "chart.drawio"
+          })
+        );
+      });
+
+      const dlBtn2 = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+      );
+      assert.ok(dlBtn2 !== undefined, "Download button must exist for drawio");
+
+      await act(async () => {
+        dlBtn2.click();
+      });
+
+      assert.equal(clickedDownloadName, "chart.drawio");
+      assert.equal((createdBlob as any)?.type, "application/xml;charset=utf-8");
+
+      // 3. diagram.svg
+      root.unmount();
+      root = null;
+      createdBlob = null;
+      clickedDownloadName = "";
+
+      root = createRoot(container);
+      await act(async () => {
+        root!.render(
+          React.createElement(SvgViewer, {
+            code: `<svg><circle r="10"/></svg>`,
+            title: "diagram.svg"
+          })
+        );
+      });
+
+      const dlBtn3 = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+      );
+      await act(async () => {
+        dlBtn3!.click();
+      });
+
+      assert.equal(clickedDownloadName, "diagram.svg");
+      assert.equal((createdBlob as any)?.type, "image/svg+xml;charset=utf-8");
+    } finally {
+      (globalThis as any).URL.createObjectURL = origCreateObjectURL;
+      (globalThis as any).URL.revokeObjectURL = origRevokeObjectURL;
+      win.document.body.appendChild = origAppendChild;
+    }
+  });
+
   it("fetches and renders SVG from file URL", async () => {
     const remoteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#3b82f6"/></svg>`;
 
@@ -314,6 +417,72 @@ describe("SVG Viewer Component Suite", () => {
       assert.fail("Must render SVG DOM element for Draw.io file");
     }
     assert.ok(svgElem.innerHTML.includes("App Server"), "Must render App Server inside SVG");
+  });
+
+  it("LiveRunBlock renders sandboxed HTML iframe preview for .html deliverables, and SvgViewer for .svg", async () => {
+    const { LiveRunBlock } = await import("../components/LiveRunBlock.js");
+
+    const htmlTask: any = {
+      id: "task-html-1",
+      title: "Weather Report Generator",
+      status: "completed",
+      milestones: [
+        {
+          id: "m-1",
+          name: "Write HTML",
+          status: "completed",
+          plannedFiles: ["spanish-fort-weather.html"]
+        }
+      ]
+    };
+
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(LiveRunBlock, {
+          task: htmlTask
+        })
+      );
+    });
+
+    const iframe = container.querySelector("iframe");
+    assert.ok(iframe !== null, "LiveRunBlock must render iframe for HTML deliverable");
+    assert.ok(
+      iframe?.getAttribute("src")?.includes("/api/files?path=spanish-fort-weather.html"),
+      "iframe src must point to /api/files?path=spanish-fort-weather.html"
+    );
+    assert.equal(iframe?.getAttribute("sandbox"), "allow-scripts", "iframe must have sandbox='allow-scripts'");
+
+    // Clean up container
+    root.unmount();
+    root = null;
+
+    // Test SVG deliverable continues to render SvgViewer
+    const svgTask: any = {
+      id: "task-svg-1",
+      title: "Chart Generator",
+      status: "completed",
+      milestones: [
+        {
+          id: "m-1",
+          name: "Write SVG",
+          status: "completed",
+          plannedFiles: ["architecture.svg"]
+        }
+      ]
+    };
+
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        React.createElement(LiveRunBlock, {
+          task: svgTask
+        })
+      );
+    });
+
+    assert.equal(container.querySelector("iframe"), null, "SVG deliverable must not render iframe");
+    assert.ok(container.textContent?.includes("architecture.svg"), "SVG deliverable renders SvgViewer title");
   });
 });
 
