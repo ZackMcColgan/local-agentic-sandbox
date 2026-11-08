@@ -279,6 +279,173 @@ function createProxyServer(listenPort) {
   return server;
 }
 
+class GatewayWatchdog {
+  constructor(options = {}) {
+    this.targetPort = options.targetPort || TARGET_PORT || 3001;
+    this.targetHost = options.targetHost || TARGET_HOST || "127.0.0.1";
+    this.probeIntervalMs = options.probeIntervalMs || 5000;
+    this.probeTimeoutMs = options.probeTimeoutMs || 3000;
+    this.maxHeals = options.maxHeals || 3;
+    this.windowMs = options.windowMs || 300000; // 5 minutes
+    this.enabled = options.enabled !== undefined ? options.enabled : (process.env.ACCESS_PATH_MODE === "gateway");
+    this.detectionBudgetDescription = "<=11s plus container start time";
+
+    this.nowFn = options.nowFn || (() => Date.now());
+    this.logFn = options.logFn || ((msg) => console.log(msg));
+
+    this.probeFn = options.probeFn || this._defaultProbe.bind(this);
+    this.restartContainerFn = options.restartContainerFn || this._defaultRestartContainer.bind(this);
+    this.startGatewayFn = options.startGatewayFn || this._defaultStartGateway.bind(this);
+    this.containerExistsFn = options.containerExistsFn || this._defaultContainerExists.bind(this);
+
+    this.consecutiveFailures = 0;
+    this.lastProbeError = null;
+    this.healTimestamps = [];
+    this.isExhausted = false;
+    this.totalHeals = 0;
+    this.timer = null;
+  }
+
+  async _defaultProbe(url, timeoutMs) {
+    return new Promise((resolve) => {
+      const probeUrl = url || `http://${this.targetHost}:${this.targetPort}/`;
+      const t = timeoutMs || this.probeTimeoutMs;
+      const req = http.get(probeUrl, { timeout: t }, (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 500) {
+          resolve({ ok: true, statusCode: res.statusCode });
+        } else {
+          resolve({ ok: false, statusCode: res.statusCode, error: `HTTP ${res.statusCode}` });
+        }
+        res.resume();
+      });
+
+      req.on("timeout", () => {
+        req.destroy();
+        resolve({ ok: false, error: "connect ETIMEDOUT" });
+      });
+
+      req.on("error", (err) => {
+        resolve({ ok: false, error: err.message });
+      });
+    });
+  }
+
+  _defaultContainerExists() {
+    try {
+      const out = execSync("docker ps -a -q -f name=^kind-gateway$", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      return Boolean(out && out.trim());
+    } catch {
+      return false;
+    }
+  }
+
+  _defaultRestartContainer() {
+    try {
+      const out = execSync("docker restart kind-gateway", { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
+      return { ok: true, output: out.trim() };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  _defaultStartGateway(port) {
+    try {
+      const scriptPath = path.resolve(__dirname, "kind-gateway", "start-gateway.ps1");
+      const out = execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -Port ${port}`, {
+        encoding: "utf8",
+        timeout: 20000,
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+      return { ok: true, output: out.trim() };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  getState() {
+    return {
+      consecutiveFailures: this.consecutiveFailures,
+      healTimestamps: [...this.healTimestamps],
+      isExhausted: this.isExhausted,
+      totalHeals: this.totalHeals
+    };
+  }
+
+  async step() {
+    if (!this.enabled) return;
+
+    const probeResult = await this.probeFn(`http://${this.targetHost}:${this.targetPort}/`, this.probeTimeoutMs);
+    if (probeResult.ok) {
+      this.consecutiveFailures = 0;
+      this.lastProbeError = null;
+      return;
+    }
+
+    this.consecutiveFailures++;
+    this.lastProbeError = probeResult.error || "Probe failed";
+
+    if (this.consecutiveFailures >= 2) {
+      await this._attemptHeal();
+    }
+  }
+
+  async _attemptHeal() {
+    const now = this.nowFn();
+    this.healTimestamps = this.healTimestamps.filter((t) => now - t < this.windowMs);
+
+    if (this.healTimestamps.length >= this.maxHeals) {
+      if (!this.isExhausted) {
+        this.isExhausted = true;
+        this.logFn(`[LAN Bridge Watchdog] ${new Date(now).toISOString()} | WATCHDOG EXHAUSTED: max ${this.maxHeals} heals in 5-minute window reached. Pausing auto-heal.`);
+      }
+      return;
+    }
+
+    this.isExhausted = false;
+    const containerExists = this.containerExistsFn();
+    let action = "";
+    let result = "";
+
+    if (containerExists) {
+      action = "docker restart kind-gateway";
+      const res = this.restartContainerFn();
+      result = res.ok ? "Success (restarted container)" : `Failed (${res.error || "unknown error"})`;
+    } else {
+      action = `start-gateway.ps1 (port ${this.targetPort})`;
+      const res = this.startGatewayFn(this.targetPort);
+      result = res.ok ? "Success (launched new container)" : `Failed (${res.error || "unknown error"})`;
+    }
+
+    this.healTimestamps.push(now);
+    this.totalHeals++;
+    this.consecutiveFailures = 0;
+
+    this.logFn(
+      `[LAN Bridge Watchdog] ${new Date(now).toISOString()} | Probe Error: ${this.lastProbeError} | Action: ${action} | Result: ${result}`
+    );
+  }
+
+  start() {
+    if (!this.enabled) return;
+    if (this.timer) return;
+    this.timer = setInterval(() => {
+      this.step().catch((err) => {
+        this.logFn(`[LAN Bridge Watchdog Error]: ${err.message}`);
+      });
+    }, this.probeIntervalMs);
+    if (typeof this.timer.unref === "function") {
+      this.timer.unref();
+    }
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+}
+
 if (require.main === module) {
   console.log("================================================================");
   console.log(STARTUP_WARNING);
@@ -286,10 +453,17 @@ if (require.main === module) {
   console.log("Starting LAN Reverse Proxy Bridges (Windows Defender Firewall Permitted)...");
   PORTS.map(createProxyServer).filter(Boolean);
   console.log("================================================================");
+
+  const watchdog = new GatewayWatchdog();
+  if (watchdog.enabled) {
+    console.log("[LAN Bridge] Gateway mode enabled — starting E2E kind-gateway watchdog (5s probe, <=11s detection budget)...");
+    watchdog.start();
+  }
 }
 
 module.exports = {
   createProxyServer,
+  GatewayWatchdog,
   STARTUP_WARNING,
   DEFAULT_BIND_HOST,
   PORTS,

@@ -590,4 +590,35 @@
 - **Severity:** **P0 Verification Gate**
 - **Status:** **PROVED & VERIFIED** (Nov 7, 2026 — commit head on `feature/chat-queue-steer`).
 
+---
+
+### [P0-NET1] Access-Path SPDY Multiplexer Deadlock Under Sustained Streaming Load (kubectl port-forward)
+- **Feature:** Network Access Path / LAN Gateway (`192.168.50.254:80` -> `127.0.0.1:3001` -> `web-ui:3000`)
+- **Affected Components:**
+  - `scripts/dev-proxy.js` (legacy port-forward supervisor)
+  - `scripts/lan-bridge.js` (LAN forwarder & gateway watchdog)
+  - `C:\AI\ai-control\AI-ON.ps1` & `AI-OFF.ps1`
+  - Upstream `kubectl port-forward` SPDY multiplexer
+- **Discovery:** On Nov 7, 2026 during a host-mode recursive disk-size scan turn (long SSE stream with bursty trace events), the web UI at `192.168.50.254` became unresponsive and displayed dev-proxy fallback `502 Bad Gateway` ("Sandbox Container Initializing", Target `127.0.0.1:3001`, Error: `read ECONNRESET`).
+- **Diagnosis & Measured Evidence:**
+  1. **Pod Acquittal:** Direct cluster inspection showed the `web-ui` pod was completely healthy with 0 restarts, memory at 136 MB / 384 MB limit (nowhere near OOM), and responded instantly with HTTP 200 on internal port `3000` via `kubectl exec`.
+  2. **Payload Size Acquittal:** Cleanup thread JSON was only 171 KB total; largest single tool result was 32 KB (capped at 65,536 chars by bridge). App detach protection functioned correctly (server-side turn detached and completed).
+  3. **SPDY Multiplexer Deadlock:** `kubectl port-forward` remained running and LISTENING on `127.0.0.1:3001`, accepting new TCP handshakes (`ESTABLISHED`), but never serviced HTTP requests. Probing `127.0.0.1:3001` hung indefinitely with 8 sockets stuck in `ESTABLISHED` state.
+  4. **Launch Ownership Deaths:** Legacy port-forward and dev-proxy processes died when parent PowerShell console sessions closed due to missing WMI process-tree detachment.
+- **The Fix (`kind-gateway`):**
+  - Replaced the brittle SPDY-based `kubectl port-forward` data path with a stateless `nginx:alpine` Docker container (`kind-gateway`) attached directly to the `kind` Docker bridge network.
+  - Published to host `127.0.0.1:3001` and reverse-proxied directly to the cluster NodePort `http://desktop-control-plane:30300` (backed by Kubernetes Service `web-ui` type `NodePort`).
+  - Configured Nginx with SSE non-buffering (`proxy_buffering off`, `proxy_request_buffering off`, `proxy_cache off`, `X-Accel-Buffering no`), HTTP/1.1 keep-alives, and 24-hour stream timeout.
+  - Added mode-awareness (`ACCESS_PATH_MODE=gateway|legacy-port-forward`) in `dev-proxy.js` and `AI-ON.ps1`.
+  - Added an automated `GatewayWatchdog` in `scripts/lan-bridge.js` that probes `:3001` every 5s and heals failed gateway containers within ≤11s.
+- **Rollback Procedure:**
+  To revert to the legacy `kubectl port-forward` path if needed:
+  ```powershell
+  # Pass -AccessPathMode legacy-port-forward to AI-ON
+  C:\AI\ai-control\AI-ON.ps1 -AccessPathMode legacy-port-forward
+  ```
+- **Severity:** **P0** (Completely severed LAN access to web UI during streaming workloads).
+- **Status:** **VERIFIED-FIXED** (Nov 7, 2026 — `feature/kind-gateway-access-path`; verified by killer workload replay test passing with 0 stuck sockets, 30m soak, and automated watchdog heal drill).
+
+
 
