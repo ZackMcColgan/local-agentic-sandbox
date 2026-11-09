@@ -126,6 +126,8 @@ const activeTurnAbortControllers: Map<string, AbortController> =
   g.__sandboxActiveTurnAbortControllers || (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
 const activeRoundAbortControllers: Map<string, AbortController> =
   g.__sandboxActiveRoundAbortControllers || (g.__sandboxActiveRoundAbortControllers = new Map<string, AbortController>());
+const deletedThreadIds: Set<string> =
+  g.__sandboxDeletedThreadIds || (g.__sandboxDeletedThreadIds = new Set<string>());
 
 export function registerTurnAbortController(threadId: string, controller: AbortController): void {
   activeTurnAbortControllers.set(threadId, controller);
@@ -631,6 +633,9 @@ export class ThreadStore {
   }
 
   saveThread(thread: Thread): void {
+    if (deletedThreadIds.has(thread.id)) {
+      return;
+    }
     if (!fs.existsSync(this.threadsDir)) {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
@@ -670,6 +675,7 @@ export class ThreadStore {
     hostAccess?: boolean;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    deletedThreadIds.delete(threadId);
     const title = params.title || (params.initialPrompt && params.initialPrompt.trim() ? params.initialPrompt.trim().slice(0, 40) : "New thread");
     const hostAccess = params.hostAccess !== undefined ? params.hostAccess : getHostSettings().hostAccessEnabled;
     const thread: Thread = {
@@ -702,6 +708,9 @@ export class ThreadStore {
   }
 
   addMessage(threadId: string, message: ThreadMessage): Thread | null {
+    if (deletedThreadIds.has(threadId)) {
+      return null;
+    }
     const filePath = this.getFilePath(threadId);
     let thread: Thread | null = null;
     if (fs.existsSync(filePath)) {
@@ -758,6 +767,12 @@ export class ThreadStore {
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
+    // 1. Abort any active streaming turn first & clear live presence
+    abortActiveTurn(threadId);
+    clearTurnActive(threadId);
+    activeExecutionSet.delete(threadId);
+    deletedThreadIds.add(threadId);
+
     const filePath = this.getFilePath(threadId);
     let thread: Thread | null = null;
     if (fs.existsSync(filePath)) {
@@ -766,13 +781,29 @@ export class ThreadStore {
       } catch {}
     }
 
-    if (thread) {
-      // S1: Live run stops first, then deletes
-      activeExecutionSet.delete(thread.id);
-      if (thread.taskId) {
-        activeExecutionSet.delete(thread.taskId);
+    let taskId = thread?.taskId;
+    if (!taskId && (threadId.startsWith("thread-task-") || threadId.startsWith("task-"))) {
+      taskId = threadId.startsWith("thread-task-") ? threadId.replace(/^thread-/, "") : threadId;
+    }
+
+    const isGhostTaskThread = Boolean(
+      taskId && (threadId === `thread-${taskId}` || threadId.startsWith("thread-task-"))
+    );
+
+    if (taskId) {
+      activeExecutionSet.delete(taskId);
+      if (isGhostTaskThread) {
+        // (3) Checkpoint-synthesized ghost thread: remove checkpoint manifest so it never resurrects
         try {
-          const task = await this.supervisor.resumeTaskFromCheckpoint(thread.taskId);
+          const checkpointFile = this.supervisor.getCheckpointFilePath(taskId);
+          if (fs.existsSync(checkpointFile)) {
+            fs.unlinkSync(checkpointFile);
+          }
+        } catch {}
+      } else {
+        // (4) REAL thread with taskId: keep today's behavior (cancel task, checkpoint retained)
+        try {
+          const task = await this.supervisor.resumeTaskFromCheckpoint(taskId);
           if (task) {
             task.status = "cancelled";
             task.updatedAt = new Date().toISOString();
@@ -787,13 +818,35 @@ export class ThreadStore {
       }
     }
 
+    let deletedAny = false;
+
+    // (1) Remove thread record JSON
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
-        return true;
+        deletedAny = true;
       } catch {}
     }
-    return false;
+
+    // (1) Remove thread's <threadId>/ subdirectory recursively
+    const subDir = path.join(this.threadsDir, threadId);
+    if (fs.existsSync(subDir)) {
+      try {
+        fs.rmSync(subDir, { recursive: true, force: true });
+        deletedAny = true;
+      } catch {}
+    }
+
+    // (1) Remove its <threadId>.steer.json sidecar if present
+    const steerFile = path.join(this.threadsDir, `${threadId}.steer.json`);
+    if (fs.existsSync(steerFile)) {
+      try {
+        fs.unlinkSync(steerFile);
+        deletedAny = true;
+      } catch {}
+    }
+
+    return deletedAny || isGhostTaskThread || Boolean(thread);
   }
 
   buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {

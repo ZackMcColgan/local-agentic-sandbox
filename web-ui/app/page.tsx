@@ -587,9 +587,8 @@ export default function Home() {
       setThreads((prev) => prev.filter((t) => t.id !== threadId));
       if (selectedThreadId === threadId) {
         setActiveTask(null);
-        const remaining = threads.filter((t) => t.id !== threadId);
-        setSelectedThreadId(remaining.length > 0 ? remaining[0].id : null);
-        if (remaining.length === 0) setMessages([]);
+        setSelectedThreadId(null);
+        setMessages([]);
         try {
           window.history.pushState({ threadId: null }, "", window.location.pathname);
         } catch {}

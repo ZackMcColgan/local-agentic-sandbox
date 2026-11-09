@@ -116,8 +116,19 @@ export async function setupStubbedEngineRoutes(page: Page, options: MockOptions 
 
   // Individual thread API
   await page.route("**/api/threads/*", async (route: Route) => {
-    const url = route.request().url();
+    const req = route.request();
+    const url = req.url();
     const id = url.split("/api/threads/")[1]?.split("?")[0];
+    if (req.method() === "DELETE") {
+      const idx = currentThreads.findIndex((t) => t.id === id);
+      if (idx !== -1) currentThreads.splice(idx, 1);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, deleted: id }),
+      });
+      return;
+    }
     const thread = currentThreads.find((t) => t.id === id);
     if (!thread) {
       await route.fulfill({ status: 200, body: JSON.stringify({ id, title: "Session", messages: [] }) });

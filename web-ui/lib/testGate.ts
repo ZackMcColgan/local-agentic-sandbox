@@ -159,7 +159,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/permissions.test.ts",
       "tests/chatPersistenceDecoupling.test.ts",
-      "tests/chatLiveVisibility.test.ts"
+      "tests/chatLiveVisibility.test.ts",
+      "tests/threadDelete.test.ts",
+      "tests/threadDeleteUi.test.ts"
     ]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
@@ -199,7 +201,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/skillsProposeApprove.test.ts",
       "tests/mobileHeaderNav.test.ts",
       "tests/engineToggle.test.ts",
-      "tests/shakeoutFixes.test.ts"
+      "tests/shakeoutFixes.test.ts",
+      "tests/threadDelete.test.ts",
+      "tests/threadDeleteUi.test.ts"
     ]
   },
   {
@@ -576,6 +580,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes(".tmp") ||
     normalizedPath.includes(".agent") ||
     normalizedPath.includes("temp-") ||
+    normalizedPath.includes("playwright-report") ||
+    normalizedPath.includes("playwright-live-report") ||
+    normalizedPath.includes("test-results") ||
     normalizedPath.endsWith("full-suite-results.json") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
