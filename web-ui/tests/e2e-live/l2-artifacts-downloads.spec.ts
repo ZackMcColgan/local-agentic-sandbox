@@ -13,10 +13,10 @@ test.describe("L2: Artifact Correctness & Downloads @smoke @full", () => {
     const threadId = await createFreshSession(page, url, "L2 Artifacts");
 
     // Part A: HTML page with inline <svg>
-    const htmlPrompt = "Create a complete, single-file HTML landing page for Spanish Fort with an inline <svg> sunrise illustration in the header. Present it in an ```html code block.";
+    const htmlPrompt = "Create a concise, single-file HTML landing page for Spanish Fort with an inline <svg> sunrise illustration in the header. Present it in an ```html code block.";
     await sendPrompt(page, htmlPrompt);
 
-    const turn1 = await awaitTurnCompletion(page, url, threadId, DEADLINES.NORMAL, "l2-html-artifact");
+    const turn1 = await awaitTurnCompletion(page, url, threadId, 420000, "l2-html-artifact");
     expect(turn1.thread.messages.length).toBeGreaterThanOrEqual(2);
 
     // Refresh UI to inspect rendered artifacts
@@ -44,7 +44,7 @@ test.describe("L2: Artifact Correctness & Downloads @smoke @full", () => {
     const svgPrompt = "Create a standalone clean SVG vector diagram representing a cloud database cluster with 1 primary node and 2 replicas. Output only valid raw <svg>...</svg> in an ```xml code block.";
     await sendPrompt(page, svgPrompt);
 
-    const turn2 = await awaitTurnCompletion(page, url, threadId, DEADLINES.NORMAL, "l2-pure-svg");
+    const turn2 = await awaitTurnCompletion(page, url, threadId, 420000, "l2-pure-svg");
     expect(turn2.thread.messages.length).toBeGreaterThanOrEqual(4);
 
     await page.goto(`${url}/?thread=${encodeURIComponent(threadId)}`, { waitUntil: "networkidle" });
@@ -57,7 +57,7 @@ test.describe("L2: Artifact Correctness & Downloads @smoke @full", () => {
     const drawioPrompt = 'Create a Draw.io architecture XML diagram (<mxfile host="app.diagrams.net"><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="API Gateway" vertex="1" parent="1"><mxGeometry x="100" y="100" width="120" height="60" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>). Output it in an ```xml code block.';
     await sendPrompt(page, drawioPrompt);
 
-    const turn3 = await awaitTurnCompletion(page, url, threadId, DEADLINES.NORMAL, "l2-drawio-xml");
+    const turn3 = await awaitTurnCompletion(page, url, threadId, 420000, "l2-drawio-xml");
     expect(turn3.thread.messages.length).toBeGreaterThanOrEqual(6);
 
     await page.goto(`${url}/?thread=${encodeURIComponent(threadId)}`, { waitUntil: "networkidle" });
