@@ -90,4 +90,21 @@
 ---
 
 ## Phase 2 — Update (Strata Engine & Control)
-*Status*: PENDING
+*Completed*: 2026-11-09T08:39:52Z  
+*Update Path*: Native `strata.py update --model-config "C:\Users\zackm\AppData\Local\Strata\launch\hermes-strata-gyro-64k.json"` (Feed: `https://github.com/Niko1221/Strata/releases/latest/download`, sequence 122).  
+*Package Installed*: `0.1.58 windows-x86_64-hip-rx9070` (571 MB) + Control `0.1.58`.  
+*Version Transition*:
+- Strata Engine: `0.1.52` -> `0.1.58` (`0.1.58-windows-x86_64-hip-rx9070`, SHA verified, test start passed in 28s).
+- Strata Control: `0.1.53` -> `0.1.58`.
+- Forced Flag Diff: None (0 changes required; identical JSON configuration accepted without deprecation).
+
+### Verification Gate (Post-Update):
+- [x] Engine starts via AI-ON path (`C:\AI\ai-control\AI-ON.ps1 -SkipHermes`): READY in 24.8s (PID 34548).
+- [x] GET /slots answers and slot 0 is IDLE (`is_processing: false`, `n_prompt_tokens: 0`, `n_ctx: 131072`).
+- [x] Sandbox preflight clean (`local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk`, Host Runner healthy PID 14612 SHA 48d1d212).
+- [x] Live platform chat turn verified: `npm run test:e2e:live -- l1-short-flow-copy.spec.ts` passed (1.4m elapsed, 0 pod restarts).
+
+---
+
+## Phase 3 — Post-Update Baseline (Strata 0.1.58 / App 0.2.7)
+*Status*: IN PROGRESS
