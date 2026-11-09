@@ -112,8 +112,10 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
 
     // 5. Panel stays visible with Round 1 thinking preserved
     await expect(thinkingPanel).toBeVisible({ timeout: 10000 });
-    if (await thinkingPanel.locator("text=Show").isVisible()) {
-      await thinkingPanel.locator("button").first().click();
+    const toggleButton = thinkingPanel.locator("button[aria-expanded]");
+    await expect(toggleButton).toBeVisible({ timeout: 10000 });
+    if ((await toggleButton.getAttribute("aria-expanded")) === "false") {
+      await toggleButton.click();
     }
     await expect(page.locator("text=Assessing user weather request").first()).toBeVisible({ timeout: 10000 });
 

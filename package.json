@@ -30,7 +30,9 @@
     "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts",
-    "test:ui:update": "npm --prefix web-ui run test:e2e:update"
+    "test:ui:update": "npm --prefix web-ui run test:e2e:update",
+    "test:e2e:live": "npm --prefix web-ui run test:e2e:live",
+    "test:all": "node scripts/test-all.js"
   },
   "overrides": {
     "ip-address": "^10.7.4",

@@ -270,3 +270,34 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 | **S8: Host-mode stress** | 156.9s | PASS | 171.9s | PASS | 70KB host read without clamp, s8-verify.txt written, 75K stdout clamped at 64KB |
 
 **FINAL VERDICT: 8/8 SCENARIOS GREEN — 2/2 CONSECUTIVE RUNS CLEAN — THE BAR ("4K / 100K") ACHIEVED**
+
+
+---
+
+## Host Runner Daemon Death Incident & Recovery (Nov 9, 2026)
+
+### 1. Incident Summary & Root Cause (Grade: PROVEN)
+- **Incident:** During the sandbox agent's first self-job (`thread-1794249640310-53v2`), running `cd web-ui; npm run test 2>&1 | Select-Object -Last 15` through the host bridge caused `host-runner.exe` (PID 14612) to disconnect mid-turn (`fetch failed`).
+- **Evidence:**
+  - `ai-control.log` line 6741 recorded `[2026-11-09 12:46:19] >>> STARTING AI-OFF EXECUTION` and `Terminating Host Runner PID 14612 and its process tree...` via `taskkill.exe /PID 14612 /T /F`.
+  - Windows Event Log: 0 application crashes or exceptions (no Event ID 1000/1001). Exit was an external process tree kill.
+  - Root Defect: `web-ui/package.json` test script `"test": "tsx --test tests/**/*.test.ts"` ran `web-ui/tests/aiLifecycle.test.ts`. Lines 64-66 invoked `runPowerShell(["-File", AI_OFF_SCRIPT, "-OnlyHostRunner"])`. When executed via the host bridge, `AI-OFF.ps1` discovered its own parent daemon and terminated the process tree.
+
+### 2. Intervention & Minimal Liveness Net
+- **Self-Kill Defense (`C:\AI\ai-control\AI-OFF.ps1`):** Implemented `Test-IsDescendantOfProcess`. Refuses self-termination if invoked from a child/descendant process of `host-runner.exe`.
+- **Liveness Net (`C:\AI\ai-control\Probe-HostRunner.ps1`):** Added automated daemon probe that detects dead/unresponsive states and relaunches the daemon via WMI (`AI-ON.ps1 -OnlyHostRunner`), logging the resurrection.
+- **Provenance Digest:** `48d1d2126b17b8beb64f4c8e262f74b49dc6ad981930d4466b2fe8d93b2894b0` (unchanged).
+
+### 3. Dogfood Proof
+- Re-ran the preceding workload through the host bridge (`http://host-runner-service:8765`) from inside the sandbox pod under 30+ seconds of observation.
+- `npm run test:gate` passed: 15/15 tests in 1.124s.
+- `AI-OFF.ps1 -OnlyHostRunner` called via bridge triggered self-kill defense and exited 0.
+- Host Runner PID preserved at 34716 throughout the entire run. Failed host calls: 0. Settings: `runnerState=READY`. Verdict: **PASS**.
+
+### 4. PR #59 Part A Tail & CI Verification
+- Uncommitted doc change in `docs/live-coverage.md` committed as `2a51ff9` (`docs: align live-coverage author attribution with brand hygiene standards`).
+- GitHub Actions CI Run `42689359274` on PR #59 passed 100% green:
+  - `Unit Tests & Static Analysis`: **pass** in 2m57s
+  - `Code Coverage Report`: **pass** in 3m6s
+  - `Container Build & Docker Scout Scan`: **pass** in 3m31s
+  - `Playwright UI Invariants, Flows & Baselines`: **pass** in 3m30s
