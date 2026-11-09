@@ -139,4 +139,58 @@
 ---
 
 ## Phase 4 — Calibrate (Setup `--calibrate`)
-*Status*: PENDING
+*Completed*: 2026-11-09T09:17:21Z  
+*Method*: Full hardware calibration via `tools/calibrate.py` with component engine resolution. Swept PCIe share, draft floor, CPU worker count, adaptive tier, and AMD shared-expert stream.  
+
+### Calibration Measurement Findings:
+- **PCIe Share Sweep (`--pcie-frac`)**:
+  - `0.00` (all CPU): 19.4 tok/s
+  - `0.15` (engine default): 20.4 tok/s
+  - `0.55`: 25.4 tok/s
+  - `0.75`: 29.4 tok/s
+  - `0.90`: 31.9 tok/s
+  - `1.00` (GPU over PCIe): **34.5 tok/s** (WINNER: +71% over default)
+- **Draft Floor Sweep (`--spec-min-p`)**:
+  - `0.30`: 32.9 tok/s
+  - `0.50`: 33.9 tok/s
+  - `0.70`: **34.1 tok/s** (WINNER)
+- **CPU Worker Sweep (`--pool-workers`)**:
+  - 2 workers: 31.2 tok/s
+  - 4 workers: 37.5 tok/s
+  - 5 workers: 37.0 tok/s
+  - 7 workers: **41.3 tok/s** (WINNER: retain all 7 physical pool cores)
+- **Adaptive Tier**:
+  - Engine default: **40.4 tok/s** (beats 80 swaps @ 39.7 tok/s and 160 swaps @ 39.4 tok/s)
+- **AMD Shared Expert Stream (`STRATA_SH_STREAM`)**:
+  - Main stream (AMD default): **39.5 tok/s**
+  - Own stream: **33.8 tok/s** (14.4% regression; default main stream retained)
+
+### Calibrated Settings Diff (vs Phase 3 Baseline):
+```diff
++ --pcie-frac 1.00
+- --spec-min-p 0.6
++ --spec-min-p 0.70
+```
+
+### The Subset Benchmark Verification:
+| Cell | Rep | Prompt Tokens | Gen Tokens | Decode (tok/s) | Prefill (tok/s) | TTFT (s) | Draft Accepted | Duration (s) |
+|---|---|---|---|---|---|---|---|---|
+| `prose-4k` | 1 | 3,638 | 600 | **56.6** | 387.8 | 9.38s | 85.4% | 20.0s |
+| `json-4k` | 1 | 14,278 | 600 | **44.1** | 523.2 | 27.29s | 87.7% | 40.9s |
+| `prose-100k` | 1 | 89,490 | 300 | **51.1** | 639.8 | 139.87s | 80.6% | 145.9s |
+
+### Calibration Delta vs Phase 3 (Post-Update Baseline):
+| Cell | Phase 3 (Post-Update) | Phase 4 (Calibrated) | Delta | Gain |
+|---|---|---|---|---|
+| `prose-4k` | 40.0 tok/s | **56.6 tok/s** | **+16.6 tok/s** | **+41.5%** |
+| `json-4k` | 36.0 tok/s | **44.1 tok/s** | **+8.1 tok/s** | **+22.5%** |
+| `prose-100k` | 42.0 tok/s | **51.1 tok/s** | **+9.1 tok/s** | **+21.7%** |
+
+**VERDICT: CALIBRATE WINS DECISIVELY ON ALL CELLS. ADOPTED AS WORKING CONFIGURATION FOR PHASE 5.**
+
+---
+
+## Phase 5 — Trial Remaining Levers (One at a Time on Current Best)
+*Working Configuration Base*: Phase 4 Calibrated (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--pool-workers 7`)  
+*Evaluation Method*: THE SUBSET per lever (`prose-4k`, `json-4k`, `prose-100k` @ 300 tok). Keep winner, revert loser.  
+*Status*: IN PROGRESS
