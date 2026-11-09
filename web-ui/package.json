@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:ui": "playwright test",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "test:lifecycle": "tsx --test tests-live/**/*.live.ts"
   },
   "dependencies": {

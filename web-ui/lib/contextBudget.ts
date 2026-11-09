@@ -275,8 +275,8 @@ export function resolveRoundModelOptions(params: {
     result.num_predict = 2048 + params.numKeep;
     result.n_keep = params.numKeep;
     result.numKeep = params.numKeep;
-  } else if (!shouldUseFastSynthesis && process.env.LLM_ENGINE !== "llamacpp") {
-    result.num_predict = baseOpts.num_predict;
+  } else {
+    result.num_predict = baseOpts.num_predict || 8192;
   }
   return result;
 }
