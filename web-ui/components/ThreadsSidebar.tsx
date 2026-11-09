@@ -138,7 +138,9 @@ export function ThreadsSidebar({
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e?: React.TouchEvent) => {
+    // Preserve touch handling when touching interactive buttons
+    if (e && (e.target as HTMLElement).closest("button")) return;
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
