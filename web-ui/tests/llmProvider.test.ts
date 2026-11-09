@@ -1032,6 +1032,35 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(sentBody.max_tokens, 2560, "Must set max_tokens === 2560 for output budget");
     });
   });
+
+  describe("Task 8: Live Strata Engine Integration (TEST_ENGINE=live)", () => {
+    it("streams real completion from Strata llama-server when TEST_ENGINE=live", async (t) => {
+      if (process.env.TEST_ENGINE !== "live") {
+        t.skip("Skipped when TEST_ENGINE !== 'live'");
+        return;
+      }
+      const provider = new LlamaCppProvider();
+      const endpoint = process.env.LIVE_ENGINE_URL || "http://127.0.0.1:8080";
+      let tokenCount = 0;
+      let fullText = "";
+      for await (const chunk of provider.streamChat(endpoint, {
+        model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+        messages: [
+          { role: "system", content: "You are a concise assistant." },
+          { role: "user", content: "Reply with the word PONG." }
+        ],
+        options: { maxTokens: 64, temperature: 0.1 } as any
+      })) {
+        const text = chunk.message?.content || chunk.content || "";
+        if (text) {
+          fullText += text;
+          tokenCount++;
+        }
+      }
+      assert.ok(tokenCount > 0, "Must receive streaming tokens from live Strata engine");
+      assert.match(fullText, /PONG/i, "Live engine output must contain PONG");
+    });
+  });
 });
 
 

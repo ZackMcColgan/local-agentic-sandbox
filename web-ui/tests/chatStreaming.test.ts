@@ -77,7 +77,7 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
     assert.equal(lowEffort, "low");
     const lowOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "low");
     assert.equal(lowOpts.temperature, 0.2);
-    assert.equal(lowOpts.num_predict, 4096);
+    assert.equal(lowOpts.num_predict, 8192);
 
     // Swift-1.5-Qwen3.8-27B-IQ3_XS support (Bug regression: case-insensitive check + profile definition)
     assert.equal(isReasoningEffortSupported("Swift-1.5-Qwen3.8-27B-IQ3_XS"), true);
@@ -97,7 +97,7 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
 
     const unsupportedOpts = computeModelOptions("hermes3:8b", "xhigh");
     assert.equal(unsupportedOpts.temperature, 0.7, "Must use standard unbiased defaults");
-    assert.equal(unsupportedOpts.num_predict, 4096);
+    assert.equal(unsupportedOpts.num_predict, 8192);
   });
 
   it("CI standing rule: no test file re-implements functions exported by implementation modules", () => {
