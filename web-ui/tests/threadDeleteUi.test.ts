@@ -3,6 +3,7 @@ import assert from "node:assert";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
+import { NavigationDrawer } from "../components/NavigationDrawer";
 import { Thread } from "../lib/threads/threadStore";
 
 describe("PART B — Thread Deletion UI Contract & Affordances", () => {
@@ -102,5 +103,61 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     assert.ok(handlerBody.includes('setSelectedThreadId(null)'), "Must reset selectedThreadId to null");
     assert.ok(handlerBody.includes('setMessages([])'), "Must clear messages on active thread deletion");
     assert.ok(handlerBody.includes('setActiveTask(null)'), "Must clear active task on active thread deletion");
+  });
+
+  it("5. NavigationDrawer renders visible overflow (⋯) button and accessible rows for mobile sessions", () => {
+    const html = ReactDOMServer.renderToString(
+      React.createElement(NavigationDrawer, {
+        isOpen: true,
+        onClose: () => {},
+        activeView: "sessions",
+        onNavigate: () => {},
+        onNewSession: () => {},
+        threads: sampleThreads,
+        selectedThreadId: "thread-abc-1",
+        onSelectThread: () => {},
+        onDeleteThread: () => {}
+      })
+    );
+
+    assert.ok(html.includes('data-testid="thread-overflow-btn"'), "NavigationDrawer must render data-testid='thread-overflow-btn'");
+    const overflowMatches = html.match(/data-testid="thread-overflow-btn"/g);
+    assert.strictEqual(overflowMatches?.length, 2, "Each session row in NavigationDrawer must have a visible overflow button");
+    assert.ok(html.includes('data-testid="thread-row-thread-abc-1"'), "Must include testid for individual drawer session rows");
+    assert.ok(html.includes('tabindex="0"'), "Session rows must be focusable via tabindex=0");
+  });
+
+  it("6. NavigationDrawer source implements touch long-press handler, action sheet, confirm dialog, and focus trap", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const drawerSrc = fs.readFileSync(
+      path.resolve(__dirname, "../components/NavigationDrawer.tsx"),
+      "utf-8"
+    );
+
+    // Three equivalent paths
+    assert.ok(drawerSrc.includes('handleTouchStart'), "Must implement touch long-press handler");
+    assert.ok(drawerSrc.includes('handleTouchMove'), "Must implement touch move threshold");
+    assert.ok(drawerSrc.includes('handleTouchEnd'), "Must implement touch end handler");
+    assert.ok(drawerSrc.includes('data-testid="thread-overflow-btn"'), "Must have visible overflow button");
+    assert.ok(
+      drawerSrc.includes('e.key === "Delete"') || drawerSrc.includes('e.key === \'Delete\''),
+      "Must open confirm dialog on Delete key on row"
+    );
+
+    // Confirm dialog and Action sheet
+    assert.ok(drawerSrc.includes('data-testid="thread-action-sheet"'), "Must have action sheet");
+    assert.ok(drawerSrc.includes('data-testid="action-sheet-delete-btn"'), "Must have action sheet delete button");
+    assert.ok(drawerSrc.includes('data-testid="thread-delete-dialog"'), "Must have confirm dialog");
+    assert.ok(drawerSrc.includes('data-testid="confirm-delete-btn"'), "Must have confirm delete button");
+    assert.ok(drawerSrc.includes('data-testid="cancel-delete-btn"'), "Must have cancel delete button");
+    assert.ok(
+      drawerSrc.includes("This action is permanent and cannot be undone"),
+      "Must display permanent deletion warning text"
+    );
+
+    // Trapped focus and Escape handling
+    assert.ok(drawerSrc.includes('e.key === "Escape"'), "Escape key must close dialogs");
+    assert.ok(drawerSrc.includes('e.key === "Tab"'), "Focus must be trapped inside confirm dialog");
   });
 });

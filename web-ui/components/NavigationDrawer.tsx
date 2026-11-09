@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Bot,
   Plus,
@@ -11,7 +11,9 @@ import {
   Settings,
   FolderGit2,
   X,
-  MessageSquare
+  MessageSquare,
+  MoreHorizontal,
+  Trash2
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
 
@@ -42,16 +44,117 @@ export function NavigationDrawer({
   onSelectThread,
   onDeleteThread
 }: NavigationDrawerProps) {
-  // Close drawer on Escape key
+  const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
+  const [confirmDeleteThread, setConfirmDeleteThread] = useState<Thread | null>(null);
+
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const didLongPressRef = useRef<boolean>(false);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const closeConfirmDialog = () => {
+    setConfirmDeleteThread(null);
+    setTimeout(() => {
+      lastActiveElementRef.current?.focus();
+    }, 0);
+  };
+
+  // Close drawer, action sheet, or confirm dialog on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
+      if (e.key === "Escape") {
+        if (confirmDeleteThread) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeConfirmDialog();
+          return;
+        }
+        if (actionSheetThread) {
+          e.preventDefault();
+          e.stopPropagation();
+          setActionSheetThread(null);
+          lastActiveElementRef.current?.focus();
+          return;
+        }
+        if (isOpen) {
+          onClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, confirmDeleteThread, actionSheetThread]);
+
+  // Focus trap for confirm dialog
+  useEffect(() => {
+    if (!confirmDeleteThread) return;
+    cancelBtnRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Tab" && confirmDialogRef.current) {
+        const focusableElements = confirmDialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length === 0) return;
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmDeleteThread]);
+
+  const handleTouchStart = (thread: Thread, e: React.TouchEvent) => {
+    didLongPressRef.current = false;
+    const touch = e.touches?.[0];
+    touchStartPosRef.current = touch ? { x: touch.clientX, y: touch.clientY } : { x: 0, y: 0 };
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      didLongPressRef.current = true;
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch {}
+      }
+      lastActiveElementRef.current = document.activeElement as HTMLElement;
+      setActionSheetThread(thread);
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current) return;
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = (e?: React.TouchEvent) => {
+    if (e && (e.target as HTMLElement).closest('[data-testid="thread-overflow-btn"]')) return;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -247,6 +350,12 @@ export function NavigationDrawer({
               return (
                 <div
                   key={thread.id}
+                  data-testid={`thread-row-${thread.id}`}
+                  aria-label={`Session: ${thread.title || "Untitled session"}`}
+                  onTouchStart={(e) => handleTouchStart(thread, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchCancel={handleTouchEnd}
                   className={`group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors min-h-[44px] ${
                     isSelected
                       ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold border border-emerald-200/60 dark:border-emerald-800/60"
@@ -255,23 +364,62 @@ export function NavigationDrawer({
                 >
                   <button
                     type="button"
+                    tabIndex={0}
                     onClick={() => {
+                      if (didLongPressRef.current) {
+                        didLongPressRef.current = false;
+                        return;
+                      }
                       if (onSelectThread) onSelectThread(thread.id);
                       onClose();
                     }}
-                    className="flex-1 min-w-0 text-left flex flex-col gap-0.5"
+                    onKeyDown={(e) => {
+                      if (e.key === "Delete" || e.key === "Backspace") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastActiveElementRef.current = e.currentTarget;
+                        setConfirmDeleteThread(thread);
+                      }
+                    }}
+                    className="flex-1 min-w-0 text-left flex flex-col gap-0.5 focus:outline-none"
                     title={thread.title}
                   >
-                    <span className="truncate text-xs">{thread.title || "Untitled session"}</span>
+                    <span className="truncate text-xs font-medium">{thread.title || "Untitled session"}</span>
                     {timeLabel && (
                       <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">
                         {timeLabel}
                       </span>
                     )}
                   </button>
-                  {thread.status === "active" && (
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5 animate-pulse" title="Active" />
-                  )}
+                  <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                    {thread.status === "active" && (
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" title="Active" />
+                    )}
+                    {onDeleteThread && (
+                      <button
+                        type="button"
+                        data-testid="thread-overflow-btn"
+                        aria-label={`Session options for ${thread.title || "session"}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          lastActiveElementRef.current = e.currentTarget;
+                          setActionSheetThread(thread);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            lastActiveElementRef.current = e.currentTarget;
+                            setActionSheetThread(thread);
+                          }
+                        }}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-700/60 transition-colors"
+                        title="Session actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -302,6 +450,130 @@ export function NavigationDrawer({
           </div>
         </div>
       </div>
+
+      {/* Material 3 Bottom Sheet for Actions */}
+      {actionSheetThread && (
+        <div
+          data-testid="thread-action-sheet"
+          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setActionSheetThread(null);
+            lastActiveElementRef.current?.focus();
+          }}
+        >
+          <div
+            className="w-full sm:max-w-md bg-white dark:bg-zinc-900 border-t sm:border border-slate-200 dark:border-zinc-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 space-y-4 animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate pr-2">
+                {actionSheetThread.title || "Session Options"}
+              </h3>
+              <button
+                type="button"
+                data-testid="action-sheet-close-btn"
+                onClick={() => {
+                  setActionSheetThread(null);
+                  lastActiveElementRef.current?.focus();
+                }}
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                aria-label="Close action sheet"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {onDeleteThread && (
+                <button
+                  type="button"
+                  data-testid="action-sheet-delete-btn"
+                  onClick={() => {
+                    const target = actionSheetThread;
+                    setActionSheetThread(null);
+                    setConfirmDeleteThread(target);
+                  }}
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold text-sm hover:bg-rose-100 dark:hover:bg-rose-950/70 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete session</span>
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="action-sheet-cancel-btn"
+                onClick={() => {
+                  setActionSheetThread(null);
+                  lastActiveElementRef.current?.focus();
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 font-medium text-xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ONE Confirm Dialog for Permanent Deletion */}
+      {confirmDeleteThread && (
+        <div
+          data-testid="thread-delete-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-delete-drawer-title"
+          ref={confirmDialogRef}
+          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => closeConfirmDialog()}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3
+                  id="confirm-delete-drawer-title"
+                  className="text-base font-bold text-slate-900 dark:text-zinc-100 line-clamp-2"
+                >
+                  Delete &ldquo;{confirmDeleteThread.title || "Untitled session"}&rdquo;?
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+                  This action is permanent and cannot be undone. All messages and task checkpoints for this session will be removed.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                ref={cancelBtnRef}
+                data-testid="cancel-delete-btn"
+                onClick={() => closeConfirmDialog()}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                ref={confirmBtnRef}
+                data-testid="confirm-delete-btn"
+                onClick={() => {
+                  if (onDeleteThread) {
+                    onDeleteThread(confirmDeleteThread.id);
+                  }
+                  closeConfirmDialog();
+                }}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
