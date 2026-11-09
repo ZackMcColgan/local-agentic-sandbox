@@ -270,3 +270,21 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 | **S8: Host-mode stress** | 156.9s | PASS | 171.9s | PASS | 70KB host read without clamp, s8-verify.txt written, 75K stdout clamped at 64KB |
 
 **FINAL VERDICT: 8/8 SCENARIOS GREEN — 2/2 CONSECUTIVE RUNS CLEAN — THE BAR ("4K / 100K") ACHIEVED**
+
+---
+
+## 2026-11-09: RESUME — Part B (Thread Deletion UI & Backend) & Part C (Disarm Lifecycle Test)
+
+### Part B: Resilient Thread Deletion UI & Backend (PR #60)
+- PR: https://github.com/ZackMcColgan/local-agentic-sandbox/pull/60
+- Backend deletion removes records, artifacts directory, sidecars, cancels real checkpoints, deletes ghost checkpoints, aborts active turns, and prevents resurrection.
+- Three UI paths (touch long-press, visible overflow button, keyboard Delete/Enter), single accessible confirm dialog with focus trap, and neutral state transition on active thread delete.
+- Gate verified: 177 tests passed in 38.5s. Playwright Flow 5 e2e passing across all 4 viewports.
+
+### Part C: Disarm Lifecycle Test to Live Tier with Hard Guard (PR #61)
+- PR: https://github.com/ZackMcColgan/local-agentic-sandbox/pull/61
+- Relocated live test out of default suite to web-ui/tests-live/aiLifecycle.live.ts under explicit npm run test:lifecycle script.
+- Re-pointed at sacrificial runner on ephemeral port (8799) with isolated temp config directory.
+- Hard guard assertSacrificialTarget rejects port 8765 and production paths.
+- Default suite backfilled with pure guard tests and mocked environment unit tests.
+- Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
