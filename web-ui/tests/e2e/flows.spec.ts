@@ -208,4 +208,57 @@ test.describe("Real User Interaction Flows", () => {
     await page.waitForSelector("textarea");
     await expect(page.locator('[data-testid="thread-row-thread-fixture-1"]')).toBeHidden();
   });
+
+  test("Flow 6: Mobile thread deletion via NavigationDrawer: drawer -> long press / overflow -> delete -> absent", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "Mobile drawer flow only");
+
+    await page.goto("/");
+    await page.waitForSelector("textarea");
+
+    // 1. Open mobile NavigationDrawer
+    const menuBtn = page.locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]').first();
+    await expect(menuBtn).toBeVisible();
+    await menuBtn.click();
+
+    const drawer = page.locator('[data-testid="navigation-drawer"]');
+    await expect(drawer).toBeVisible();
+
+    // 2. Locate thread fixture in drawer Recents
+    const drawerThreadRow = drawer.locator('[data-testid="thread-row-thread-fixture-1"]').first();
+    await expect(drawerThreadRow).toBeVisible();
+
+    // 3. Test long-press on mobile drawer session row
+    await drawerThreadRow.dispatchEvent("touchstart");
+    await page.waitForTimeout(550);
+    await drawerThreadRow.dispatchEvent("touchend");
+
+    // 4. Action sheet appears
+    const actionSheet = page.locator('[data-testid="thread-action-sheet"]');
+    await expect(actionSheet).toBeVisible();
+    const deleteBtn = page.locator('[data-testid="action-sheet-delete-btn"]');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    // 5. Confirm dialog appears with thread title and permanent text
+    const confirmDialog = page.locator('[data-testid="thread-delete-dialog"]');
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText("Initial System Setup");
+    await expect(confirmDialog).toContainText("This action is permanent and cannot be undone");
+
+    // 6. Confirm deletion
+    const confirmBtn = page.locator('[data-testid="confirm-delete-btn"]');
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // 7. Verify removed from drawer
+    await expect(confirmDialog).toBeHidden();
+    await expect(drawerThreadRow).toBeHidden();
+
+    // 8. Reload and verify still absent
+    await page.goto("/");
+    await page.waitForSelector("textarea");
+    const menuBtnAfter = page.locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]').first();
+    await menuBtnAfter.click();
+    await expect(drawer.locator('[data-testid="thread-row-thread-fixture-1"]')).toBeHidden();
+  });
 });
