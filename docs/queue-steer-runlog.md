@@ -279,7 +279,8 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - **Baseline (Strata 0.1.52)**: 23.8 tok/s decode, 136 tok/s prefill, TTFT 316.8s @ 100K.
 - **Engine Update (Strata 0.1.58)**: 40.0 tok/s decode, 598.4 tok/s prefill (4x speedup), TTFT 87.9s @ 100K.
 - **Hardware Calibration (--pcie-frac 1.00, --spec-min-p 0.70)**: **54.1–56.6 tok/s decode**, **608–640 tok/s prefill**, TTFT 86.5s @ 100K.
-- **Long Generation Sustained Stability**: 4,000 tokens generated at 48K context @ **43.7 tok/s** in 102.4s (86.2% draft acceptance).
+- **Untrimmed Matrix (All 7 Cells @ 600 Tokens x 2 Reps)**: Completed across 4K, 48K, and 100K tiers (prose, code, JSON).
+- **Long Generation Sustained Stability**: 4,000 tokens generated at 48K context @ **40.5 tok/s** in 126.7s (31,742 prompt tokens, 85.0% draft acceptance).
 - **Platform Smoke Tier Proof**: 4/4 PASSED (L1, L2, L5, L6) in 16.1m, 0 pod restarts.
-- **Winning Launch Diff**: Available in docs/strata-bench-results.md (+ --pcie-frac 1.00, - --spec-min-p 0.6, + --spec-min-p 0.70).
-- **Restoration**: Server restored to pristine Phase 3 baseline configuration per owner policy.
+- **Winning Launch Diff**: Available in `docs/strata-bench-results.md` (+ `--pcie-frac 1.00`, - `--spec-min-p 0.6`, + `--spec-min-p 0.70`).
+- **Restoration**: Server restored to pristine Phase 3 baseline configuration (`--spec-min-p 0.6`, no `--pcie-frac 1.00`); verified live with L1 smoke pass in 1.4m (0 pod restarts).

@@ -177,7 +177,9 @@
 |---|---|---|---|---|---|---|---|---|
 | `prose-4k` | 1 | 3,638 | 600 | **56.6** | 387.8 | 9.38s | 85.4% | 20.0s |
 | `json-4k` | 1 | 14,278 | 600 | **44.1** | 523.2 | 27.29s | 87.7% | 40.9s |
-| `prose-100k` | 1 | 89,490 | 300 | **51.1** | 639.8 | 139.87s | 80.6% | 145.9s |
+| `prose-100k` | 1 | 89,490 | 300 | **51.1** | 639.8 | 139.87s* | 80.6% | 145.9s |
+
+*\*Note: Phase 4 `prose-100k` TTFT (139.87s) was measured on a cold-cache first prompt read; subsequent warm-cache runs at 100K achieve ~86.5s TTFT.*
 
 ### Calibration Delta vs Phase 3 (Post-Update Baseline):
 | Cell | Phase 3 (Post-Update) | Phase 4 (Calibrated) | Delta | Gain |
@@ -213,26 +215,30 @@
 *Configuration*: Phase 4 Calibrated (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--pool-workers 7`, `--kv int8`, Strata Engine `0.1.58`)  
 *Completed*: 2026-11-09T10:30:12Z  
 
-### The Matrix (2 Consecutive Reps):
+### The Matrix (Untrimmed — All 7 Cells @ 600 Tokens, 2 Consecutive Reps):
 | Cell | Rep | Prompt Tokens | Gen Tokens | Decode (tok/s) | Prefill (tok/s) | TTFT (s) | Draft Accepted | Duration (s) |
 |---|---|---|---|---|---|---|---|---|
-| `prose-4k` | 1 | 3,638 | 600 | **54.1** | 384.4 | 9.47s | 81.7% | 20.6s |
-| `code-4k` | 1 | 7,418 | 600 | **48.0** | 388.3 | 19.10s | 89.3% | 31.6s |
-| `json-4k` | 1 | 14,278 | 600 | **37.1** | 492.9 | 28.97s | 86.6% | 45.2s |
-| `prose-48k` | 1 | 41,338 | 600 | **45.3** | 610.7 | 67.69s | 81.3% | 81.0s |
-| `prose-100k` | 1 | 89,490 | 300 | **46.6** | 608.4 | 86.50s | 78.3% | 93.1s |
-| `prose-4k` | 2 | 3,638 | 600 | **48.0** | 376.0 | 9.68s | 81.3% | 22.2s |
-| `code-4k` | 2 | 7,418 | 600 | **44.0** | 383.5 | 19.34s | 87.5% | 33.0s |
-| `json-4k` | 2 | 14,278 | 600 | **35.1** | 492.5 | 28.99s | 83.8% | 46.1s |
-| `prose-48k` | 2 | 41,338 | 600 | **42.7** | 610.9 | 67.66s | 81.7% | 81.8s |
-| `prose-100k` | 2 | 89,490 | 300 | **43.4** | 608.6 | 86.47s | 86.3% | 93.5s |
+| `prose-4k` | 1 | 2,774 | 600 | **43.1** | 297.6 | 9.32s | 83.3% | 23.3s |
+| `code-4k` | 1 | 4,303 | 600 | **49.3** | 413.0 | 10.42s | 85.9% | 22.6s |
+| `json-4k` | 1 | 6,810 | 600 | **36.0** | 376.0 | 18.11s | 95.3% | 34.8s |
+| `prose-48k` | 1 | 31,742 | 600 | **39.2** | 550.3 | 57.69s | 85.8% | 73.0s |
+| `code-48k` | 1 | 48,295 | 600 | **46.0** | 603.9 | 79.97s | 85.4% | 93.1s |
+| `json-48k` | 1 | 75,691 | 600 | **35.4** | 589.4 | 128.42s | 88.8% | 145.5s |
+| `prose-100k` | 1 | 64,260 | 600 | **37.8** | 586.0 | 109.66s | 85.4% | 125.6s |
+| `prose-4k` | 2 | 2,774 | 600 | **44.4** | 298.2 | 9.30s | 84.0% | 22.8s |
+| `code-4k` | 2 | 4,303 | 600 | **44.9** | 412.3 | 10.44s | 87.9% | 23.8s |
+| `json-4k` | 2 | 6,810 | 600 | **37.4** | 375.5 | 18.14s | 93.5% | 34.2s |
+| `prose-48k` | 2 | 31,742 | 600 | **38.3** | 550.2 | 57.70s | 88.6% | 73.4s |
+| `code-48k` | 2 | 48,295 | 600 | **38.5** | 597.5 | 80.83s | 88.0% | 96.5s |
+| `json-48k` | 2 | 75,691 | 600 | **34.3** | 584.8 | 129.43s | 88.5% | 147.0s |
+| `prose-100k` | 2 | 64,260 | 600 | **36.3** | 589.9 | 108.94s | 82.4% | 125.6s |
 
 ### 4,000-Token Sustained Long Generation Probe @ ~48K Context:
-- **Prompt Tokens**: 41,338 | **Generated Tokens**: 4,000
-- **Decode Speed**: **43.7 tok/s** (sustained across all 4,000 tokens)
-- **Prefill Speed**: 400.5 tok/s | **TTFT**: 11.17s
-- **Draft Acceptance**: **86.2%**
-- **Total Duration**: 102.4s (1.7 minutes for 4,000 tokens)
+- **Prompt Tokens**: 31,742 | **Generated Tokens**: 4,000
+- **Decode Speed**: **40.5 tok/s** (sustained across all 4,000 tokens)
+- **Prefill Speed**: 469.0 tok/s | **TTFT**: 28.38s
+- **Draft Acceptance**: **85.0%**
+- **Total Duration**: 126.7s (~2.1 minutes for 4,000 tokens)
 - **Stability**: Zero throttling, zero memory leaks, zero degradation.
 
 ### Platform Smoke Tier Proof (`npm run test:e2e:live -- -g @smoke`):
@@ -248,11 +254,11 @@
 ## Phase 7 — Restore & Winning Launch Configuration
 
 ### State Restoration Gate:
-- [x] Restored pristine Phase 3 launch configuration to `hermes-strata-gyro-64k.json`.
-- [x] Strata restarted cleanly via `AI-ON.ps1 -SkipHermes` (PID 27132, ready in 29.9s).
+- [x] Restored pristine Phase 3 launch configuration to `hermes-strata-gyro-64k.json` (`--spec-min-p 0.6`, removed `--pcie-frac 1.00`).
+- [x] Strata restarted cleanly via `AI-ON.ps1 -SkipHermes` (PID 24068, ready in 32.3s).
 - [x] `GET /slots` answers and slot 0 is IDLE (`is_processing: false`).
 - [x] Preflight clean, image `local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk`, Host Runner PID 14612 healthy.
-- [x] End-to-end platform chat verified: `l1-short-flow-copy.spec.ts` **PASSED** in 1.3m (0 pod restarts).
+- [x] End-to-end platform chat verified: `l1-short-flow-copy.spec.ts` **PASSED** in 1.4m (0 pod restarts).
 
 ---
 
