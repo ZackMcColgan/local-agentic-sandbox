@@ -165,4 +165,47 @@ test.describe("Real User Interaction Flows", () => {
     await expect(page.locator("text=Analysis complete.")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("text=All systems verified operational.")).toBeVisible({ timeout: 5000 });
   });
+
+  test("Flow 5: Thread deletion via UI: overflow button -> action sheet -> confirm dialog -> reload -> absent", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Desktop sessions panel flow");
+
+    await page.goto("/");
+    await page.waitForSelector("textarea");
+
+    // Locate the initial fixture thread
+    const threadRow = page.locator('[data-testid="thread-row-thread-fixture-1"]').first();
+    await expect(threadRow).toBeVisible();
+
+    // 1. Click visible overflow (⋯) button
+    const overflowBtn = threadRow.locator('[data-testid="thread-overflow-btn"]');
+    await expect(overflowBtn).toBeVisible();
+    await overflowBtn.click();
+
+    // 2. Action sheet opens with Delete option
+    const actionSheet = page.locator('[data-testid="thread-action-sheet"]');
+    await expect(actionSheet).toBeVisible();
+    const deleteBtn = page.locator('[data-testid="action-sheet-delete-btn"]');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    // 3. ONE confirm dialog appears naming thread and permanent warning
+    const confirmDialog = page.locator('[data-testid="thread-delete-dialog"]');
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText("Initial System Setup");
+    await expect(confirmDialog).toContainText("This action is permanent and cannot be undone");
+
+    // 4. Confirm deletion
+    const confirmBtn = page.locator('[data-testid="confirm-delete-btn"]');
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // 5. Dialog closes and thread is immediately removed from UI
+    await expect(confirmDialog).toBeHidden();
+    await expect(threadRow).toBeHidden();
+
+    // 6. Reload page and verify thread is still absent
+    await page.goto("/");
+    await page.waitForSelector("textarea");
+    await expect(page.locator('[data-testid="thread-row-thread-fixture-1"]')).toBeHidden();
+  });
 });

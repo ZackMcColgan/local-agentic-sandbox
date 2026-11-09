@@ -1,0 +1,106 @@
+import { describe, it } from "node:test";
+import assert from "node:assert";
+import React from "react";
+import ReactDOMServer from "react-dom/server";
+import { ThreadsSidebar } from "../components/ThreadsSidebar";
+import { Thread } from "../lib/threads/threadStore";
+
+describe("PART B — Thread Deletion UI Contract & Affordances", () => {
+  const sampleThreads: Thread[] = [
+    {
+      id: "thread-abc-1",
+      title: "Alpha Research Session",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: [{ id: "m1", role: "user", content: "hello", timestamp: new Date().toISOString() }]
+    },
+    {
+      id: "thread-abc-2",
+      title: "Beta Bug Fixing",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: []
+    }
+  ];
+
+  it("1. Renders visible overflow (⋯) button with data-testid='thread-overflow-btn' on every thread row", () => {
+    const html = ReactDOMServer.renderToString(
+      React.createElement(ThreadsSidebar, {
+        threads: sampleThreads,
+        selectedThreadId: "thread-abc-1",
+        onSelectThread: () => {},
+        onNewThread: () => {},
+        onDeleteThread: () => {}
+      })
+    );
+
+    assert.ok(html.includes('data-testid="thread-overflow-btn"'), "Must render data-testid='thread-overflow-btn'");
+    const overflowMatches = html.match(/data-testid="thread-overflow-btn"/g);
+    assert.strictEqual(overflowMatches?.length, 2, "Each thread row must have a visible overflow button");
+    // Ensure it is not hidden with opacity-0
+    assert.ok(!html.includes('opacity-0 group-hover:opacity-100'), "Overflow button must not be hidden behind hover-only opacity-0");
+  });
+
+  it("2. Thread rows have tabIndex=0 and accessible role/labels for keyboard navigation", () => {
+    const html = ReactDOMServer.renderToString(
+      React.createElement(ThreadsSidebar, {
+        threads: sampleThreads,
+        selectedThreadId: "thread-abc-1",
+        onSelectThread: () => {},
+        onNewThread: () => {},
+        onDeleteThread: () => {}
+      })
+    );
+
+    assert.ok(html.includes('tabindex="0"'), "Thread row must be focusable via tabindex=0");
+    assert.ok(html.includes('data-testid="thread-row-thread-abc-1"'), "Must include testid for individual rows");
+  });
+
+  it("3. Action Sheet and Confirm Dialog structure adheres to permanent deletion contract", () => {
+    // Read ThreadsSidebar.tsx source code to verify modal/dialog and event handlers
+    const fs = require("fs");
+    const path = require("path");
+    const sidebarSrc = fs.readFileSync(
+      path.resolve(__dirname, "../components/ThreadsSidebar.tsx"),
+      "utf-8"
+    );
+
+    // Three equivalent paths
+    assert.ok(sidebarSrc.includes('handleTouchStart'), "Must implement touch long-press handler");
+    assert.ok(sidebarSrc.includes('data-testid="thread-overflow-btn"'), "Must have visible overflow button");
+    assert.ok(
+      sidebarSrc.includes('e.key === "Delete"') || sidebarSrc.includes('e.key === \'Delete\''),
+      "Must open confirm dialog on Delete key on row"
+    );
+
+    // ONE confirm dialog naming thread title and permanent text
+    assert.ok(sidebarSrc.includes('data-testid="thread-delete-dialog"'), "Must have confirm dialog");
+    assert.ok(sidebarSrc.includes('data-testid="confirm-delete-btn"'), "Must have confirm delete button");
+    assert.ok(sidebarSrc.includes('data-testid="cancel-delete-btn"'), "Must have cancel delete button");
+    assert.ok(
+      sidebarSrc.includes("This action is permanent and cannot be undone"),
+      "Must display permanent deletion warning text"
+    );
+
+    // Trapped focus and Escape handling
+    assert.ok(sidebarSrc.includes('e.key === "Escape"'), "Escape key must close dialogs");
+    assert.ok(sidebarSrc.includes('e.key === "Tab"'), "Focus must be trapped inside confirm dialog");
+    assert.ok(sidebarSrc.includes('lastActiveElementRef.current?.focus()'), "Focus must return to list element");
+  });
+
+  it("4. App page handleDeleteThread returns UI to neutral state when deleting active thread", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const pageSrc = fs.readFileSync(
+      path.resolve(__dirname, "../app/page.tsx"),
+      "utf-8"
+    );
+
+    const deleteHandlerMatch = pageSrc.match(/const handleDeleteThread = async \([^)]*\) => {[\s\S]*?};/);
+    assert.ok(deleteHandlerMatch, "handleDeleteThread must exist in page.tsx");
+    const handlerBody = deleteHandlerMatch[0];
+    assert.ok(handlerBody.includes('setSelectedThreadId(null)'), "Must reset selectedThreadId to null");
+    assert.ok(handlerBody.includes('setMessages([])'), "Must clear messages on active thread deletion");
+    assert.ok(handlerBody.includes('setActiveTask(null)'), "Must clear active task on active thread deletion");
+  });
+});

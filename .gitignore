@@ -47,6 +47,10 @@ test-results/
 playwright-report/
 web-ui/test-results/
 web-ui/playwright-report/
+playwright-live-report/
+test-results-live/
+web-ui/playwright-live-report/
+web-ui/test-results-live/
 temp-*
 temp-test-*
 web-ui/temp-*
@@ -56,9 +60,3 @@ web-ui/temp-test-*
 /workspace/
 .opencode-remote-session.json
 .agent/
-
- playwright-live-report/
-web-ui/playwright-live-report/
-
-test-results-live/
-web-ui/test-results-live/
