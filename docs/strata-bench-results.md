@@ -290,4 +290,4 @@ To permanently adopt the winning configuration, apply this exact diff to `C:\Use
          "C:\\AI\\Strata-data\\mtp\\rt",
 ```
 
-*Adoption Decision*: Delivered to owner as a diff. Adopted nothing permanently. Server restored to baseline.
+*Adoption Decision*: **ADOPTED (Owner-Approved)**. Phase 7 diff applied to `hermes-strata-gyro-64k.json`. Full-stack `AI-ON.ps1` (Strata + Hermes) restarted cleanly (Strata PID 31252 in 32.3s, Hermes in 81.9s). Verified live: `GET /slots` idle, L1 live platform chat spec **PASSED** in 1.2m (0 pod restarts).
