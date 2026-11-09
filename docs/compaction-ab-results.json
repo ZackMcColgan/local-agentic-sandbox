@@ -1,0 +1,212 @@
+[
+  {
+    "runId": "w1-a-r1-gfnb",
+    "workload": "W1",
+    "arm": "A",
+    "runNumber": 1,
+    "timestamp": "2026-11-09T03:47:08.067Z",
+    "threadId": "thread-1794195131676-jnqt",
+    "deployedImage": "local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk",
+    "tokensBefore": 100166,
+    "tokensAfter": 54548,
+    "retainedRatio": 0.545,
+    "compactingTurnDurationSec": 235.5,
+    "totalDurationSec": 896.6,
+    "digest": "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n\nPrior User Goals & Requests:\n- \"Cluster infrastructure deployment registry record:\n- Primary config path: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\n- Ingress service port: 7973\n- Authentication token: TOKEN-W1-W1-A-R1-GFNB\n- Health endpoint URL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\n- Initialization diagnostic error: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973\nPlease confirm you have recorded these exact infrastructure parameters in one concise sentence.\"\n- \"Use host_write_file to write 'C:\\AI\\scratch\\w1-a-r1-gfnb-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\nDistributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Dis\"\n\nKey Insights & Outcomes:\n- Confirmed — I have recorded the registry parameters exactly as provided (config path `C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log`, ingress port 7973, token `TOKEN-W1-W1-A-R1-GFNB`, health URL `https://cluster-w1-w1-a-r1-gfnb.internal/healthz`, and the `[FATAL-w1-a-r1-gfnb] ... ECONNREFUSED 127.0.0.1:7\n\nRetained Identifiers & Artifacts:\n- File paths: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log, C:\\AI\\scratch\\w1-a-r1-gfnb-mid.txt\n- Git SHAs: 0123456789\n- URLs: https://cluster-w1-w1-a-r1-gfnb.internal/healthz, https://cluster-w1-w1-a-r1-gfnb.internal/healthz`,\n\nCritical Errors & Failures:\n- - Initialization diagnostic error: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+    "probes": [
+      {
+        "name": "W1-File-Path",
+        "factType": "file_path",
+        "expected": "C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\nPORT: 7973\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R1-GFNB\nURL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\nERROR_LINE: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "passed": true
+      },
+      {
+        "name": "W1-Service-Port",
+        "factType": "port",
+        "expected": "7973",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\nPORT: 7973\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R1-GFNB\nURL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\nERROR_LINE: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "passed": true
+      },
+      {
+        "name": "W1-Cluster-Token",
+        "factType": "cluster_token",
+        "expected": "TOKEN-W1-W1-A-R1-GFNB",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\nPORT: 7973\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R1-GFNB\nURL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\nERROR_LINE: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "passed": true
+      },
+      {
+        "name": "W1-Endpoint-URL",
+        "factType": "url",
+        "expected": "https://cluster-w1-w1-a-r1-gfnb.internal/healthz",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\nPORT: 7973\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R1-GFNB\nURL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\nERROR_LINE: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "passed": true
+      },
+      {
+        "name": "W1-Error-Line",
+        "factType": "error_line",
+        "expected": "[FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r1-gfnb.log\nPORT: 7973\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R1-GFNB\nURL: https://cluster-w1-w1-a-r1-gfnb.internal/healthz\nERROR_LINE: [FATAL-w1-a-r1-gfnb] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7973",
+        "passed": true
+      }
+    ],
+    "hallucinations": [],
+    "podRestartsInitial": 0,
+    "podRestartsFinal": 0
+  },
+  {
+    "runId": "w2-a-r1-oq48",
+    "workload": "W2",
+    "arm": "A",
+    "runNumber": 1,
+    "timestamp": "2026-11-09T04:29:53.377Z",
+    "threadId": "thread-1794197198108-gf32",
+    "deployedImage": "local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk",
+    "tokensBefore": 97991,
+    "tokensAfter": 50558,
+    "retainedRatio": 0.516,
+    "compactingTurnDurationSec": 241.6,
+    "totalDurationSec": 1395.5,
+    "digest": "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n\nPrior User Goals & Requests:\n- \"Use host_write_file to write 'C:\\AI\\scratch\\w2-a-r1-oq48-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\nDistributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kapp\"\n\nKey Insights & Outcomes:\n- [CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n- [HONORED-W2-A-R1-OQ48] Acknowledged — the block is 30 identical `REPEATED-HEARTBEAT` probes all reporting alive/OK, so the nodes are healthy and there is no drift, drop, or election anomaly to act on.\n\nRetained Identifiers & Artifacts:\n- File paths: C:\\AI\\scratch\\w2-a-r1-oq48-mid.txt\n- Git SHAs: 0123456789",
+    "probes": [
+      {
+        "name": "W2-Tail-Constraint-Honored",
+        "factType": "user_constraint",
+        "expected": "Starts with or contains [HONORED-W2-A-R1-OQ48]",
+        "actual": "The primary goal is to build an overnight autonomous AI coding appliance that runs entirely on local, air-gapped hardware to plan, implement, and verify engineering tasks with a verifiable git trail and morning report.",
+        "passed": false,
+        "notes": "Failed constraint probe (expected in Arm A manipulation check)"
+      },
+      {
+        "name": "W2-Decision-And-Rationale",
+        "factType": "decision_rationale",
+        "expected": "Paxos over Raft with lower latency / WAN rationale",
+        "actual": "No consensus protocol was decided upon — there is no such decision in this project. The repo's architecture records (ADR-001 sandboxed MCP, ADR-002 LangGraph supervisor checkpoints, `ARCHITECTURE.md`) describe a single-node, local, air-gapped appliance with a LangGraph supervisor + worker pool, not a distributed consensus system; grep for `consensus|quorum|raft|paxos|leader election|2PC` across docs and root docs returns no matches. The \"telemetry log record sequence\" blocks in this conversation were repeated heartbeat probes, not evidence of a consensus design, so I won't invent a rationale for a protocol that was never chosen.",
+        "passed": false,
+        "notes": "decision=true, rationale=false"
+      }
+    ],
+    "hallucinations": [],
+    "podRestartsInitial": 0,
+    "podRestartsFinal": 0
+  },
+  {
+    "runId": "w3-a-r1-iy8s",
+    "workload": "W3",
+    "arm": "A",
+    "runNumber": 1,
+    "timestamp": "2026-11-09T04:46:05.598Z",
+    "threadId": "thread-1794198608319-kl3e",
+    "deployedImage": "local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk",
+    "tokensBefore": 98420,
+    "tokensAfter": 56351,
+    "retainedRatio": 0.573,
+    "compactingTurnDurationSec": 244.5,
+    "totalDurationSec": 957.5,
+    "digest": "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n\nPrior User Goals & Requests:\n- \"Service deployment initialization for Agent-SecMetrics:\n- Service Name: Agent-SecMetrics\n- Primary Port: 8443\n- Protocol: HTTPS\nPlease confirm you have recorded these parameters in one sentence.\"\n- \"SECURITY POLICY UPDATE & CORRECTION:\nPort 8443 has been revoked due to network policy conflict. The new official active service port for Agent-SecMetrics is 9443 (this completely replaces and supersedes port 8443). Confirm you have updated the active port to 9443 in one sentence.\"\n- \"Use host_write_file to write 'C:\\AI\\scratch\\w3-a-r1-iy8s-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\nDistributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distributed telemetry log record sequence pi rho sigma tau 0123456789. Distr\"\n\nKey Insights & Outcomes:\n- Confirmed — I have recorded the Agent-SecMetrics deployment parameters: service name **Agent-SecMetrics**, primary port **8443**, protocol **HTTPS**.\n- Confirmed — port 8443 is revoked and superseded; the active service port for Agent-SecMetrics is now **9443** (HTTPS).\n\nRetained Identifiers & Artifacts:\n- File paths: C:\\AI\\scratch\\w3-a-r1-iy8s-mid.txt\n- Git SHAs: 0123456789",
+    "probes": [
+      {
+        "name": "W3-Correction-Port-On-Disk",
+        "factType": "correction",
+        "expected": "port: 9443",
+        "actual": "writtenPort=9443 (from host_write_file args)",
+        "passed": true,
+        "notes": "Correction honored in tool call args (port 9443)"
+      }
+    ],
+    "hallucinations": [],
+    "podRestartsInitial": 0,
+    "podRestartsFinal": 0
+  },
+  {
+    "runId": "w1-a-r2-4sf9",
+    "workload": "W1",
+    "arm": "A",
+    "runNumber": 2,
+    "timestamp": "2026-11-09T05:01:30.417Z",
+    "threadId": "thread-1794199627209-govp",
+    "deployedImage": "local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk",
+    "tokensBefore": 100206,
+    "tokensAfter": 54692,
+    "retainedRatio": 0.546,
+    "compactingTurnDurationSec": 238.5,
+    "totalDurationSec": 863.4,
+    "digest": "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n\nPrior User Goals & Requests:\n- \"Cluster infrastructure deployment registry record:\n- Primary config path: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\n- Ingress service port: 7825\n- Authentication token: TOKEN-W1-W1-A-R2-4SF9\n- Health endpoint URL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\n- Initialization diagnostic error: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825\nPlease confirm you have recorded these exact infrastructure parameters in one concise sentence.\"\n- \"Use host_write_file to write 'C:\\AI\\scratch\\w1-a-r2-4sf9-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\nDistributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Distributed telemetry log record sequence alpha beta gamma delta 0123456789. Dis\"\n\nKey Insights & Outcomes:\n- Recorded: primary config path `C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log`, ingress port 7825, token `TOKEN-W1-W1-A-R2-4SF9`, health endpoint `https://cluster-w1-w1-a-r2-4sf9.internal/healthz`, and the diagnostic error `[FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0\n\nRetained Identifiers & Artifacts:\n- File paths: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log, C:\\AI\\scratch\\w1-a-r2-4sf9-mid.txt\n- Git SHAs: 0123456789\n- URLs: https://cluster-w1-w1-a-r2-4sf9.internal/healthz, https://cluster-w1-w1-a-r2-4sf9.internal/healthz`,\n\nCritical Errors & Failures:\n- - Initialization diagnostic error: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825\n- Recorded: primary config path `C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log`, ingress port 7825, token `TOKEN-W1-W1-A-R2-4SF9`, health endpoint `https://cluster-w1-w1-a-r2-4sf9.internal/healthz`, and the diagnostic error `[FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825` — all captured verbatim for this deployment registry record (noted as recorded values only; I have not verified the file, endpoint, or socket state).",
+    "probes": [
+      {
+        "name": "W1-File-Path",
+        "factType": "file_path",
+        "expected": "C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\nPORT: 7825\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R2-4SF9\nURL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\nERROR_LINE: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "passed": true
+      },
+      {
+        "name": "W1-Service-Port",
+        "factType": "port",
+        "expected": "7825",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\nPORT: 7825\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R2-4SF9\nURL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\nERROR_LINE: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "passed": true
+      },
+      {
+        "name": "W1-Cluster-Token",
+        "factType": "cluster_token",
+        "expected": "TOKEN-W1-W1-A-R2-4SF9",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\nPORT: 7825\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R2-4SF9\nURL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\nERROR_LINE: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "passed": true
+      },
+      {
+        "name": "W1-Endpoint-URL",
+        "factType": "url",
+        "expected": "https://cluster-w1-w1-a-r2-4sf9.internal/healthz",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\nPORT: 7825\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R2-4SF9\nURL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\nERROR_LINE: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "passed": true
+      },
+      {
+        "name": "W1-Error-Line",
+        "factType": "error_line",
+        "expected": "[FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "actual": "FILE_PATH: C:\\AI\\scratch\\telemetry-w1-a-r2-4sf9.log\nPORT: 7825\nCLUSTER_TOKEN: TOKEN-W1-W1-A-R2-4SF9\nURL: https://cluster-w1-w1-a-r2-4sf9.internal/healthz\nERROR_LINE: [FATAL-w1-a-r2-4sf9] upstream gateway socket connection failed: ECONNREFUSED 127.0.0.1:7825",
+        "passed": true
+      }
+    ],
+    "hallucinations": [],
+    "podRestartsInitial": 0,
+    "podRestartsFinal": 0
+  },
+  {
+    "runId": "w2-a-r2-ngkp",
+    "workload": "W2",
+    "arm": "A",
+    "runNumber": 2,
+    "timestamp": "2026-11-09T05:18:10.790Z",
+    "threadId": "thread-1794200498318-r9f6",
+    "deployedImage": "local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk",
+    "tokensBefore": 97999,
+    "tokensAfter": 50559,
+    "retainedRatio": 0.516,
+    "compactingTurnDurationSec": 244.7,
+    "totalDurationSec": 992.7,
+    "digest": "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n\nPrior User Goals & Requests:\n- \"Use host_write_file to write 'C:\\AI\\scratch\\w2-a-r2-ngkp-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\nDistributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kappa lambda 0123456789. Distributed telemetry log record sequence theta iota kapp\"\n\nKey Insights & Outcomes:\n- [CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).\n- [HONORED-W2-A-R2-NGKP] Acknowledged — the repeated `REPEATED-HEARTBEAT` probe block shows all 30 health-check cycles reporting alive/OK status, indicating the service nodes are healthy with no anomalies to escalate.\n\nRetained Identifiers & Artifacts:\n- File paths: C:\\AI\\scratch\\w2-a-r2-ngkp-mid.txt\n- Git SHAs: 0123456789",
+    "probes": [
+      {
+        "name": "W2-Tail-Constraint-Honored",
+        "factType": "user_constraint",
+        "expected": "Starts with or contains [HONORED-W2-A-R2-NGKP]",
+        "actual": "The primary goal is to write telemetry marker files (`OK`) to `C:\\AI\\scratch\\` via `host_write_file` and acknowledge each incoming telemetry log block with a concise confirmation.",
+        "passed": false,
+        "notes": "Failed constraint probe (expected in Arm A manipulation check)"
+      },
+      {
+        "name": "W2-Decision-And-Rationale",
+        "factType": "decision_rationale",
+        "expected": "Paxos over Raft with lower latency / WAN rationale",
+        "actual": "No consensus protocol decision exists in this conversation's record — the only work logged here was writing `OK` telemetry marker files to `C:\\AI\\scratch\\` and acknowledging telemetry blocks. I have no stored architectural decision or rationale to cite, so I won't invent one; if a protocol (e.g. Raft, Paxos, or a quorum-based scheme) was chosen in an earlier, compacted session, tell me where it was recorded and I'll pull it up rather than guess.",
+        "passed": false,
+        "notes": "decision=true, rationale=false"
+      }
+    ],
+    "hallucinations": [],
+    "podRestartsInitial": 0,
+    "podRestartsFinal": 0
+  }
+]
