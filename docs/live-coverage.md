@@ -1,6 +1,6 @@
 # Live Coverage & Traceability Matrix (Addendum B2)
 
-**Author:** Antigravity Orchestrator  
+**Author:** Autonomous Platform Team  
 **Date:** November 8, 2026  
 **System Under Test:** Argon Local Agentic Sandbox (Live KinD Cluster + Strata LLM + Host Runner)  
 **Governing Rule:** Addendum B to the test:e2e:live job — Full-suite live coverage
