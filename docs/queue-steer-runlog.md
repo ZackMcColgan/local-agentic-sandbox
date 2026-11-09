@@ -284,4 +284,4 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - **Platform Smoke Tier Proof**: 4/4 PASSED (L1, L2, L5, L6) in 16.1m, 0 pod restarts.
 - **Winning Launch Diff**: Available in `docs/strata-bench-results.md` (+ `--pcie-frac 1.00`, - `--spec-min-p 0.6`, + `--spec-min-p 0.70`).
 - **Owner Adoption**: Phase 7 diff adopted to `hermes-strata-gyro-64k.json`; full-stack `AI-ON.ps1` verified live with L1 smoke pass in 1.2m.
-- **Phase 8 Micro-Bench (Resident Budget)**: 14/2 variant yielded 59.1 tok/s on 4K prose but 38.5 tok/s on 100K (missed 51.1 tok/s threshold). Verdict: REVERTED. Pre-trial adopted configuration (13/3) restored and verified live with L1 smoke pass in 1.4m (0 pod restarts).
+- **Phase 8 Micro-Bench & Adoption (Resident Budget)**: On identical fixtures, 14/2 matched or beat 13/3 on every cell with zero memory incidents (the 51.1 threshold was from different Phase 4 fixtures). Owner adopted 14/2 on Nov 9, 2026 (`--resident-budget-gib 14`, `STRATA_RESIDENT_HEADROOM_GIB=2`). Telemetry verified: 16,596 resident experts (67.5% in VRAM+RAM), slot 0 idle, L1 live pass in 1.6m (0 pod restarts).

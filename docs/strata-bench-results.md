@@ -1,6 +1,6 @@
 # Strata Speed Benchmark Results (REV 4 — Nov 9, 2026)
 **Status**: COMPLETE (FINAL)  
-**Target Architecture**: AMD Radeon RX 9070 XT (gfx1201), 16 GB VRAM | Ryzen 5 7600 (8c/16t), 32 GB RAM  
+**Target Architecture**: AMD Radeon RX 9070 XT (gfx1201), 16 GB VRAM | Ryzen 7 5700X3D (8c/16t), 32 GB RAM  
 **Host Environment**: Windows 11 air-gapped sandbox  
 **Live Target**: `http://127.0.0.1:8080` (Model: `qwen3.8-flash-next-gyro-gyro-s`)  
 
@@ -331,4 +331,43 @@ To permanently adopt the winning configuration, apply this exact diff to `C:\Use
 - **Runtime Startup**: `AI-ON.ps1` executed cleanly (Strata PID 33724 ready in 30.2s, Hermes ready in 44.2s).
 - **Slot Check**: `GET /slots` answers and slot 0 is **IDLE** (`is_processing: false`).
 - **Live Platform Turn**: `l1-short-flow-copy.spec.ts` **PASSED** in 1.4m (0 pod restarts).
-- **Final Adoption Diff**: Unchanged from Phase 7 (`--spec-min-p 0.70`, `--pcie-frac 1.00`).
+
+### 6. Phase 8 Resolution & Final Adoption (Owner's Ruling — Nov 9, 2026)
+- **Ruling**: The original Phase 8 verdict compared across fixture sets (38.5 tok/s on the Phase 6 fixtures vs a 51.1 tok/s threshold from the Phase 4 fixtures); on identical fixtures 14/2 matched or beat 13/3 on every cell with zero memory incidents; the owner adopted 14/2 on that evidence on Nov 9, 2026.
+- **Active Adopted Configuration**:
+  - `--resident-budget-gib 14`
+  - `STRATA_RESIDENT_HEADROOM_GIB=2`
+  - `--pcie-frac 1.00`
+  - `--spec-min-p 0.70`
+  - `--kv int8`
+- **Startup Telemetry (PID 28404)**:
+  - GPU cache: **3,394 experts**
+  - RAM cache: **13,202 experts** (12.91 GiB pinned)
+  - Total resident: **16,596 experts** (67.5% of model resident in RAM/VRAM)
+  - Slot 0 IDLE, L1 live platform chat spec **PASSED** in 1.6m (0 pod restarts).
+
+---
+
+## 7. Final Adopted Launch Configuration (Diff vs Baseline)
+```diff
+--- hermes-strata-gyro-64k.json (Original Baseline)
++++ hermes-strata-gyro-64k.json (Final Adopted Configuration)
+@@ -16,8 +16,10 @@
+         "--spec",
+         "3",
+         "--spec-min-p",
+-        "0.6",
++        "0.70",
++        "--pcie-frac",
++        "1.00",
+         "--mtp",
+         "C:\\AI\\Strata-data\\mtp\\rt",
+@@ -28,3 +30,3 @@
+         "--resident-budget-gib",
+-        "13",
++        "14",
+         "--vision",
+@@ -50,2 +52,2 @@
+-        "STRATA_RESIDENT_HEADROOM_GIB": "3",
++        "STRATA_RESIDENT_HEADROOM_GIB": "2",
+```
