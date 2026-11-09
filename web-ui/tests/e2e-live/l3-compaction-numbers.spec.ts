@@ -28,8 +28,8 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     // 1. Create fresh session via real UI
     const threadId = await createFreshSession(page, url, "L3 Compaction");
 
-    // 2. Round 1: Seed unique memorable tokens via real chat turn (Fresh thread ~1K-4K tier)
-    const seedPrompt = "Mission parameter: Codename Project-Zeus-77. Secret port is 8443. Access token is ZEUS-9922. Acknowledge and repeat this exact token.";
+    // 2. Round 1: Seed unique memorable configuration tokens (Fresh thread ~1K-4K tier)
+    const seedPrompt = "Configuration registry: Project name is Project-Zeus-77, cluster identifier is ZEUS-9922, and primary service port is 8443. Please confirm these settings in one sentence.";
     console.log(`[L3] Dispatching Round 1 (Seed prompt, fresh thread tier) on thread ${threadId}...`);
     await sendPrompt(page, seedPrompt);
 
@@ -40,8 +40,8 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     console.log(`[L3] In-app context counter after Round 1 (seed): ${counter}`);
 
     // 3. Round 2: Real chat turn growing context to mid tier (~50K tokens)
-    // ~190,000 characters ~ 47,500 tokens + ~1,500 prior = ~49K tokens
-    const fillerMid = "Distributed telemetry log record sequence alpha beta gamma delta 0123456789. ".repeat(2500); // ~192,500 chars
+    // ~185,000 characters ~ 46,250 tokens + ~1,500 prior = ~48K tokens
+    const fillerMid = "Distributed telemetry log record sequence alpha beta gamma delta 0123456789. ".repeat(2400); // ~184,800 chars
     const promptMid = `Use host_write_file to write 'C:\\AI\\scratch\\l3-telemetry-mid.txt' with 'OK', then acknowledge this mid-tier telemetry block in one concise sentence:\n${fillerMid}`;
     console.log(`[L3] Dispatching Round 2 (Mid tier ~50K tokens)...`);
     await sendPrompt(page, promptMid);
@@ -51,7 +51,7 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     console.log(`[L3] In-app context counter after Round 2 (mid tier): ${counter}`);
 
     // 4. Round 3: Real chat turn crossing the 85K compaction threshold (~88K tokens)
-    // ~155,000 characters ~ 38,750 tokens + ~49K prior = ~88K tokens (>85K trigger!)
+    // ~155,000 characters ~ 38,750 tokens + ~48K prior = ~87K tokens (>85K trigger!)
     const fillerThreshold = "Distributed telemetry log record sequence epsilon zeta eta theta 0123456789. ".repeat(2000); // ~154,000 chars
     const promptThreshold = `Use host_write_file to write 'C:\\AI\\scratch\\l3-telemetry-threshold.txt' with 'OK', then acknowledge this 85K-threshold telemetry block in one concise sentence:\n${fillerThreshold}`;
     console.log(`[L3] Dispatching Round 3 (85K threshold tier)...`);
@@ -62,7 +62,7 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     console.log(`[L3] In-app context counter after Round 3 (85K threshold): ${counter}`);
 
     // 5. Round 4: Real chat turn pushing into full 100K budget / triggering compaction ladder
-    const fillerBudget = "Distributed telemetry log record sequence iota kappa lambda mu 0123456789. ".repeat(1000); // ~75,000 chars
+    const fillerBudget = "Distributed telemetry log record sequence iota kappa lambda mu 0123456789. ".repeat(800); // ~60,000 chars
     const promptBudget = `Use host_write_file to write 'C:\\AI\\scratch\\l3-telemetry-budget.txt' with 'OK', then acknowledge this 100K-budget telemetry block in one concise sentence:\n${fillerBudget}`;
     console.log(`[L3] Dispatching Round 4 (100K budget & compaction tier)...`);
     await sendPrompt(page, promptBudget);
@@ -72,7 +72,7 @@ test.describe("L3: Compaction & Context Numbers @full", () => {
     console.log(`[L3] In-app context counter after Round 4 (100K budget / compaction): ${counter}`);
 
     // 6. Round 5: Recall turn — recalls seeded gist across compacted history
-    const recallPrompt = "What is the secret access token and port for Project-Zeus-77? Answer concisely.";
+    const recallPrompt = "What is the cluster identifier and service port for Project-Zeus-77? Answer concisely.";
     console.log(`[L3] Dispatching Round 5 (Recall turn across compacted context)...`);
     await sendPrompt(page, recallPrompt);
 
