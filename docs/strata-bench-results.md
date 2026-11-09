@@ -291,3 +291,44 @@ To permanently adopt the winning configuration, apply this exact diff to `C:\Use
 ```
 
 *Adoption Decision*: **ADOPTED (Owner-Approved)**. Phase 7 diff applied to `hermes-strata-gyro-64k.json`. Full-stack `AI-ON.ps1` (Strata + Hermes) restarted cleanly (Strata PID 31252 in 32.3s, Hermes in 81.9s). Verified live: `GET /slots` idle, L1 live platform chat spec **PASSED** in 1.2m (0 pod restarts).
+
+---
+
+## Phase 8 — Micro-Bench: Resident Budget Addendum (Owner-Approved Follow-On)
+*Completed*: 2026-11-09T15:38:00Z  
+*Base Configuration*: Phase 6/7 Calibrated Winner (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--kv int8`, Strata Engine `0.1.58`)
+
+### 1. Variant 1: 14 GiB Resident Budget / 2 GiB Headroom (`14/2`)
+- **Flags Changed**: `--resident-budget-gib 14` (was 13) and `STRATA_RESIDENT_HEADROOM_GIB=2` (was 3). (Sum = 16 GiB).
+- **Startup Engine Telemetry (PID 23740)**:
+  - **GPU Resident Experts**: **3,452 experts** in VRAM cache (3.37 GiB of VRAM).
+    - *Comparison*: vs Phase 0 baseline (2,602 experts): **+850 experts (+32.7%)**; vs 13/3 base (3,408 experts): **+44 experts**.
+  - **RAM Resident Experts**: **12,739 experts** (12.45 GiB pinned RAM budget).
+    - *Comparison*: vs 13/3 base (11,784 experts): **+955 experts in RAM**.
+    - *Combined Total*: **16,191 resident experts** in VRAM + RAM (65.9% of the entire 24,576 model experts resident).
+  - **Idle VRAM**: 2,208 MiB free with everything loaded. Process VRAM usage: **13.21 GB** (vs 9.95 GB in Phase 0 baseline). Total adapter allocation: 13.47 GB.
+
+### 2. Subset Benchmark Results (Identical Fixtures)
+| Cell | Rep | Prompt Tokens | Gen Tokens | Decode (tok/s) | Prefill (tok/s) | TTFT (s) | Draft Accepted | Duration (s) |
+|---|---|---|---|---|---|---|---|---|
+| `prose-4k` | 1 | 2,774 | 600 | **59.1** | 65.9 | 0.08s | 84.2% | 10.2s |
+| `json-4k` | 1 | 6,810 | 600 | **42.6** | 424.1 | 16.06s | 92.2% | 30.2s |
+| `prose-100k` | 1 | 64,260 | 300 | **38.5** | 614.3 | 104.60s | 81.4% | 112.5s |
+
+### 3. VRAM Occupancy & Stability During 100K Cell
+- **Continuous Sampling**: Min 12.561 GiB, Max **12.589 GiB**, Avg 12.587 GiB adapter usage.
+- **Engine Free VRAM during generation**: 2,178 MiB free maintained across verify windows.
+- **Stability Incidents**: **0 evictions, 0 OOMs, 0 engine restarts**.
+
+### 4. Verdict & Rationale
+- **Rule**: KEPT only if `prose-100k` decode beats 51.1 tok/s with zero memory incidents; a 4K-only win with any 100K instability is a REVERT.
+- **Finding**: While 4K prose reached 59.1 tok/s, 100K decode was **38.5 tok/s** (well below the 51.1 tok/s threshold). Squeezing OS RAM headroom to 2 GiB leaves only ~2.2 GiB free for the Windows system and filesystem page cache, elevating file paging latency on large prompts.
+- **Verdict**: **REVERT** (14/2 rejected).
+- **Variant 2 (`14.5/1.5`)**: **SKIPPED** per the rule ("If 14/2 wins clean, you may trial 14.5/1.5 once").
+
+### 5. Post-Trial Restoration & Live Verification
+- **Configuration Restored**: `hermes-strata-gyro-64k.json` restored to `--resident-budget-gib 13` and `STRATA_RESIDENT_HEADROOM_GIB=3`.
+- **Runtime Startup**: `AI-ON.ps1` executed cleanly (Strata PID 33724 ready in 30.2s, Hermes ready in 44.2s).
+- **Slot Check**: `GET /slots` answers and slot 0 is **IDLE** (`is_processing: false`).
+- **Live Platform Turn**: `l1-short-flow-copy.spec.ts` **PASSED** in 1.4m (0 pod restarts).
+- **Final Adoption Diff**: Unchanged from Phase 7 (`--spec-min-p 0.70`, `--pcie-frac 1.00`).

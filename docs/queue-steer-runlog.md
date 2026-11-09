@@ -283,4 +283,5 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - **Long Generation Sustained Stability**: 4,000 tokens generated at 48K context @ **40.5 tok/s** in 126.7s (31,742 prompt tokens, 85.0% draft acceptance).
 - **Platform Smoke Tier Proof**: 4/4 PASSED (L1, L2, L5, L6) in 16.1m, 0 pod restarts.
 - **Winning Launch Diff**: Available in `docs/strata-bench-results.md` (+ `--pcie-frac 1.00`, - `--spec-min-p 0.6`, + `--spec-min-p 0.70`).
-- **Restoration**: Server restored to pristine Phase 3 baseline configuration (`--spec-min-p 0.6`, no `--pcie-frac 1.00`); verified live with L1 smoke pass in 1.4m (0 pod restarts).
+- **Owner Adoption**: Phase 7 diff adopted to `hermes-strata-gyro-64k.json`; full-stack `AI-ON.ps1` verified live with L1 smoke pass in 1.2m.
+- **Phase 8 Micro-Bench (Resident Budget)**: 14/2 variant yielded 59.1 tok/s on 4K prose but 38.5 tok/s on 100K (missed 51.1 tok/s threshold). Verdict: REVERTED. Pre-trial adopted configuration (13/3) restored and verified live with L1 smoke pass in 1.4m (0 pod restarts).
