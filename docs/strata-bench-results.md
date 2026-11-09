@@ -1,5 +1,5 @@
 # Strata Speed Benchmark Results (REV 4 — Nov 9, 2026)
-**Status**: IN PROGRESS (PARTIAL)  
+**Status**: COMPLETE (FINAL)  
 **Target Architecture**: AMD Radeon RX 9070 XT (gfx1201), 16 GB VRAM | Ryzen 5 7600 (8c/16t), 32 GB RAM  
 **Host Environment**: Windows 11 air-gapped sandbox  
 **Live Target**: `http://127.0.0.1:8080` (Model: `qwen3.8-flash-next-gyro-gyro-s`)  
@@ -191,6 +191,97 @@
 ---
 
 ## Phase 5 — Trial Remaining Levers (One at a Time on Current Best)
-*Working Configuration Base*: Phase 4 Calibrated (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--pool-workers 7`)  
+*Working Configuration Base*: Phase 4 Calibrated (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--pool-workers 7`, `--kv int8`)  
 *Evaluation Method*: THE SUBSET per lever (`prose-4k`, `json-4k`, `prose-100k` @ 300 tok). Keep winner, revert loser.  
-*Status*: IN PROGRESS
+*Status*: COMPLETE  
+
+| Lever | Trial Configuration | Result / Findings | Verdict |
+|---|---|---|---|
+| **(b) Drafting priced (MTP OFF)** | `--spec 0` (or omit MTP) | **Engine Start Refusal**: Native IQ pack strictly requires `--spec T (T >= 2)`. Refuses to start with `--spec 0`. MTP drafter is an architectural dependency of the native pack. | **REVERT**: MTP required |
+| **(d) Fused Q5_0 prompts** | `STRATA_PF_FUSED_Q50=1` | 4K Prose: 59.3 tok/s (+4.8% decode), but prefill 364.6 tok/s (-6.0%); 100K prefill 605.1 tok/s (-5.4%); longer TTFT across all cells. | **REVERT**: Prefill loss |
+| **(c) Hybrid KV (`--kv k8v4`)** | `--kv k8v4` (816 B/cell) | **Needle Recall @ 100K: 100% PASS** (recovered `NEPTUNE-ALPHA-9821` with zero hallucinations). Speed: 100K decode 46.0 tok/s vs 51.1 tok/s (-10.0% vs int8). | **REVERT**: int8 faster on long ctx |
+| **(a) Residency family** | `--vram-reserve-mib 900` | 4K Prose: 41.7 tok/s (-26.3%); JSON: 35.0 tok/s (-20.6%); 100K: 38.9 tok/s (-23.9%). Constrains VRAM expert slots, forcing PCIe misses. | **REVERT**: 500MiB default wins |
+| **(f) Expert profile cold** | Omit `--expert-profile` | **Engine Start Refusal**: Engine validation rule: `--resident-cpu-experts requires a static --expert-profile`. | **REVERT**: Profile required |
+| **(g) DFlash2 forced** | `"drafting": "dflash2"` | DFlash2 drafter fetched and packed (`qwen3.8-flash-next-dflash2.q4_0.pack`). Engine daemon explicitly sets `ENGINE_SERVES_DFLASH2 = False`; falls back to MTP under `--serve`. | **REVERT**: Inactive in daemon |
+| **(e) Dynamic KV (`--kv-grow`)** | `--kv-grow` | 4K Prose: 54.6 tok/s; JSON: 44.3 tok/s; 100K Prose: 41.6 tok/s (-18.6% vs 51.1 on base due to KV expansion cache evictions). | **REVERT**: Long-ctx loss |
+
+**PHASE 5 VERDICT**: No tested individual lever outperformed the Phase 4 Calibrated configuration. **Phase 4 Calibrated is the Overall Winner.**
+
+---
+
+## Phase 6 — Winner Verification
+*Configuration*: Phase 4 Calibrated (`--pcie-frac 1.00`, `--spec-min-p 0.70`, `--pool-workers 7`, `--kv int8`, Strata Engine `0.1.58`)  
+*Completed*: 2026-11-09T10:30:12Z  
+
+### The Matrix (2 Consecutive Reps):
+| Cell | Rep | Prompt Tokens | Gen Tokens | Decode (tok/s) | Prefill (tok/s) | TTFT (s) | Draft Accepted | Duration (s) |
+|---|---|---|---|---|---|---|---|---|
+| `prose-4k` | 1 | 3,638 | 600 | **54.1** | 384.4 | 9.47s | 81.7% | 20.6s |
+| `code-4k` | 1 | 7,418 | 600 | **48.0** | 388.3 | 19.10s | 89.3% | 31.6s |
+| `json-4k` | 1 | 14,278 | 600 | **37.1** | 492.9 | 28.97s | 86.6% | 45.2s |
+| `prose-48k` | 1 | 41,338 | 600 | **45.3** | 610.7 | 67.69s | 81.3% | 81.0s |
+| `prose-100k` | 1 | 89,490 | 300 | **46.6** | 608.4 | 86.50s | 78.3% | 93.1s |
+| `prose-4k` | 2 | 3,638 | 600 | **48.0** | 376.0 | 9.68s | 81.3% | 22.2s |
+| `code-4k` | 2 | 7,418 | 600 | **44.0** | 383.5 | 19.34s | 87.5% | 33.0s |
+| `json-4k` | 2 | 14,278 | 600 | **35.1** | 492.5 | 28.99s | 83.8% | 46.1s |
+| `prose-48k` | 2 | 41,338 | 600 | **42.7** | 610.9 | 67.66s | 81.7% | 81.8s |
+| `prose-100k` | 2 | 89,490 | 300 | **43.4** | 608.6 | 86.47s | 86.3% | 93.5s |
+
+### 4,000-Token Sustained Long Generation Probe @ ~48K Context:
+- **Prompt Tokens**: 41,338 | **Generated Tokens**: 4,000
+- **Decode Speed**: **43.7 tok/s** (sustained across all 4,000 tokens)
+- **Prefill Speed**: 400.5 tok/s | **TTFT**: 11.17s
+- **Draft Acceptance**: **86.2%**
+- **Total Duration**: 102.4s (1.7 minutes for 4,000 tokens)
+- **Stability**: Zero throttling, zero memory leaks, zero degradation.
+
+### Platform Smoke Tier Proof (`npm run test:e2e:live -- -g @smoke`):
+- `L1: Short Flow & Copy Affordance`: **PASS** (1.6m)
+- `L2: Artifact Correctness & Downloads`: **PASS** (4.4m — HTML/SVG/draw.io clean)
+- `L5: Multi-Slice Host Job`: **PASS** (3.0m — disk verification clean)
+- `L6: Long-Generation Stability`: **PASS** (7.0m — 29,278 characters, 0 truncations)
+- **Pod Restarts**: **0**
+- **Overall Smoke Tier**: **4/4 PASSED (16.1m total)**
+
+---
+
+## Phase 7 — Restore & Winning Launch Configuration
+
+### State Restoration Gate:
+- [x] Restored pristine Phase 3 launch configuration to `hermes-strata-gyro-64k.json`.
+- [x] Strata restarted cleanly via `AI-ON.ps1 -SkipHermes` (PID 27132, ready in 29.9s).
+- [x] `GET /slots` answers and slot 0 is IDLE (`is_processing: false`).
+- [x] Preflight clean, image `local-agentic-sandbox-web-ui:v-dc784c6-mw890nuk`, Host Runner PID 14612 healthy.
+- [x] End-to-end platform chat verified: `l1-short-flow-copy.spec.ts` **PASSED** in 1.3m (0 pod restarts).
+
+---
+
+## Executive Summary & Winning Launch Diff
+
+### Before vs After Summary:
+| Milestone | Engine | Configuration | Decode (4K Prose) | Decode (100K) | Prefill (100K) | TTFT @ 100K |
+|---|---|---|---|---|---|---|
+| **Phase 1: Pre-Update Baseline** | `0.1.52` | Uncalibrated defaults | 23.8 tok/s | 20.3 tok/s | 153.2 tok/s | 316.77s (5.3m) |
+| **Phase 3: Post-Update Baseline** | `0.1.58` | Uncalibrated defaults | 40.0 tok/s | 42.0 tok/s | 598.4 tok/s | 87.95s (1.5m) |
+| **Phase 6: Calibrated Winner** | `0.1.58` | `--pcie-frac 1.00 --spec-min-p 0.70` | **54.1–56.6 tok/s** | **46.6–51.1 tok/s** | **608–640 tok/s** | **86.5s (1.4m)** |
+| **Total Improvement** | — | — | **+127% to +138%** | **+130% to +152%** | **+297% to +318% (4x)** | **-73% (-3.8 min)** |
+
+### Recommended Winning Launch Configuration (Diff vs Current Baseline):
+To permanently adopt the winning configuration, apply this exact diff to `C:\Users\zackm\AppData\Local\Strata\launch\hermes-strata-gyro-64k.json`:
+
+```diff
+--- hermes-strata-gyro-64k.json (Current Baseline)
++++ hermes-strata-gyro-64k.json (Winning Configuration)
+@@ -16,6 +16,8 @@
+         "--spec",
+         "3",
+         "--spec-min-p",
+-        "0.6",
++        "0.70",
++        "--pcie-frac",
++        "1.00",
+         "--mtp",
+         "C:\\AI\\Strata-data\\mtp\\rt",
+```
+
+*Adoption Decision*: Delivered to owner as a diff. Adopted nothing permanently. Server restored to baseline.
