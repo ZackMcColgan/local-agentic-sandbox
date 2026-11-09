@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "test:lifecycle": "tsx --test tests-live/**/*.live.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.2.14",
