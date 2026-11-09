@@ -32,6 +32,7 @@
     "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts",
     "test:ui:update": "npm --prefix web-ui run test:e2e:update",
     "test:e2e:live": "npm --prefix web-ui run test:e2e:live",
+    "test:lifecycle": "npm --prefix web-ui run test:lifecycle",
     "test:all": "node scripts/test-all.js"
   },
   "overrides": {

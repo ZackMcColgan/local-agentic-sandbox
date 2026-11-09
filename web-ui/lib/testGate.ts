@@ -78,6 +78,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("hostDaemon") ||
       p.includes("build-host-runner") ||
       p.includes("aiLifecycle") ||
+      p.includes("lifecycleTargetGuard") ||
       p.includes("hostFourState"),
     tests: [
       "tests/hostMode.test.ts",
@@ -85,7 +86,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostFourState.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
-      "tests/aiLifecycle.test.ts",
+      "tests/hostLifecycleUnit.test.ts",
+      "tests/lifecycleGuard.test.ts",
       "tests/chatFilePaging.test.ts"
     ]
   },
@@ -595,6 +597,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes("playwright-live-report") ||
     normalizedPath.includes("tests/e2e/") ||
     normalizedPath.includes("tests/e2e-live/") ||
+    normalizedPath.includes("tests-live/") ||
+    normalizedPath.endsWith(".live.ts") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||
