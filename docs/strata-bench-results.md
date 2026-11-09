@@ -107,4 +107,36 @@
 ---
 
 ## Phase 3 — Post-Update Baseline (Strata 0.1.58 / App 0.2.7)
-*Status*: IN PROGRESS
+*Captured*: 2026-11-09T08:45:28Z  
+*Method*: Byte-identical programmatically generated fixtures, greedy decode (temp=0.0). Identical launch configuration to Phase 1.  
+*Time Budgeting*: Matrix completed in **4.6 minutes** (277.1s total vs ~15m in Phase 1).
+
+| Cell | Context Tier | Content Type | Prompt Tokens | Gen Tokens | Decode (tok/s) | Prefill (tok/s) | TTFT (s) | Draft Accepted | Total Duration |
+|---|---|---|---|---|---|---|---|---|---|
+| `prose-4k` | ~4K | Prose Spec | 3,638 | 600 | **40.0** | 356.9 | 10.19s | 80.2% | 25.2s |
+| `code-4k` | ~4K | TS Code | 7,418 | 600 | **44.0** | 436.0 | 17.01s | 81.0% | 30.7s |
+| `json-4k` | ~4K | JSON Payload | 14,278 | 600 | **36.0** | 531.3 | 26.87s | 82.2% | 43.5s |
+| `prose-48k` | ~48K | Prose Spec | 41,338 | 600 | **42.2** | 605.5 | 68.27s | 83.3% | 82.5s |
+| `code-48k` | ~48K | TS Code | — | — | *TRIMMED* | — | — | — | — |
+| `json-48k` | ~48K | JSON Payload | — | — | *TRIMMED* | — | — | — | — |
+| `prose-100k` | ~100K | Prose Spec | 89,490 | 300 | **42.0** | 598.4 | 87.95s | 69.6% | 95.2s |
+
+### Update Delta (Phase 3 vs Phase 1):
+| Metric | Pre-Update (0.1.52) | Post-Update (0.1.58) | Absolute Delta | Relative Gain |
+|---|---|---|---|---|
+| **Decode `prose-4k`** | 23.8 tok/s | **40.0 tok/s** | **+16.2 tok/s** | **+68.1%** |
+| **Decode `code-4k`** | 18.0 tok/s | **44.0 tok/s** | **+26.0 tok/s** | **+144.4%** |
+| **Decode `json-4k`** | 16.6 tok/s | **36.0 tok/s** | **+19.4 tok/s** | **+116.9%** |
+| **Decode `prose-48k`** | 22.0 tok/s | **42.2 tok/s** | **+20.2 tok/s** | **+91.8%** |
+| **Decode `prose-100k`** | 20.3 tok/s | **42.0 tok/s** | **+21.7 tok/s** | **+106.9%** |
+| **Prefill `prose-4k`** | 136.4 tok/s | **356.9 tok/s** | **+220.5 tok/s** | **+161.7%** |
+| **Prefill `prose-48k`** | 138.0 tok/s | **605.5 tok/s** | **+467.5 tok/s** | **+338.8%** (4.4x) |
+| **Prefill `prose-100k`** | 153.2 tok/s | **598.4 tok/s** | **+445.2 tok/s** | **+290.6%** (3.9x) |
+| **TTFT @ 48K** | 299.62s (5.0m) | **68.27s (1.1m)** | **-231.35s** | **-77.2%** |
+| **TTFT @ 100K** | 316.77s (5.3m) | **87.95s (1.5m)** | **-228.82s** | **-72.2%** |
+| **JSON Spread @ 4K** | -30.3% (23.8 vs 16.6) | **-10.0% (40.0 vs 36.0)** | **+20.3 pct pts** | **Significant parity improvement** |
+
+---
+
+## Phase 4 — Calibrate (Setup `--calibrate`)
+*Status*: PENDING
