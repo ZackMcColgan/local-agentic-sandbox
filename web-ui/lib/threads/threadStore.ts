@@ -38,6 +38,8 @@ export interface ThreadMessage {
   compactionActions?: string[];
   selectedModel?: string;
   status?: "completed" | "incomplete" | "error" | "streaming";
+  finish_reason?: string;
+  outputTokens?: number;
 }
 
 export interface ThreadCompactionBoundary {
@@ -488,7 +490,8 @@ export class ThreadStore {
       }
     }
 
-    // CHAT-10: Reconcile any orphaned 'streaming' assistant message when turn is no longer live (e.g. after server restart)
+    // CHAT-10 & Deliverable 4: Reconcile any orphaned 'streaming' assistant message when turn is no longer live
+    // On thread read, a message in "streaming" status with no live execution registered is finalized as "incomplete", content preserved.
     if (!isLive && thread.messages && thread.messages.length > 0) {
       for (const msg of thread.messages) {
         if (msg.role === "assistant" && msg.status === "streaming") {

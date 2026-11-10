@@ -19,6 +19,9 @@ export interface LLMStreamChunk {
     tool_calls?: any[];
   };
   done?: boolean;
+  finish_reason?: string;
+  outputTokens?: number;
+  eval_count?: number;
   [key: string]: any;
 }
 
@@ -633,11 +636,16 @@ export class LlamaCppProvider implements LLMProvider {
           const choice = parsed.choices?.[0];
           if (!choice) continue;
 
+          const finishReason = choice.finish_reason || parsed.finish_reason;
+          const usageOutputTokens = parsed.usage?.completion_tokens;
+
           // Handle streaming delta reasoning
           const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
           if (reasoning) {
             yield {
-              message: { thinking: reasoning }
+              message: { thinking: reasoning },
+              finish_reason: finishReason || undefined,
+              outputTokens: usageOutputTokens
             };
           }
 
@@ -657,19 +665,21 @@ export class LlamaCppProvider implements LLMProvider {
               if (content.includes("</think>")) {
                 const parts = content.split("</think>");
                 if (parts[0]) {
-                  yield { message: { thinking: parts[0] } };
+                  yield { message: { thinking: parts[0] }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
                 }
                 insideThinking = false;
                 const after = parts.slice(1).join("</think>");
                 if (after) {
-                  yield { message: { content: after } };
+                  yield { message: { content: after }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
                 }
               } else if (content) {
-                yield { message: { thinking: content } };
+                yield { message: { thinking: content }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
               }
             } else if (content) {
-              yield { message: { content } };
+              yield { message: { content }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
             }
+          } else if (finishReason) {
+            yield { finish_reason: finishReason, outputTokens: usageOutputTokens };
           }
 
           // Handle streaming delta tool calls

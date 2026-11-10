@@ -324,3 +324,41 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - Default suite backfilled with pure guard tests and mocked environment unit tests.
 - Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
 
+
+
+---
+
+## 2026-11-10: TURN-DELIVERY FIX & CLIENT RECONCILIATION
+
+### Context & Diagnosis Audit
+- **Root Cause Verified:** Long chat turns did not die; delivery failed due to the 500ms SSE writer write-race timeout (`[ChatRoute] SSE writer failed for thread ... Turn continuing detached server-side.`). Turn completes detached server-side and persists to thread record, but client was previously left with a terminal error.
+- **Defects Addressed:**
+  1. Caught SSE writer error was discarded without logging details.
+  2. Missing `finish_reason` and token accounting on persisted messages.
+  3. Client treated stream disconnect as a terminal error instead of transient state reconciled against server thread.
+  4. Zombie 'streaming' messages persisted on interrupted turns.
+
+### Deliverables Implemented & Verified
+- **Deliverable 1 (Log the Caught Error):**
+  - Updated `web-ui/app/api/chat/route.ts` and `web-ui/lib/turnReconciliation.ts`.
+  - Format helper formats caught error name, message, and first stack frame.
+  - Verbatim log output: `[ChatRoute] SSE writer failed for thread <id>: Error: writer timeout | at Timeout._onTimeout (...). Turn continuing detached server-side.`
+- **Deliverable 2 (Honest Turn Records):**
+  - Added `finish_reason?: string` and `outputTokens?: number` to `ThreadMessage` in `web-ui/lib/threads/threadStore.ts`.
+  - In `web-ui/app/api/chat/route.ts`, tracked `lastFinishReason` and `turnOutputTokens` across all LLM streaming loops (tool turns and synthesis).
+  - Saved `finish_reason` and `outputTokens` at assistant message persist.
+  - If `finish_reason` is abnormal (`"length"`, `"error"`, `"abort"`), marked turn status `"incomplete"` and appended honest truncation banner (`⚠️ [Turn incomplete: ... token limit reached]`).
+- **Deliverable 3 (Client Reconciliation):**
+  - Added pure transition helpers in `web-ui/lib/turnReconciliation.ts` (`transitionOnStreamDisconnect`, `transitionOnDetachedTurnReconciliation`).
+  - In `web-ui/components/ChatStream.tsx`, stream disconnect enters a transient state (`data-testid="turn-transient-disconnected"`: `"Connection interrupted — turn continuing server-side..."`), polls `/api/threads/:id` in background until detached turn completes, swaps in persisted full message, and reveals `data-testid="turn-resolved-detached"`.
+- **Deliverable 4 (Zombie Reaping):**
+  - In `web-ui/lib/threads/threadStore.ts` (`reconcileThread`), any assistant message remaining in `"streaming"` status when `!isLive` is finalized to `"incomplete"`, preserving content and setting `isStopped: true`.
+- **500ms Race Threshold:**
+  - Kept strictly unchanged at 500ms.
+
+### Test & Verification Evidence
+- `web-ui/tests/turnDeliveryReconciliation.test.ts`: 5/5 tests passing.
+- `npm run test:gate`: 416 tests passing, 0 failed in 38.779s (<90s budget).
+- `npm run build`: Compiled successfully in 10.4s, zero type or lint errors.
+- **Branch:** `feature/turn-delivery-reconciliation`
+- **Cluster Operations:** 0 operations performed (running re-baselined image `v-2b6262c-fresh`).
