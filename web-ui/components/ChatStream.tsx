@@ -1170,7 +1170,12 @@ export function ChatStream({
                 status: "error"
               }))
             );
-            throw new Error(event.error || "Streaming error encountered");
+            // Server explicitly reported a terminal turn error (e.g. engine offline,
+            // simulation error event). This is a verdict, not a disconnect: never
+            // route it into the detached-turn reconciliation path.
+            const terminalErr = new Error(event.error || "Streaming error encountered");
+            (terminalErr as any).isTerminalServerError = true;
+            throw terminalErr;
           }
         } catch (parseErr: any) {
           if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
@@ -1215,7 +1220,9 @@ export function ChatStream({
           const errJson = await res.json();
           errMessage = errJson.error || errMessage;
         } catch {}
-        throw new Error(errMessage);
+        const httpErr = new Error(errMessage);
+        (httpErr as any).terminalServerError = true;
+        throw httpErr;
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
@@ -1231,7 +1238,7 @@ export function ChatStream({
         );
       } else {
         console.error("[ChatStream] Stream interrupted mid-approval:", err);
-        if (targetThreadId) {
+        if (targetThreadId && err.isTerminalServerError !== true) {
           setIsTransientDisconnected(true);
           setReconcilingThreadId(targetThreadId);
           setStreamStatus("Connection interrupted — turn continuing server-side...");
@@ -1627,7 +1634,11 @@ export function ChatStream({
             errMessage = errJson.error || errMessage;
           } catch {}
         }
-        throw new Error(errMessage);
+        // HTTP-level failure is a terminal verdict (503 backend-down, 413, 504),
+        // not a mid-stream disconnect: never reconcile it server-side.
+        const httpErr = new Error(errMessage);
+        (httpErr as any).isTerminalServerError = true;
+        throw httpErr;
       }
 
       await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
@@ -1645,7 +1656,10 @@ export function ChatStream({
       } else {
         console.error("[ChatStream] Stream interrupted mid-turn:", err);
         const currentTid = activeThreadId || threadId;
-        if (currentTid) {
+        // Transient reconciliation applies only to genuine client-side disconnects
+        // on real threads. Terminal server errors (engine offline, HTTP 503) and
+        // offline simulations must render the error banner + Retry surface instead.
+        if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
           // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
           setIsTransientDisconnected(true);
           setReconcilingThreadId(currentTid);
