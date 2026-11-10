@@ -1494,6 +1494,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           });
         }
 
+        // SYNTHESIS-RETRY: hoisted flag — true when BOTH synthesis passes returned no text.
+        let synthesisReturnedEmpty = false;
         // Post-tool synthesis safety pass if lingering tool calls, missing artifact, empty text, or late steers:
         const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
         const pendingLateSteers = activeThreadId ? threadStore.getPendingSteers(activeThreadId) : [];
@@ -1551,8 +1553,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
           }
 
-          let synthContent = "";
-          let synthThinking = "";
           const synthOptions = resolveRoundModelOptions({
             model: activeModel,
             requestedEffort: effectiveReasoningEffort,
@@ -1561,51 +1561,80 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             hasCompletedToolCalls: traces.length > 0
           });
 
-          for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
-            model: activeModel,
-            messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-            signal: turnAbortController.signal,
-            reasoning_effort: synthOptions.reasoning_effort,
-            options: synthOptions
-          })) {
-            if (chunk.finish_reason) {
-              lastFinishReason = chunk.finish_reason;
+          // SYNTHESIS-RETRY: a single synthesis pass, streamed into the shared accumulators.
+          const runSynthesisPass = async (): Promise<{ content: string; thinking: string }> => {
+            let passContent = "";
+            let passThinking = "";
+            for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+              model: activeModel,
+              messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
+              signal: turnAbortController.signal,
+              reasoning_effort: synthOptions.reasoning_effort,
+              options: synthOptions
+            })) {
+              if (chunk.finish_reason) {
+                lastFinishReason = chunk.finish_reason;
+              }
+              if (typeof chunk.outputTokens === "number") {
+                turnOutputTokens = chunk.outputTokens;
+              } else if (typeof chunk.eval_count === "number") {
+                turnOutputTokens = chunk.eval_count;
+              }
+              if (chunk.message?.thinking) {
+                passThinking += chunk.message.thinking;
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
+                  : passThinking;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                await sendEvent({ type: "thinking", content: chunk.message.thinking });
+                await sendEvent({ type: "thought", thought: currentCumulativeThought });
+              }
+              if (chunk.message?.content) {
+                passContent += chunk.message.content;
+                accumulatedStreamedTokens += chunk.message.content;
+                const currentCumulativeThought = accumulatedThoughts.length > 0
+                  ? (passThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}` : accumulatedThoughts.join("\n\n"))
+                  : (passThinking || undefined);
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                await sendEvent({ type: "token", content: chunk.message.content });
+              }
             }
-            if (typeof chunk.outputTokens === "number") {
-              turnOutputTokens = chunk.outputTokens;
-            } else if (typeof chunk.eval_count === "number") {
-              turnOutputTokens = chunk.eval_count;
+            return { content: passContent, thinking: passThinking };
+          };
+
+          let synthResult = await runSynthesisPass();
+          let synthesisPasses = 1;
+
+          if (!synthResult.content.trim() && !turnAbortController.signal.aborted && !explicitStopped) {
+            // SYNTHESIS-RETRY: an empty post-tool synthesis must never strand the turn.
+            // Bank pass 1's thinking BEFORE the retry overwrites it so the thought
+            // record never jumps backward.
+            if (synthResult.thinking.trim()) {
+              accumulatedThoughts.push(synthResult.thinking.trim());
             }
-            if (chunk.message?.thinking) {
-              synthThinking += chunk.message.thinking;
-              const currentCumulativeThought = accumulatedThoughts.length > 0
-                ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}`
-                : synthThinking;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
-              await sendEvent({ type: "thinking", content: chunk.message.thinking });
-              await sendEvent({ type: "thought", thought: currentCumulativeThought });
-            }
-            if (chunk.message?.content) {
-              synthContent += chunk.message.content;
-              accumulatedStreamedTokens += chunk.message.content;
-              const currentCumulativeThought = accumulatedThoughts.length > 0
-                ? (synthThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${synthThinking}` : accumulatedThoughts.join("\n\n"))
-                : (synthThinking || undefined);
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
-              await sendEvent({ type: "token", content: chunk.message.content });
-            }
+            await sendEvent({
+              type: "status",
+              status: "Synthesis returned no text — retrying once..."
+            });
+            synthResult = await runSynthesisPass();
+            synthesisPasses = 2;
           }
 
-          if (synthThinking.trim()) {
-            accumulatedThoughts.push(synthThinking.trim());
+          if (synthResult.thinking.trim()) {
+            accumulatedThoughts.push(synthResult.thinking.trim());
           }
 
-          if (synthContent.trim()) {
-            currentAssistantMessage = { role: "assistant", content: synthContent };
+          if (synthResult.content.trim()) {
+            currentAssistantMessage = { role: "assistant", content: synthResult.content };
+            synthSpan.end("ok", { synthesisPasses });
+          } else {
+            synthesisReturnedEmpty = true;
+            synthSpan.end("empty-synthesis", { synthesisPasses });
           }
-          synthSpan.end("ok");
         }
 
+        // SYNTHESIS-RETRY: honest end-of-turn stamp for a failed synthesis (retry exhausted).
+        const EMPTY_SYNTHESIS_STAMP = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.] Work persisted above; the summary failed. The thread is resumable — resume this thread to continue.`;
         // Clean residual tool tags
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
         let turnStatus: "completed" | "incomplete" | undefined = undefined;
@@ -1629,7 +1658,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           if (loopPaused) {
             cleanedContent = `${pauseNote} Traces captured above; synthesis returned no text.`;
           } else if (traces.length > 0) {
-            cleanedContent = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]`;
+            cleanedContent = EMPTY_SYNTHESIS_STAMP;
           } else if (currentAssistantMessage.content?.trim()) {
             cleanedContent = currentAssistantMessage.content.trim();
             turnStatus = undefined;
@@ -1642,6 +1671,17 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           cleanedContent = `${cleanedContent}\n\n${pauseNote}`;
         }
 
+        // SYNTHESIS-RETRY: if BOTH synthesis passes returned no text, the turn ends honestly —
+        // whatever landed above is persisted, status is incomplete, and the stamp says the
+        // summary failed and the thread is resumable (never a silent "completed").
+        if (synthesisReturnedEmpty) {
+          turnStatus = "incomplete";
+          if (!cleanedContent.includes(EMPTY_SYNTHESIS_STAMP)) {
+            cleanedContent = cleanedContent.trim()
+              ? `${cleanedContent}\n\n${EMPTY_SYNTHESIS_STAMP}`
+              : EMPTY_SYNTHESIS_STAMP;
+          }
+        }
         // Gather turn attachments using exact write tracking
         const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
