@@ -362,3 +362,20 @@ Executed adversarial probes Aâ€“G against the deployed chat runtime, registered 
 - `npm run build`: Compiled successfully in 10.4s, zero type or lint errors.
 - **Branch:** `feature/turn-delivery-reconciliation`
 - **Cluster Operations:** 0 operations performed (running re-baselined image `v-2b6262c-fresh`).
+
+---
+
+## CI Job: PR #63 Green Run Log (2026-11-10)
+
+### Step 0 — State Established (read-only gh evidence)
+- `gh workflow list --all`: `CI Pipeline & Security Boundary Verification` = **active** (ID 370993482). No workflow disabled_manually or disabled_inactivity.
+- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` — repo-level Actions enabled.
+- `gh run list --limit 15`: runs continue through 2026-11-10T16:47:52Z; last green run was develop push `2b6262c` (PR #62 merge) at 2026-11-09T22:53:50Z.
+- `gh pr view 63`: state OPEN, head `feature/turn-delivery-reconciliation` @ `e1f0cb4`, statusCheckRollup = FAILURE on `Unit Tests & Static Analysis` (run 42858208319), downstream jobs SKIPPED.
+
+### Root Cause
+Actions was never disabled — no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
+
+### Fix (cycle 1, on branch, no test/workflow weakening)
+- `web-ui/components/ChatStream.tsx`: added `lastAssistantIndex` (last assistant message index over `deduplicatedMessages`) and keyed `hasResolvedDetachedTurn` notification to `idx === lastAssistantIndex` instead of the literal tail.
+- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.

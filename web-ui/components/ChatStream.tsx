@@ -1725,6 +1725,13 @@ export function ChatStream({
     return true;
   });
 
+  // Anchor for the reconciled detached-turn notification: the last assistant message,
+  // not the literal tail, so a steer bubble appended after reconciliation does not hide it.
+  const lastAssistantIndex = deduplicatedMessages.reduce(
+    (last, m, i) => (m.role === "assistant" ? i : last),
+    -1
+  );
+
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
   const lastLinkedTaskMsgIndex = deduplicatedMessages
     .map((m, i) => m.taskId ? i : -1)
@@ -2842,7 +2849,7 @@ export function ChatStream({
                   )}
 
                   {/* Detached turn resolved notification */}
-                  {hasResolvedDetachedTurn && idx === deduplicatedMessages.length - 1 && (
+                  {hasResolvedDetachedTurn && idx === lastAssistantIndex && (
                     <div
                       data-testid="turn-resolved-detached"
                       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-medium"
