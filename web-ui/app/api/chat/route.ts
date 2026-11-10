@@ -92,9 +92,11 @@ import {
   HONEST_ABORT_DIRECTIVE
 } from "@/lib/grounding";
 
+import { formatSseWriterError } from "@/lib/turnReconciliation";
+
 const getLlmBaseUrl = () => process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
-const BROWSER_MCP_URL = process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
+const getMcpUrl = () => process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
+const getBrowserMcpUrl = () => process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 const ADVERTISED_TOOLS = new Set([
   "search_web",
@@ -425,6 +427,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     const traces: TraceItem[] = [];
     let accumulatedThoughts: string[] = [];
 
+    let lastFinishReason: string | undefined = undefined;
+    let turnOutputTokens: number | undefined = undefined;
+
     const persistAssistantOnAbort = () => {
       if (!activeThreadId || assistantPersisted) return;
       assistantPersisted = true;
@@ -437,6 +442,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn incomplete: Stream aborted or disconnected.]`
           : `⚠️ [Turn incomplete: Stream aborted or disconnected.]`;
 
+        const finalOutputTokens = turnOutputTokens ?? (accumulatedStreamedTokens ? estimateTokens(accumulatedStreamedTokens) : 0);
+
         const abortedMsg = {
           id: assistantMessageId,
           role: "assistant" as const,
@@ -448,7 +455,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           modelUsed: activeModel,
           selectedModel: requestedModel || activeModel,
           timestamp: new Date().toISOString(),
-          status: "incomplete" as const
+          status: "incomplete" as const,
+          finish_reason: lastFinishReason || "abort",
+          outputTokens: finalOutputTokens
         };
         threadStore.addMessage(activeThreadId, abortedMsg);
       } catch (err) {
@@ -491,7 +500,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       } catch (err: any) {
         clearInterval(heartbeatInterval);
         clientDisconnected = true;
-        console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
+        console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}: ${formatSseWriterError(err)}. Turn continuing detached server-side.`);
       }
     };
 
@@ -566,7 +575,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 2. Connect to Sandboxed Code-Runner / Workspace MCP
-        const sandboxSession = await connectMcpClient(MCP_URL, "orchestrator-sandbox-client");
+        const sandboxSession = await connectMcpClient(getMcpUrl(), "orchestrator-sandbox-client");
         if (sandboxSession) {
           activeSessions.push(sandboxSession);
           for (const t of sandboxSession.tools) {
@@ -575,7 +584,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 3. Connect to Isolated Browser/Scraper MCP
-        const browserSession = await connectMcpClient(BROWSER_MCP_URL, "orchestrator-browser-client");
+        const browserSession = await connectMcpClient(getBrowserMcpUrl(), "orchestrator-browser-client");
         if (browserSession) {
           activeSessions.push(browserSession);
           for (const t of browserSession.tools) {
@@ -935,6 +944,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
           try {
             for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
+              if (chunk.finish_reason) {
+                lastFinishReason = chunk.finish_reason;
+              }
+              if (typeof chunk.outputTokens === "number") {
+                turnOutputTokens = chunk.outputTokens;
+              } else if (typeof chunk.eval_count === "number") {
+                turnOutputTokens = chunk.eval_count;
+              }
               if (chunk.message?.thinking) {
                 roundThinking += chunk.message.thinking;
                 const currentCumulativeThought = accumulatedThoughts.length > 0
@@ -1551,6 +1568,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             reasoning_effort: synthOptions.reasoning_effort,
             options: synthOptions
           })) {
+            if (chunk.finish_reason) {
+              lastFinishReason = chunk.finish_reason;
+            }
+            if (typeof chunk.outputTokens === "number") {
+              turnOutputTokens = chunk.outputTokens;
+            } else if (typeof chunk.eval_count === "number") {
+              turnOutputTokens = chunk.eval_count;
+            }
             if (chunk.message?.thinking) {
               synthThinking += chunk.message.thinking;
               const currentCumulativeThought = accumulatedThoughts.length > 0
@@ -1634,6 +1659,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           return;
         }
 
+        if (lastFinishReason === "length" || lastFinishReason === "error" || lastFinishReason === "abort") {
+          turnStatus = "incomplete";
+          const truncationNotice = `⚠️ [Turn incomplete: Generation truncated (${lastFinishReason}).]`;
+          if (!cleanedContent.includes("⚠️ [Turn incomplete:")) {
+            cleanedContent = cleanedContent.trim() ? `${cleanedContent}\n\n${truncationNotice}` : truncationNotice;
+          }
+        }
+
+        const finalOutputTokens = turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0);
+
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
             id: assistantMessageId,
@@ -1650,7 +1685,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             tokensBeforeCompaction: turnCompacted ? turnTokensBefore : undefined,
             tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
-            status: turnStatus || ("completed" as const)
+            status: turnStatus || ("completed" as const),
+            finish_reason: lastFinishReason || "stop",
+            outputTokens: finalOutputTokens
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
           assistantPersisted = true;

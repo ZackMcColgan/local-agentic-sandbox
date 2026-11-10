@@ -528,6 +528,9 @@ export function ChatStream({
   const programmaticScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const activeAssistantMsgIdRef = useRef<string | null>(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const [reconcilingThreadId, setReconcilingThreadId] = useState<string | null>(null);
+  const [isTransientDisconnected, setIsTransientDisconnected] = useState<boolean>(false);
+  const [hasResolvedDetachedTurn, setHasResolvedDetachedTurn] = useState<boolean>(false);
 
   const upsertAssistant = (
     prev: ChatMessage[],
@@ -567,7 +570,47 @@ export function ChatStream({
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const chatQueueRef = useRef<ChatQueue | null>(null);
 
-  // Sync / instantiate queue for current thread and persist follow-up action
+  // Poll and reconcile thread records if a stream disconnected mid-turn
+  useEffect(() => {
+    if (!reconcilingThreadId) return;
+    let active = true;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const pollDetachedTurn = async () => {
+      try {
+        const res = await fetch(`/api/threads/${reconcilingThreadId}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" }
+        });
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (Array.isArray(data?.thread?.messages)) {
+          const threadMsgs: ChatMessage[] = data.thread.messages;
+          const lastAsst = [...threadMsgs].reverse().find((m) => m.role === "assistant");
+          if (lastAsst) {
+            setMessages(threadMsgs);
+            if (lastAsst.status !== "streaming") {
+              setIsTransientDisconnected(false);
+              setReconcilingThreadId(null);
+              setHasResolvedDetachedTurn(true);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[ChatStream] Detached turn reconciliation poll error:", err);
+      }
+      if (active) {
+        pollTimer = setTimeout(pollDetachedTurn, 1000);
+      }
+    };
+
+    pollTimer = setTimeout(pollDetachedTurn, 1000);
+    return () => {
+      active = false;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [reconcilingThreadId]);
   useEffect(() => {
     const tid = activeThreadId || threadId;
     if (typeof window !== "undefined" && tid) {
@@ -1127,7 +1170,12 @@ export function ChatStream({
                 status: "error"
               }))
             );
-            throw new Error(event.error || "Streaming error encountered");
+            // Server explicitly reported a terminal turn error (e.g. engine offline,
+            // simulation error event). This is a verdict, not a disconnect: never
+            // route it into the detached-turn reconciliation path.
+            const terminalErr = new Error(event.error || "Streaming error encountered");
+            (terminalErr as any).isTerminalServerError = true;
+            throw terminalErr;
           }
         } catch (parseErr: any) {
           if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
@@ -1172,7 +1220,9 @@ export function ChatStream({
           const errJson = await res.json();
           errMessage = errJson.error || errMessage;
         } catch {}
-        throw new Error(errMessage);
+        const httpErr = new Error(errMessage);
+        (httpErr as any).terminalServerError = true;
+        throw httpErr;
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
@@ -1187,14 +1237,26 @@ export function ChatStream({
           }))
         );
       } else {
-        console.error(err);
-        setErrorMsg(err.message || "Failed to continue chat after host approval");
-        setMessages((prev) =>
-          upsertAssistant(prev, (msg) => ({
-            ...msg,
-            status: "error"
-          }))
-        );
+        console.error("[ChatStream] Stream interrupted mid-approval:", err);
+        if (targetThreadId && err.isTerminalServerError !== true) {
+          setIsTransientDisconnected(true);
+          setReconcilingThreadId(targetThreadId);
+          setStreamStatus("Connection interrupted — turn continuing server-side...");
+          setMessages((prev) =>
+            upsertAssistant(prev, (msg) => ({
+              ...msg,
+              status: "streaming"
+            }))
+          );
+        } else {
+          setErrorMsg(err.message || "Failed to continue chat after host approval");
+          setMessages((prev) =>
+            upsertAssistant(prev, (msg) => ({
+              ...msg,
+              status: "error"
+            }))
+          );
+        }
       }
     } finally {
       setIsLoading(false);
@@ -1572,7 +1634,11 @@ export function ChatStream({
             errMessage = errJson.error || errMessage;
           } catch {}
         }
-        throw new Error(errMessage);
+        // HTTP-level failure is a terminal verdict (503 backend-down, 413, 504),
+        // not a mid-stream disconnect: never reconcile it server-side.
+        const httpErr = new Error(errMessage);
+        (httpErr as any).isTerminalServerError = true;
+        throw httpErr;
       }
 
       await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
@@ -1588,14 +1654,31 @@ export function ChatStream({
           }))
         );
       } else {
-        console.error(err);
-        setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
-        setMessages((prev) =>
-          upsertAssistant(prev, (msg) => ({
-            ...msg,
-            status: "error"
-          }))
-        );
+        console.error("[ChatStream] Stream interrupted mid-turn:", err);
+        const currentTid = activeThreadId || threadId;
+        // Transient reconciliation applies only to genuine client-side disconnects
+        // on real threads. Terminal server errors (engine offline, HTTP 503) and
+        // offline simulations must render the error banner + Retry surface instead.
+        if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
+          // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
+          setIsTransientDisconnected(true);
+          setReconcilingThreadId(currentTid);
+          setStreamStatus("Connection interrupted — turn continuing server-side...");
+          setMessages((prev) =>
+            upsertAssistant(prev, (msg) => ({
+              ...msg,
+              status: "streaming"
+            }))
+          );
+        } else {
+          setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+          setMessages((prev) =>
+            upsertAssistant(prev, (msg) => ({
+              ...msg,
+              status: "error"
+            }))
+          );
+        }
       }
     } finally {
       setIsLoading(false);
@@ -1655,6 +1738,13 @@ export function ChatStream({
     }
     return true;
   });
+
+  // Anchor for the reconciled detached-turn notification: the last assistant message,
+  // not the literal tail, so a steer bubble appended after reconciliation does not hide it.
+  const lastAssistantIndex = deduplicatedMessages.reduce(
+    (last, m, i) => (m.role === "assistant" ? i : last),
+    -1
+  );
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
   const lastLinkedTaskMsgIndex = deduplicatedMessages
@@ -2772,6 +2862,17 @@ export function ChatStream({
                     </div>
                   )}
 
+                  {/* Detached turn resolved notification */}
+                  {hasResolvedDetachedTurn && idx === lastAssistantIndex && (
+                    <div
+                      data-testid="turn-resolved-detached"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-medium"
+                    >
+                      <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Turn completed server-side and reconciled</span>
+                    </div>
+                  )}
+
                   {/* Per-message served model indicator: only display when served model differs from selected */}
                   {(() => {
                     if (m.id === "initial-welcome") return null;
@@ -2963,6 +3064,17 @@ export function ChatStream({
             </div>
           );
         })()}
+
+        {/* Deliverable 3: Transient stream disconnected indicator */}
+        {isTransientDisconnected && (
+          <div
+            data-testid="turn-transient-disconnected"
+            className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+          >
+            <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>Connection interrupted — turn continuing server-side...</span>
+          </div>
+        )}
 
         {errorMsg && (() => {
           const formatted = formatChatErrorMessage(errorMsg);

@@ -324,3 +324,64 @@ Executed adversarial probes A‚ÄìG against the deployed chat runtime, registered 
 - Default suite backfilled with pure guard tests and mocked environment unit tests.
 - Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
 
+
+
+---
+
+## 2026-11-10: TURN-DELIVERY FIX & CLIENT RECONCILIATION
+
+### Context & Diagnosis Audit
+- **Root Cause Verified:** Long chat turns did not die; delivery failed due to the 500ms SSE writer write-race timeout (`[ChatRoute] SSE writer failed for thread ... Turn continuing detached server-side.`). Turn completes detached server-side and persists to thread record, but client was previously left with a terminal error.
+- **Defects Addressed:**
+  1. Caught SSE writer error was discarded without logging details.
+  2. Missing `finish_reason` and token accounting on persisted messages.
+  3. Client treated stream disconnect as a terminal error instead of transient state reconciled against server thread.
+  4. Zombie 'streaming' messages persisted on interrupted turns.
+
+### Deliverables Implemented & Verified
+- **Deliverable 1 (Log the Caught Error):**
+  - Updated `web-ui/app/api/chat/route.ts` and `web-ui/lib/turnReconciliation.ts`.
+  - Format helper formats caught error name, message, and first stack frame.
+  - Verbatim log output: `[ChatRoute] SSE writer failed for thread <id>: Error: writer timeout | at Timeout._onTimeout (...). Turn continuing detached server-side.`
+- **Deliverable 2 (Honest Turn Records):**
+  - Added `finish_reason?: string` and `outputTokens?: number` to `ThreadMessage` in `web-ui/lib/threads/threadStore.ts`.
+  - In `web-ui/app/api/chat/route.ts`, tracked `lastFinishReason` and `turnOutputTokens` across all LLM streaming loops (tool turns and synthesis).
+  - Saved `finish_reason` and `outputTokens` at assistant message persist.
+  - If `finish_reason` is abnormal (`"length"`, `"error"`, `"abort"`), marked turn status `"incomplete"` and appended honest truncation banner (`‚ö†Ô∏è [Turn incomplete: ... token limit reached]`).
+- **Deliverable 3 (Client Reconciliation):**
+  - Added pure transition helpers in `web-ui/lib/turnReconciliation.ts` (`transitionOnStreamDisconnect`, `transitionOnDetachedTurnReconciliation`).
+  - In `web-ui/components/ChatStream.tsx`, stream disconnect enters a transient state (`data-testid="turn-transient-disconnected"`: `"Connection interrupted ‚Äî turn continuing server-side..."`), polls `/api/threads/:id` in background until detached turn completes, swaps in persisted full message, and reveals `data-testid="turn-resolved-detached"`.
+- **Deliverable 4 (Zombie Reaping):**
+  - In `web-ui/lib/threads/threadStore.ts` (`reconcileThread`), any assistant message remaining in `"streaming"` status when `!isLive` is finalized to `"incomplete"`, preserving content and setting `isStopped: true`.
+- **500ms Race Threshold:**
+  - Kept strictly unchanged at 500ms.
+
+### Test & Verification Evidence
+- `web-ui/tests/turnDeliveryReconciliation.test.ts`: 5/5 tests passing.
+- `npm run test:gate`: 416 tests passing, 0 failed in 38.779s (<90s budget).
+- `npm run build`: Compiled successfully in 10.4s, zero type or lint errors.
+- **Branch:** `feature/turn-delivery-reconciliation`
+- **Cluster Operations:** 0 operations performed (running re-baselined image `v-2b6262c-fresh`).
+
+---
+
+## CI Job: PR #63 Green Run Log (2026-11-10)
+
+### Step 0 ó State Established (read-only gh evidence)
+- `gh workflow list --all`: `CI Pipeline & Security Boundary Verification` = **active** (ID 370993482). No workflow disabled_manually or disabled_inactivity.
+- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` ó repo-level Actions enabled.
+- `gh run list --limit 15`: runs continue through 2026-11-10T16:47:52Z; last green run was develop push `2b6262c` (PR #62 merge) at 2026-11-09T22:53:50Z.
+- `gh pr view 63`: state OPEN, head `feature/turn-delivery-reconciliation` @ `e1f0cb4`, statusCheckRollup = FAILURE on `Unit Tests & Static Analysis` (run 42858208319), downstream jobs SKIPPED.
+
+### Root Cause
+Actions was never disabled ó no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
+
+### Fix (cycle 1, on branch, no test/workflow weakening)
+- `web-ui/components/ChatStream.tsx`: added `lastAssistantIndex` (last assistant message index over `deduplicatedMessages`) and keyed `hasResolvedDetachedTurn` notification to `idx === lastAssistantIndex` instead of the literal tail.
+- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.
+
+### Fix Cycle 2 (Playwright job, run 42862508213)
+- Run 42862508213 (head 997b916): Unit Tests, Coverage, Container Build all green; Playwright job failed 8 tests (Scenario 7 engine-stop, Scenario 9 backend-down across 4 viewports).
+- Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' ó UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
+- Fix (no test weakening): ChatStream.tsx ó SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
+- Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
