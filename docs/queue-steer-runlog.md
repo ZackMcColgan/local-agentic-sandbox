@@ -1,4 +1,4 @@
-# Chat Runtime Shakeout: Queue + Steer Run Log
+﻿# Chat Runtime Shakeout: Queue + Steer Run Log
 
 **Date:** 2026-11-06  
 **Agent:** Autonomous Agent  
@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 0 — Ground Truth & Census
+## Phase 0 â€” Ground Truth & Census
 
 ### Deployment Census
 - **Kubernetes Namespaces & Pods:**
@@ -37,13 +37,13 @@
 
 ---
 
-## Phase 1 — Diagnosis (INV-A & INV-B)
+## Phase 1 â€” Diagnosis (INV-A & INV-B)
 
 ### INV-A: Turn-Death Forensics
 - Examined both dead threads on disk in `/workspace/.agent/threads/`:
-  1. `thread-1793953864369-i4jn.json`: 28 traces, terminated with `"⚠️ [Turn incomplete: Stream aborted or disconnected.]"` due to client disconnect.
+  1. `thread-1793953864369-i4jn.json`: 28 traces, terminated with `"âš ï¸ [Turn incomplete: Stream aborted or disconnected.]"` due to client disconnect.
   2. `thread-1793980342870-vvdn.json`: 25 tool rounds executed. The model in round 25 streamed text (`"Design is settled and I've confirmed..."`) with 11.8k chars of thinking. At round 25 completion, `streamLlmChat` returned zero content tokens during final synthesis pass (or model generated pure `<think>` tokens).
-- Root cause: Model synthesis pass produced empty completion tokens. In `route.ts`, when synthesis text is empty after tool execution, line 1405 sets `cleanedContent = "⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]"`. `mergeStreamedTokens` retained the previously streamed preamble and appended the honest warning banner. No code regression was introduced in PR #48/#49; the logic faithfully preserved what was emitted.
+- Root cause: Model synthesis pass produced empty completion tokens. In `route.ts`, when synthesis text is empty after tool execution, line 1405 sets `cleanedContent = "âš ï¸ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]"`. `mergeStreamedTokens` retained the previously streamed preamble and appended the honest warning banner. No code regression was introduced in PR #48/#49; the logic faithfully preserved what was emitted.
 
 ### INV-B: Cross-Device Live Visibility Probe
 - Probes A & B (`probe-a-out.txt`, `probe-b-out.txt`) demonstrated that in the deployed build, watcher devices saw the user message at ~4.1s but saw 0 assistant activity until the first content token was streamed (at 22.3s for direction A, 13.3s for direction B).
@@ -51,7 +51,7 @@
 
 ---
 
-## Phase 2 — Presence Fix (INV-B)
+## Phase 2 â€” Presence Fix (INV-B)
 - **Active Turn Marker:** Added `markTurnActive`, `getActiveTurn`, `clearTurnActive` to `threadStore.ts`.
 - **API Exposal:** Updated `GET /api/threads/[id]` to return `activeTurn` immediately upon turn creation, even before the thread file is written to disk.
 - **Tests:** Fixed mock engine lifecycle in `web-ui/tests/chatTurnPresence.test.ts`. All 7 subtests passed (7/7).
@@ -59,12 +59,12 @@
 
 ---
 
-## Phase 3 — Client-Side Message Queue
+## Phase 3 â€” Client-Side Message Queue
 - **Queue Implementation:** Implemented `web-ui/lib/chatQueue.ts` implementing `StorageLike`, FIFO operations, `decideSendAction`, and `drainNextForTurnEnd`.
 - **ChatStream Wiring:**
   - Send-while-running enqueues text follow-ups.
   - Attachments while running are blocked with an informative error hint.
-  - Queue deck with chips rendered above composer with per-item `×` and `Clear all`.
+  - Queue deck with chips rendered above composer with per-item `Ã—` and `Clear all`.
   - Normal `DONE` drains exactly one item and submits it as a follow-up turn.
   - Abort / error endings pause the queue without draining or clearing.
 - **Verification:**
@@ -74,7 +74,7 @@
 
 ---
 
-## Phase 4 — Mid-Turn Steer Mailbox
+## Phase 4 â€” Mid-Turn Steer Mailbox
 - **Mailbox Implementation:**
   - Added sidecar store methods to `ThreadStore` in `web-ui/lib/threads/threadStore.ts`: `appendSteer`, `consumeSteers`, `getPendingSteers`, `clearSteers`.
   - Added endpoint `POST /api/threads/[id]/steer` returning `{ success: true, pendingCount }`.
@@ -95,7 +95,7 @@
 
 ---
 
-## Phase 5 — Deploy & Live Verification
+## Phase 5 â€” Deploy & Live Verification
 - **Deployed Build:** `local-agentic-sandbox-web-ui:v-4ca0c42-mw5my380`.
 - **Rollout:** Successfully rolled out to Kubernetes `deployment/web-ui`.
 - **End-to-End Live Verification:**
@@ -112,7 +112,7 @@
 
 ---
 
-## Phase 7 — Steer Effectiveness Diagnosis & Fix
+## Phase 7 â€” Steer Effectiveness Diagnosis & Fix
 
 ### Step 0 Forensics: Owner's Thread Analysis
 - **Thread ID:** `thread-1794016475206-zz14.json`
@@ -151,10 +151,10 @@
 
 ---
 
-## Phase 8 — Turn-Lifetime Decoupling & CI Green (Jobs 0, 1, 2)
+## Phase 8 â€” Turn-Lifetime Decoupling & CI Green (Jobs 0, 1, 2)
 
 ### Job 0 & Job 1: Server-Side Turn Lifetime Decoupling (`614fa10`)
-- **Root Cause:** Previously, `req.signal` abort (triggered whenever a client refreshed the page, closed the tab, or put a phone to sleep) aborted the server-side turn and persisted `"⚠️ [Turn incomplete: Stream aborted or disconnected.]"`. Additionally, if a reload occurred during MCP setup / reasoning before the first content token arrived, no assistant placeholder existed on disk yet, causing a temporary visual hole on reload. Finally, in `POST /api/threads/[id]` (`action: "stop"`), reading `thread` before `abortActiveTurn(thread.id)` and saving that stale reference after `unloadAllModels()` could overwrite the aborted message state.
+- **Root Cause:** Previously, `req.signal` abort (triggered whenever a client refreshed the page, closed the tab, or put a phone to sleep) aborted the server-side turn and persisted `"âš ï¸ [Turn incomplete: Stream aborted or disconnected.]"`. Additionally, if a reload occurred during MCP setup / reasoning before the first content token arrived, no assistant placeholder existed on disk yet, causing a temporary visual hole on reload. Finally, in `POST /api/threads/[id]` (`action: "stop"`), reading `thread` before `abortActiveTurn(thread.id)` and saving that stale reference after `unloadAllModels()` could overwrite the aborted message state.
 - **Fix (`614fa10`):**
   1. Decoupled `clientDisconnected` (SSE stream closed / `req.signal` aborted) from `turnAbortController` (explicit user Stop via `POST /api/threads/[id]` `{ action: "stop" }`). Client disconnects now log `[ChatRoute] Client SSE connection disconnected... Turn continuing detached server-side` and allow the tool loop, steer consumption, streaming snapshots, and final synthesis/persistence to run to natural completion.
   2. Seeded an initial `status: "streaming"` assistant message placeholder at turn start (and filtered empty streaming placeholders out of `buildModelMessages` so LLM prompts stay clean), eliminating reload holes during pre-token phases.
@@ -164,39 +164,39 @@
   - 7 targeted suites (`chatTurnHonesty`, `chatLiveVisibility`, `chatStreamTokenPreservation`, `chatSteer`, `chatTurnPresence`, `chatQueue`, `chatPersistenceDecoupling`): **74/74 passed** (0 failed).
   - Deployed `local-agentic-sandbox-web-ui:v-614fa10` and verified live at mobile viewport (`390x844`):
     - Mid-turn disconnect + reload shows `Streaming` badge immediately (zero hole) and completes naturally server-side (`thread-1794047006240-4mdb`).
-    - Explicit Stop (`thread-1794047022355-ydoh`) halts turn and renders `Incomplete` badge + `"⚠️ [Turn incomplete: Stream aborted or disconnected.]"`.
+    - Explicit Stop (`thread-1794047022355-ydoh`) halts turn and renders `Incomplete` badge + `"âš ï¸ [Turn incomplete: Stream aborted or disconnected.]"`.
 
 ### Job 2: Repo CI Green on PR #50
 - GitHub Actions Run `42362482744` on branch `feature/chat-queue-steer` (head `614fa10`) completed with **`success`** in `5m38s`.
 
 ---
 
-## Phase 9 — Job 3: Overnight Chat Runtime Shakeout Battery (`7e7b40a`, `69c5047`, `67fb713`)
+## Phase 9 â€” Job 3: Overnight Chat Runtime Shakeout Battery (`7e7b40a`, `69c5047`, `67fb713`)
 
-Executed adversarial probes A–G against the deployed chat runtime, registered 3 newly uncovered defects (`CHAT-10`, `CHAT-11`, `CHAT-12`) in `docs/shakeout-register.md`, wrote failing behavioral tests first, committed 1 atomic fix per defect, deployed `local-agentic-sandbox-web-ui:v-67fb713`, and re-verified 100% pass across all probes:
+Executed adversarial probes Aâ€“G against the deployed chat runtime, registered 3 newly uncovered defects (`CHAT-10`, `CHAT-11`, `CHAT-12`) in `docs/shakeout-register.md`, wrote failing behavioral tests first, committed 1 atomic fix per defect, deployed `local-agentic-sandbox-web-ui:v-67fb713`, and re-verified 100% pass across all probes:
 
-1. **`[CHAT-10]` (`7e7b40a` — Server Restart Mid-Turn Reconciliation):**
+1. **`[CHAT-10]` (`7e7b40a` â€” Server Restart Mid-Turn Reconciliation):**
    - Fixed `ThreadStore.addMessage` so `status: "streaming"` snapshots keep `thread.status = "active"` (instead of flipping `thread.status` to `"completed"` on existing threads) and `status: "incomplete" | "error"` sets `thread.status = "stopped"`.
-   - Fixed `ThreadStore.reconcileThread` so any orphaned `status: "streaming"` assistant message on a non-live thread is reconciled to `status: "incomplete"`, `isStopped: true`, with `"⚠️ [Turn incomplete: Server restarted or turn interrupted.]"`.
+   - Fixed `ThreadStore.reconcileThread` so any orphaned `status: "streaming"` assistant message on a non-live thread is reconciled to `status: "incomplete"`, `isStopped: true`, with `"âš ï¸ [Turn incomplete: Server restarted or turn interrupted.]"`.
    - Verified via unit test 4 in `chatPersistenceDecoupling.test.ts` and live `kubectl rollout restart deployment/web-ui` mid-turn on `thread-1794048592462-otwu`.
-2. **`[CHAT-11]` (`69c5047` — Steer to Nonexistent Thread 404):**
+2. **`[CHAT-11]` (`69c5047` â€” Steer to Nonexistent Thread 404):**
    - Updated `POST /api/threads/[id]/steer` to verify `store.getThread(id) || getActiveTurn(id) || activeExecutionSet.has(id)` and return HTTP `404` (`{ error: "Thread not found" }`) instead of `200 OK` with an orphan `.steer.json` sidecar.
    - Verified via `chatSteer.test.ts` and live Probe C3.
-3. **`[CHAT-12]` (`67fb713` — Honest Rejection of Unavailable Model Names):**
+3. **`[CHAT-12]` (`67fb713` â€” Honest Rejection of Unavailable Model Names):**
    - Updated `POST /api/chat` to validate `requestedModel` against `"auto"`, `DEFAULT_MODEL`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_SUBAGENT_MODEL`, legacy default aliases, and `PRESET_MODEL_PROFILES`. Unknown model names fail fast with `Model "<id>" is not available on the active inference engine.`, emitting an SSE `error` event and persisting `status: "error"` without calling the LLM backend.
    - Verified via Test 5 in `chatPersistenceDecoupling.test.ts` and live Probe E1.
 - **Targeted Suites:** **77 / 77 passed** (`chatTurnHonesty`, `chatLiveVisibility`, `chatStreamTokenPreservation`, `chatSteer`, `chatTurnPresence`, `chatQueue`, `chatPersistenceDecoupling`).
 
 ---
 
-## Phase 10 — Job 4: Build Mode Analysis, Fix-Up, and End-to-End Proof (`101871e`)
+## Phase 10 â€” Job 4: Build Mode Analysis, Fix-Up, and End-to-End Proof (`101871e`)
 
 ### 1. 7-Question Architecture & Live Stack Analysis
 - **Q1 (Wiring):** `POST /api/threads` (`action: "launchTask" | "build"`) -> `generatePlanSpec` -> `OvernightSupervisor.executeTaskWithRecovery` -> `createProductionStepExecutor` -> `WorkerPool` (`BuilderWorker`, `CriticWorker`) -> `WorkerGitOps` -> `ThreadStore` & `RunLedger`. Fixed hardcoded `"swift-15-27b-mtp"` fallbacks across `workerPool.ts`, `planner.ts`, `supervisor.ts`, `scheduler.ts`, and `app/api/threads/route.ts` to honor `process.env.MODEL_NAME` (`qwen3.8-flash-next-gyro-gyro-s`).
 - **Q2 (Token Economics):** Fixed `LlamaCppProvider.generate` (`web-ui/lib/llm/provider.ts:808-814`) so `req.options.num_predict` always adds `thinkingBudget` (`4096` default, matching `OllamaProvider.generate`), preventing reasoning tokens from starving Critic (`512 + 4096 = 4608`), Planner (`2048 + 4096 = 6144`), or Builder (`4096 + 4096 = 8192`) output.
-- **Q3 (Single-Slot Contention):** Verified live (`job4-build-smoke-probe.log`): `WorkerPool` enforces `maxConcurrency = 1`; concurrent Chat turns during an active Build task queue cleanly inside Strata's HTTP server without error or deadlock (`Concurrent Chat Turn finished — done: true, error: null, content: CONTENTION_OK`).
+- **Q3 (Single-Slot Contention):** Verified live (`job4-build-smoke-probe.log`): `WorkerPool` enforces `maxConcurrency = 1`; concurrent Chat turns during an active Build task queue cleanly inside Strata's HTTP server without error or deadlock (`Concurrent Chat Turn finished â€” done: true, error: null, content: CONTENTION_OK`).
 - **Q4 (Workspace & Fresh-Pull GitOps):** Updated `WorkerGitOps.createAndSwitchBranch` (`web-ui/lib/git/workerGitOps.ts`) to fetch `origin/develop` and branch from `origin/develop` (`git checkout -f -B <branchName> origin/develop`) when `origin` remote is configured, and seeded `/workspace` in the cluster PVC with `origin/develop` (`06fb0bdc540b9e3fb61b486e3f7b759ef229353a`).
-- **Q5–Q7 (Lifecycle Honesty, Morning Report, Scheduler):** Verified terminal state reconciliation (`completed`, `parked`, `paused`, `stopped`), idempotent `stageAndCommit` audit logging, `/api/morning-report` artifact/SHA reporting, and `UnattendedScheduler` model wiring.
+- **Q5â€“Q7 (Lifecycle Honesty, Morning Report, Scheduler):** Verified terminal state reconciliation (`completed`, `parked`, `paused`, `stopped`), idempotent `stageAndCommit` audit logging, `/api/morning-report` artifact/SHA reporting, and `UnattendedScheduler` model wiring.
 - **Worth-It Gate Verdict:** **WORTH FIXING AND PROVING TONIGHT.**
 
 ### 2. End-to-End Proof Run (`task-1794049952744`, `thread-1794049952748-hnzm`)
@@ -208,12 +208,12 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 
 ---
 
-## Phase 11 — Job 5: Graduation Probe (`GRADUATION BLOCKED`) & `INTERRUPT-STEER` Implementation
+## Phase 11 â€” Job 5: Graduation Probe (`GRADUATION BLOCKED`) & `INTERRUPT-STEER` Implementation
 
 ### 1. Graduation Probe (`thread-1794050126335-i74n`)
 - Dispatched a 1-chunk survey job on `thread-1794050126335-i74n` asking the sandbox chat agent to inspect the steer implementation and write a 10-line design note for `INTERRUPT-STEER`.
 - The sandbox chat agent executed 19 tool calls and completed cleanly (`status: "completed"`), producing a 10-point design note (`interrupt-steer-survey.md`).
-- **Verdict:** **`GRADUATION BLOCKED`** — three concrete self-hosting capability gaps diagnosed from live probe evidence:
+- **Verdict:** **`GRADUATION BLOCKED`** â€” three concrete self-hosting capability gaps diagnosed from live probe evidence:
   1. **Container `/workspace` PVC vs. Host Checkout Isolation:** In Chat mode without Host Mode, `workspace_*` tools execute inside `mcp-runner` against the cluster `/workspace` PVC (tracking `origin/develop` `06fb0bd`) rather than the host checkout (`C:\Users\zackm\Desktop\repos\local-agentic-sandbox` on `feature/chat-queue-steer`), so unmerged branch files (`steer/route.ts`) are not visible in `/workspace` until pushed/fetched.
   2. **Cross-Pod UID/Umask Mismatch on `/workspace` Subdirectories:** `web-ui` runs as `uid=1001` (`nextjs`) while `mcp-runner` runs as `uid=10001, gid=10001`. When `web-ui` runs `git checkout` in `/workspace`, newly created subdirectories (`/workspace/docs`) are created with mode `0755` (`uid=1001, gid=10001`), preventing `mcp-runner` (`uid=10001`) from creating new files inside `/workspace/docs` without `0775` group-write permissions.
   3. **Host Mode Interactive Approval Gate:** In Host Mode (`host_*` tools), `host_run_powershell` and `host_write_file` gate command/write execution behind interactive human approval or the host-runner daemon (`:8765`), preventing unattended test+commit loops from inside a chat turn.
@@ -227,13 +227,13 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 
 ---
 
-## Phase 12 — Job 6: House-Rule Improvements & Final Verification
+## Phase 12 â€” Job 6: House-Rule Improvements & Final Verification
 - Added bounded-retry (`max 2 identical runs, max 3 strategies -> BLOCKED`), targeted-test-first, paging discipline, and single-writer rules to `AGENTS.md`, `GEMINI.md`, and `SYSTEM_PROMPT` in `web-ui/app/api/chat/route.ts`.
 - Verified `web-ui/tests/repoHygiene.test.ts` passes **5 / 5**.
 
 ---
 
-## Phase 13 — CAMPAIGN: Live Chat Stress Test & Host Mode Settings Default (Nov 8, 2026)
+## Phase 13 â€” CAMPAIGN: Live Chat Stress Test & Host Mode Settings Default (Nov 8, 2026)
 
 ### 1. Defect #0: Global Host Mode Switch Default ON & Read-Only Status Chip
 - **Directive:** Global Host switch in Settings menu (`[data-testid="host-access-toggle-btn"]`), default ON, persisted server-side at `host-settings.json` (no file = enabled). Thread header keeps ONLY a read-only status chip (`[data-testid="host-access-chip"]`), per-thread interactive toggle button removed. Health gate strictly maintained (switch ON + daemon down = UNAVAILABLE, no host tools). Subagent/scheduled contexts strictly prohibited from host tools.
@@ -256,7 +256,7 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
   - Rollback Armed Baseline: `local-agentic-sandbox-web-ui:v-2a1f40f-mw81k1uh`.
 - **Live Verification:** Verified on `http://192.168.50.254`. Brand-new threads default to `Host access ON`. Settings toggle persists across pod restart. 4 visual screenshot permutations verified across Desktop/Mobile and Dark/Light.
 
-### 2. Live Acceptance Battery — Double Green Proof Matrix
+### 2. Live Acceptance Battery â€” Double Green Proof Matrix
 
 | Scenario | Pass 1 Duration | Pass 1 Result | Pass 2 Duration | Pass 2 Result | Live Verification Details |
 |---|---|---|---|---|---|
@@ -269,11 +269,14 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 | **S7: Long-generation stability** | 174.9s | PASS | 180.8s | PASS | Deep-dive streaming spec, 17,059 chars (4,265 tokens), status completed, 0 silent drops |
 | **S8: Host-mode stress** | 156.9s | PASS | 171.9s | PASS | 70KB host read without clamp, s8-verify.txt written, 75K stdout clamped at 64KB |
 
-**FINAL VERDICT: 8/8 SCENARIOS GREEN — 2/2 CONSECUTIVE RUNS CLEAN — THE BAR ("4K / 100K") ACHIEVED**
+**FINAL VERDICT: 8/8 SCENARIOS GREEN â€” 2/2 CONSECUTIVE RUNS CLEAN â€” THE BAR ("4K / 100K") ACHIEVED**
 
-
----
-
+
+
+---
+
+
+
 ---
 
 ## Host Runner Daemon Death Incident & Recovery (Nov 9, 2026)
@@ -302,13 +305,17 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
   - `Unit Tests & Static Analysis`: **pass** in 2m57s
   - `Code Coverage Report`: **pass** in 3m6s
   - `Container Build & Docker Scout Scan`: **pass** in 3m31s
-  - `Playwright UI Invariants, Flows & Baselines`: **pass** in 3m30s
-
----
-
+  - `Playwright UI Invariants, Flows & Baselines`: **pass** in 3m30s
+
+
+
+---
+
+
+
 --
 
-## 2026-11-09: RESUME — Part B (Thread Deletion UI & Backend) & Part C (Disarm Lifecycle Test)
+## 2026-11-09: RESUME â€” Part B (Thread Deletion UI & Backend) & Part C (Disarm Lifecycle Test)
 
 ### Part B: Resilient Thread Deletion UI & Backend (PR #60)
 - PR: https://github.com/ZackMcColgan/local-agentic-sandbox/pull/60
@@ -322,7 +329,8 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - Re-pointed at sacrificial runner on ephemeral port (8799) with isolated temp config directory.
 - Hard guard assertSacrificialTarget rejects port 8765 and production paths.
 - Default suite backfilled with pure guard tests and mocked environment unit tests.
-- Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
+- Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
+
 
 
 
@@ -347,10 +355,10 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
   - Added `finish_reason?: string` and `outputTokens?: number` to `ThreadMessage` in `web-ui/lib/threads/threadStore.ts`.
   - In `web-ui/app/api/chat/route.ts`, tracked `lastFinishReason` and `turnOutputTokens` across all LLM streaming loops (tool turns and synthesis).
   - Saved `finish_reason` and `outputTokens` at assistant message persist.
-  - If `finish_reason` is abnormal (`"length"`, `"error"`, `"abort"`), marked turn status `"incomplete"` and appended honest truncation banner (`⚠️ [Turn incomplete: ... token limit reached]`).
+  - If `finish_reason` is abnormal (`"length"`, `"error"`, `"abort"`), marked turn status `"incomplete"` and appended honest truncation banner (`âš ï¸ [Turn incomplete: ... token limit reached]`).
 - **Deliverable 3 (Client Reconciliation):**
   - Added pure transition helpers in `web-ui/lib/turnReconciliation.ts` (`transitionOnStreamDisconnect`, `transitionOnDetachedTurnReconciliation`).
-  - In `web-ui/components/ChatStream.tsx`, stream disconnect enters a transient state (`data-testid="turn-transient-disconnected"`: `"Connection interrupted — turn continuing server-side..."`), polls `/api/threads/:id` in background until detached turn completes, swaps in persisted full message, and reveals `data-testid="turn-resolved-detached"`.
+  - In `web-ui/components/ChatStream.tsx`, stream disconnect enters a transient state (`data-testid="turn-transient-disconnected"`: `"Connection interrupted â€” turn continuing server-side..."`), polls `/api/threads/:id` in background until detached turn completes, swaps in persisted full message, and reveals `data-testid="turn-resolved-detached"`.
 - **Deliverable 4 (Zombie Reaping):**
   - In `web-ui/lib/threads/threadStore.ts` (`reconcileThread`), any assistant message remaining in `"streaming"` status when `!isLive` is finalized to `"incomplete"`, preserving content and setting `isStopped: true`.
 - **500ms Race Threshold:**
@@ -367,32 +375,35 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 
 ## CI Job: PR #63 Green Run Log (2026-11-10)
 
-### Step 0 � State Established (read-only gh evidence)
+### Step 0 ï¿½ State Established (read-only gh evidence)
 - `gh workflow list --all`: `CI Pipeline & Security Boundary Verification` = **active** (ID 370993482). No workflow disabled_manually or disabled_inactivity.
-- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` � repo-level Actions enabled.
+- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` ï¿½ repo-level Actions enabled.
 - `gh run list --limit 15`: runs continue through 2026-11-10T16:47:52Z; last green run was develop push `2b6262c` (PR #62 merge) at 2026-11-09T22:53:50Z.
 - `gh pr view 63`: state OPEN, head `feature/turn-delivery-reconciliation` @ `e1f0cb4`, statusCheckRollup = FAILURE on `Unit Tests & Static Analysis` (run 42858208319), downstream jobs SKIPPED.
 
 ### Root Cause
-Actions was never disabled � no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
+Actions was never disabled ï¿½ no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
 
 ### Fix (cycle 1, on branch, no test/workflow weakening)
 - `web-ui/components/ChatStream.tsx`: added `lastAssistantIndex` (last assistant message index over `deduplicatedMessages`) and keyed `hasResolvedDetachedTurn` notification to `idx === lastAssistantIndex` instead of the literal tail.
-- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.
+- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.
+
 
 ### Fix Cycle 2 (Playwright job, run 42862508213)
 - Run 42862508213 (head 997b916): Unit Tests, Coverage, Container Build all green; Playwright job failed 8 tests (Scenario 7 engine-stop, Scenario 9 backend-down across 4 viewports).
-- Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' � UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
-- Fix (no test weakening): ChatStream.tsx � SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
-- Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
+- Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' ï¿½ UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
+- Fix (no test weakening): ChatStream.tsx ï¿½ SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
+- Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
 
-## Steer run � synthesis-retry merge+deploy job (Phase 1 Step 1) � STOPPED, PR NOT FOUND
+
+## Steer run ï¿½ synthesis-retry merge+deploy job (Phase 1 Step 1) ï¿½ STOPPED, PR NOT FOUND
 - gh pr list --state open --json ... => [] (zero open PRs on ZackMcColgan/local-agentic-sandbox).
 - gh pr list --state all --limit 100 grep 'synthesis' => no match; merged list top = PR #63 (feature/turn-delivery-reconciliation, merged 2026-11-10T19:54:40Z, merge commit 18282cb).
 - git ls-remote origin => no remote branch feature/synthesis-retry.
 - Local branch feature/synthesis-retry tip = 18282cb0d7ea (== origin/develop tip); git rev-list --count origin/develop..feature/synthesis-retry = 0 commits ahead.
 - Fix content exists ONLY untracked: web-ui/tests/synthesisRetry.test.ts (untracked). git diff origin/develop -- web-ui/app/api/chat/route.ts = EMPTY (no retry logic in route.ts; route.ts:1632 still the bare 'concluded without synthesis text' stamp, no synthesis retry at ~1554-1607). git grep synthesisRetry in package.json/scripts = no testGate wiring.
-- Conclusion: no PR to merge (owner did NOT merge it himself � develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
+- Conclusion: no PR to merge (owner did NOT merge it himself ï¿½ develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
+
 
 ## Steer run - synthesis-retry apply+commit+PR job (recovery)
 - STATE CHECK: branch feature/synthesis-retry tip 18282cb0d7ea == origin/develop; route.ts synthesis block unfixed (bare stamp at 1632); tests/synthesisRetry.test.ts present untracked and matches the design (scripted-stream POST, 4 completions: tool round -> empty round -> empty synthesis -> retry summary; plus a double-empty case).
@@ -402,15 +413,18 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - PASS-AFTER: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail (retry summary persisted, status completed, retry status event present; double-empty -> status incomplete + resumable stamp).
 - test:gate: repo-wide git-status scan rejects on unrelated untracked web-ui/app/api/settings/memory/route.ts (zero coverage) - unrelated Settings Memory work, NOT this job. Scoped run node scripts/test-gate.js --files=web-ui/app/api/chat/route.ts,web-ui/lib/testGate.ts -> PASSED 179 pass / 0 fail / 1 skipped in 37.87s (<90s budget).
 - STAGED ONLY: web-ui/app/api/chat/route.ts, web-ui/tests/synthesisRetry.test.ts, web-ui/lib/testGate.ts, docs/queue-steer-runlog.md. Settings Memory files (lib/memory/operatorMemory.ts, app/api/settings/memory/, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) left untracked and untouched.
-- NO merge, NO deploy this job.
+- NO merge, NO deploy this job.
+
 
 ## Fix cycle - PR #64 CI (run 42925509474, head 5f4c7b7)
 - RE-GROUND: HEAD 5f4c7b7 == origin/feature/synthesis-retry; no uncommitted tracked changes. Untracked tree inventory (NOT part of this job, left untouched): Settings Memory work (web-ui/app/api/settings/memory/, lib/memory/operatorMemory.ts, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) + stranded-turn scratch (.tmp-forensics.py, .tmp-pr-body.md, .tmp-synth-guard.js, .tmp-synth-override.js, .tmp-synth-patch.js, .tmp-synth-scope.js, .tmp-thread.json, .tmp-thread2.json, web-ui/tests/.tmp-synth-debug.test.ts). No candidate fix in the tree relevant to the CI failure.
 - DIAGNOSE (gh run view 42925509474 --log-failed): Job 'Unit Tests & Static Analysis', step 'Typecheck & Build Services' (npm run build --workspaces). Exact error: ./app/api/chat/route.ts:1632:27 - Type error: Argument of type '"empty-synthesis"' is not assignable to parameter of type '"error" | "ok" | undefined'. The route's own tracer (web-ui/lib/telemetry.ts:102,128 - TelemetryTracer.startSpan/end) constrains span status to "ok"|"error"; supervisor.ts's two-arg end(status,{attrs}) form is fine, but the status literal itself must be ok/error.
 - FIX (no guard edit, no assertion change): route.ts:1632 synthSpan.end("empty-synthesis", { synthesisPasses }) -> synthSpan.end("error", { synthesisPasses, emptySynthesis: true }). Intent preserved: the synthesis span still ends non-ok on the double-empty path, with the empty-synthesis signal carried as an attribute. No test asserts on span status/attrs (git grep: synthesisPasses/model.synthesis absent from tests).
 - LOCAL VERIFY: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail. npx next build -> exit 0 (typecheck clean; the failing CI step is next build, which now passes locally).
-- PUSH + watch new run below.
-- WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
+- PUSH + watch new run below.
+
+- WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
+
 
 ## CI Watch close-out - PR #64 FULLY GREEN (2026-11-11)
 - RUN 42930341188 (head c1a9f1f): status completed, conclusion success. All four jobs success:
@@ -424,17 +438,21 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
   Container Build & Docker Scout Scan = success (job 130231147933)
   Code Coverage Report = success (job 130231147992)
 - gh pr checks 64: all four checks pass on the newest run. Prior failure run 42925509474 (head 5f4c7b7) superseded by the typecheck fix c1a9f1f.
-- No merge, no deploy this job - those arrive as separate tickets.
-- WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
+- No merge, no deploy this job - those arrive as separate tickets.
+
+- WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
+
 
 ## Deploy ticket PR #64 -> prod (2026-11-11)
 - Develop head confirmed: 6e02172fa905ad73bcf43a801a22e48f558297fa ("Merge pull request #64 from ZackMcColgan/feature/synthesis-retry", PR head 8622a0d, CI run 42932489987 all-four-green).
 - ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-18282cb-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-6c858f8565-4g8g9 1/1 Running).
-- Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
-- Build complete: docker build -t local-agentic-sandbox-web-ui:v-6e02172-fresh -f web-ui/Dockerfile . -> image de07c9232d01 (327MB disk / 78MB content). Cached layers reused.
-- Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
+- Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
 
-## Settings Memory job (2026-11-12) — resume, implementation landed
+- Build complete: docker build -t local-agentic-sandbox-web-ui:v-6e02172-fresh -f web-ui/Dockerfile . -> image de07c9232d01 (327MB disk / 78MB content). Cached layers reused.
+- Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
+
+
+## Settings Memory job (2026-11-12) â€” resume, implementation landed
 - Fail-before re-verified on branch feature/settings-memory (rebased onto develop ac4ba03): 19 pass / 6 fail (5 UI + 1 injection wiring).
 - Inventory: lib/memory/operatorMemory.ts, app/api/settings/memory/route.ts, and the three test files already existed untracked; chat route, SettingsView card, .gitignore pattern, repoHygiene guard, and testGate wiring were missing.
 - Implemented: chat route OWNER MEMORY injection via assembleSystemPrompt (byte-identical when memory empty); SettingsView Memory card (textarea, live counter, save blocked beyond 2000 cap, exact privacy note); .gitignore operator-memory.json pattern; repoHygiene tracked-file guard; testGate mapping rules only (pass/fail logic untouched).
@@ -451,17 +469,23 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - PR #65 merged into develop by driver (audit PASS: scope 11 files exact; exact OWNER MEMORY header; byte-identical empty prompt; card counter/cap/exact note; .gitignore + repoHygiene guard; testGate mapping-only; no brand names; acceptance evidence in PR body). Merge commit e36f1b4; CI run 42955669440 all-four-green on head c5f50b1 (Unit Tests 2m49s, Coverage 2m52s, Container Build 4m3s, Playwright 3m31s).
 - ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-6e02172-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-76847586c6-n872c 1/1 Running 0 restarts).
 - Target image tag to build: local-agentic-sandbox-web-ui:v-e36f1b4-fresh. Deploy scope: web-ui only.
-- DEPLOY OUTCOME (driver, 2026-11-11 ~22:20 CT): PROD == develop c5389f6 VERIFIED. S1 runlog commit c5389f6 pushed first (tag then v-c5389f6-fresh). S2 build BLOCKED at first by Docker credential helper: `node:22-alpine` not in the daemon image store, and `docker-credential-desktop` fails in non-interactive SSH logons ("A specified logon session does not exist"); DOCKER_CONFIG override to an empty config did NOT bypass it (CLI still invoked the helper). WORKAROUND (SSH-side, durable): pull the base into the kind node with `ctr -n k8s.io images pull docker.io/library/node:22-alpine` (anonymous, no Windows helper), `ctr images export` to /images/node-22-alpine.tar, `docker cp` out, `docker load` into the daemon. SSH sessions also DROP after ~30-45s on long foreground commands (two broken pipes during the build); processes with stdout redirected to a log file SURVIVE the drop and keep running — poll the log + `docker images` with short calls instead of holding the session. Build then green (Next.js build ~2.5min, image 7e3099c05682); save 78MB tar; ctr import OK (node image 8ab5e734216df). S3 set image v-c5389f6-fresh. S4 rollout success, new pod web-ui-6b6fb6d557-765sz 1/1 Running 0 restarts; gateway 200; /api/threads 12 threads intact; UI render check clean (nav + threads list, screen matches record). ROLLBACK TARGET remains v-6e02172-fresh. LESSON for future deploys: if `node:22-alpine` is missing from the daemon store, use the ctr-export/docker-load path above before building; keep long builds log-redirected and poll.
+- DEPLOY OUTCOME (driver, 2026-11-11 ~22:20 CT): PROD == develop c5389f6 VERIFIED. S1 runlog commit c5389f6 pushed first (tag then v-c5389f6-fresh). S2 build BLOCKED at first by Docker credential helper: `node:22-alpine` not in the daemon image store, and `docker-credential-desktop` fails in non-interactive SSH logons ("A specified logon session does not exist"); DOCKER_CONFIG override to an empty config did NOT bypass it (CLI still invoked the helper). WORKAROUND (SSH-side, durable): pull the base into the kind node with `ctr -n k8s.io images pull docker.io/library/node:22-alpine` (anonymous, no Windows helper), `ctr images export` to /images/node-22-alpine.tar, `docker cp` out, `docker load` into the daemon. SSH sessions also DROP after ~30-45s on long foreground commands (two broken pipes during the build); processes with stdout redirected to a log file SURVIVE the drop and keep running â€” poll the log + `docker images` with short calls instead of holding the session. Build then green (Next.js build ~2.5min, image 7e3099c05682); save 78MB tar; ctr import OK (node image 8ab5e734216df). S3 set image v-c5389f6-fresh. S4 rollout success, new pod web-ui-6b6fb6d557-765sz 1/1 Running 0 restarts; gateway 200; /api/threads 12 threads intact; UI render check clean (nav + threads list, screen matches record). ROLLBACK TARGET remains v-6e02172-fresh. LESSON for future deploys: if `node:22-alpine` is missing from the daemon store, use the ctr-export/docker-load path above before building; keep long builds log-redirected and poll.
 
 ## Settings Memory DONE + compaction-hybrid resumes (2026-11-11)
-- Settings-memory item DONE 2026-11-11 ~22:20 CT: PR #65 audit PASS (driver) → merged e36f1b4 → deployed v-c5389f6-fresh → verified prod == develop c5389f6 (rollout success, pod 1/1 Running 0 restarts, gateway 200, 12 threads intact, UI render clean). Prod SHA now c5389f6; rollback target v-6e02172-fresh.
+- Settings-memory item DONE 2026-11-11 ~22:20 CT: PR #65 audit PASS (driver) â†’ merged e36f1b4 â†’ deployed v-c5389f6-fresh â†’ verified prod == develop c5389f6 (rollout success, pod 1/1 Running 0 restarts, gateway 200, 12 threads intact, UI render clean). Prod SHA now c5389f6; rollback target v-6e02172-fresh.
 - Compaction-hybrid continuation brief issued 2026-11-11 ~22:24 CT in fresh thread thread-1794371021984-comphyb2 (model qwen3.8-flash-next-gyro-gyro-s, medium): CONTINUE from banked 9df7762 on origin/feature/compaction-hybrid (9 tests red, implementation partial; no PR yet); brief instructs stash inspection, fail-before re-confirmation, guardrail tests, COMPACTION_PROMPT_V1 verbatim, gate, PR into develop, no merge/deploy in-job. Strike count stays 1 (first turn stranded once).
-- compaction-hybrid 2a: digest-index fix in conversationCompaction.ts (digestIndex = leading system ? 1 : 0) at read sites + hybrid write; hybridCompaction.test.ts now 7/9 (test 5 green; 8-9 await store rung 2b).
-## compaction-hybrid 3: route wiring (2026-11-12)
-- ROUTE WIRING: web-ui/app/api/chat/route.ts in-turn ladder call-site (~L827) now branches on resolveCompactionStrategy(): COMPACTION_STRATEGY=hybrid awaits threadStore.compactThreadIncrementalHybrid(threadData, { summarize }) with a call-site adapter (system=req.prompt verbatim, user=req.digest, signal=req.signal, options temperature/num_predict, finish_reason=length -> truncated); unset/anything-else keeps the existing synchronous compactThreadIncremental(threadData) call byte-identical. Summarization pass, identifier post-check, deadlines, fallback untouched (live in the rung). web-ui/app/api/threads/[id]/compact/route.ts left on extraction (out of scope).
-- TEST: hybridCompaction.test.ts seam test added (source-level call-site selection: strategy branch, awaited hybrid rung, else extraction call, adapter contract, compact endpoint stays extraction). FAIL-BEFORE proven: route.ts stashed to HEAD 3fedd43 -> 9 pass / 1 fail ("call-site must branch on the resolved strategy"). PASS-AFTER: npx tsx --test tests/hybridCompaction.test.ts -> 10 pass / 0 fail.
-- TYPECHECK: npx tsc --noEmit error set identical to HEAD baseline (pre-existing: operatorMemory import unresolved on this branch base ac4ba03, resolved when PR lands on develop; test-file strictness errors pre-existing). No new errors from this step.
-- STEP 4 REMAINING: npm run test:gate + PR into develop (driver owns merge/deploy).
+- compaction-hybrid 2a: digest-index fix in conversationCompaction.ts (digestIndex = leading system ? 1 : 0) at read sites + hybrid write; hybridCompaction.test.ts now 7/9 (test 5 green; 8-9 await store rung 2b).
+
+## compaction-hybrid 3: route wiring (2026-11-12)
+
+- ROUTE WIRING: web-ui/app/api/chat/route.ts in-turn ladder call-site (~L827) now branches on resolveCompactionStrategy(): COMPACTION_STRATEGY=hybrid awaits threadStore.compactThreadIncrementalHybrid(threadData, { summarize }) with a call-site adapter (system=req.prompt verbatim, user=req.digest, signal=req.signal, options temperature/num_predict, finish_reason=length -> truncated); unset/anything-else keeps the existing synchronous compactThreadIncremental(threadData) call byte-identical. Summarization pass, identifier post-check, deadlines, fallback untouched (live in the rung). web-ui/app/api/threads/[id]/compact/route.ts left on extraction (out of scope).
+
+- TEST: hybridCompaction.test.ts seam test added (source-level call-site selection: strategy branch, awaited hybrid rung, else extraction call, adapter contract, compact endpoint stays extraction). FAIL-BEFORE proven: route.ts stashed to HEAD 3fedd43 -> 9 pass / 1 fail ("call-site must branch on the resolved strategy"). PASS-AFTER: npx tsx --test tests/hybridCompaction.test.ts -> 10 pass / 0 fail.
+
+- TYPECHECK: npx tsc --noEmit error set identical to HEAD baseline (pre-existing: operatorMemory import unresolved on this branch base ac4ba03, resolved when PR lands on develop; test-file strictness errors pre-existing). No new errors from this step.
+
+- STEP 4 REMAINING: npm run test:gate + PR into develop (driver owns merge/deploy).
+
 
 ## compaction-hybrid 4: gate wiring + PR (2026-11-12)
 - GATE WIRING: web-ui/lib/testGate.ts chat-route mapping group (match app/api/chat/route || lib/progressiveTools || lib/conversationCompaction) now includes tests/hybridCompaction.test.ts (MAPPING-only edit; pass/fail logic untouched). hybridCompaction.test.ts was created after gate-completeness PR #66 landed, so develop's manifest-completeness invariant (web-ui/tests/gateManifestCompleteness.test.ts) requires this wiring once the PR merges into develop.
@@ -476,9 +500,12 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - DEAD RULES CONFIRMED: develop contained p.includes lib/agentEngine, components/Navbar, components/WorkerTiles, components/ModelSelector predicates; HEAD has none (git show origin/develop vs Select-String HEAD = zero matches).
 - RULE COUNTS: MappingRule objects 70 -> 70 (dead predicates folded out of existing rules, scheduler match extended with app/api/scheduler); wired unique test literals 111 (develop) -> 141 (HEAD).
 - GATE: npm run test:gate PASSED 6 pass / 0 fail in 2.95s (<90s budget). Change-aware scope = changed files web-ui/lib/testGate.ts (testGate rule -> testGate.test.ts + gateManifestCompleteness.test.ts) + web-ui/tests/gateManifestCompleteness.test.ts (direct-test rule). No test or pass/fail logic weakened; only MAPPING + test dir path touched.
-- NO merge, NO deploy this job.
-- 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
-- 2026-11-11 01:30 CT gate-completeness DONE: PR 66 merged 72c3342, deployed v-7701e23-fresh, S4 verified, pod web-ui-74665f94b4-7b5tx 1-1 Running 0 restarts, gateway 200, threads 19 intact, UI render clean. Rollback target v-c5389f6-fresh. Build lesson: use foreground docker build with stdout redirected to a log file, SSH drops at 30s, process survives, poll log plus docker images.  
+- NO merge, NO deploy this job.
+
+- 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
+
+- 2026-11-11 01:30 CT gate-completeness DONE: PR 66 merged 72c3342, deployed v-7701e23-fresh, S4 verified, pod web-ui-74665f94b4-7b5tx 1-1 Running 0 restarts, gateway 200, threads 19 intact, UI render clean. Rollback target v-c5389f6-fresh. Build lesson: use foreground docker build with stdout redirected to a log file, SSH drops at 30s, process survives, poll log plus docker images.  
+
 
 ## compaction-hybrid audit-fix strand 1: partial lib wiring BANKED (2026-11-12 ~07:40 CT)
 - Context: threads comphyb12 and comphyb13 both stranded (comphyb13 at 07:19 CT on a Strata engine network error, fetch failed to strata-service:8080, AFTER finding uncommitted fix work but BEFORE banking it). Driver SSH-verified: branch at 71d8fba, only uncommitted change web-ui/lib/conversationCompaction.ts (52+/25-).
@@ -494,7 +521,7 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - GATE: npm run test:gate via bridge PASSED 12 pass / 0 fail in 11.02s (<90s budget), run after item 2 before its push.
 - No merge, no deploy this job.
 
-## compaction-hybrid audit fix (PR #67) � regex restore � 2026-11-11
+## compaction-hybrid audit fix (PR #67) — regex restore — 2026-11-11
 - Audit finding (driver-verified, single point): web-ui/lib/conversationCompaction.ts filePathRegex (branch line 376) diverged from origin/develop line 37. Branch leading char class lost the single-quote and backslash ([\s"'()] -> [\s"()]); trailing lookahead lost the backslash ([\s"')] -> [\s")). Introduced by WIP commit 9df7762, never by design; no brief asked for it. Weakened identifier extraction feeding the load-bearing identifier post-check.
 - Fix: restored the branch line byte-exact to the develop line; touched nothing else. Verified git diff origin/develop shows NO difference on the filePathRegex line (hybrid-feature diffs elsewhere remain).
 - Gate: npm run test:gate via bridge -> PASSED 221 pass / 0 fail / 1 skipped (<90s budget).
@@ -542,3 +569,15 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-0d99143-fresh - current prod, ba
  
 ## Deploy: turn-liveness PR 69 merge e4cd9f9 - 2026-11-11 
 DEPLOYED: image local-agentic-sandbox-web-ui:v-6555510-fresh set on deployment/web-ui; rollout success; pod web-ui-755cbbb749-wb8bh 1/1 Running 0 restarts; gateway 200; /api/threads 200, 51 threads intact; UI render clean, screen matches record. Prod == develop 6555510 verified. Rollback target was v-0d99143-fresh. 
+## HYBRID TURN-START FIX step 1 (thread-1794419317041-hybridstep1retry) - failing turn-start tests banked
+Branch feature/compaction-hybrid-turnstart-fix (local head was 2ecf71b; prior step-1 thread stranded with nothing banked, its uncommitted test work survived in the working tree).
+Scope: web-ui/tests/hybridCompaction.test.ts only (+130/-2). No product code touched; conversationCompaction.ts untouched; no constants, no strategy rollout, no deployment, no test-gate logic. npm run test:gate NOT run (step 2 owns it).
+Tests appended under '// HYBRID TURN-START WIRING FIX (fail-before)':
+(a) 'turn-start prepare honors strategy=hybrid: boundary summary is the MODEL DIGEST, extraction digest retained' - asserts prepareTurnConversationMessages(thread, msgs, budget, {strategy:'hybrid', summarize}) reports compactedThisTurn=true, tokensBefore > 85% trigger, tokens shrink, exactly ONE summarize pass, model view carries COMPACTION_MODEL_DIGEST_HEADER, persisted boundary summary starts with the MODEL DIGEST header, boundary.strategy==='hybrid', boundary.extractionDigest retained as the extraction audit copy (identifiers verbatim).
+(b) 'turn-start prepare with strategy=extraction, hybrid without summarize, or no options produces the extraction digest exactly as today' - regression-parity guard: extraction rung byte-identical to summarizeTurnHistory(messages.slice(0, len-4)), summarize never invoked, no strategy/extractionDigest fields. Passes at HEAD by design (it pins today's behavior).
+Fixture shape (prior diagnosis applied): bulk tokens sit in the REPLACED middle turn (t3, 30K tokens) so extraction does not no-op as already_optimal, and the preserved tail (t6, 66K tokens) keeps the post-extraction view above the 65% escalation rung.
+FAIL-BEFORE (npx tsx --test tests/hybridCompaction.test.ts): 14 tests, 13 pass, 1 fail.
+  not ok 13 - turn-start prepare honors strategy=hybrid: boundary summary is the MODEL DIGEST, extraction digest retained
+    error: 'exactly ONE summarization pass at turn start' / 0 !== 1 (test file line 532)
+    => summarize callback never invoked at turn start: prepareTurnConversationMessages calls the synchronous extraction compactThreadIncremental and never consults COMPACTION_STRATEGY (threadStore.ts:1095-1147). Earlier assertions in the same test pass (compaction reported, tokens shrink), so extraction fires correctly - only the hybrid escalation is missing.
+Commit 26a4d64 pushed (-u origin, branch new on origin). Step 2 (the fix) NOT started in this thread.
