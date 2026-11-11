@@ -599,7 +599,7 @@ TESTS:
 
 Commit 8ed6961 pushed to origin/feature/compaction-hybrid-turnstart-fix. Step 3 (gate + PR) waits on the bank.
 ## HYBRID TURN-START FIX step 2 - turn-start strategy-aware prepare banked
-Thread thread-1794428560586-hybridstep2c (verify-and-bank retry; prior attempt thread-1794423819396-hybridstep2b wrote the implementation but stranded with an empty-synthesis marker and no commit - its working-tree work survived and was verified here, not rewritten).
+Thread thread-1794428560586-hybridstep2c (verify-and-bank retry). CORRECTION TO THE RECORD: the prior attempt thread-1794423819396-hybridstep2b did NOT strand uncommitted - its commits 8ed6961 (fix) and 04199b5 (its own step-2 runlog entry) landed on origin AFTER the driver's tree snapshot, so the implementation was already banked when this thread started. This thread verified the banked tree against the step-2 spec instead of rewriting it, and deleted the stray untracked web-ui/debug-turnstart.ts. Two step-2 runlog entries now exist (04199b5 from the prior thread, 2849716 from this thread); this entry is the verification record.
 Commit 8ed6961 'fix(compaction): turn-start prepare honors COMPACTION_STRATEGY=hybrid' pushed to origin/feature/compaction-hybrid-turnstart-fix (HEAD == origin == 8ed6961). Files: web-ui/app/api/chat/route.ts (+32), web-ui/lib/threads/threadStore.ts (+101), web-ui/tests/hybridCompaction.test.ts (+4/-2, fixture typing only - no assertion weakened). Stray untracked web-ui/debug-turnstart.ts deleted via git clean; never committed.
 Implementation satisfies the step-2 spec:
 - route.ts turn-start call-site now awaits prepareTurnConversationMessages and passes {strategy: resolveCompactionStrategy(), summarize: adapter over streamLlmChat} (temperature/maxTokens/signal/onProgress forwarded from the SummarizeRequest; truncated flagged on finish_reason 'length'). Flag OFF / unset resolves to extraction and the callback is never invoked.
@@ -607,4 +607,3 @@ Implementation satisfies the step-2 spec:
 - strategy==='extraction', hybrid without a callback, or no options at all keep the synchronous extraction call byte-identical to prior behavior (no strategy/extractionDigest fields).
 TESTS: npx tsx --test tests/hybridCompaction.test.ts => 14 pass / 0 fail (both step-1 turn-start tests now green; fail-before 'exactly ONE summarization pass' 0 !== 1 resolved). npm run test:gate => 298 pass / 0 fail / 1 skipped in 76.6s (<90s budget). Full npm run test NOT run (lifecycle test can tear down the stack).
 No deployment touched, no COMPACTION_STRATEGY flip, no kubectl rollout, no merge. Step 3 (gate + PR) waits on this bank.
->>>>>>> 2849716 (docs(runlog): HYBRID TURN-START FIX step 2 - turn-start strategy-aware prepare banked)
