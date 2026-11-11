@@ -231,12 +231,14 @@ export async function runHybridCompaction(
     preserveRecentMessages: options.preserveRecentMessages
   });
 
+  const digestIndex = base.messages[0]?.role === "system" ? 1 : 0;
+
   if (strategy === "extraction") {
     return {
       ...base,
       strategy: "extraction",
-      extractionDigest: base.compacted ? base.messages[1]?.content : undefined,
-      liveContent: base.compacted ? base.messages[1]?.content : undefined,
+      extractionDigest: base.compacted ? base.messages[digestIndex]?.content : undefined,
+      liveContent: base.compacted ? base.messages[digestIndex]?.content : undefined,
       modelSummaryUsed: false,
       fallback: false
     };
@@ -257,14 +259,14 @@ export async function runHybridCompaction(
     return {
       ...base,
       strategy: "hybrid",
-      extractionDigest: base.messages[1]?.content,
-      liveContent: base.messages[1]?.content,
+      extractionDigest: base.messages[digestIndex]?.content,
+      liveContent: base.messages[digestIndex]?.content,
       modelSummaryUsed: false,
       fallback: false
     };
   }
 
-  const digest = base.messages[1]?.content ?? "";
+  const digest = base.messages[digestIndex]?.content ?? "";
   const replacedMessages = base.replacedMessages ?? [];
 
   const controller = new AbortController();
@@ -313,7 +315,7 @@ export async function runHybridCompaction(
   }
 
   const hybridMessages: any[] = [...base.messages];
-  hybridMessages[1] = { role: "assistant", content: result.text };
+  hybridMessages[digestIndex] = { role: "assistant", content: result.text };
   const tokensAfter = estimateTokens(hybridMessages);
 
   return {
