@@ -313,8 +313,17 @@ export function generateHostFileDiff(
     if (tool === "host_write_file") {
       afterContent = typeof args.content === "string" ? args.content : null;
     } else if (tool === "host_replace_string") {
-      if (typeof args.oldString === "string" && typeof args.newString === "string") {
-        afterContent = result.preImageContent.replace(args.oldString, args.newString);
+      if (typeof args.oldString === "string" && args.oldString.length > 0 && typeof args.newString === "string") {
+        // Mirror the bridge core's literal semantics: no $-pattern
+        // substitution, and replaceAll replaces every occurrence.
+        if (args.replaceAll === true) {
+          afterContent = result.preImageContent.split(args.oldString).join(args.newString);
+        } else {
+          const idx = result.preImageContent.indexOf(args.oldString);
+          afterContent = idx === -1
+            ? null
+            : result.preImageContent.slice(0, idx) + args.newString + result.preImageContent.slice(idx + args.oldString.length);
+        }
       } else if (typeof args.newString === "string") {
         afterContent = args.newString;
       }
@@ -423,6 +432,23 @@ export const HOST_TOOLS_DEFINITIONS = [
           content: { type: "string", description: "Text content to write." }
         },
         required: ["path", "content"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "host_replace_string",
+      description: "Replace an exact string in an existing file on the host machine. PREFERRED over host_write_file for editing existing files: it changes only the matched text and preserves the rest of the file byte-for-byte. oldString must match exactly once, or set replaceAll to replace every occurrence; it errors if oldString is not found or is ambiguous. Use host_write_file only to create new files or to rewrite a file in full.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Absolute path on the host machine." },
+          oldString: { type: "string", description: "Exact text to replace, including whitespace. Include enough surrounding context that it matches exactly once." },
+          newString: { type: "string", description: "Replacement text, inserted literally. May be empty to delete the matched text." },
+          replaceAll: { type: "boolean", description: "Optional. Replace every occurrence instead of requiring exactly one match." }
+        },
+        required: ["path", "oldString", "newString"]
       }
     }
   },
