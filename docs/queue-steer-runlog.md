@@ -411,3 +411,17 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 - LOCAL VERIFY: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail. npx next build -> exit 0 (typecheck clean; the failing CI step is next build, which now passes locally).
 - PUSH + watch new run below.
 - WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
+
+## CI Watch close-out - PR #64 FULLY GREEN (2026-11-11)
+- RUN 42930341188 (head c1a9f1f): status completed, conclusion success. All four jobs success:
+  Unit Tests & Static Analysis = success (2m33s, job 130227195885)
+  Playwright UI Invariants, Flows & Baselines = success (3m29s, job 130228340343)
+  Container Build & Docker Scout Scan = success (3m36s, job 130228340395)
+  Code Coverage Report = success (3m11s, job 130228340413)
+- SUPERSESSION: run 42931144092 exists for feature/synthesis-retry on head 9fca81e (docs-only runlog commit, no code change). Watched the newest run per rule 4: status completed, conclusion success, all four jobs success:
+  Unit Tests & Static Analysis = success (job 130229898485)
+  Playwright UI Invariants, Flows & Baselines = success (job 130231147851)
+  Container Build & Docker Scout Scan = success (job 130231147933)
+  Code Coverage Report = success (job 130231147992)
+- gh pr checks 64: all four checks pass on the newest run. Prior failure run 42925509474 (head 5f4c7b7) superseded by the typecheck fix c1a9f1f.
+- No merge, no deploy this job - those arrive as separate tickets.
