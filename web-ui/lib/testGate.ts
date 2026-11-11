@@ -269,7 +269,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatPersistenceDecoupling.test.ts",
       "tests/chatLiveVisibility.test.ts",
       "tests/synthesisRetry.test.ts",
-      "tests/hybridCompaction.test.ts"
+      "tests/hybridCompaction.test.ts",
       "tests/chatRoundBudget.test.ts",
       "tests/chatToolDegradation.test.ts",
       "tests/chatTurnPresence.test.ts",
