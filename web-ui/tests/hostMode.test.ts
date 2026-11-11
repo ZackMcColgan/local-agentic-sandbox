@@ -24,12 +24,13 @@ const {
 } = hostModeLib as any;
 
 describe("Host Mode & Destructive Action Gate Suite", () => {
-  it("defines all 5 standard host tools with valid schemas", () => {
-    assert.equal(HOST_TOOLS_DEFINITIONS.length, 5);
+  it("defines all 6 standard host tools with valid schemas", () => {
+    assert.equal(HOST_TOOLS_DEFINITIONS.length, 6);
     const names = HOST_TOOLS_DEFINITIONS.map((t: any) => t.function.name);
     assert.ok(names.includes("host_run_powershell"));
     assert.ok(names.includes("host_read_file"));
     assert.ok(names.includes("host_write_file"));
+    assert.ok(names.includes("host_replace_string"));
     assert.ok(names.includes("host_list_dir"));
     assert.ok(names.includes("host_delete_path"));
   });
