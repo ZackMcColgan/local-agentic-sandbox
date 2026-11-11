@@ -462,3 +462,4 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - RULE COUNTS: MappingRule objects 70 -> 70 (dead predicates folded out of existing rules, scheduler match extended with app/api/scheduler); wired unique test literals 111 (develop) -> 141 (HEAD).
 - GATE: npm run test:gate PASSED 6 pass / 0 fail in 2.95s (<90s budget). Change-aware scope = changed files web-ui/lib/testGate.ts (testGate rule -> testGate.test.ts + gateManifestCompleteness.test.ts) + web-ui/tests/gateManifestCompleteness.test.ts (direct-test rule). No test or pass/fail logic weakened; only MAPPING + test dir path touched.
 - NO merge, NO deploy this job.
+- 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
