@@ -1629,7 +1629,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             synthSpan.end("ok", { synthesisPasses });
           } else {
             synthesisReturnedEmpty = true;
-            synthSpan.end("empty-synthesis", { synthesisPasses });
+            synthSpan.end("error", { synthesisPasses, emptySynthesis: true });
           }
         }
 
