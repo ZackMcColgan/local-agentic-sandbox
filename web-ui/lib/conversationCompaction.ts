@@ -6,6 +6,19 @@
  * 1. System prompt (index 0) verbatim
  * 2. Compaction summary of middle turns
  * 3. Most recent 2-3 turns verbatim
+ *
+ * COMPACTION STRATEGY (owner ruling Nov 10, 2026):
+ * - COMPACTION_STRATEGY=extraction (default): the extraction digest only.
+ *   Flag OFF reproduces extraction behavior exactly.
+ * - COMPACTION_STRATEGY=hybrid: extraction first, unchanged; then, when the
+ *   post-extraction model view still exceeds 65% of the 100K budget, ONE
+ *   guarded model summarization pass over the extraction digest plus the
+ *   messages it replaced. The pass pins temperature 0.2, caps generation at
+ *   8192 tokens, enforces a 180s inactivity deadline and a 5-min total
+ *   deadline, and must pass a programmatic identifier post-check. ANY
+ *   failure, timeout, truncation, or post-check rejection falls back to the
+ *   extraction digest. The extraction digest is ALWAYS retained in the thread
+ *   record alongside any model summary (audit copy).
  */
 
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "./contextBudget";
@@ -13,11 +26,337 @@ import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "./contextBudget";
 export const DEFAULT_COMPACTION_THRESHOLD = 0.85;
 export const DEFAULT_PRESERVE_RECENT_MESSAGES = 4; // ~2 full turns (user + assistant)
 
+export type CompactionStrategy = "extraction" | "hybrid";
+
+/** Post-extraction escalation threshold: hybrid summarization runs only when the
+ * extraction-compacted model view still exceeds 65% of the context budget. */
+export const HYBRID_ESCALATION_THRESHOLD = 0.65;
+
+/** Guardrails pinned by the owner ruling for the single summarization pass. */
+export const SUMMARIZATION_TEMPERATURE = 0.2;
+export const SUMMARIZATION_MAX_TOKENS = 8192;
+export const SUMMARIZATION_INACTIVITY_MS = 180_000;
+export const SUMMARIZATION_TOTAL_DEADLINE_MS = 300_000;
+
+/** Exact header line the live model digest must begin with (rule from COMPACTION_PROMPT_V1). */
+export const COMPACTION_MODEL_DIGEST_HEADER =
+  "[CONVERSATION COMPACTED (MODEL DIGEST)]: Earlier conversation history summarized. Extraction digest retained in the thread record as audit copy.";
+
+/**
+ * COMPACTION_PROMPT_V1 — shipped VERBATIM per owner ruling (Nov 10, 2026).
+ * Do not rewrite, retune, or improve. Objections go to docs/queue-steer-runlog.md.
+ */
+export const COMPACTION_PROMPT_V1 = `You are compacting the working memory of an ongoing conversation so it can continue past its context limit. Your output REPLACES the conversation history that follows. The assistant continuing this conversation will rely on your output as its only memory of that history. Write for that reader: complete on what matters, ruthless on what does not.
+
+RULES — inviolable, in priority order:
+1. NEVER INVENT. Every fact in your output comes from the source. If you are unsure whether something mattered, keep it. If you are unsure of a value, copy it exactly — never guess, round, or repair it.
+2. IDENTIFIERS VERBATIM. File paths, SHAs, URLs, tokens, ports, IDs, names, version numbers, and numeric values are copied character-for-character.
+3. CORRECTIONS WIN. If a fact was later corrected or replaced, output only the current value, noted as "(supersedes: <old value>)". A superseded value is never presented as current.
+4. CONSTRAINTS IN FULL. Every instruction, requirement, prohibition, or preference the user stated is preserved completely, wherever it appeared — the beginning, middle, or end of their message. Do not paraphrase these.
+5. DECISIONS KEEP THEIR REASONS. For every decision: what was decided, who decided it (user or assistant), and why, if a reason was given.
+6. OPEN THREADS STAY OPEN. Unresolved questions, unfinished tasks, promised actions, and anything awaiting the user are listed as open. Never resolve an open thread by implication.
+7. ERRORS VERBATIM. Failure and error lines are copied exactly.
+8. COMPRESS REPETITION. Repeated or near-identical content becomes a single line noting what repeated and approximately how much of it there was. Greetings, acknowledgments, and process chatter are dropped.
+9. ORDER. Within each section, preserve chronological order wherever sequence matters (decisions, corrections, errors).
+
+OUTPUT — exactly these sections, in this order, as markdown. No preamble, no closing remarks, no commentary about the task. Omit a section only if it would be empty. Begin with the header line exactly as written:
+
+[CONVERSATION COMPACTED (MODEL DIGEST)]: Earlier conversation history summarized. Extraction digest retained in the thread record as audit copy.
+
+Prior User Goals & Requests:
+- <each distinct user goal or request, in order>
+
+Key Decisions & Rationale:
+- <decision> — decided by <user|assistant> — <reason, if given>
+
+User Constraints & Preferences:
+- <each constraint carried in full, per rule 4>
+
+Key Insights & Outcomes:
+- <what was established, built, verified, or answered>
+
+Open Threads:
+- <each open item, marked with what it is waiting on>
+
+Retained Identifiers & Artifacts:
+- File paths: <verbatim list>
+- Git SHAs: <verbatim list>
+- URLs: <verbatim list>
+- Other identifiers: <tokens, ports, IDs, verbatim>
+
+Critical Errors & Failures:
+- <error lines verbatim>
+
+LENGTH: your output must be substantially shorter than the source. Cut narrative prose first; the protected categories above are never cut for length. Target under 4,000 tokens — if protected material alone exceeds the target, protected material wins.`;
+
+/**
+ * Resolves the compaction strategy from COMPACTION_STRATEGY.
+ * Default (unset or unrecognized) is "extraction" — flag OFF reproduces
+ * extraction behavior exactly.
+ */
+export function resolveCompactionStrategy(env?: Record<string, string | undefined>): CompactionStrategy {
+  const raw = (env?.COMPACTION_STRATEGY ?? process.env.COMPACTION_STRATEGY ?? "").trim().toLowerCase();
+  return raw === "hybrid" ? "hybrid" : "extraction";
+}
+
 export interface CompactionResult {
   compacted: boolean;
   messages: any[];
   tokensBefore: number;
   tokensAfter: number;
+}
+
+export type HybridFallbackReason =
+  | "generation_failure"
+  | "timeout"
+  | "truncated"
+  | "empty_summary"
+  | "identifier_post_check_rejected";
+
+export interface SummarizeRequest {
+  /** The extraction digest produced from the replaced messages. */
+  digest: string;
+  /** The messages the digest replaced (source material for the model pass). */
+  replacedMessages: any[];
+  /** COMPACTION_PROMPT_V1, verbatim. */
+  prompt: string;
+  temperature: number;
+  maxTokens: number;
+  inactivityMs: number;
+  totalDeadlineMs: number;
+  /** Aborted when the inactivity or total deadline elapses. Supplied by the
+   * deadline wrapper (runSummarizationWithinDeadlines) and forwarded onward to
+   * streamLlmChat so a deadline aborts the in-flight model stream. */
+  signal?: AbortSignal;
+  /** Progress hook: the summarize callback must call this per received chunk so
+   * the inactivity deadline measures silence since the LAST chunk, not elapsed
+   * time since start. */
+  onProgress?: () => void;
+}
+
+export interface SummarizeResult {
+  text: string;
+  /** Set true when generation hit the token cap (finish_reason === "length"). */
+  truncated?: boolean;
+}
+
+export interface IdentifierCoverageResult {
+  ok: boolean;
+  missing: string[];
+}
+
+/**
+ * Programmatic identifier post-check (not a prompt hope): every file path,
+ * git SHA, and URL present in the extraction digest must appear verbatim in
+ * the model summary. A summary failing the check is rejected.
+ */
+export function verifyIdentifierCoverage(digest: string, summary: string): IdentifierCoverageResult {
+  const extracted = extractIdentifiersAndErrors([
+    { role: "assistant", content: digest }
+  ]);
+  const missing: string[] = [];
+  for (const id of [...extracted.filePaths, ...extracted.gitShas, ...extracted.urls]) {
+    if (!summary.includes(id)) {
+      missing.push(id);
+    }
+  }
+  return { ok: missing.length === 0, missing };
+}
+
+/**
+ * Wraps a summarization callback with the pinned inactivity (180s) and total
+ * (5-min) deadlines. Rejects with Error("timeout") when either fires.
+ *
+ * The deadline AbortController is the single authority: its signal is handed
+ * to the summarize callback (onward to streamLlmChat) so a deadline aborts the
+ * in-flight model stream, and the race rejects on the same signal. The
+ * inactivity timer is re-armed on every onProgress() call, so 180s means
+ * "180s since the last received chunk"; the total deadline fires regardless
+ * of progress. Deadlines are injectable via req.inactivityMs /
+ * req.totalDeadlineMs so tests can use short values.
+ */
+async function runSummarizationWithinDeadlines(req: SummarizeRequest, summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>): Promise<SummarizeResult> {
+  const controller = new AbortController();
+  const inactivityMs = req.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS;
+  const totalMs = req.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS;
+  let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+  const resetInactivity = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => controller.abort("inactivity"), inactivityMs);
+  };
+  resetInactivity();
+  const totalTimer = setTimeout(() => controller.abort("total"), totalMs);
+
+  // The callback receives the deadline controller's signal (so a deadline
+  // aborts the model stream itself) plus the progress hook (re-arm the
+  // inactivity timer per chunk).
+  const guardedReq: SummarizeRequest = { ...req, signal: controller.signal, onProgress: resetInactivity };
+
+  try {
+    const result = await Promise.race([
+      summarize(guardedReq),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener("abort", () => {
+          reject(new Error("timeout"));
+        });
+        if (controller.signal.aborted) reject(new Error("timeout"));
+      })
+    ]);
+    return typeof result === "string" ? { text: result } : result;
+  } finally {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    clearTimeout(totalTimer);
+  }
+}
+
+export interface HybridCompactionResult extends CompactionResult {
+  strategy: CompactionStrategy;
+  /** The extraction digest — always retained, audit copy. */
+  extractionDigest?: string;
+  /** Content placed into the live model view (model digest or extraction digest). */
+  liveContent?: string;
+  modelSummaryUsed: boolean;
+  fallback: boolean;
+  fallbackReason?: HybridFallbackReason;
+  /** Messages replaced by the digest (for the summarization source). */
+  replacedMessages?: any[];
+}
+
+/**
+ * Extraction-first compaction with optional guarded hybrid escalation.
+ *
+ * - strategy extraction (flag OFF): identical to compactConversationHistory.
+ * - strategy hybrid: after extraction, if the compacted model view still
+ *   exceeds HYBRID_ESCALATION_THRESHOLD (65%) of the budget, run exactly ONE
+ *   summarization pass over the extraction digest + replaced messages under
+ *   COMPACTION_PROMPT_V1 with pinned guardrails. The summary must begin with
+ *   COMPACTION_MODEL_DIGEST_HEADER and pass verifyIdentifierCoverage; any
+ *   failure/timeout/truncation/rejection falls back to the extraction digest.
+ */
+export async function runHybridCompaction(
+  messages: any[],
+  options: {
+    maxContentTokens?: number;
+    compactionThreshold?: number;
+    preserveRecentMessages?: number;
+    strategy?: CompactionStrategy;
+    summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+    /** Injectable deadlines (test seam); default to the pinned guardrails. */
+    inactivityMs?: number;
+    totalDeadlineMs?: number;
+  }
+): Promise<HybridCompactionResult> {
+  const strategy = options.strategy ?? resolveCompactionStrategy();
+  const base = compactConversationHistory(messages, {
+    maxContentTokens: options.maxContentTokens,
+    compactionThreshold: options.compactionThreshold,
+    preserveRecentMessages: options.preserveRecentMessages
+  });
+
+  const digestIndex = base.messages[0]?.role === "system" ? 1 : 0;
+
+  if (strategy === "extraction") {
+    return {
+      ...base,
+      strategy: "extraction",
+      extractionDigest: base.compacted ? base.messages[digestIndex]?.content : undefined,
+      liveContent: base.compacted ? base.messages[digestIndex]?.content : undefined,
+      modelSummaryUsed: false,
+      fallback: false
+    };
+  }
+
+  if (!base.compacted) {
+    return {
+      ...base,
+      strategy: "hybrid",
+      modelSummaryUsed: false,
+      fallback: false
+    };
+  }
+
+  const maxTokens = options.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+  const postExtractionRatio = base.tokensAfter / maxTokens;
+  if (postExtractionRatio <= HYBRID_ESCALATION_THRESHOLD) {
+    return {
+      ...base,
+      strategy: "hybrid",
+      extractionDigest: base.messages[digestIndex]?.content,
+      liveContent: base.messages[digestIndex]?.content,
+      modelSummaryUsed: false,
+      fallback: false
+    };
+  }
+
+  const digest = base.messages[digestIndex]?.content ?? "";
+  const replacedMessages = base.replacedMessages ?? [];
+
+  const req: SummarizeRequest = {
+    digest,
+    replacedMessages,
+    prompt: COMPACTION_PROMPT_V1,
+    temperature: SUMMARIZATION_TEMPERATURE,
+    maxTokens: SUMMARIZATION_MAX_TOKENS,
+    inactivityMs: options.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS,
+    totalDeadlineMs: options.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS
+    // signal + onProgress are supplied by the deadline wrapper; the wrapper's
+    // AbortController is the only thing that ever aborts the pass.
+  };
+
+  const fallbackToDigest = (reason: HybridFallbackReason): HybridCompactionResult => {
+    console.warn(
+      `[compaction-hybrid] summarization fallback (${reason}); extraction digest retained as live content and audit copy (model summary discarded)`
+    );
+    return {
+      ...base,
+      strategy: "hybrid",
+      extractionDigest: digest,
+      liveContent: digest,
+      modelSummaryUsed: false,
+      fallback: true,
+      fallbackReason: reason,
+      replacedMessages
+    };
+  };
+
+  let result: SummarizeResult;
+  try {
+    result = await runSummarizationWithinDeadlines(req, options.summarize);
+  } catch (err: any) {
+    const msg = String(err?.message ?? err);
+    return fallbackToDigest(msg.includes("timeout") || msg.includes("deadline") || msg.includes("abort") ? "timeout" : "generation_failure");
+  }
+
+  if (!result.text.trim()) {
+    return fallbackToDigest("empty_summary");
+  }
+  if (result.truncated) {
+    return fallbackToDigest("truncated");
+  }
+  if (!result.text.startsWith(COMPACTION_MODEL_DIGEST_HEADER)) {
+    return fallbackToDigest("identifier_post_check_rejected");
+  }
+  const coverage = verifyIdentifierCoverage(digest, result.text);
+  if (!coverage.ok) {
+    return fallbackToDigest("identifier_post_check_rejected");
+  }
+
+  const hybridMessages: any[] = [...base.messages];
+  hybridMessages[digestIndex] = { role: "assistant", content: result.text };
+  const tokensAfter = estimateTokens(hybridMessages);
+
+  return {
+    compacted: true,
+    messages: hybridMessages,
+    tokensBefore: base.tokensBefore,
+    tokensAfter,
+    strategy: "hybrid",
+    extractionDigest: digest,
+    liveContent: result.text,
+    modelSummaryUsed: true,
+    fallback: false,
+    replacedMessages
+  };
 }
 
 /**
@@ -213,7 +552,7 @@ export function compactConversationHistory(
     compactionThreshold?: number;
     preserveRecentMessages?: number;
   }
-): CompactionResult {
+): CompactionResult & { replacedMessages?: any[] } {
   if (!Array.isArray(messages) || messages.length <= 3) {
     const tokens = estimateTokens(messages);
     return { compacted: false, messages, tokensBefore: tokens, tokensAfter: tokens };
@@ -260,6 +599,7 @@ export function compactConversationHistory(
     compacted: true,
     messages: compactedMessages,
     tokensBefore,
-    tokensAfter
+    tokensAfter,
+    replacedMessages: olderMessages
   };
 }

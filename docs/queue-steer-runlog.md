@@ -271,9 +271,9 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 
 **FINAL VERDICT: 8/8 SCENARIOS GREEN — 2/2 CONSECUTIVE RUNS CLEAN — THE BAR ("4K / 100K") ACHIEVED**
 
-
----
-
+
+---
+
 ---
 
 ## Host Runner Daemon Death Incident & Recovery (Nov 9, 2026)
@@ -302,10 +302,10 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
   - `Unit Tests & Static Analysis`: **pass** in 2m57s
   - `Code Coverage Report`: **pass** in 3m6s
   - `Container Build & Docker Scout Scan`: **pass** in 3m31s
-  - `Playwright UI Invariants, Flows & Baselines`: **pass** in 3m30s
-
----
-
+  - `Playwright UI Invariants, Flows & Baselines`: **pass** in 3m30s
+
+---
+
 --
 
 ## 2026-11-09: RESUME — Part B (Thread Deletion UI & Backend) & Part C (Disarm Lifecycle Test)
@@ -322,7 +322,7 @@ Executed adversarial probes A–G against the deployed chat runtime, registered 
 - Re-pointed at sacrificial runner on ephemeral port (8799) with isolated temp config directory.
 - Hard guard assertSacrificialTarget rejects port 8765 and production paths.
 - Default suite backfilled with pure guard tests and mocked environment unit tests.
-- Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
+- Behavioral acceptance verified: production host runner PID remained 34716 throughout test:gate, test:lifecycle, and guard rejection probe.
 
 
 
@@ -378,13 +378,13 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 
 ### Fix (cycle 1, on branch, no test/workflow weakening)
 - `web-ui/components/ChatStream.tsx`: added `lastAssistantIndex` (last assistant message index over `deduplicatedMessages`) and keyed `hasResolvedDetachedTurn` notification to `idx === lastAssistantIndex` instead of the literal tail.
-- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.
+- Local verification: `npx tsx --test tests/chatThinkingPreservation.test.ts` 4/4 pass; root `npm test` full suite 1027 pass / 0 fail.
 
 ### Fix Cycle 2 (Playwright job, run 42862508213)
 - Run 42862508213 (head 997b916): Unit Tests, Coverage, Container Build all green; Playwright job failed 8 tests (Scenario 7 engine-stop, Scenario 9 backend-down across 4 viewports).
 - Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' � UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
 - Fix (no test weakening): ChatStream.tsx � SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
-- Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
+- Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
 
 ## Steer run � synthesis-retry merge+deploy job (Phase 1 Step 1) � STOPPED, PR NOT FOUND
 - gh pr list --state open --json ... => [] (zero open PRs on ZackMcColgan/local-agentic-sandbox).
@@ -392,7 +392,7 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - git ls-remote origin => no remote branch feature/synthesis-retry.
 - Local branch feature/synthesis-retry tip = 18282cb0d7ea (== origin/develop tip); git rev-list --count origin/develop..feature/synthesis-retry = 0 commits ahead.
 - Fix content exists ONLY untracked: web-ui/tests/synthesisRetry.test.ts (untracked). git diff origin/develop -- web-ui/app/api/chat/route.ts = EMPTY (no retry logic in route.ts; route.ts:1632 still the bare 'concluded without synthesis text' stamp, no synthesis retry at ~1554-1607). git grep synthesisRetry in package.json/scripts = no testGate wiring.
-- Conclusion: no PR to merge (owner did NOT merge it himself � develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
+- Conclusion: no PR to merge (owner did NOT merge it himself � develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
 
 ## Steer run - synthesis-retry apply+commit+PR job (recovery)
 - STATE CHECK: branch feature/synthesis-retry tip 18282cb0d7ea == origin/develop; route.ts synthesis block unfixed (bare stamp at 1632); tests/synthesisRetry.test.ts present untracked and matches the design (scripted-stream POST, 4 completions: tool round -> empty round -> empty synthesis -> retry summary; plus a double-empty case).
@@ -402,15 +402,15 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - PASS-AFTER: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail (retry summary persisted, status completed, retry status event present; double-empty -> status incomplete + resumable stamp).
 - test:gate: repo-wide git-status scan rejects on unrelated untracked web-ui/app/api/settings/memory/route.ts (zero coverage) - unrelated Settings Memory work, NOT this job. Scoped run node scripts/test-gate.js --files=web-ui/app/api/chat/route.ts,web-ui/lib/testGate.ts -> PASSED 179 pass / 0 fail / 1 skipped in 37.87s (<90s budget).
 - STAGED ONLY: web-ui/app/api/chat/route.ts, web-ui/tests/synthesisRetry.test.ts, web-ui/lib/testGate.ts, docs/queue-steer-runlog.md. Settings Memory files (lib/memory/operatorMemory.ts, app/api/settings/memory/, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) left untracked and untouched.
-- NO merge, NO deploy this job.
+- NO merge, NO deploy this job.
 
 ## Fix cycle - PR #64 CI (run 42925509474, head 5f4c7b7)
 - RE-GROUND: HEAD 5f4c7b7 == origin/feature/synthesis-retry; no uncommitted tracked changes. Untracked tree inventory (NOT part of this job, left untouched): Settings Memory work (web-ui/app/api/settings/memory/, lib/memory/operatorMemory.ts, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) + stranded-turn scratch (.tmp-forensics.py, .tmp-pr-body.md, .tmp-synth-guard.js, .tmp-synth-override.js, .tmp-synth-patch.js, .tmp-synth-scope.js, .tmp-thread.json, .tmp-thread2.json, web-ui/tests/.tmp-synth-debug.test.ts). No candidate fix in the tree relevant to the CI failure.
 - DIAGNOSE (gh run view 42925509474 --log-failed): Job 'Unit Tests & Static Analysis', step 'Typecheck & Build Services' (npm run build --workspaces). Exact error: ./app/api/chat/route.ts:1632:27 - Type error: Argument of type '"empty-synthesis"' is not assignable to parameter of type '"error" | "ok" | undefined'. The route's own tracer (web-ui/lib/telemetry.ts:102,128 - TelemetryTracer.startSpan/end) constrains span status to "ok"|"error"; supervisor.ts's two-arg end(status,{attrs}) form is fine, but the status literal itself must be ok/error.
 - FIX (no guard edit, no assertion change): route.ts:1632 synthSpan.end("empty-synthesis", { synthesisPasses }) -> synthSpan.end("error", { synthesisPasses, emptySynthesis: true }). Intent preserved: the synthesis span still ends non-ok on the double-empty path, with the empty-synthesis signal carried as an attribute. No test asserts on span status/attrs (git grep: synthesisPasses/model.synthesis absent from tests).
 - LOCAL VERIFY: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail. npx next build -> exit 0 (typecheck clean; the failing CI step is next build, which now passes locally).
-- PUSH + watch new run below.
-- WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
+- PUSH + watch new run below.
+- WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
 
 ## CI Watch close-out - PR #64 FULLY GREEN (2026-11-11)
 - RUN 42930341188 (head c1a9f1f): status completed, conclusion success. All four jobs success:
@@ -424,15 +424,15 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
   Container Build & Docker Scout Scan = success (job 130231147933)
   Code Coverage Report = success (job 130231147992)
 - gh pr checks 64: all four checks pass on the newest run. Prior failure run 42925509474 (head 5f4c7b7) superseded by the typecheck fix c1a9f1f.
-- No merge, no deploy this job - those arrive as separate tickets.
-- WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
+- No merge, no deploy this job - those arrive as separate tickets.
+- WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
 
 ## Deploy ticket PR #64 -> prod (2026-11-11)
 - Develop head confirmed: 6e02172fa905ad73bcf43a801a22e48f558297fa ("Merge pull request #64 from ZackMcColgan/feature/synthesis-retry", PR head 8622a0d, CI run 42932489987 all-four-green).
 - ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-18282cb-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-6c858f8565-4g8g9 1/1 Running).
-- Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
+- Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
 - Build complete: docker build -t local-agentic-sandbox-web-ui:v-6e02172-fresh -f web-ui/Dockerfile . -> image de07c9232d01 (327MB disk / 78MB content). Cached layers reused.
-- Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
+- Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
 
 ## Settings Memory job (2026-11-12) — resume, implementation landed
 - Fail-before re-verified on branch feature/settings-memory (rebased onto develop ac4ba03): 19 pass / 6 fail (5 UI + 1 injection wiring).
@@ -453,6 +453,21 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - Target image tag to build: local-agentic-sandbox-web-ui:v-e36f1b4-fresh. Deploy scope: web-ui only.
 - DEPLOY OUTCOME (driver, 2026-11-11 ~22:20 CT): PROD == develop c5389f6 VERIFIED. S1 runlog commit c5389f6 pushed first (tag then v-c5389f6-fresh). S2 build BLOCKED at first by Docker credential helper: `node:22-alpine` not in the daemon image store, and `docker-credential-desktop` fails in non-interactive SSH logons ("A specified logon session does not exist"); DOCKER_CONFIG override to an empty config did NOT bypass it (CLI still invoked the helper). WORKAROUND (SSH-side, durable): pull the base into the kind node with `ctr -n k8s.io images pull docker.io/library/node:22-alpine` (anonymous, no Windows helper), `ctr images export` to /images/node-22-alpine.tar, `docker cp` out, `docker load` into the daemon. SSH sessions also DROP after ~30-45s on long foreground commands (two broken pipes during the build); processes with stdout redirected to a log file SURVIVE the drop and keep running — poll the log + `docker images` with short calls instead of holding the session. Build then green (Next.js build ~2.5min, image 7e3099c05682); save 78MB tar; ctr import OK (node image 8ab5e734216df). S3 set image v-c5389f6-fresh. S4 rollout success, new pod web-ui-6b6fb6d557-765sz 1/1 Running 0 restarts; gateway 200; /api/threads 12 threads intact; UI render check clean (nav + threads list, screen matches record). ROLLBACK TARGET remains v-6e02172-fresh. LESSON for future deploys: if `node:22-alpine` is missing from the daemon store, use the ctr-export/docker-load path above before building; keep long builds log-redirected and poll.
 
+## Settings Memory DONE + compaction-hybrid resumes (2026-11-11)
+- Settings-memory item DONE 2026-11-11 ~22:20 CT: PR #65 audit PASS (driver) → merged e36f1b4 → deployed v-c5389f6-fresh → verified prod == develop c5389f6 (rollout success, pod 1/1 Running 0 restarts, gateway 200, 12 threads intact, UI render clean). Prod SHA now c5389f6; rollback target v-6e02172-fresh.
+- Compaction-hybrid continuation brief issued 2026-11-11 ~22:24 CT in fresh thread thread-1794371021984-comphyb2 (model qwen3.8-flash-next-gyro-gyro-s, medium): CONTINUE from banked 9df7762 on origin/feature/compaction-hybrid (9 tests red, implementation partial; no PR yet); brief instructs stash inspection, fail-before re-confirmation, guardrail tests, COMPACTION_PROMPT_V1 verbatim, gate, PR into develop, no merge/deploy in-job. Strike count stays 1 (first turn stranded once).
+- compaction-hybrid 2a: digest-index fix in conversationCompaction.ts (digestIndex = leading system ? 1 : 0) at read sites + hybrid write; hybridCompaction.test.ts now 7/9 (test 5 green; 8-9 await store rung 2b).
+## compaction-hybrid 3: route wiring (2026-11-12)
+- ROUTE WIRING: web-ui/app/api/chat/route.ts in-turn ladder call-site (~L827) now branches on resolveCompactionStrategy(): COMPACTION_STRATEGY=hybrid awaits threadStore.compactThreadIncrementalHybrid(threadData, { summarize }) with a call-site adapter (system=req.prompt verbatim, user=req.digest, signal=req.signal, options temperature/num_predict, finish_reason=length -> truncated); unset/anything-else keeps the existing synchronous compactThreadIncremental(threadData) call byte-identical. Summarization pass, identifier post-check, deadlines, fallback untouched (live in the rung). web-ui/app/api/threads/[id]/compact/route.ts left on extraction (out of scope).
+- TEST: hybridCompaction.test.ts seam test added (source-level call-site selection: strategy branch, awaited hybrid rung, else extraction call, adapter contract, compact endpoint stays extraction). FAIL-BEFORE proven: route.ts stashed to HEAD 3fedd43 -> 9 pass / 1 fail ("call-site must branch on the resolved strategy"). PASS-AFTER: npx tsx --test tests/hybridCompaction.test.ts -> 10 pass / 0 fail.
+- TYPECHECK: npx tsc --noEmit error set identical to HEAD baseline (pre-existing: operatorMemory import unresolved on this branch base ac4ba03, resolved when PR lands on develop; test-file strictness errors pre-existing). No new errors from this step.
+- STEP 4 REMAINING: npm run test:gate + PR into develop (driver owns merge/deploy).
+
+## compaction-hybrid 4: gate wiring + PR (2026-11-12)
+- GATE WIRING: web-ui/lib/testGate.ts chat-route mapping group (match app/api/chat/route || lib/progressiveTools || lib/conversationCompaction) now includes tests/hybridCompaction.test.ts (MAPPING-only edit; pass/fail logic untouched). hybridCompaction.test.ts was created after gate-completeness PR #66 landed, so develop's manifest-completeness invariant (web-ui/tests/gateManifestCompleteness.test.ts) requires this wiring once the PR merges into develop.
+- GATE RUN (full branch, npm run test:gate via bridge): 223 pass / 3 fail / 1 skipped in 25.2s (<90s budget). All 3 failures are the KNOWN base artifact: route.ts:92 imports @/lib/memory/operatorMemory, which exists only on develop (settings-memory merge e36f1b4); branch base ac4ba03 predates it. Failing: chatPersistenceDecoupling suite-level import + synthesisRetry tests 17-18 (same require stack via route.ts). CI runs next build/tests against the develop merge where the module resolves; no rebase, settings-memory files untouched.
+- SCRATCH: deleted untracked .tmp-stash0.diff at repo root (not committed).
+- MERGE NOTE: merge-tree vs develop shows content conflict in docs/queue-steer-runlog.md (append-only, trivial resolve) and testGate.ts MAPPING (resolve by keeping develop's #66 rewired rules + the one-line tests/hybridCompaction.test.ts addition to the chat-route group).
 ## Gate-completeness continuation (2026-11-11) - fixes + green + PR
 - Resumed from banked b09ff0b on feature/gate-completeness (turn 1 stranded at 112 chars).
 - FIX 1: web-ui/tests/gateManifestCompleteness.test.ts testsDir changed from path.resolve(__dirname, "..") (web-ui root, zero .test.ts files there) to __dirname (web-ui/tests). BEFORE evidence: test failed with AssertionError 'expected at least one test file on disk' (pass 0 / fail 1). AFTER: ok 1 - Gate manifest completeness, pass 1 / fail 0, zero unwired.
@@ -461,6 +476,43 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - DEAD RULES CONFIRMED: develop contained p.includes lib/agentEngine, components/Navbar, components/WorkerTiles, components/ModelSelector predicates; HEAD has none (git show origin/develop vs Select-String HEAD = zero matches).
 - RULE COUNTS: MappingRule objects 70 -> 70 (dead predicates folded out of existing rules, scheduler match extended with app/api/scheduler); wired unique test literals 111 (develop) -> 141 (HEAD).
 - GATE: npm run test:gate PASSED 6 pass / 0 fail in 2.95s (<90s budget). Change-aware scope = changed files web-ui/lib/testGate.ts (testGate rule -> testGate.test.ts + gateManifestCompleteness.test.ts) + web-ui/tests/gateManifestCompleteness.test.ts (direct-test rule). No test or pass/fail logic weakened; only MAPPING + test dir path touched.
-- NO merge, NO deploy this job.
-- 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
-- 2026-11-11 01:30 CT gate-completeness DONE: PR 66 merged 72c3342, deployed v-7701e23-fresh, S4 verified, pod web-ui-74665f94b4-7b5tx 1-1 Running 0 restarts, gateway 200, threads 19 intact, UI render clean. Rollback target v-c5389f6-fresh. Build lesson: use foreground docker build with stdout redirected to a log file, SSH drops at 30s, process survives, poll log plus docker images.  
+- NO merge, NO deploy this job.
+- 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
+- 2026-11-11 01:30 CT gate-completeness DONE: PR 66 merged 72c3342, deployed v-7701e23-fresh, S4 verified, pod web-ui-74665f94b4-7b5tx 1-1 Running 0 restarts, gateway 200, threads 19 intact, UI render clean. Rollback target v-c5389f6-fresh. Build lesson: use foreground docker build with stdout redirected to a log file, SSH drops at 30s, process survives, poll log plus docker images.  
+
+## compaction-hybrid audit-fix strand 1: partial lib wiring BANKED (2026-11-12 ~07:40 CT)
+- Context: threads comphyb12 and comphyb13 both stranded (comphyb13 at 07:19 CT on a Strata engine network error, fetch failed to strata-service:8080, AFTER finding uncommitted fix work but BEFORE banking it). Driver SSH-verified: branch at 71d8fba, only uncommitted change web-ui/lib/conversationCompaction.ts (52+/25-).
+- BANKED THIS STEP: commit 7b7779c pushed to origin/feature/compaction-hybrid (PR #67 head moves 71d8fba -> 7b7779c). Covers audit-fix items 1 (deadline controller wiring: guardedReq hands controller.signal + onProgress=resetInactivity to the summarize callback; inactivity timer re-armed per chunk; injectable inactivityMs/totalDeadlineMs via req and runHybridCompaction options), 4 (console.warn on fallbackToDigest), 5 (trailing newline), plus SummarizeRequest signal?/onProgress? plumbing.
+- REVERTED: stray one-line hunk in extractIdentifiersAndErrors filePathRegex lookahead class (dropped the quote and backslash before the close paren). Protected identifier-extraction code per audit brief; restored byte-exact to HEAD via targeted string replace (git apply -R failed twice on PowerShell backslash/backtick transport mangling; string-replace strategy succeeded, verified needle=1 orig=0 then diff shows zero filePathRegex lines).
+- MISSING (completion step, next job): item 2 route adapter onProgress wiring in web-ui/app/api/chat/route.ts (untouched); item 3 real deadline test (no test file modified). Completion step runs npm run test:gate before its push; CI on this push is the backstop.
+- No merge, no deploy this job.
+## compaction-hybrid audit-fix strand 2 (RE-ISSUE 2): DONE + pushed (2026-11-12)
+- Context: prior attempt thread-1794404217950-comphyb15 ended empty-synthesis, banked nothing (head stayed 5f42df8, tree clean). This attempt banks after EACH scope item.
+- ITEM 1 BANKED FIRST: commit 49d90ac pushed to origin/feature/compaction-hybrid (PR #67 head 5f42df8 -> 49d90ac). web-ui/app/api/chat/route.ts hybrid summarize adapter now calls req.onProgress?.() per received chunk (re-arms the deadline wrapper's inactivity timer; 180s = silence since LAST chunk). req.signal was already forwarded to streamLlmChat (route.ts:843). Gate pass/fail logic and bridge destructive classifier untouched.
+- ITEM 2 BANKED: commit f076710 pushed (head -> f076710). web-ui/tests/hybridCompaction.test.ts adds REAL deadline tests with never-resolving stubs + injectable inactivityMs/totalDeadlineMs (the old timeout test rejected from the stub itself, so it could not fail even with zero wrapper timers): (a) total-deadline fires with silent stub (totalDeadlineMs=120, inactivityMs=10000, elapsed >=100ms and <2000ms, fallbackReason=timeout); (b) inactivity-deadline fires with silent stub (inactivityMs=120, totalDeadlineMs=10000); (c) onProgress-reset test: stub ticks req.onProgress every 20ms under inactivityMs=60 -> inactivity never trips, total deadline (200ms) still fires. Route seam test now also asserts slice.includes("req.onProgress?.()"). Trailing newline verified present (last byte 10/LF; strand 1 already restored it).
+- filePathRegex CORRECTION FINDING (recorded, NOT fixed): HEAD line 376 of web-ui/lib/conversationCompaction.ts still differs from origin/develop (lookahead class dropped the single-quote and backslash before close paren). git blame attributes the line to branch commit 9df7762 (WIP), NOT 7b7779c; strand 1's runlog claim "restored byte-exact to HEAD" was self-referential and the revert against develop never happened. Status: STILL DIFFERS from develop. Left for the re-audit per brief (this step did not touch conversationCompaction.ts).
+- GATE: npm run test:gate via bridge PASSED 12 pass / 0 fail in 11.02s (<90s budget), run after item 2 before its push.
+- No merge, no deploy this job.
+
+## compaction-hybrid audit fix (PR #67) � regex restore � 2026-11-11
+- Audit finding (driver-verified, single point): web-ui/lib/conversationCompaction.ts filePathRegex (branch line 376) diverged from origin/develop line 37. Branch leading char class lost the single-quote and backslash ([\s"'()] -> [\s"()]); trailing lookahead lost the backslash ([\s"')] -> [\s")). Introduced by WIP commit 9df7762, never by design; no brief asked for it. Weakened identifier extraction feeding the load-bearing identifier post-check.
+- Fix: restored the branch line byte-exact to the develop line; touched nothing else. Verified git diff origin/develop shows NO difference on the filePathRegex line (hybrid-feature diffs elsewhere remain).
+- Gate: npm run test:gate via bridge -> PASSED 221 pass / 0 fail / 1 skipped (<90s budget).
+- Commit 486b8ee pushed to feature/compaction-hybrid (same branch, no new PR). No merge, no deploy.
+
+## PR #67 CI infra hardening: Playwright install retry loop (2026-11-12)
+- Root cause (driver-verified): Playwright job failed TWICE on the SAME infra cause before any test ran. Step "Install Playwright Chromium & System Dependencies" (.github/workflows/ci.yml, job ui-e2e-playwright, ubuntu-24.04, working-directory web-ui) ran npx playwright install --with-deps chromium; apt-get inside it died with "Temporary failure resolving 'azure.archive.ubuntu.com'" (exit 100). Evidence: GitHub run 43036081822, Playwright job 130584144773 (the rerun) - repeated Err lines then "Failed to install browsers / Installation process exited with code: 100". Develop CI runs all green, so this is a transient runner-DNS outage window, not a repo problem. A third identical rerun is not the answer.
+- Fix: wrapped ONLY that step's install command in a plain bash retry loop inside the existing run: | block - up to 3 attempts, sleep 20s between attempts, retry on ANY install failure. Step still exits non-zero (exit 1) if the final attempt fails, so a real failure is never swallowed into a green step. No job restructure, no other step touched, no test or product code touched.
+- Verification: yaml-lint clean; npm run test:gate via bridge PASSED 15 pass / 0 fail in 1.395s (<90s budget). Diff is 16 insertions / 1 deletion, LF line endings preserved.
+- Commit 23dd364 pushed to feature/compaction-hybrid (PR #67 head e77b45c -> 23dd364). Note: an intermediate commit 4563e51 was pushed with CRLF line endings from a Set-Content mishap; replaced via --force-with-lease with the clean LF commit 23dd364 (both share base e77b45c; remote tip verified 23dd364). No new PR opened - push updates PR #67. No merge, no deploy this job.
+
+
+## PR #67 CI infra fix-cycle: Playwright install drops --with-deps (2026-11-12)
+
+- Root cause (prior turn banked, not re-researched): job ui-e2e-playwright setup step ran npx playwright install --with-deps chromium; apt-get inside it cannot resolve azure.archive.ubuntu.com (runner-side DNS outage, hit 4+ times across two heads). The 3-attempt retry loop from commit 23dd364 did not survive the outage window. Container-image approach abandoned (microsoft/playwright Dockerfile URL 404'd for v1.64.1).
+
+- Fix: replaced the retry-loop block at ci.yml lines 186-204 with a single-command step - name "Install Playwright Chromium (no apt; runner image carries system deps)", run: npx playwright install chromium. No apt runs at all; the GitHub runner image already carries the browser system deps. Every other line byte-identical. Scope: ci.yml only, no product code, no tests.
+
+- Verification: yaml.safe_load clean (jobs: test-and-typecheck, coverage-report, docker-build-and-scout, ui-e2e-playwright); npm run test:gate via bridge PASSED 15 pass / 0 fail in 1.307s (<90s budget). Diff 2 insertions / 17 deletions.
+
+- Commit ed53160 pushed to feature/compaction-hybrid (PR #67 head 04b319f -> ed53160). New CI run started on ed53160: run id 43058076625 (in_progress at bank time). No new PR opened, no merge, no deploy.

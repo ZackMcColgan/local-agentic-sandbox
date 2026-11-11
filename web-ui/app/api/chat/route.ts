@@ -62,7 +62,7 @@ import {
   buildToolRegistry,
   describeTool
 } from "@/lib/progressiveTools";
-import { compactConversationHistory } from "@/lib/conversationCompaction";
+import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
@@ -824,7 +824,38 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
             if (activeThreadId && threadData) {
               try {
-                threadStore.compactThreadIncremental(threadData);
+                // ROUTE WIRING (compaction-hybrid step 3): COMPACTION_STRATEGY=hybrid
+                // selects the async hybrid rung; unset/anything-else keeps the
+                // extraction call byte-identical. Summarization pass, identifier
+                // post-check, deadlines, and fallback live in the rung.
+                if (resolveCompactionStrategy() === "hybrid") {
+                  await threadStore.compactThreadIncrementalHybrid(threadData, {
+                    summarize: async (req) => {
+                      let text = "";
+                      let truncated = false;
+                      for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+                        model: activeModel,
+                        messages: [
+                          { role: "system", content: req.prompt },
+                          { role: "user", content: req.digest }
+                        ],
+                        keep_alive: -1,
+                        signal: req.signal,
+                        options: { temperature: req.temperature, num_predict: req.maxTokens }
+                      })) {
+                        // Per-chunk progress hook: re-arms the deadline wrapper's
+                        // inactivity timer so 180s means silence since the LAST
+                        // chunk, not elapsed time since start.
+                        req.onProgress?.();
+                        if (chunk.message?.content) text += chunk.message.content;
+                        if (chunk.finish_reason === "length") truncated = true;
+                      }
+                      return { text, truncated };
+                    }
+                  });
+                } else {
+                  threadStore.compactThreadIncremental(threadData);
+                }
               } catch {}
             }
 

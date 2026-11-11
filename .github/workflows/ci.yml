@@ -183,10 +183,10 @@ jobs:
         run: |
           npm ci --workspaces || npm install
 
-      - name: Install Playwright Chromium & System Dependencies
+      - name: Install Playwright Chromium (no apt; runner image carries system deps)
         working-directory: web-ui
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
 
       - name: Build Web UI
         working-directory: web-ui
