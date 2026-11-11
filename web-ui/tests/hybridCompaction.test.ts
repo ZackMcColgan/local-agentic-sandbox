@@ -469,4 +469,132 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     assert.ok(!compactSrc.includes("compactThreadIncrementalHybrid"), "manual compact endpoint must not invoke the hybrid rung");
     assert.ok(!compactSrc.includes("resolveCompactionStrategy"), "manual compact endpoint must not branch on strategy");
   });
-});
+
+
+  // HYBRID TURN-START WIRING FIX (fail-before): at HEAD 2ecf71b
+  // prepareTurnConversationMessages always calls the synchronous extraction
+  // compactThreadIncremental and never consults COMPACTION_STRATEGY, so a thread
+  // crossing the 85% trigger at TURN START gets the extraction digest even when
+  // strategy=hybrid and a summarize callback are supplied. The hybrid rung is only
+  // reachable from the mid-turn fitConversationToBudget branch, which turn-start
+  // compaction pre-empts (post-turn-start view is below the fit thresholds, so the
+  // hybrid store function no-ops as already_compacted).
+  // Fixture shape: the bulk of the tokens sits in the REPLACED middle turn (t3) so
+  // extraction does not no-op as already_optimal, and the preserved tail (t6) keeps
+  // the post-extraction view above the 65% hybrid escalation rung.
+  const TURN_START_MESSAGES = (prefix: string): ThreadMessage[] => [
+    { id: `${prefix}-1`, role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
+    { id: `${prefix}-2`, role: "assistant", content: "Execution error: failed to compile module at line 42.", timestamp: "now" },
+    { id: `${prefix}-3`, role: "tool", name: "workspace_read_file", content: "x".repeat(30000 * 4), timestamp: "now" },
+    { id: `${prefix}-4`, role: "assistant", content: "Done.", timestamp: "now" },
+    { id: `${prefix}-5`, role: "user", content: "Recent question one", timestamp: "now" },
+    { id: `${prefix}-6`, role: "assistant", content: "y".repeat(66000 * 4), timestamp: "now" },
+    { id: `${prefix}-7`, role: "user", content: "Recent question two", timestamp: "now" }
+  ];
+
+  const makeTurnStartThread = (id: string): Thread => ({
+    id,
+    title: "Turn-Start Thread",
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    model: "swift-15-27b-mtp",
+    reasoningEffort: "medium",
+    messages: TURN_START_MESSAGES(id)
+  });
+
+  it("turn-start prepare honors strategy=hybrid: boundary summary is the MODEL DIGEST, extraction digest retained", async () => {
+    const saved = process.env.COMPACTION_STRATEGY;
+    const tmpDir = path.resolve("./.tmp-test-hybrid-turnstart-" + Date.now());
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const store = new ThreadStore(tmpDir);
+      const thread = makeTurnStartThread("thread-hybrid-turnstart-a");
+      store.saveThread(thread);
+
+      let calls = 0;
+      const prep = await store.prepareTurnConversationMessages(
+        thread,
+        [...thread.messages],
+        CHAT_CONTEXT_BUDGET_TOKENS,
+        {
+          strategy: "hybrid",
+          summarize: async ({ digest }) => {
+            calls++;
+            return `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo\nCritical Errors & Failures:\n- Execution error: failed to compile module at line 42.\n` + digest;
+          }
+        }
+      );
+
+      assert.equal(prep.compactedThisTurn, true, "turn-start must report compaction");
+      assert.ok(prep.tokensBeforeCompaction! > Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85), "model view must exceed the 85% trigger");
+      assert.ok(prep.tokensAfterCompaction! < prep.tokensBeforeCompaction!, "tokens must shrink");
+      assert.equal(calls, 1, "exactly ONE summarization pass at turn start");
+      assert.ok(prep.messages.some((m: any) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)), "model view must carry the model digest");
+
+      const savedThread = (await store.getThread(thread.id))!;
+      assert.ok(savedThread.compaction, "compaction boundary persisted");
+      assert.ok(savedThread.compaction!.summary.startsWith(COMPACTION_MODEL_DIGEST_HEADER), "boundary summary must begin with the MODEL DIGEST header");
+      assert.equal(savedThread.compaction!.strategy, "hybrid");
+      assert.ok(savedThread.compaction!.extractionDigest, "extraction digest retained as audit copy");
+      assert.ok(savedThread.compaction!.extractionDigest!.startsWith("[CONVERSATION COMPACTED (85% THRESHOLD)]"), "audit copy is the extraction digest");
+      assert.ok(savedThread.compaction!.extractionDigest!.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+      assert.ok(savedThread.compaction!.extractionDigest!.includes("web-ui/lib/contextBudget.ts"));
+      assert.ok(savedThread.compaction!.extractionDigest!.includes("https://github.com/test/repo"));
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it("turn-start prepare with strategy=extraction, hybrid without summarize, or no options produces the extraction digest exactly as today", async () => {
+    const saved = process.env.COMPACTION_STRATEGY;
+    const tmpDir = path.resolve("./.tmp-test-hybrid-turnstart-extraction-" + Date.now());
+    try {
+      const store = new ThreadStore(tmpDir);
+
+      const assertExtractionIdentical = async (thread: Thread, prep: Awaited<ReturnType<typeof store.prepareTurnConversationMessages>>, summarizeCalls: number) => {
+        assert.equal(prep.compactedThisTurn, true, "turn-start must report compaction");
+        assert.equal(summarizeCalls, 0, "summarizer must never be invoked on the extraction rung");
+        assert.ok(!prep.messages.some((m: any) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)), "model view must not carry a model digest");
+        const savedThread = (await store.getThread(thread.id))!;
+        assert.ok(savedThread.compaction);
+        assert.ok(savedThread.compaction!.summary.startsWith("[CONVERSATION COMPACTED (85% THRESHOLD)]"), "boundary summary is the extraction digest");
+        assert.ok(!savedThread.compaction!.summary.includes(COMPACTION_MODEL_DIGEST_HEADER));
+        assert.equal(savedThread.compaction!.strategy, undefined, "extraction boundary carries no strategy field");
+        assert.equal(savedThread.compaction!.extractionDigest, undefined, "extraction boundary carries no audit copy");
+        assert.equal(savedThread.compaction!.summary, summarizeTurnHistory(thread.messages.slice(0, thread.messages.length - 4)), "digest must be byte-identical to today's extraction output");
+        assert.equal(prep.messages[0].content, savedThread.compaction!.summary, "model view is headed by the extraction digest");
+      };
+
+      // (b1) explicit strategy=extraction WITH a summarize callback present.
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const t1 = makeTurnStartThread("thread-turnstart-extraction-explicit");
+      store.saveThread(t1);
+      let calls1 = 0;
+      const prep1 = await store.prepareTurnConversationMessages(t1, [...t1.messages], CHAT_CONTEXT_BUDGET_TOKENS, {
+        strategy: "extraction",
+        summarize: async () => { calls1++; return "MUST NEVER BE CALLED"; }
+      });
+      await assertExtractionIdentical(t1, prep1, calls1);
+
+      // (b2) strategy=hybrid WITHOUT a summarize callback -> extraction rung.
+      const t2 = makeTurnStartThread("thread-turnstart-hybrid-no-summarize");
+      store.saveThread(t2);
+      const prep2 = await store.prepareTurnConversationMessages(t2, [...t2.messages], CHAT_CONTEXT_BUDGET_TOKENS, { strategy: "hybrid" });
+      await assertExtractionIdentical(t2, prep2, 0);
+
+      // (b3) no options argument at all, flag OFF -> legacy synchronous extraction.
+      delete process.env.COMPACTION_STRATEGY;
+      const t3 = makeTurnStartThread("thread-turnstart-no-options");
+      store.saveThread(t3);
+      const prep3 = await store.prepareTurnConversationMessages(t3, [...t3.messages], CHAT_CONTEXT_BUDGET_TOKENS);
+      await assertExtractionIdentical(t3, prep3, 0);
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });});
+
