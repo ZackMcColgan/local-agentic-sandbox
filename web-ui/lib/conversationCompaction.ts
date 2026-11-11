@@ -373,7 +373,7 @@ export function extractIdentifiersAndErrors(messages: any[]): {
   const urlsSet = new Set<string>();
   const errorLines: string[] = [];
 
-  const filePathRegex = /(?:^|[\s"(\`])((?:[a-zA-Z]:[\\/]|\/|\.\.?\/|[a-zA-Z0-9_-]+\/)[a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9]{1,12})(?=$|[\s"'\)`,;:])/gm;
+  const filePathRegex = /(?:^|[\s"'(\`])((?:[a-zA-Z]:[\\/]|\/|\.\.?\/|[a-zA-Z0-9_-]+\/)[a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9]{1,12})(?=$|[\s"'\)\`,;:])/gm;
   const gitShaRegex = /\b([0-9a-f]{7,40})\b/gi;
   const urlRegex = /\b(https?:\/\/[^\s<>"'\)]+)/gi;
 
