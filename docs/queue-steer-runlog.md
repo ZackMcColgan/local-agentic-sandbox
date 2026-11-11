@@ -440,3 +440,9 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - Implemented: chat route OWNER MEMORY injection via assembleSystemPrompt (byte-identical when memory empty); SettingsView Memory card (textarea, live counter, save blocked beyond 2000 cap, exact privacy note); .gitignore operator-memory.json pattern; repoHygiene tracked-file guard; testGate mapping rules only (pass/fail logic untouched).
 - Two test-side fixes during green-up: operatorMemory.test.ts cleanup moved into an after() hook (suite-level delete of OPERATOR_MEMORY_PATH ran before async subtests, leaking writes into the default store); SettingsView counter counts non-whitespace characters per the UI test spec, and textarea listens for native input events.
 - npm run test:gate: PASSED 162 pass / 0 fail, 26.1s (<90s budget). Ships EMPTY - no memory content seeded.
+
+## Settings Memory PR #65 -> develop (2026-11-12)
+- Branch feature/settings-memory head 0ed4d62 (one commit on develop ac4ba03); pushed; PR #65 opened into develop. No merge, no deploy this job.
+- Gate evidence on clean branch: npm run test:gate PASSED 328 pass / 0 fail, 40.1s (<90s budget).
+- Acceptance: git check-ignore -v shows .gitignore:62 (.agent/) and .gitignore:65 (operator-memory.json) cover the store; git ls-files | grep operator-memory = zero matches. Ships EMPTY - owner seeds his own facts later.
+- Unrelated compaction WIP preserved: branch feature/compaction-hybrid restored to 9df7762; working-tree compaction edits stashed ("compaction-hybrid WIP preserved").
