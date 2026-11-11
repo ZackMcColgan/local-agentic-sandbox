@@ -463,3 +463,4 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - GATE: npm run test:gate PASSED 6 pass / 0 fail in 2.95s (<90s budget). Change-aware scope = changed files web-ui/lib/testGate.ts (testGate rule -> testGate.test.ts + gateManifestCompleteness.test.ts) + web-ui/tests/gateManifestCompleteness.test.ts (direct-test rule). No test or pass/fail logic weakened; only MAPPING + test dir path touched.
 - NO merge, NO deploy this job.
 - 2026-11-11 01:07 CT gate-completeness deploy: rollback target v-c5389f6-fresh, target v-72c3342-fresh.  
+- 2026-11-11 01:30 CT gate-completeness DONE: PR 66 merged 72c3342, deployed v-7701e23-fresh, S4 verified, pod web-ui-74665f94b4-7b5tx 1-1 Running 0 restarts, gateway 200, threads 19 intact, UI render clean. Rollback target v-c5389f6-fresh. Build lesson: use foreground docker build with stdout redirected to a log file, SSH drops at 30s, process survives, poll log plus docker images.  
