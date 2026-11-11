@@ -253,7 +253,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatTurnHonesty.test.ts",
       "tests/chatPersistenceDecoupling.test.ts",
       "tests/chatLiveVisibility.test.ts",
-      "tests/synthesisRetry.test.ts"
+      "tests/synthesisRetry.test.ts",
+      "tests/hybridCompaction.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control
