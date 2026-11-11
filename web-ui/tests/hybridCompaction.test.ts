@@ -365,6 +365,33 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
       else process.env.COMPACTION_STRATEGY = saved;
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    }
+    }  });
+
+  it("chat route call-site wires COMPACTION_STRATEGY=hybrid to the async rung; flag OFF keeps the extraction call", () => {
+    // Seam test on the call-site selection at app/api/chat/route.ts (in-turn ladder
+    // compaction). Fail-before: at HEAD 3fedd43 this slice contained a single
+    // unconditional threadStore.compactThreadIncremental(threadData) with no
+    // strategy branch and no hybrid rung, so every assertion below was red.
+    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
+    assert.ok(anchor >= 0, "chat route must contain the in-turn ladder compaction call-site");
+    const slice = routeSrc.slice(anchor, anchor + 2600);
+    assert.ok(slice.includes(`resolveCompactionStrategy() === "hybrid"`), "call-site must branch on the resolved strategy");
+    assert.ok(slice.includes("await threadStore.compactThreadIncrementalHybrid(threadData"), "hybrid branch must await the async store rung");
+    assert.ok(slice.includes("} else {"), "extraction branch must be the else path");
+    assert.ok(slice.includes("threadStore.compactThreadIncremental(threadData);"), "flag OFF keeps the existing synchronous extraction call");
+    // The call-site adapter feeds the rung request contract (prompt verbatim,
+    // digest as source, signal + guardrail options); the summarization pass,
+    // identifier post-check, deadlines, and fallback all live in the rung.
+    assert.ok(slice.includes("content: req.prompt"), "summarize adapter must send COMPACTION_PROMPT_V1 verbatim");
+    assert.ok(slice.includes("content: req.digest"), "summarize adapter must send the extraction digest");
+    assert.ok(slice.includes("signal: req.signal"), "summarize adapter must honor the rung deadline signal");
+    assert.ok(slice.includes("num_predict: req.maxTokens"), "summarize adapter must carry the pinned maxTokens");
+    assert.ok(routeSrc.includes(`import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";`), "route must import the strategy resolver");
+    // Out-of-scope surface stays on extraction: the manual compact endpoint.
+    const compactSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/threads/[id]/compact/route.ts"), "utf8");
+    assert.ok(compactSrc.includes("threadStore.compactThreadIncremental(thread)"), "manual compact endpoint stays extraction");
+    assert.ok(!compactSrc.includes("compactThreadIncrementalHybrid"), "manual compact endpoint must not invoke the hybrid rung");
+    assert.ok(!compactSrc.includes("resolveCompactionStrategy"), "manual compact endpoint must not branch on strategy");
   });
 });
