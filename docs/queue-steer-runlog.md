@@ -426,3 +426,8 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 - gh pr checks 64: all four checks pass on the newest run. Prior failure run 42925509474 (head 5f4c7b7) superseded by the typecheck fix c1a9f1f.
 - No merge, no deploy this job - those arrive as separate tickets.
 - WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
+
+## Deploy ticket PR #64 -> prod (2026-11-11)
+- Develop head confirmed: 6e02172fa905ad73bcf43a801a22e48f558297fa ("Merge pull request #64 from ZackMcColgan/feature/synthesis-retry", PR head 8622a0d, CI run 42932489987 all-four-green).
+- ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-18282cb-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-6c858f8565-4g8g9 1/1 Running).
+- Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
