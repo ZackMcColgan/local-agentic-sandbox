@@ -15,7 +15,7 @@ import path from "path";
  */
 describe("Gate manifest completeness", () => {
   const gatePath = path.resolve(__dirname, "../lib/testGate.ts");
-  const testsDir = path.resolve(__dirname, "..");
+  const testsDir = __dirname;
 
   it("every web-ui/tests/*.test.ts file on disk is wired into MAPPING_RULES", () => {
     const src = fs.readFileSync(gatePath, "utf8");

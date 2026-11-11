@@ -516,7 +516,6 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("components/DiffViewer") ||
-      p.includes("components/DiffViewer") ||
       p.includes("components/ExecutionTrace") ||
       p.includes("app/page.tsx") ||
       p.includes("app/layout.tsx"),
