@@ -505,3 +505,14 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - Fix: wrapped ONLY that step's install command in a plain bash retry loop inside the existing run: | block - up to 3 attempts, sleep 20s between attempts, retry on ANY install failure. Step still exits non-zero (exit 1) if the final attempt fails, so a real failure is never swallowed into a green step. No job restructure, no other step touched, no test or product code touched.
 - Verification: yaml-lint clean; npm run test:gate via bridge PASSED 15 pass / 0 fail in 1.395s (<90s budget). Diff is 16 insertions / 1 deletion, LF line endings preserved.
 - Commit 23dd364 pushed to feature/compaction-hybrid (PR #67 head e77b45c -> 23dd364). Note: an intermediate commit 4563e51 was pushed with CRLF line endings from a Set-Content mishap; replaced via --force-with-lease with the clean LF commit 23dd364 (both share base e77b45c; remote tip verified 23dd364). No new PR opened - push updates PR #67. No merge, no deploy this job.
+
+
+## PR #67 CI infra fix-cycle: Playwright install drops --with-deps (2026-11-12)
+
+- Root cause (prior turn banked, not re-researched): job ui-e2e-playwright setup step ran npx playwright install --with-deps chromium; apt-get inside it cannot resolve azure.archive.ubuntu.com (runner-side DNS outage, hit 4+ times across two heads). The 3-attempt retry loop from commit 23dd364 did not survive the outage window. Container-image approach abandoned (microsoft/playwright Dockerfile URL 404'd for v1.64.1).
+
+- Fix: replaced the retry-loop block at ci.yml lines 186-204 with a single-command step - name "Install Playwright Chromium (no apt; runner image carries system deps)", run: npx playwright install chromium. No apt runs at all; the GitHub runner image already carries the browser system deps. Every other line byte-identical. Scope: ci.yml only, no product code, no tests.
+
+- Verification: yaml.safe_load clean (jobs: test-and-typecheck, coverage-report, docker-build-and-scout, ui-e2e-playwright); npm run test:gate via bridge PASSED 15 pass / 0 fail in 1.307s (<90s budget). Diff 2 insertions / 17 deletions.
+
+- Commit ed53160 pushed to feature/compaction-hybrid (PR #67 head 04b319f -> ed53160). New CI run started on ed53160: run id 43058076625 (in_progress at bank time). No new PR opened, no merge, no deploy.
