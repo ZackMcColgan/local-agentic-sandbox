@@ -519,3 +519,4 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 
 ## Deploy: compaction-hybrid (PR #67, merge 85521da) - 2026-11-11
 ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-7701e23-fresh (current prod, banked before build)
+DEPLOYED: image local-agentic-sandbox-web-ui:v-b5c9694-fresh set on deployment/web-ui; rollout success; pod Running 0 restarts; gateway 200; thread list loads, history intact. Prod content = b5c9694 (PR #67 merge 85521da + rollback-bank commit).
