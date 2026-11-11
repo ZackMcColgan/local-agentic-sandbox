@@ -843,6 +843,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                         signal: req.signal,
                         options: { temperature: req.temperature, num_predict: req.maxTokens }
                       })) {
+                        // Per-chunk progress hook: re-arms the deadline wrapper's
+                        // inactivity timer so 180s means silence since the LAST
+                        // chunk, not elapsed time since start.
+                        req.onProgress?.();
                         if (chunk.message?.content) text += chunk.message.content;
                         if (chunk.finish_reason === "length") truncated = true;
                       }
