@@ -60,3 +60,6 @@ web-ui/temp-test-*
 /workspace/
 .opencode-remote-session.json
 .agent/
+
+# Settings Memory store (runtime state on this machine; never committed)
+operator-memory.json
