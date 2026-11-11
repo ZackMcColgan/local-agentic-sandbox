@@ -493,3 +493,9 @@ Actions was never disabled ï¿½ no permission or workflow-state stoppage. PR #63'
 - filePathRegex CORRECTION FINDING (recorded, NOT fixed): HEAD line 376 of web-ui/lib/conversationCompaction.ts still differs from origin/develop (lookahead class dropped the single-quote and backslash before close paren). git blame attributes the line to branch commit 9df7762 (WIP), NOT 7b7779c; strand 1's runlog claim "restored byte-exact to HEAD" was self-referential and the revert against develop never happened. Status: STILL DIFFERS from develop. Left for the re-audit per brief (this step did not touch conversationCompaction.ts).
 - GATE: npm run test:gate via bridge PASSED 12 pass / 0 fail in 11.02s (<90s budget), run after item 2 before its push.
 - No merge, no deploy this job.
+
+## compaction-hybrid audit fix (PR #67) — regex restore — 2026-11-11
+- Audit finding (driver-verified, single point): web-ui/lib/conversationCompaction.ts filePathRegex (branch line 376) diverged from origin/develop line 37. Branch leading char class lost the single-quote and backslash ([\s"'()] -> [\s"()]); trailing lookahead lost the backslash ([\s"')] -> [\s")). Introduced by WIP commit 9df7762, never by design; no brief asked for it. Weakened identifier extraction feeding the load-bearing identifier post-check.
+- Fix: restored the branch line byte-exact to the develop line; touched nothing else. Verified git diff origin/develop shows NO difference on the filePathRegex line (hybrid-feature diffs elsewhere remain).
+- Gate: npm run test:gate via bridge -> PASSED 221 pass / 0 fail / 1 skipped (<90s budget).
+- Commit 486b8ee pushed to feature/compaction-hybrid (same branch, no new PR). No merge, no deploy.
