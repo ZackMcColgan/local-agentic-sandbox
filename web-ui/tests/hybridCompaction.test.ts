@@ -25,17 +25,24 @@ const IDENTIFIER_MESSAGES = [
 ];
 
 function buildLargeConversation(budgetTokens: number, utilizationRatio: number) {
-  // estimateTokens = ceil(chars/4); craft chars so post-extraction utilization lands where asked.
-  const targetTokens = Math.floor(budgetTokens * utilizationRatio);
-  const filler = "x".repeat(targetTokens * 4);
+  // estimateTokens = ceil(chars/4). The SOURCE conversation must exceed the 85%
+  // compaction threshold so extraction fires, and the PRESERVED recent messages
+  // must carry the bulk of the tokens so the POST-EXTRACTION model view lands at
+  // utilizationRatio of the budget (the extraction digest itself is tiny, ~1.2K
+  // tokens, so sizing only the replaced middle turns leaves the view at ~0.002
+  // of budget and the hybrid summarizer is never invoked).
+  const olderFillerTokens = Math.floor(budgetTokens * 0.45);
+  const recentFillerTokens = Math.floor(budgetTokens * utilizationRatio);
+  const olderFiller = "x".repeat(olderFillerTokens * 4);
+  const recentFiller = "y".repeat(recentFillerTokens * 4);
   return [
     { role: "system", content: "System instructions for autonomous agent." },
     { role: "user", content: "First task: inspect web-ui/lib/contextBudget.ts and commit 86c8901c6433617cb9abe5db97123a0f52f58c89 on https://github.com/test/repo" },
-    { role: "assistant", content: filler },
-    { role: "tool", name: "workspace_read_file", content: filler },
+    { role: "assistant", content: olderFiller },
+    { role: "tool", name: "workspace_read_file", content: olderFiller },
     { role: "assistant", content: "Done." },
     { role: "user", content: "Recent question one" },
-    { role: "assistant", content: "Recent answer one" },
+    { role: "assistant", content: recentFiller },
     { role: "user", content: "Recent question two" }
   ];
 }
