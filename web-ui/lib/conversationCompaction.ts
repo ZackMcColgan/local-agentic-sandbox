@@ -124,8 +124,14 @@ export interface SummarizeRequest {
   maxTokens: number;
   inactivityMs: number;
   totalDeadlineMs: number;
-  /** Aborted when the inactivity or total deadline elapses. */
-  signal: AbortSignal;
+  /** Aborted when the inactivity or total deadline elapses. Supplied by the
+   * deadline wrapper (runSummarizationWithinDeadlines) and forwarded onward to
+   * streamLlmChat so a deadline aborts the in-flight model stream. */
+  signal?: AbortSignal;
+  /** Progress hook: the summarize callback must call this per received chunk so
+   * the inactivity deadline measures silence since the LAST chunk, not elapsed
+   * time since start. */
+  onProgress?: () => void;
 }
 
 export interface SummarizeResult {
@@ -160,27 +166,40 @@ export function verifyIdentifierCoverage(digest: string, summary: string): Ident
 /**
  * Wraps a summarization callback with the pinned inactivity (180s) and total
  * (5-min) deadlines. Rejects with Error("timeout") when either fires.
+ *
+ * The deadline AbortController is the single authority: its signal is handed
+ * to the summarize callback (onward to streamLlmChat) so a deadline aborts the
+ * in-flight model stream, and the race rejects on the same signal. The
+ * inactivity timer is re-armed on every onProgress() call, so 180s means
+ * "180s since the last received chunk"; the total deadline fires regardless
+ * of progress. Deadlines are injectable via req.inactivityMs /
+ * req.totalDeadlineMs so tests can use short values.
  */
 async function runSummarizationWithinDeadlines(req: SummarizeRequest, summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>): Promise<SummarizeResult> {
   const controller = new AbortController();
+  const inactivityMs = req.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS;
+  const totalMs = req.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS;
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   const resetInactivity = () => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => controller.abort("inactivity"), SUMMARIZATION_INACTIVITY_MS);
+    inactivityTimer = setTimeout(() => controller.abort("inactivity"), inactivityMs);
   };
   resetInactivity();
-  const totalTimer = setTimeout(() => controller.abort("total"), SUMMARIZATION_TOTAL_DEADLINE_MS);
+  const totalTimer = setTimeout(() => controller.abort("total"), totalMs);
 
-  // Any chunk-producing callback may call signal-notifying progress via req.signal;
-  // the deadline aborts below regardless.
+  // The callback receives the deadline controller's signal (so a deadline
+  // aborts the model stream itself) plus the progress hook (re-arm the
+  // inactivity timer per chunk).
+  const guardedReq: SummarizeRequest = { ...req, signal: controller.signal, onProgress: resetInactivity };
+
   try {
     const result = await Promise.race([
-      summarize(req),
+      summarize(guardedReq),
       new Promise<never>((_, reject) => {
-        req.signal.addEventListener("abort", () => {
+        controller.signal.addEventListener("abort", () => {
           reject(new Error("timeout"));
         });
-        if (req.signal.aborted) reject(new Error("timeout"));
+        if (controller.signal.aborted) reject(new Error("timeout"));
       })
     ]);
     return typeof result === "string" ? { text: result } : result;
@@ -222,6 +241,9 @@ export async function runHybridCompaction(
     preserveRecentMessages?: number;
     strategy?: CompactionStrategy;
     summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+    /** Injectable deadlines (test seam); default to the pinned guardrails. */
+    inactivityMs?: number;
+    totalDeadlineMs?: number;
   }
 ): Promise<HybridCompactionResult> {
   const strategy = options.strategy ?? resolveCompactionStrategy();
@@ -269,28 +291,33 @@ export async function runHybridCompaction(
   const digest = base.messages[digestIndex]?.content ?? "";
   const replacedMessages = base.replacedMessages ?? [];
 
-  const controller = new AbortController();
   const req: SummarizeRequest = {
     digest,
     replacedMessages,
     prompt: COMPACTION_PROMPT_V1,
     temperature: SUMMARIZATION_TEMPERATURE,
     maxTokens: SUMMARIZATION_MAX_TOKENS,
-    inactivityMs: SUMMARIZATION_INACTIVITY_MS,
-    totalDeadlineMs: SUMMARIZATION_TOTAL_DEADLINE_MS,
-    signal: controller.signal
+    inactivityMs: options.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS,
+    totalDeadlineMs: options.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS
+    // signal + onProgress are supplied by the deadline wrapper; the wrapper's
+    // AbortController is the only thing that ever aborts the pass.
   };
 
-  const fallbackToDigest = (reason: HybridFallbackReason): HybridCompactionResult => ({
-    ...base,
-    strategy: "hybrid",
-    extractionDigest: digest,
-    liveContent: digest,
-    modelSummaryUsed: false,
-    fallback: true,
-    fallbackReason: reason,
-    replacedMessages
-  });
+  const fallbackToDigest = (reason: HybridFallbackReason): HybridCompactionResult => {
+    console.warn(
+      `[compaction-hybrid] summarization fallback (${reason}); extraction digest retained as live content and audit copy (model summary discarded)`
+    );
+    return {
+      ...base,
+      strategy: "hybrid",
+      extractionDigest: digest,
+      liveContent: digest,
+      modelSummaryUsed: false,
+      fallback: true,
+      fallbackReason: reason,
+      replacedMessages
+    };
+  };
 
   let result: SummarizeResult;
   try {
