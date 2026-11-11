@@ -367,14 +367,14 @@ Executed adversarial probes Aâ€“G against the deployed chat runtime, registered 
 
 ## CI Job: PR #63 Green Run Log (2026-11-10)
 
-### Step 0 — State Established (read-only gh evidence)
+### Step 0 ï¿½ State Established (read-only gh evidence)
 - `gh workflow list --all`: `CI Pipeline & Security Boundary Verification` = **active** (ID 370993482). No workflow disabled_manually or disabled_inactivity.
-- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` — repo-level Actions enabled.
+- `gh api repos/ZackMcColgan/local-agentic-sandbox/actions/permissions`: `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}` ï¿½ repo-level Actions enabled.
 - `gh run list --limit 15`: runs continue through 2026-11-10T16:47:52Z; last green run was develop push `2b6262c` (PR #62 merge) at 2026-11-09T22:53:50Z.
 - `gh pr view 63`: state OPEN, head `feature/turn-delivery-reconciliation` @ `e1f0cb4`, statusCheckRollup = FAILURE on `Unit Tests & Static Analysis` (run 42858208319), downstream jobs SKIPPED.
 
 ### Root Cause
-Actions was never disabled — no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
+Actions was never disabled ï¿½ no permission or workflow-state stoppage. PR #63's head run failed on one test: `chatThinkingPreservation.test.ts` 1(d) bans keying thinking-panel visibility to `idx === deduplicatedMessages.length - 1` (CHAT-13b invariant), but this PR's new detached-turn notification (ChatStream.tsx:2845) used exactly that fragile tail key, so a steer bubble appended after reconciliation hides the notification.
 
 ### Fix (cycle 1, on branch, no test/workflow weakening)
 - `web-ui/components/ChatStream.tsx`: added `lastAssistantIndex` (last assistant message index over `deduplicatedMessages`) and keyed `hasResolvedDetachedTurn` notification to `idx === lastAssistantIndex` instead of the literal tail.
@@ -382,17 +382,17 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 
 ### Fix Cycle 2 (Playwright job, run 42862508213)
 - Run 42862508213 (head 997b916): Unit Tests, Coverage, Container Build all green; Playwright job failed 8 tests (Scenario 7 engine-stop, Scenario 9 backend-down across 4 viewports).
-- Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' — UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
-- Fix (no test weakening): ChatStream.tsx — SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
+- Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' ï¿½ UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
+- Fix (no test weakening): ChatStream.tsx ï¿½ SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
 - Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
 
-## Steer run — synthesis-retry merge+deploy job (Phase 1 Step 1) — STOPPED, PR NOT FOUND
+## Steer run ï¿½ synthesis-retry merge+deploy job (Phase 1 Step 1) ï¿½ STOPPED, PR NOT FOUND
 - gh pr list --state open --json ... => [] (zero open PRs on ZackMcColgan/local-agentic-sandbox).
 - gh pr list --state all --limit 100 grep 'synthesis' => no match; merged list top = PR #63 (feature/turn-delivery-reconciliation, merged 2026-11-10T19:54:40Z, merge commit 18282cb).
 - git ls-remote origin => no remote branch feature/synthesis-retry.
 - Local branch feature/synthesis-retry tip = 18282cb0d7ea (== origin/develop tip); git rev-list --count origin/develop..feature/synthesis-retry = 0 commits ahead.
 - Fix content exists ONLY untracked: web-ui/tests/synthesisRetry.test.ts (untracked). git diff origin/develop -- web-ui/app/api/chat/route.ts = EMPTY (no retry logic in route.ts; route.ts:1632 still the bare 'concluded without synthesis text' stamp, no synthesis retry at ~1554-1607). git grep synthesisRetry in package.json/scripts = no testGate wiring.
-- Conclusion: no PR to merge (owner did NOT merge it himself — develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
+- Conclusion: no PR to merge (owner did NOT merge it himself ï¿½ develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
 
 ## Steer run - synthesis-retry apply+commit+PR job (recovery)
 - STATE CHECK: branch feature/synthesis-retry tip 18282cb0d7ea == origin/develop; route.ts synthesis block unfixed (bare stamp at 1632); tests/synthesisRetry.test.ts present untracked and matches the design (scripted-stream POST, 4 completions: tool round -> empty round -> empty synthesis -> retry summary; plus a double-empty case).
@@ -433,3 +433,26 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 - Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
 - Build complete: docker build -t local-agentic-sandbox-web-ui:v-6e02172-fresh -f web-ui/Dockerfile . -> image de07c9232d01 (327MB disk / 78MB content). Cached layers reused.
 - Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
+
+## Settings Memory job (2026-11-12) â€” resume, implementation landed
+- Fail-before re-verified on branch feature/settings-memory (rebased onto develop ac4ba03): 19 pass / 6 fail (5 UI + 1 injection wiring).
+- Inventory: lib/memory/operatorMemory.ts, app/api/settings/memory/route.ts, and the three test files already existed untracked; chat route, SettingsView card, .gitignore pattern, repoHygiene guard, and testGate wiring were missing.
+- Implemented: chat route OWNER MEMORY injection via assembleSystemPrompt (byte-identical when memory empty); SettingsView Memory card (textarea, live counter, save blocked beyond 2000 cap, exact privacy note); .gitignore operator-memory.json pattern; repoHygiene tracked-file guard; testGate mapping rules only (pass/fail logic untouched).
+- Two test-side fixes during green-up: operatorMemory.test.ts cleanup moved into an after() hook (suite-level delete of OPERATOR_MEMORY_PATH ran before async subtests, leaking writes into the default store); SettingsView counter counts non-whitespace characters per the UI test spec, and textarea listens for native input events.
+- npm run test:gate: PASSED 162 pass / 0 fail, 26.1s (<90s budget). Ships EMPTY - no memory content seeded.
+
+## Settings Memory PR #65 -> develop (2026-11-12)
+- Branch feature/settings-memory head 0ed4d62 (one commit on develop ac4ba03); pushed; PR #65 opened into develop. No merge, no deploy this job.
+- Gate evidence on clean branch: npm run test:gate PASSED 328 pass / 0 fail, 40.1s (<90s budget).
+- Acceptance: git check-ignore -v shows .gitignore:62 (.agent/) and .gitignore:65 (operator-memory.json) cover the store; git ls-files | grep operator-memory = zero matches. Ships EMPTY - owner seeds his own facts later.
+- Unrelated compaction WIP preserved: branch feature/compaction-hybrid restored to 9df7762; working-tree compaction edits stashed ("compaction-hybrid WIP preserved").
+
+## Deploy ticket PR #65 settings-memory -> prod (2026-11-11)
+- PR #65 merged into develop by driver (audit PASS: scope 11 files exact; exact OWNER MEMORY header; byte-identical empty prompt; card counter/cap/exact note; .gitignore + repoHygiene guard; testGate mapping-only; no brand names; acceptance evidence in PR body). Merge commit e36f1b4; CI run 42955669440 all-four-green on head c5f50b1 (Unit Tests 2m49s, Coverage 2m52s, Container Build 4m3s, Playwright 3m31s).
+- ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-6e02172-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-76847586c6-n872c 1/1 Running 0 restarts).
+- Target image tag to build: local-agentic-sandbox-web-ui:v-e36f1b4-fresh. Deploy scope: web-ui only.
+- DEPLOY OUTCOME (driver, 2026-11-11 ~22:20 CT): PROD == develop c5389f6 VERIFIED. S1 runlog commit c5389f6 pushed first (tag then v-c5389f6-fresh). S2 build BLOCKED at first by Docker credential helper: `node:22-alpine` not in the daemon image store, and `docker-credential-desktop` fails in non-interactive SSH logons ("A specified logon session does not exist"); DOCKER_CONFIG override to an empty config did NOT bypass it (CLI still invoked the helper). WORKAROUND (SSH-side, durable): pull the base into the kind node with `ctr -n k8s.io images pull docker.io/library/node:22-alpine` (anonymous, no Windows helper), `ctr images export` to /images/node-22-alpine.tar, `docker cp` out, `docker load` into the daemon. SSH sessions also DROP after ~30-45s on long foreground commands (two broken pipes during the build); processes with stdout redirected to a log file SURVIVE the drop and keep running â€” poll the log + `docker images` with short calls instead of holding the session. Build then green (Next.js build ~2.5min, image 7e3099c05682); save 78MB tar; ctr import OK (node image 8ab5e734216df). S3 set image v-c5389f6-fresh. S4 rollout success, new pod web-ui-6b6fb6d557-765sz 1/1 Running 0 restarts; gateway 200; /api/threads 12 threads intact; UI render check clean (nav + threads list, screen matches record). ROLLBACK TARGET remains v-6e02172-fresh. LESSON for future deploys: if `node:22-alpine` is missing from the daemon store, use the ctr-export/docker-load path above before building; keep long builds log-redirected and poll.
+
+## Settings Memory DONE + compaction-hybrid resumes (2026-11-11)
+- Settings-memory item DONE 2026-11-11 ~22:20 CT: PR #65 audit PASS (driver) â†’ merged e36f1b4 â†’ deployed v-c5389f6-fresh â†’ verified prod == develop c5389f6 (rollout success, pod 1/1 Running 0 restarts, gateway 200, 12 threads intact, UI render clean). Prod SHA now c5389f6; rollback target v-6e02172-fresh.
+- Compaction-hybrid continuation brief issued 2026-11-11 ~22:24 CT in fresh thread thread-1794371021984-comphyb2 (model qwen3.8-flash-next-gyro-gyro-s, medium): CONTINUE from banked 9df7762 on origin/feature/compaction-hybrid (9 tests red, implementation partial; no PR yet); brief instructs stash inspection, fail-before re-confirmation, guardrail tests, COMPACTION_PROMPT_V1 verbatim, gate, PR into develop, no merge/deploy in-job. Strike count stays 1 (first turn stranded once).
