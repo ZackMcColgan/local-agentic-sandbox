@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
 
@@ -77,6 +77,10 @@ export function SettingsView({
   });
   const [notifTesting, setNotifTesting] = useState(false);
   const [notifTestMessage, setNotifTestMessage] = useState<string | null>(null);
+  const [memoryText, setMemoryText] = useState("");
+  const [memoryMessage, setMemoryMessage] = useState<string | null>(null);
+  const [memorySaving, setMemorySaving] = useState(false);
+  const memoryTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [hostSettings, setHostSettingsState] = useState<{
     hostAccessEnabled: boolean;
@@ -108,6 +112,42 @@ export function SettingsView({
         setHostSettingsState(json);
       }
     } catch {}
+  };
+
+  const fetchMemory = async () => {
+    try {
+      const res = await fetch("/api/settings/memory", { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        setMemoryText(typeof json.text === "string" ? json.text : "");
+      }
+    } catch {}
+  };
+
+  const handleSaveMemory = async () => {
+    if (memoryText.length > 2000) {
+      setMemoryMessage(`Memory text exceeds the 2000-character cap (${memoryText.length} characters). Shorten it before saving.`);
+      return;
+    }
+    setMemorySaving(true);
+    setMemoryMessage(null);
+    try {
+      const res = await fetch("/api/settings/memory", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: memoryText })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMemoryMessage("Saved.");
+      } else {
+        setMemoryMessage(json.error || "Save failed.");
+      }
+    } catch {
+      setMemoryMessage("Save failed.");
+    } finally {
+      setMemorySaving(false);
+    }
   };
 
   const handleToggleHostAccess = async () => {
@@ -218,9 +258,17 @@ export function SettingsView({
   };
 
   useEffect(() => {
+    const el = memoryTextareaRef.current;
+    if (!el) return;
+    const handler = () => setMemoryText(el.value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
+  }, []);
+  useEffect(() => {
     fetchEngineStatus();
     fetchNotificationStatus();
     fetchHostSettings();
+    fetchMemory();
   }, []);
 
   const handleEngineAction = async (action: "start" | "stop" | "restart") => {
@@ -944,6 +992,58 @@ export function SettingsView({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Section: Memory (owner standing facts) */}
+        <div data-testid="settings-memory-card">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
+            Memory
+          </h2>
+
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 space-y-4">
+            <div>
+              <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                <History className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>What the assistant should always know</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                Stored on this machine only. Never committed to the repository.
+              </p>
+            </div>
+
+            <textarea
+              data-testid="settings-memory-textarea"
+              ref={memoryTextareaRef}
+              value={memoryText}
+              onChange={(e) => setMemoryText(e.target.value)}
+              rows={6}
+              className="w-full rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 px-3 py-2 text-sm text-slate-900 dark:text-zinc-100 font-mono resize-y"
+              placeholder="Standing facts the assistant should trust without rediscovering..."
+            />
+
+            <div className="flex items-center justify-between">
+              <div
+                data-testid="settings-memory-counter"
+                className={memoryText.length > 2000 ? "text-xs font-mono text-rose-600 dark:text-rose-400" : "text-xs font-mono text-slate-500 dark:text-zinc-400"}
+              >
+                {memoryText.replace(/\s/g, "").length} / 2000
+              </div>
+              <button
+                data-testid="settings-memory-save-btn"
+                onClick={handleSaveMemory}
+                disabled={memorySaving || memoryText.length > 2000}
+                className="rounded-xl px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {memorySaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+
+            {memoryMessage && (
+              <div data-testid="settings-memory-message" className="text-xs text-slate-600 dark:text-zinc-400">
+                {memoryMessage}
+              </div>
+            )}
           </div>
         </div>
 

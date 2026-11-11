@@ -41,6 +41,13 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
     assert.deepEqual(violating, [], "No tracked files should end with .scratch or .updated");
   });
 
+  it("settings memory hygiene: git ls-files returns ZERO paths ending in operator-memory.json", () => {
+    const output = execSync("git ls-files", { cwd: repoRoot, encoding: "utf8" });
+    const lines = output.split(/\r?\n/).filter(Boolean);
+    const violating = lines.filter((file) => file.endsWith("operator-memory.json"));
+    assert.deepEqual(violating, [], "No tracked files should end with operator-memory.json");
+  });
+
   it("brand hygiene: no antigravity references in UI components, configs, or docs, and version is 1.0.0", () => {
     const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
     assert.equal(rootPkg.version, "1.0.0", "Root package.json version must be 1.0.0");
