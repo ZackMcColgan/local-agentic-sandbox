@@ -520,6 +520,7 @@ Actions was never disabled ï¿½ no permission or workflow-state stoppage. PR #
 - filePathRegex CORRECTION FINDING (recorded, NOT fixed): HEAD line 376 of web-ui/lib/conversationCompaction.ts still differs from origin/develop (lookahead class dropped the single-quote and backslash before close paren). git blame attributes the line to branch commit 9df7762 (WIP), NOT 7b7779c; strand 1's runlog claim "restored byte-exact to HEAD" was self-referential and the revert against develop never happened. Status: STILL DIFFERS from develop. Left for the re-audit per brief (this step did not touch conversationCompaction.ts).
 - GATE: npm run test:gate via bridge PASSED 12 pass / 0 fail in 11.02s (<90s budget), run after item 2 before its push.
 - No merge, no deploy this job.
+<<<<<<< HEAD
 
 ## compaction-hybrid audit fix (PR #67) — regex restore — 2026-11-11
 - Audit finding (driver-verified, single point): web-ui/lib/conversationCompaction.ts filePathRegex (branch line 376) diverged from origin/develop line 37. Branch leading char class lost the single-quote and backslash ([\s"'()] -> [\s"()]); trailing lookahead lost the backslash ([\s"')] -> [\s")). Introduced by WIP commit 9df7762, never by design; no brief asked for it. Weakened identifier extraction feeding the load-bearing identifier post-check.
@@ -581,3 +582,20 @@ FAIL-BEFORE (npx tsx --test tests/hybridCompaction.test.ts): 14 tests, 13 pass, 
     error: 'exactly ONE summarization pass at turn start' / 0 !== 1 (test file line 532)
     => summarize callback never invoked at turn start: prepareTurnConversationMessages calls the synchronous extraction compactThreadIncremental and never consults COMPACTION_STRATEGY (threadStore.ts:1095-1147). Earlier assertions in the same test pass (compaction reported, tokens shrink), so extraction fires correctly - only the hybrid escalation is missing.
 Commit 26a4d64 pushed (-u origin, branch new on origin). Step 2 (the fix) NOT started in this thread.
+
+## HYBRID TURN-START FIX step 2 (thread-1794420015594-hybridstep2) - turn-start strategy-aware prepare banked
+Branch feature/compaction-hybrid-turnstart-fix (head 5c1f80d -> 8ed6961). Fix only; no deployment, no strategy rollout, no kubectl rollout, no merge, no PR (step 3 owns gate+PR).
+
+WHAT CHANGED (3 files, +122/-15):
+1. web-ui/lib/threads/threadStore.ts - prepareTurnConversationMessages is now strategy-aware. Added TurnConversationPreparation + TurnStartCompactionOptions interfaces and two overload signatures: without a summarize callback the call stays SYNCHRONOUS (extraction rung, byte-identical to prior behavior); with a summarize callback it returns a Promise driven by the hybrid rung. Inside the 85% trigger branch the path resolves strategy = opts?.strategy ?? resolveCompactionStrategy(); strategy==='hybrid' WITH a summarize callback delegates to compactThreadIncrementalHybrid (extraction first, then exactly ONE guarded summarization pass when the post-extraction view still exceeds 65% of the 100K budget - temperature 0.2 pinned, generation capped 8192, 180s inactivity / 5-min total deadline, identifier post-check; ANY failure/timeout/truncation/post-check rejection falls back to the extraction digest and is logged; extraction digest always retained on the thread record as the audit copy). strategy==='extraction', hybrid without a callback, or no options at all keep the synchronous compactThreadIncremental call untouched. compactThreadIncrementalHybrid gained optional inactivityMs/totalDeadlineMs passthrough to runHybridCompaction (test seam; defaults remain the pinned guardrails).
+2. web-ui/app/api/chat/route.ts - turn-start call-site (formerly line 660) now awaits the prepare and passes { strategy: resolveCompactionStrategy(), summarize: <streamLlmChat adapter> } (COMPACTION_PROMPT_V1 verbatim, digest as source, req.signal, req.onProgress per chunk, num_predict = req.maxTokens). Flag OFF/unset resolves to 'extraction' so the callback is never invoked and the prepare stays on the synchronous extraction call. The mid-turn fit branch (line ~831) is unchanged; the manual compact endpoint stays extraction.
+3. web-ui/tests/hybridCompaction.test.ts - fixture typing only: TURN_START_MESSAGES annotated any[] instead of ThreadMessage[] (fixture carries a tool-role message, mirroring the pre-existing tool-role fixtures at lines 363/417). NO assertion weakened or altered; step-1 assertions intact.
+
+TESTS:
+- npx tsx --test tests/hybridCompaction.test.ts: 14 tests, 14 pass, 0 fail (step-1 fail-before test 13 'turn-start prepare honors strategy=hybrid...' now PASS; test 14 extraction-parity PASS).
+- npx tsx --test tests/threadCompaction.test.ts: 3 tests, 3 pass, 0 fail (F4.3 synchronous-call parity preserved via overload).
+- npm run test:gate: PASSED - 298 tests passed, 0 failed, 1 skipped, 92 suites, 75.8s (<90s budget).
+- tsc baseline comparison (git stash A/B): compaction-related tsc errors went 13 -> 9; the 9 remaining are PRE-EXISTING at HEAD (liveContent possibly-undefined and tool-role fixture typing in hybridCompaction.test.ts lines 87/138/139/160/285/286/363/417), not introduced by this step. Repo-wide tsc has unrelated pre-existing errors in other test files (buildPushHonesty, canonicalLifecycle, chatPolish); CI runs npm run build --workspaces + npm test, not tsc --noEmit.
+- Gate initially rejected with ZERO TEST COVERAGE on web-ui/debug-turnstart.ts (untracked scratch debug script left in the repo by the prior diagnosis pass). Moved to D:\AI\orchestrator-scratch\debug-turnstart.ts (scratch rule); gate then passed.
+
+Commit 8ed6961 pushed to origin/feature/compaction-hybrid-turnstart-fix. Step 3 (gate + PR) waits on the bank.
