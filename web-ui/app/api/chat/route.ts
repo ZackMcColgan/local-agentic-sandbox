@@ -661,10 +661,38 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const toolRegistry = buildToolRegistry(allTools);
         const llmTools = buildLayer1Tools(allTools);
 
-        const prep = threadStore.prepareTurnConversationMessages(
+        // TURN-START WIRING (compaction-hybrid turn-start fix): the turn-start
+        // prepare now receives the resolved strategy plus the summarize adapter so
+        // a flag-on thread crossing the 85% trigger at turn start reaches the
+        // hybrid rung instead of being pre-empted by the extraction digest.
+        // Flag OFF / unset resolves to "extraction" and the prepare stays on the
+        // synchronous extraction call (the callback is never invoked).
+        const prep = await threadStore.prepareTurnConversationMessages(
           threadData,
           messages,
-          CHAT_CONTEXT_BUDGET_TOKENS
+          CHAT_CONTEXT_BUDGET_TOKENS,
+          {
+            strategy: resolveCompactionStrategy(),
+            summarize: async (req) => {
+              let text = "";
+              let truncated = false;
+              for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+                model: activeModel,
+                messages: [
+                  { role: "system", content: req.prompt },
+                  { role: "user", content: req.digest }
+                ],
+                keep_alive: -1,
+                signal: req.signal,
+                options: { temperature: req.temperature, num_predict: req.maxTokens }
+              })) {
+                req.onProgress?.();
+                if (chunk.message?.content) text += chunk.message.content;
+                if (chunk.finish_reason === "length") truncated = true;
+              }
+              return { text, truncated };
+            }
+          }
         );
         let turnCompacted = prep.compactedThisTurn;
         let turnTokensBefore = prep.tokensBeforeCompaction;

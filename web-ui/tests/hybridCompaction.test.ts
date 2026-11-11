@@ -482,7 +482,9 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
   // Fixture shape: the bulk of the tokens sits in the REPLACED middle turn (t3) so
   // extraction does not no-op as already_optimal, and the preserved tail (t6) keeps
   // the post-extraction view above the 65% hybrid escalation rung.
-  const TURN_START_MESSAGES = (prefix: string): ThreadMessage[] => [
+  // Fixture typing is any[] (not ThreadMessage[]): the fixture carries a tool-role message,
+  // mirroring the pre-existing fixtures above (lines 363/417 use the same tool-role shape).
+  const TURN_START_MESSAGES = (prefix: string): any[] => [
     { id: `${prefix}-1`, role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
     { id: `${prefix}-2`, role: "assistant", content: "Execution error: failed to compile module at line 42.", timestamp: "now" },
     { id: `${prefix}-3`, role: "tool", name: "workspace_read_file", content: "x".repeat(30000 * 4), timestamp: "now" },

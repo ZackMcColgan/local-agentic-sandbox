@@ -4,12 +4,35 @@ import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
-import { summarizeTurnHistory, runHybridCompaction } from "../conversationCompaction";
+import { summarizeTurnHistory, runHybridCompaction, resolveCompactionStrategy } from "../conversationCompaction";
 import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
 import { getHostSettings } from "../hostSettings";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
+
+/** Result of turn-start conversation preparation (thread view + compaction report). */
+export interface TurnConversationPreparation {
+  messages: any[];
+  compactedThisTurn: boolean;
+  tokensBeforeCompaction?: number;
+  tokensAfterCompaction?: number;
+  /** True when the boundary summary placed in the model view is the MODEL DIGEST. */
+  modelSummaryUsed?: boolean;
+  /** Set when the hybrid pass failed and the extraction digest was used instead. */
+  fallbackReason?: HybridFallbackReason;
+}
+
+/** Options for the turn-start compaction path (strategy-aware dispatch). */
+export interface TurnStartCompactionOptions {
+  /** Overrides COMPACTION_STRATEGY for this call; defaults to resolveCompactionStrategy(). */
+  strategy?: CompactionStrategy;
+  /** Summarization callback for the hybrid rung. Absent => extraction rung. */
+  summarize?: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+  /** Injectable deadlines (test seam); default to the pinned guardrails. */
+  inactivityMs?: number;
+  totalDeadlineMs?: number;
+}
 
 export interface ThreadAttachment {
   name: string;
@@ -1080,7 +1103,7 @@ export class ThreadStore {
 
   async compactThreadIncrementalHybrid(
     thread: Thread,
-    opts: { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string> }
+    opts: { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>; inactivityMs?: number; totalDeadlineMs?: number }
   ): Promise<{
     noop: boolean;
     reason?: string;
@@ -1110,6 +1133,8 @@ export class ThreadStore {
     const result = await runHybridCompaction(messages, {
       strategy: "hybrid",
       summarize: opts.summarize,
+      inactivityMs: opts.inactivityMs,
+      totalDeadlineMs: opts.totalDeadlineMs,
     });
     if (!result.compacted) {
       return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
@@ -1141,16 +1166,31 @@ export class ThreadStore {
     };
   }
 
+  /**
+   * Turn-start conversation preparation.
+   *
+   * Overload contract: without a summarize callback the call stays synchronous
+   * (extraction rung, byte-identical to prior behavior). With a summarize
+   * callback the call returns a Promise driven by the hybrid rung.
+   */
   prepareTurnConversationMessages(
     thread: Thread | null,
     clientMessages: any[],
-    maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS
-  ): {
-    messages: any[];
-    compactedThisTurn: boolean;
-    tokensBeforeCompaction?: number;
-    tokensAfterCompaction?: number;
-  } {
+    maxBudgetTokens: number,
+    opts: TurnStartCompactionOptions & { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string> }
+  ): Promise<TurnConversationPreparation>;
+  prepareTurnConversationMessages(
+    thread: Thread | null,
+    clientMessages: any[],
+    maxBudgetTokens?: number,
+    opts?: TurnStartCompactionOptions
+  ): TurnConversationPreparation;
+  prepareTurnConversationMessages(
+    thread: Thread | null,
+    clientMessages: any[],
+    maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS,
+    opts?: TurnStartCompactionOptions
+  ): TurnConversationPreparation | Promise<TurnConversationPreparation> {
     if (thread && thread.messages && thread.messages.length > 0) {
       const clientUserMessages = (clientMessages || []).filter((m: any) => m.role === "user");
       const lastClientUser = clientUserMessages[clientUserMessages.length - 1];
@@ -1175,6 +1215,43 @@ export class ThreadStore {
       const triggerThreshold = Math.floor(maxBudgetTokens * 0.85);
 
       if (estimateTokens(modelView) > triggerThreshold) {
+        // TURN-START STRATEGY DISPATCH (compaction-hybrid turn-start fix): the
+        // turn-start path must consult COMPACTION_STRATEGY instead of always
+        // running the synchronous extraction rung. The hybrid rung previously
+        // lived only in the mid-turn fit branch, which turn-start compaction
+        // pre-empts, so a flag-on thread crossing the 85% trigger at turn start
+        // got the extraction digest with strategy null.
+        //
+        // strategy=hybrid WITH a summarize callback routes to the hybrid rung:
+        // extraction first, then exactly ONE guarded summarization pass when the
+        // post-extraction model view still exceeds 65% of the budget (temperature
+        // 0.2 pinned, generation capped 8192, 180s inactivity / 5-min total
+        // deadline, identifier post-check). ANY failure, timeout, truncation, or
+        // post-check rejection falls back to the extraction digest and is logged;
+        // the extraction digest is always retained on the thread record as the
+        // audit copy. strategy=extraction, hybrid without a callback, or no
+        // options at all keep the synchronous extraction call byte-identical.
+        const strategy = opts?.strategy ?? resolveCompactionStrategy();
+        if (strategy === "hybrid" && opts?.summarize) {
+          const summarize = opts.summarize;
+          return this.compactThreadIncrementalHybrid(thread, {
+            summarize,
+            inactivityMs: opts.inactivityMs,
+            totalDeadlineMs: opts.totalDeadlineMs
+          }).then((hybridResult) => {
+            if (!hybridResult.noop) {
+              return {
+                messages: this.buildModelMessages(thread),
+                compactedThisTurn: true,
+                tokensBeforeCompaction: hybridResult.tokensBefore,
+                tokensAfterCompaction: hybridResult.tokensAfter,
+                modelSummaryUsed: hybridResult.modelSummaryUsed,
+                fallbackReason: hybridResult.fallbackReason
+              };
+            }
+            return { messages: this.buildModelMessages(thread), compactedThisTurn: false };
+          });
+        }
         const compResult = this.compactThreadIncremental(thread);
         if (!compResult.noop) {
           modelView = this.buildModelMessages(thread);
