@@ -4,7 +4,8 @@ import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
-import { summarizeTurnHistory } from "../conversationCompaction";
+import { summarizeTurnHistory, runHybridCompaction } from "../conversationCompaction";
+import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
 import { getHostSettings } from "../hostSettings";
 
@@ -43,6 +44,10 @@ export interface ThreadMessage {
 }
 
 export interface ThreadCompactionBoundary {
+  strategy?: CompactionStrategy;
+  extractionDigest?: string;
+  fallbackLogged?: boolean;
+  fallbackReason?: HybridFallbackReason;
   throughMessageId: string;
   summary: string;
   compactedAt: string;
@@ -1021,6 +1026,69 @@ export class ThreadStore {
       summary,
       throughMessageId: throughMessage.id,
       thread
+    };
+  }
+
+  async compactThreadIncrementalHybrid(
+    thread: Thread,
+    opts: { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string> }
+  ): Promise<{
+    noop: boolean;
+    reason?: string;
+    tokensBefore: number;
+    tokensAfter: number;
+    summary?: string;
+    throughMessageId?: string;
+    modelSummaryUsed: boolean;
+    fallbackReason?: HybridFallbackReason;
+    thread: Thread;
+  }> {
+    const messages = thread.messages || [];
+    const tokensBefore = estimateTokens(this.buildModelMessages(thread));
+    if (messages.length <= 4) {
+      return { noop: true, reason: "insufficient_messages", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const hasSystem = messages[0]?.role === "system";
+    const baseStartIdx = hasSystem ? 1 : 0;
+    const prevBoundaryIdx = thread.compaction?.throughMessageId
+      ? messages.findIndex((m) => m.id === thread.compaction?.throughMessageId)
+      : -1;
+    const uncompactedStartIdx = prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
+    const endIdx = Math.max(baseStartIdx, messages.length - 4);
+    if (endIdx <= uncompactedStartIdx) {
+      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const result = await runHybridCompaction(messages, {
+      strategy: "hybrid",
+      summarize: opts.summarize,
+    });
+    if (!result.compacted) {
+      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const throughMessage = messages[endIdx - 1];
+    this.applyCompactionBoundary(
+      thread,
+      result.liveContent ?? "",
+      throughMessage.id,
+      result.tokensBefore,
+      result.tokensAfter
+    );
+    thread.compaction!.strategy = "hybrid";
+    thread.compaction!.extractionDigest = result.extractionDigest;
+    if (result.fallback) {
+      thread.compaction!.fallbackLogged = true;
+      thread.compaction!.fallbackReason = result.fallbackReason;
+    }
+    this.saveThread(thread);
+    return {
+      noop: false,
+      tokensBefore: result.tokensBefore,
+      tokensAfter: result.tokensAfter,
+      summary: result.liveContent,
+      throughMessageId: throughMessage.id,
+      modelSummaryUsed: result.modelSummaryUsed,
+      fallbackReason: result.fallbackReason,
+      thread,
     };
   }
 

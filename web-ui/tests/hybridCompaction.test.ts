@@ -285,11 +285,11 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
         reasoningEffort: "medium",
         messages: [
           { id: "m1", role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
-          { id: "m2", role: "assistant", content: filler, timestamp: "now" },
-          { id: "m3", role: "tool", name: "workspace_read_file", content: filler, timestamp: "now" },
+          { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
+          { id: "m3", role: "tool", name: "workspace_read_file", content: "File contents retrieved.", timestamp: "now" },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
-          { id: "m6", role: "assistant", content: "Recent answer one", timestamp: "now" },
+          { id: "m6", role: "assistant", content: filler, timestamp: "now" },
           { id: "m7", role: "user", content: "Recent question two", timestamp: "now" }
         ]
       };
@@ -339,11 +339,11 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
         reasoningEffort: "medium",
         messages: [
           { id: "m1", role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
-          { id: "m2", role: "assistant", content: filler, timestamp: "now" },
-          { id: "m3", role: "tool", name: "workspace_read_file", content: filler, timestamp: "now" },
+          { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
+          { id: "m3", role: "tool", name: "workspace_read_file", content: "File contents retrieved.", timestamp: "now" },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
-          { id: "m6", role: "assistant", content: "Recent answer one", timestamp: "now" },
+          { id: "m6", role: "assistant", content: filler, timestamp: "now" },
           { id: "m7", role: "user", content: "Recent question two", timestamp: "now" }
         ]
       };
