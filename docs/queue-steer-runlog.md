@@ -385,3 +385,44 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 - Root cause: Deliverable 3 routed ALL mid-turn errors into the transient detached-reconciliation state, so the terminal error banner (errorMsg + Retry) never rendered. Log evidence: ChatRoute 'Client SSE connection disconnected... Turn continuing detached server-side' then 'Detached turn completed' — UI showed transient/resolved banner instead of 'Local LLM Engine offline' / 'Service Unavailable' surfaces.
 - Fix (no test weakening): ChatStream.tsx — SSE 'error' events and non-ok HTTP responses now throw errors tagged isTerminalServerError; transient reconciliation only entered for genuine client disconnects on real, non-simulated threads. Terminal errors keep errorMsg banner + Retry.
 - Local verification: playwright scenarios 7/9 pass 8/8 across mobile-light/dark, desktop-light/dark; root npm test full suite 1027 pass / 0 fail; next build clean.
+
+## Steer run — synthesis-retry merge+deploy job (Phase 1 Step 1) — STOPPED, PR NOT FOUND
+- gh pr list --state open --json ... => [] (zero open PRs on ZackMcColgan/local-agentic-sandbox).
+- gh pr list --state all --limit 100 grep 'synthesis' => no match; merged list top = PR #63 (feature/turn-delivery-reconciliation, merged 2026-11-10T19:54:40Z, merge commit 18282cb).
+- git ls-remote origin => no remote branch feature/synthesis-retry.
+- Local branch feature/synthesis-retry tip = 18282cb0d7ea (== origin/develop tip); git rev-list --count origin/develop..feature/synthesis-retry = 0 commits ahead.
+- Fix content exists ONLY untracked: web-ui/tests/synthesisRetry.test.ts (untracked). git diff origin/develop -- web-ui/app/api/chat/route.ts = EMPTY (no retry logic in route.ts; route.ts:1632 still the bare 'concluded without synthesis text' stamp, no synthesis retry at ~1554-1607). git grep synthesisRetry in package.json/scripts = no testGate wiring.
+- Conclusion: no PR to merge (owner did NOT merge it himself — develop does not contain the synthesis-retry change). Per Step 1 requirement ('if any of that differs, STOP and report'), Phase 1 Steps 2-6 NOT executed; production untouched; no build, no import, no kubectl set image.
+
+## Steer run - synthesis-retry apply+commit+PR job (recovery)
+- STATE CHECK: branch feature/synthesis-retry tip 18282cb0d7ea == origin/develop; route.ts synthesis block unfixed (bare stamp at 1632); tests/synthesisRetry.test.ts present untracked and matches the design (scripted-stream POST, 4 completions: tool round -> empty round -> empty synthesis -> retry summary; plus a double-empty case).
+- APPLY: route.ts synthesis block replaced with runSynthesisPass() (single pass streamed into shared accumulators); retry fires once when pass 1 returns no content, emitting status "Synthesis returned no text - retrying once..."; audit fold-in (a) pass-1 thinking pushed into accumulatedThoughts BEFORE the retry overwrites it; audit fold-in (b) synthSpan ends "empty-synthesis" on the double-empty path instead of unconditional "ok". synthContent/synthThinking locals removed (replaced by passContent/passThinking inside runSynthesisPass). Stamp at turn-end now appends "Work persisted above; the summary failed. The thread is resumable - resume this thread to continue." preserving the original substring exactly (hoisted as EMPTY_SYNTHESIS_STAMP).
+- FIX-ITERATION NOTE: first pass left the double-empty turn reporting status=completed because the generic "I am ready to assist you..." fallback filled cleanedContent, so the !cleanedContent branch never ran. Added a hoisted synthesisReturnedEmpty flag + final honest override so a failed synthesis always marks the turn incomplete.
+- GATE WIRING: web-ui/lib/testGate.ts chat-route mapping group (match app/api/chat/route) now includes tests/synthesisRetry.test.ts.
+- PASS-AFTER: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail (retry summary persisted, status completed, retry status event present; double-empty -> status incomplete + resumable stamp).
+- test:gate: repo-wide git-status scan rejects on unrelated untracked web-ui/app/api/settings/memory/route.ts (zero coverage) - unrelated Settings Memory work, NOT this job. Scoped run node scripts/test-gate.js --files=web-ui/app/api/chat/route.ts,web-ui/lib/testGate.ts -> PASSED 179 pass / 0 fail / 1 skipped in 37.87s (<90s budget).
+- STAGED ONLY: web-ui/app/api/chat/route.ts, web-ui/tests/synthesisRetry.test.ts, web-ui/lib/testGate.ts, docs/queue-steer-runlog.md. Settings Memory files (lib/memory/operatorMemory.ts, app/api/settings/memory/, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) left untracked and untouched.
+- NO merge, NO deploy this job.
+
+## Fix cycle - PR #64 CI (run 42925509474, head 5f4c7b7)
+- RE-GROUND: HEAD 5f4c7b7 == origin/feature/synthesis-retry; no uncommitted tracked changes. Untracked tree inventory (NOT part of this job, left untouched): Settings Memory work (web-ui/app/api/settings/memory/, lib/memory/operatorMemory.ts, operatorMemory/operatorMemoryInjection/settingsMemoryUi tests) + stranded-turn scratch (.tmp-forensics.py, .tmp-pr-body.md, .tmp-synth-guard.js, .tmp-synth-override.js, .tmp-synth-patch.js, .tmp-synth-scope.js, .tmp-thread.json, .tmp-thread2.json, web-ui/tests/.tmp-synth-debug.test.ts). No candidate fix in the tree relevant to the CI failure.
+- DIAGNOSE (gh run view 42925509474 --log-failed): Job 'Unit Tests & Static Analysis', step 'Typecheck & Build Services' (npm run build --workspaces). Exact error: ./app/api/chat/route.ts:1632:27 - Type error: Argument of type '"empty-synthesis"' is not assignable to parameter of type '"error" | "ok" | undefined'. The route's own tracer (web-ui/lib/telemetry.ts:102,128 - TelemetryTracer.startSpan/end) constrains span status to "ok"|"error"; supervisor.ts's two-arg end(status,{attrs}) form is fine, but the status literal itself must be ok/error.
+- FIX (no guard edit, no assertion change): route.ts:1632 synthSpan.end("empty-synthesis", { synthesisPasses }) -> synthSpan.end("error", { synthesisPasses, emptySynthesis: true }). Intent preserved: the synthesis span still ends non-ok on the double-empty path, with the empty-synthesis signal carried as an attribute. No test asserts on span status/attrs (git grep: synthesisPasses/model.synthesis absent from tests).
+- LOCAL VERIFY: npx tsx --test tests/synthesisRetry.test.ts -> 2 pass / 0 fail. npx next build -> exit 0 (typecheck clean; the failing CI step is next build, which now passes locally).
+- PUSH + watch new run below.
+- WATCH PARTIAL (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis = success (Typecheck & Build Services now passes; Execute Full Test Suite success). Playwright, Container Build, Coverage still in_progress at poll time. Host runner disconnected during gh run watch; recovered via gh run view --json poll. Continuing polls to full green.
+
+## CI Watch close-out - PR #64 FULLY GREEN (2026-11-11)
+- RUN 42930341188 (head c1a9f1f): status completed, conclusion success. All four jobs success:
+  Unit Tests & Static Analysis = success (2m33s, job 130227195885)
+  Playwright UI Invariants, Flows & Baselines = success (3m29s, job 130228340343)
+  Container Build & Docker Scout Scan = success (3m36s, job 130228340395)
+  Code Coverage Report = success (3m11s, job 130228340413)
+- SUPERSESSION: run 42931144092 exists for feature/synthesis-retry on head 9fca81e (docs-only runlog commit, no code change). Watched the newest run per rule 4: status completed, conclusion success, all four jobs success:
+  Unit Tests & Static Analysis = success (job 130229898485)
+  Playwright UI Invariants, Flows & Baselines = success (job 130231147851)
+  Container Build & Docker Scout Scan = success (job 130231147933)
+  Code Coverage Report = success (job 130231147992)
+- gh pr checks 64: all four checks pass on the newest run. Prior failure run 42925509474 (head 5f4c7b7) superseded by the typecheck fix c1a9f1f.
+- No merge, no deploy this job - those arrive as separate tickets.
+- WATCH FULL GREEN (run 42930341188, head c1a9f1f): Unit Tests & Static Analysis success; Playwright UI Invariants success; Container Build & Docker Scout Scan success; Code Coverage Report success; run conclusion success. Runlog-only push 9fca81e also triggered run 42931144092 -> all four jobs success, run conclusion success. NO merge, NO deploy.
