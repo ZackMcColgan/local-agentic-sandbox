@@ -446,3 +446,8 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - Gate evidence on clean branch: npm run test:gate PASSED 328 pass / 0 fail, 40.1s (<90s budget).
 - Acceptance: git check-ignore -v shows .gitignore:62 (.agent/) and .gitignore:65 (operator-memory.json) cover the store; git ls-files | grep operator-memory = zero matches. Ships EMPTY - owner seeds his own facts later.
 - Unrelated compaction WIP preserved: branch feature/compaction-hybrid restored to 9df7762; working-tree compaction edits stashed ("compaction-hybrid WIP preserved").
+
+## Deploy ticket PR #65 settings-memory -> prod (2026-11-11)
+- PR #65 merged into develop by driver (audit PASS: scope 11 files exact; exact OWNER MEMORY header; byte-identical empty prompt; card counter/cap/exact note; .gitignore + repoHygiene guard; testGate mapping-only; no brand names; acceptance evidence in PR body). Merge commit e36f1b4; CI run 42955669440 all-four-green on head c5f50b1 (Unit Tests 2m49s, Coverage 2m52s, Container Build 4m3s, Playwright 3m31s).
+- ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-6e02172-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-76847586c6-n872c 1/1 Running 0 restarts).
+- Target image tag to build: local-agentic-sandbox-web-ui:v-e36f1b4-fresh. Deploy scope: web-ui only.
