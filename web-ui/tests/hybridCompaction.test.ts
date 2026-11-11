@@ -177,6 +177,80 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     }
   });
 
+  it("REAL deadline: never-resolving stub times out via the wrapper's injectable deadlines", async () => {
+    // Fail-before: the prior timeout test rejected from the STUB itself
+    // (setTimeout(() => reject(new Error("inactivity deadline exceeded")), 20)),
+    // so it passed even if the deadline wrapper had no timers at all. Here the
+    // stub never settles; only the wrapper's injected deadlines can end the pass.
+    const saved = process.env.COMPACTION_STRATEGY;
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const neverResolves = () => new Promise<never>(() => {});
+
+      const startedTotal = Date.now();
+      const total = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        totalDeadlineMs: 120,
+        inactivityMs: 10_000,
+        summarize: () => neverResolves()
+      });
+      const elapsedTotal = Date.now() - startedTotal;
+      assert.equal(total.modelSummaryUsed, false);
+      assert.equal(total.fallback, true);
+      assert.equal(total.fallbackReason, "timeout");
+      assert.ok(elapsedTotal >= 100, `total deadline must fire (~120ms), got ${elapsedTotal}ms`);
+      assert.ok(elapsedTotal < 2000, `must not hang past the deadline, got ${elapsedTotal}ms`);
+
+      const startedSilent = Date.now();
+      const silent = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        inactivityMs: 120,
+        totalDeadlineMs: 10_000,
+        summarize: () => neverResolves()
+      });
+      const elapsedSilent = Date.now() - startedSilent;
+      assert.equal(silent.fallbackReason, "timeout");
+      assert.ok(elapsedSilent >= 100, `inactivity deadline must fire (~120ms), got ${elapsedSilent}ms`);
+      assert.ok(elapsedSilent < 2000, `must not hang past the inactivity deadline, got ${elapsedSilent}ms`);
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+    }
+  });
+
+  it("onProgress resets the inactivity deadline; the total deadline still fires regardless", async () => {
+    // Proves the route-adapter progress hook is load-bearing: a stub that emits
+    // chunks (calling req.onProgress) faster than inactivityMs never trips the
+    // inactivity timer, yet the total deadline still aborts the pass.
+    const saved = process.env.COMPACTION_STRATEGY;
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const started = Date.now();
+      const result = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        inactivityMs: 60,
+        totalDeadlineMs: 200,
+        summarize: (req) => new Promise<never>(() => {
+          const tick = setInterval(() => req.onProgress?.(), 20);
+          req.signal?.addEventListener("abort", () => clearInterval(tick));
+        })
+      });
+      const elapsed = Date.now() - started;
+      assert.equal(result.fallback, true);
+      assert.equal(result.fallbackReason, "timeout");
+      assert.ok(elapsed >= 180, `total deadline must fire (~200ms), got ${elapsed}ms`);
+      assert.ok(elapsed < 1000, `inactivity must have been reset per chunk, got ${elapsed}ms`);
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+    }
+  });
   it("identifier post-check rejects an incomplete summary (missing path/SHA/URL from the digest)", async () => {
     const saved = process.env.COMPACTION_STRATEGY;
     try {
@@ -386,6 +460,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     assert.ok(slice.includes("content: req.prompt"), "summarize adapter must send COMPACTION_PROMPT_V1 verbatim");
     assert.ok(slice.includes("content: req.digest"), "summarize adapter must send the extraction digest");
     assert.ok(slice.includes("signal: req.signal"), "summarize adapter must honor the rung deadline signal");
+    assert.ok(slice.includes("req.onProgress?.()"), "summarize adapter must call the rung progress hook per chunk (resets the inactivity deadline)");
     assert.ok(slice.includes("num_predict: req.maxTokens"), "summarize adapter must carry the pinned maxTokens");
     assert.ok(routeSrc.includes(`import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";`), "route must import the strategy resolver");
     // Out-of-scope surface stays on extraction: the manual compact endpoint.
