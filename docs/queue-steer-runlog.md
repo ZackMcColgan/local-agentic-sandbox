@@ -516,3 +516,6 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 - Verification: yaml.safe_load clean (jobs: test-and-typecheck, coverage-report, docker-build-and-scout, ui-e2e-playwright); npm run test:gate via bridge PASSED 15 pass / 0 fail in 1.307s (<90s budget). Diff 2 insertions / 17 deletions.
 
 - Commit ed53160 pushed to feature/compaction-hybrid (PR #67 head 04b319f -> ed53160). New CI run started on ed53160: run id 43058076625 (in_progress at bank time). No new PR opened, no merge, no deploy.
+
+## Deploy: compaction-hybrid (PR #67, merge 85521da) - 2026-11-11
+ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-7701e23-fresh (current prod, banked before build)
