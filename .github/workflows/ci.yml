@@ -186,7 +186,22 @@ jobs:
       - name: Install Playwright Chromium & System Dependencies
         working-directory: web-ui
         run: |
-          npx playwright install --with-deps chromium
+          MAX_ATTEMPTS=3
+          ATTEMPT=0
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: npx playwright install --with-deps chromium"
+            if npx playwright install --with-deps chromium; then
+              echo "Playwright install succeeded on attempt ${ATTEMPT}"
+              exit 0
+            fi
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "Attempt ${ATTEMPT} failed; sleeping 20s before retry"
+              sleep 20
+            fi
+          done
+          echo "Playwright install failed after ${MAX_ATTEMPTS} attempts"
+          exit 1
 
       - name: Build Web UI
         working-directory: web-ui
