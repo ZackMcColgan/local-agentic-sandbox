@@ -85,6 +85,11 @@ import {
   extractDurablePreferences,
   recordProfileEntry
 } from "@/lib/memory/profile";
+import {
+  loadOperatorMemory,
+  formatMemoryForContext,
+  assembleSystemPrompt
+} from "@/lib/memory/operatorMemory";
 import { getLLMProvider } from "@/lib/llm/provider";
 import {
   evaluateSearchQueryAttempt,
@@ -681,17 +686,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         const userProfile = loadUserProfile();
         const profileContext = formatProfileForContext(userProfile);
+        const ownerMemory = loadOperatorMemory();
+        const memoryText = ownerMemory.text;
 
         const hostDirective = "\n\n" + getHostStateDirective(hostStatus.runnerState, hostStatus.reason);
 
         if (!conversationMessages.some((m: any) => m.role === "system")) {
           conversationMessages.unshift({
             role: "system",
-            content: SYSTEM_PROMPT + profileContext + effortDirective + hostDirective
+            content: assembleSystemPrompt(SYSTEM_PROMPT, profileContext, memoryText, effortDirective, hostDirective)
           });
         } else {
           const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
-          conversationMessages[sysIdx].content += profileContext + hostDirective;
+          conversationMessages[sysIdx].content += profileContext + formatMemoryForContext(memoryText) + hostDirective;
         }
 
         // Handle single-use approval continuation buffer

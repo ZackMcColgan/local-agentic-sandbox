@@ -558,6 +558,19 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/supervisor.test.ts"
     ]
   },
+  // Settings Memory store, API route, prompt injection, and Settings card
+  {
+    match: (p) => p.includes("lib/memory/operatorMemory") || p.includes("app/api/settings/memory"),
+    tests: ["tests/operatorMemory.test.ts", "tests/operatorMemoryInjection.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/api/chat/route"),
+    tests: ["tests/operatorMemoryInjection.test.ts"]
+  },
+  {
+    match: (p) => p.includes("components/SettingsView"),
+    tests: ["tests/settingsMemoryUi.test.ts"]
+  },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
     match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
