@@ -431,3 +431,5 @@ Actions was never disabled — no permission or workflow-state stoppage. PR #63's 
 - Develop head confirmed: 6e02172fa905ad73bcf43a801a22e48f558297fa ("Merge pull request #64 from ZackMcColgan/feature/synthesis-retry", PR head 8622a0d, CI run 42932489987 all-four-green).
 - ROLLBACK TARGET (current prod image, captured BEFORE build): local-agentic-sandbox-web-ui:v-18282cb-fresh (deployment web-ui, namespace local-agentic-sandbox; pod web-ui-6c858f8565-4g8g9 1/1 Running).
 - Target image tag to build: local-agentic-sandbox-web-ui:v-6e02172-fresh. Deploy scope: web-ui only.
+- Build complete: docker build -t local-agentic-sandbox-web-ui:v-6e02172-fresh -f web-ui/Dockerfile . -> image de07c9232d01 (327MB disk / 78MB content). Cached layers reused.
+- Transfer per scripts/deploy-cluster.js flow: docker save temp-web-ui-6e02172.tar -> docker cp to desktop-control-plane:/images/image.tar -> ctr -n k8s.io images import (sha256:de07c9232d01..., imported OK) -> node-side /images/image.tar removed. Host-side temp tar left pending host-approval cleanup (harmless artifact).
