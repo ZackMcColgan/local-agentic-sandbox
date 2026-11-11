@@ -88,7 +88,10 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostDaemon.test.ts",
       "tests/hostLifecycleUnit.test.ts",
       "tests/lifecycleGuard.test.ts",
-      "tests/chatFilePaging.test.ts"
+      "tests/chatFilePaging.test.ts",
+      "tests/hostGitSafetyBattery.test.ts",
+      "tests/unattendedGitOps.test.ts",
+      "tests/unattendedGitToolAdmission.test.ts"
     ]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
@@ -149,7 +152,10 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
-      "tests/chatSteerSubmitUx.test.ts"
+      "tests/chatSteerSubmitUx.test.ts",
+      "tests/capDefault8192.test.ts",
+      "tests/chatRoundBudget.test.ts",
+      "tests/chatWebResearchCap.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -163,7 +169,13 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatPersistenceDecoupling.test.ts",
       "tests/chatLiveVisibility.test.ts",
       "tests/threadDelete.test.ts",
-      "tests/threadDeleteUi.test.ts"
+      "tests/threadDeleteUi.test.ts",
+      "tests/threadCompaction.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts",
+      "tests/chatTurnPresence.test.ts",
+      "tests/chatThinkingPreservation.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+      "tests/supervisorGitOpsIntegration.test.ts"
     ]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
@@ -181,7 +193,6 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/LiveRunBlock") ||
       p.includes("components/ArtifactRenderers") ||
       p.includes("components/ModelBottomSheet") ||
-      p.includes("components/ModelSelector") ||
       p.includes("components/ThreadsSidebar") ||
       p.includes("components/NavigationDrawer") ||
       p.includes("components/SettingsView") ||
@@ -205,7 +216,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/engineToggle.test.ts",
       "tests/shakeoutFixes.test.ts",
       "tests/threadDelete.test.ts",
-      "tests/threadDeleteUi.test.ts"
+      "tests/threadDeleteUi.test.ts",
+      "tests/projectsNavAndWorkflow.test.ts",
+      "tests/selfDeployWiring.test.ts",
+      "tests/threadsDeleteTouch.test.ts",
+      "tests/uiStateAndDedup.test.ts"
     ]
   },
   {
@@ -253,14 +268,18 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatTurnHonesty.test.ts",
       "tests/chatPersistenceDecoupling.test.ts",
       "tests/chatLiveVisibility.test.ts",
-      "tests/synthesisRetry.test.ts"
+      "tests/synthesisRetry.test.ts",
+      "tests/chatRoundBudget.test.ts",
+      "tests/chatToolDegradation.test.ts",
+      "tests/chatTurnPresence.test.ts",
+      "tests/chatThinkingPreservation.test.ts",
+      "tests/chatWebResearchCap.test.ts"
     ]
   },
   // LLM Provider abstraction, standalone supervisor & engine control
   {
     match: (p) =>
       p.includes("lib/llm/") ||
-      p.includes("lib/agentEngine") ||
       p.includes("scripts/llamacpp-standalone") ||
       p.includes("app/api/engine") ||
       p.includes("components/EngineStatusPill") ||
@@ -275,7 +294,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
-    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
+    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
   // Files API route, Workspace File alias & thread outputs
   {
@@ -304,16 +323,22 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/taskCompletion.test.ts",
       "tests/browserMcpConnectivity.test.ts",
       "tests/activeTaskRehydration.test.ts",
-      "tests/taskControls.test.ts"
+      "tests/taskControls.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+      "tests/buildPushHonesty.test.ts",
+      "tests/plannerScope.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts",
+      "tests/supervisorGitOpsIntegration.test.ts"
     ]
   },
   {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/llmClient"),
-    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts", "tests/llmClient.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/residency"),
@@ -321,11 +346,11 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
-    tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts"]
+    tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts", "tests/plannerScope.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/morningReport"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
+    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/buildPushHonesty.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/types"),
@@ -333,15 +358,22 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/supervisor.test.ts",
       "tests/workerPool.test.ts",
       "tests/scheduler.test.ts",
-      "tests/morningReport.test.ts"
+      "tests/morningReport.test.ts",
+      "tests/buildPushHonesty.test.ts",
+      "tests/evidenceLinking.test.ts",
+      "tests/explorerAndCriticUpgrade.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts"
     ]
   },
   {
-    match: (p) => p.includes("lib/subagents/scheduler") || p.includes("app/api/schedules"),
+    match: (p) => p.includes("lib/subagents/scheduler") || p.includes("app/api/schedules") || p.includes("app/api/scheduler"),
     tests: [
       "tests/scheduler.test.ts",
       "tests/schedulerApi.test.ts",
-      "tests/shakeoutFixes.test.ts"
+      "tests/shakeoutFixes.test.ts",
+      "tests/schedulerDaemon.test.ts",
+      "tests/schedulerHealth.test.ts"
     ]
   },
   // Telemetry, Tool Parser, File Parser
@@ -427,7 +459,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Human Skill Gates (Sprint 3)
   {
     match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
-    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts"]
+    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts", "tests/skillsViewPreview.test.ts"]
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
@@ -437,12 +469,12 @@ const MAPPING_RULES: MappingRule[] = [
   // Worker Git Operations (Sprint 12 Phase 8)
   {
     match: (p) => p.includes("lib/git/"),
-    tests: ["tests/workerGitOps.test.ts"]
+    tests: ["tests/workerGitOps.test.ts", "tests/buildPushHonesty.test.ts", "tests/supervisorGitOpsIntegration.test.ts"]
   },
   // Worker CI Feedback (Sprint 12 Phase 9)
   {
     match: (p) => p.includes("lib/ci/"),
-    tests: ["tests/workerCiFeedback.test.ts"]
+    tests: ["tests/workerCiFeedback.test.ts", "tests/productionTestRunnerWiring.test.ts"]
   },
   // Self-Deploy Pipeline (Sprint 12 Phase 10)
   {
@@ -456,13 +488,15 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatLiveVisibility.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
-      "tests/chatQueue.test.ts"
+      "tests/chatQueue.test.ts",
+      "tests/punchlistUiFixes.test.ts",
+      "tests/uiStateAndDedup.test.ts"
     ]
   },
   // CHAT-8 live streaming visibility (server snapshots + client poll loop)
   {
     match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
-    tests: ["tests/chatLiveVisibility.test.ts"]
+    tests: ["tests/chatLiveVisibility.test.ts", "tests/chatThinkingPreservation.test.ts"]
   },
   // CHAT-QUEUE client-side message queue
   {
@@ -481,8 +515,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
-      p.includes("components/Navbar") ||
-      p.includes("components/WorkerTiles") ||
+      p.includes("components/DiffViewer") ||
       p.includes("components/DiffViewer") ||
       p.includes("components/ExecutionTrace") ||
       p.includes("app/page.tsx") ||
@@ -491,7 +524,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/chatHistory.test.ts",
       "tests/chatStreaming.test.ts",
-      "tests/artifactDeliveryAndPolish.test.ts"
+      "tests/artifactDeliveryAndPolish.test.ts",
+      "tests/projectsNavAndWorkflow.test.ts",
+      "tests/selfDeployWiring.test.ts"
     ]
   },
   // MCP server files
@@ -507,7 +542,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Test gate itself
   {
     match: (p) => p.includes("lib/testGate") || p.includes("scripts/test-gate"),
-    tests: ["tests/testGate.test.ts"]
+    tests: ["tests/testGate.test.ts", "tests/gateManifestCompleteness.test.ts"]
   },
   // Overnight dogfood runner
   {
