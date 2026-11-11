@@ -110,6 +110,7 @@ const ADVERTISED_TOOLS = new Set([
   "workspace_grep",
   "workspace_read_file",
   "workspace_write_file",
+  "workspace_patch_file",
   "workspace_run_command",
   "git_status",
   "git_diff",
@@ -391,6 +392,9 @@ CRITICAL INSTRUCTIONS:
   - Bounded retries: maximum 2 identical runs of any command or tool call, and maximum 3 distinct strategies per subproblem; if still failing, stop and report BLOCKED with the exact error and command.
   - Targeted tests first: run only the specific test file(s) for the modified module before running any broader test gate.
   - Paging discipline: use startLine/endLine when reading large files instead of re-reading entire files repeatedly.
+- FILE EDITING DISCIPLINE (PATCHES, NOT BLOBS):
+  - Edit existing files with the patch tools: 'host_replace_string' on the host, 'workspace_patch_file' in the workspace. Reserve 'host_write_file' / 'workspace_write_file' for creating NEW files, or for a deliberate full-file rewrite.
+  - Work one file at a time: patch it, run the targeted check for that file, and commit it before editing the next file. Never hold a multi-file rewrite to dump at the end of a turn.
 ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
