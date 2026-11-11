@@ -520,7 +520,6 @@ Actions was never disabled ï¿½ no permission or workflow-state stoppage. PR #
 - filePathRegex CORRECTION FINDING (recorded, NOT fixed): HEAD line 376 of web-ui/lib/conversationCompaction.ts still differs from origin/develop (lookahead class dropped the single-quote and backslash before close paren). git blame attributes the line to branch commit 9df7762 (WIP), NOT 7b7779c; strand 1's runlog claim "restored byte-exact to HEAD" was self-referential and the revert against develop never happened. Status: STILL DIFFERS from develop. Left for the re-audit per brief (this step did not touch conversationCompaction.ts).
 - GATE: npm run test:gate via bridge PASSED 12 pass / 0 fail in 11.02s (<90s budget), run after item 2 before its push.
 - No merge, no deploy this job.
-<<<<<<< HEAD
 
 ## compaction-hybrid audit fix (PR #67) — regex restore — 2026-11-11
 - Audit finding (driver-verified, single point): web-ui/lib/conversationCompaction.ts filePathRegex (branch line 376) diverged from origin/develop line 37. Branch leading char class lost the single-quote and backslash ([\s"'()] -> [\s"()]); trailing lookahead lost the backslash ([\s"')] -> [\s")). Introduced by WIP commit 9df7762, never by design; no brief asked for it. Weakened identifier extraction feeding the load-bearing identifier post-check.
@@ -599,3 +598,13 @@ TESTS:
 - Gate initially rejected with ZERO TEST COVERAGE on web-ui/debug-turnstart.ts (untracked scratch debug script left in the repo by the prior diagnosis pass). Moved to D:\AI\orchestrator-scratch\debug-turnstart.ts (scratch rule); gate then passed.
 
 Commit 8ed6961 pushed to origin/feature/compaction-hybrid-turnstart-fix. Step 3 (gate + PR) waits on the bank.
+## HYBRID TURN-START FIX step 2 - turn-start strategy-aware prepare banked
+Thread thread-1794428560586-hybridstep2c (verify-and-bank retry; prior attempt thread-1794423819396-hybridstep2b wrote the implementation but stranded with an empty-synthesis marker and no commit - its working-tree work survived and was verified here, not rewritten).
+Commit 8ed6961 'fix(compaction): turn-start prepare honors COMPACTION_STRATEGY=hybrid' pushed to origin/feature/compaction-hybrid-turnstart-fix (HEAD == origin == 8ed6961). Files: web-ui/app/api/chat/route.ts (+32), web-ui/lib/threads/threadStore.ts (+101), web-ui/tests/hybridCompaction.test.ts (+4/-2, fixture typing only - no assertion weakened). Stray untracked web-ui/debug-turnstart.ts deleted via git clean; never committed.
+Implementation satisfies the step-2 spec:
+- route.ts turn-start call-site now awaits prepareTurnConversationMessages and passes {strategy: resolveCompactionStrategy(), summarize: adapter over streamLlmChat} (temperature/maxTokens/signal/onProgress forwarded from the SummarizeRequest; truncated flagged on finish_reason 'length'). Flag OFF / unset resolves to extraction and the callback is never invoked.
+- threadStore.prepareTurnConversationMessages gained overloads: with a summarize callback the call is async and dispatches on strategy; strategy==='hybrid' && summarize routes to compactThreadIncrementalHybrid (extraction first, then exactly ONE guarded pass above the 65% HYBRID_ESCALATION_THRESHOLD, temp 0.2 pinned, 8192 cap, 180s inactivity / 5-min total deadline, verifyIdentifierCoverage post-check, any failure falls back to the extraction digest and is logged). Extraction digest retained on the thread record as extractionDigest audit copy; boundary carries strategy='hybrid'.
+- strategy==='extraction', hybrid without a callback, or no options at all keep the synchronous extraction call byte-identical to prior behavior (no strategy/extractionDigest fields).
+TESTS: npx tsx --test tests/hybridCompaction.test.ts => 14 pass / 0 fail (both step-1 turn-start tests now green; fail-before 'exactly ONE summarization pass' 0 !== 1 resolved). npm run test:gate => 298 pass / 0 fail / 1 skipped in 76.6s (<90s budget). Full npm run test NOT run (lifecycle test can tear down the stack).
+No deployment touched, no COMPACTION_STRATEGY flip, no kubectl rollout, no merge. Step 3 (gate + PR) waits on this bank.
+>>>>>>> 2849716 (docs(runlog): HYBRID TURN-START FIX step 2 - turn-start strategy-aware prepare banked)
