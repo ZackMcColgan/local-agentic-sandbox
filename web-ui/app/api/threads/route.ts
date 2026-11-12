@@ -109,7 +109,8 @@ export async function POST(req: Request) {
             initialPrompt: goal,
             attachments: body.attachments,
             taskId,
-            scope
+            scope,
+            hostAccess: false
           });
         }
       } else {
@@ -120,7 +121,8 @@ export async function POST(req: Request) {
           initialPrompt: goal,
           attachments: body.attachments,
           taskId,
-          scope
+          scope,
+          hostAccess: false
         });
         thread.messages.push({
           id: `msg-${Date.now()}-a`,
