@@ -726,3 +726,7 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Root cause (driver-verified): old assertion compared derived title against raw goal prefix (goal.slice(0, title.length)); after 'JOB - ' prefix strip the title is no longer a raw prefix, so the check failed although the title itself ended on whole word 'registry' with next stripped-source char a space. Implementation deriveThreadTitle correct; only assertion wrong.
 - Fix: assertion now locates title inside goal via indexOf and requires the next source char to be whitespace (no weakening, no other files touched). Commit 6d155c7 pushed to feature/qa2-thread-titles.
 - Suite: node --test --import tsx tests/threadTitleDerivation.test.ts -> 11 pass / 0 fail. npm run test:gate via bridge -> PASSED 11 pass / 0 fail in 2.257s (<90s budget). New head: 6d155c7.
+ 
+## qa-2 deploy 2026-11-12 
+- Rollback target banked: v-c71d541-fresh 
+- Deploy target: v-add4375-fresh, develop add4375, PR 80 merged 
