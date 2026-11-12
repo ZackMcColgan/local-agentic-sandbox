@@ -184,9 +184,9 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       while (true) {
-        const { done } = await reader.read();
+        const { done, value } = await reader.read();
         if (done) break;
-        decoder.decode(value = undefined as any, { stream: true });
+        decoder.decode(value, { stream: true });
       }
       return capturedPayloads;
     } finally {
