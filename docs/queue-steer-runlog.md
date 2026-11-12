@@ -615,3 +615,6 @@ PRODUCT DIFF UNCHANGED after rebase (git diff origin/develop --numstat): web-ui/
 GATE: npm run test:gate via bridge PASSED 303 pass / 0 fail / 1 skipped in 62.1s (<90s budget). Targeted npx tsx --test tests/hybridCompaction.test.ts -> 14 pass / 0 fail (step-1 fail-before turn-start test green). Full npm run test NOT run (lifecycle test can tear down the stack).
 PR: #70 into develop opened (gh pr create), acceptance evidence in body (fix commit 5a9597d, gate line, rebase union note, product-diff-unchanged verification).
 No merge, no deploy, no COMPACTION_STRATEGY flip, no kubectl rollout in this job.
+  
+## Deploy: compaction-hybrid turn-start fix (PR #70, merge 57518ac) - 2026-11-11  
+ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-6555510-fresh (current prod, banked before build)  
