@@ -10,6 +10,7 @@ import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, Summar
 import { TurnFileDiff } from "../chatDiffs";
 import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
 import type { ElisionMeta } from "../microElision";
+import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
@@ -73,6 +74,11 @@ export interface ThreadMessage {
    * turn (tool, target, original size, round). The full results remain in
    * `traces`, so a stubbed result stays recoverable from the thread record. */
   microElisions?: ElisionMeta[];
+  /** TOKEN ECONOMICS (d): read-dedup audit — every unchanged re-read stubbed
+   * during the turn (path, content hash, the earlier read's round/trace, and
+   * the re-read's round). The full content of the first read remains in
+   * `traces`, so a stubbed read stays recoverable from the thread record. */
+  readDedups?: ReadDedupMeta[];
   /** TOKEN ECONOMICS (a): per-job rollup for this turn (rounds, prompt integral, output, compactions). */
   tokenEconomics?: JobTokenRollup;
 }

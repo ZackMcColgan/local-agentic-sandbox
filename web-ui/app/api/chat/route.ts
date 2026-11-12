@@ -64,6 +64,7 @@ import {
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
+import { ReadDedupRegistry, type ReadDedupMeta } from "@/lib/readDedup";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -448,6 +449,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // Declared alongside the other turn state so both persist paths (abort and
     // final) can carry it onto the assistant message.
     const turnMicroElisions: ElisionMeta[] = [];
+    // TOKEN ECONOMICS (d): within-thread read dedup audit log — every stubbed
+    // unchanged re-read, carrying path + content hash + the earlier trace/round
+    // reference. Declared with the other turn state so both persist paths carry it.
+    const turnReadDedups: ReadDedupMeta[] = [];
     let accumulatedThoughts: string[] = [];
 
     let lastFinishReason: string | undefined = undefined;
@@ -482,7 +487,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           finish_reason: lastFinishReason || "abort",
           outputTokens: finalOutputTokens,
           // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
-          microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined
+          microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
+          // TOKEN ECONOMICS (d): the read-dedup audit rides on the aborted record too.
+          readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined
         };
         threadStore.addMessage(activeThreadId, abortedMsg);
       } catch (err) {
@@ -877,6 +884,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // paths (abort and final) carry the elision audit onto the message.
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
+
+        // TOKEN ECONOMICS (d): WITHIN-THREAD READ DEDUP registry. Seeded from the
+        // conversation messages already in context (earlier turns' tool results)
+        // so a re-read in a later turn stubs against the earlier turn's read.
+        // Survives compaction (its own entries map), and the full result of the
+        // first read stays recoverable in the thread trace record.
+        const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
 
         while (true) {
           if (turnAbortController.signal.aborted) break;
@@ -1692,6 +1706,27 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             });
 
             const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
+            // TOKEN ECONOMICS (d): within-thread read dedup. A read whose
+            // path + content hash matches an earlier read in this thread is
+            // answered with a short stub referencing the earlier trace/round; a
+            // changed file re-reads full and re-anchors the registry. The full
+            // result stays recoverable in the trace record (audit copy pushed
+            // above), and every stub is logged on the turn's readDedups field.
+            // The pinned clamp-bypass expression below stays byte-identical
+            // (chatFilePaging Pin 1 compliance); dedup swaps `result` itself.
+            if (isFileReadTool && !isExecutionError) {
+              const dedupDecision = readDedupRegistry.checkAndRecord(
+                toolName,
+                toolArgs,
+                JSON.stringify(result),
+                round,
+                traces.length - 1
+              );
+              if (dedupDecision.deduplicated && dedupDecision.stub && dedupDecision.meta) {
+                result = { status: "DEDUP_STUB", stub: dedupDecision.stub };
+                turnReadDedups.push({ ...dedupDecision.meta, reReadRound: round });
+              }
+            }
             conversationMessages.push({
               role: "tool",
               name: toolName,
@@ -2075,6 +2110,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             roundPromptTokens: roundPromptTokens,
             // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
             microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
+            // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
+            readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined,
             tokenEconomics: buildJobTokenRollup({
               rounds: round,
               promptTokens: finalPromptTokens,

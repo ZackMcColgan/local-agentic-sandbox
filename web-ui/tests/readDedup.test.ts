@@ -24,7 +24,21 @@ import {
  */
 
 function filePayload(text: string): string {
-  return JSON.stringify({ success: true, path: "src/config.ts", content: text });
+  // Realistic read-result shape: content plus the metadata fields the read
+  // tools actually return (total lines/bytes, paging state). Dedup hashes the
+  // CONTENT payload only; the metadata inflates the payload so the stub is
+  // meaningfully smaller than the full result, as in production.
+  return JSON.stringify({
+    success: true,
+    path: "src/config.ts",
+    content: text,
+    total_lines: 201,
+    total_bytes: text.length * 38,
+    showing_lines: "1-201",
+    has_more: false,
+    next_start_line: null,
+    truncated: false
+  });
 }
 
 describe("Read dedup (d): constants and helpers", () => {
