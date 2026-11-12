@@ -686,3 +686,6 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - ChatStream pill (~L2317-2326) rendered only 'History compacted: X -> Y tokens' and never the actions. Pill line kept as-is; added capped chips beneath it (cap 3) with '+N more' overflow chip, labels mapped from the real CompactionAction union (no invented labels).
 - Tests first in web-ui/tests/chatPolish.test.ts F4.6 render-test style: chips render from compactionActions; cap 3 + '+2 more' overflow; no-actions pill unchanged. Fail-before on unmodified pill: 3 new tests failed (pass 20 / fail 3). After implementation: chatPolish 23 pass / 0 fail.
 - Gate: npm run test:gate PASSED 307 pass / 0 fail, 20.0s (<90s budget).
+
+## Compaction-pill deploy (2026-11-12)
+- Rollback target banked: v-a9736db-fresh (prod image before compaction-pill deploy, S0 10:37 CT). Deploy target: v-6b0bb0c-fresh (develop 6b0bb0c, PR #77 merged).
