@@ -15,6 +15,37 @@ import { getHostSettings } from "../hostSettings";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
+/** Max characters for a derived thread-list title (UI-008). */
+const THREAD_TITLE_MAX_CHARS = 40;
+
+/**
+ * UI-008: derive a readable thread-list title from a goal/prompt at
+ * record-create time. Strips the driver/session style prefixes
+ * ('Session: ', 'JOB — ' incl. hyphen/dash variants) case-insensitively,
+ * collapses to the first line, and truncates at a word boundary so the
+ * sidebar never shows a raw prefix or a mid-word cut. Plain goals pass
+ * through unchanged apart from the word-boundary truncation.
+ */
+export function deriveThreadTitle(raw: string | undefined): string {
+  let text = (raw ?? "").trim();
+  // Strip stacked style prefixes: 'Session:' / 'JOB' followed by an em/en dash,
+  // hyphen, or colon separator. Only the exact prefix tokens are removed —
+  // ordinary words that merely start with 'job'/'session' are left intact.
+  const prefixPattern = /^(?:session|job)\s*[:\-–—]\s*/i;
+  while (prefixPattern.test(text)) {
+    text = text.replace(prefixPattern, "").trim();
+  }
+  // First line only — multi-line briefs keep the summary line.
+  const firstLine = text.split(/\r?\n/)[0].trim();
+  if (!firstLine) return "New thread";
+  if (firstLine.length <= THREAD_TITLE_MAX_CHARS) return firstLine;
+  // Truncate at a word boundary: cut at the last whitespace before the cap.
+  const window = firstLine.slice(0, THREAD_TITLE_MAX_CHARS);
+  const lastBoundary = window.lastIndexOf(" ");
+  const cut = lastBoundary > 0 ? window.slice(0, lastBoundary) : window;
+  return cut.trim();
+}
+
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
   messages: any[];
@@ -679,7 +710,7 @@ export class ThreadStore {
 
           const newThread: Thread = {
             id: `thread-${task.taskId}`,
-            title: task.goal.trim().slice(0, 40) || "New thread",
+            title: deriveThreadTitle(task.goal),
             status: honestStatus,
             createdAt: task.startedAt || new Date().toISOString(),
             updatedAt: task.updatedAt || task.startedAt || new Date().toISOString(),
@@ -783,7 +814,7 @@ export class ThreadStore {
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     deletedThreadIds.delete(threadId);
-    const title = params.title || (params.initialPrompt && params.initialPrompt.trim() ? params.initialPrompt.trim().slice(0, 40) : "New thread");
+    const title = params.title || deriveThreadTitle(params.initialPrompt);
     const hostAccess = params.hostAccess !== undefined ? params.hostAccess : getHostSettings().hostAccessEnabled;
     const thread: Thread = {
       id: threadId,

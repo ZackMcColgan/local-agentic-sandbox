@@ -712,3 +712,11 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 ## qa-1 deploy 2026-11-12 
 - Rollback target banked: v-df5e37a-fresh 
 - Deploy target: v-c71d541-fresh, develop c71d541, PR 79 merged 
+
+## qa-2 job - readable thread-list titles (2026-11-12, UI-008)
+- Branch feature/qa2-thread-titles from develop (e12e43c). Defect source: web-ui/lib/threads/threadStore.ts L682 (recordFromTask: title = goal.trim().slice(0,40)) and L786 (createThread: initialPrompt.trim().slice(0,40)) -> sidebar shows raw 'Session: JOB — ...' prefixes with mid-word cuts (docs/ui-qa-findings-2026-11-10.md UI-008).
+- Tests first: new web-ui/tests/threadTitleDerivation.test.ts (pure deriveThreadTitle + ThreadStore.createThread, tmpdir style). Fail-before on unmodified store: 11 tests, pass 2 / fail 9 (only the two 'existing behavior unchanged' cases passed) -> commit cbb593a.
+- Implementation: exported deriveThreadTitle(raw) in threadStore.ts after COMPACTION_TRIGGER_TOKENS: strips stacked 'Session:'/'JOB' style prefixes (case-insensitive, em/en-dash/hyphen/colon separator only, so ordinary words like 'Job board app...' untouched), first line only, <=40 chars, truncation at last whitespace boundary (never mid-word, no dangling hyphen), empty/whitespace -> 'New thread'. L682 recordFromTask now title: deriveThreadTitle(task.goal); L786 createThread now params.title || deriveThreadTitle(params.initialPrompt). Explicit params.title precedence unchanged; retroactive-title path on getThread untouched; no component changes.
+- Existing assertion updated: web-ui/tests/sessionIntegrity.test.ts S4 'derives title from first ~40 characters' asserted the raw mid-word slice ('How does the critic handle crashes in wo') - the exact UI-008 defect; now asserts word-boundary title 'How does the critic handle crashes in'. S4 'New thread' and retroactive-title assertions unchanged.
+- Gate wiring: lib/testGate.ts threads rule tests[] now includes tests/threadTitleDerivation.test.ts (gateManifestCompleteness requires every tests/*.test.ts wired).
+- npm run test:gate: PASSED 167 pass / 0 fail, 56 suites, 61.8s (<90s budget).
