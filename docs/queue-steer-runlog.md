@@ -607,3 +607,11 @@ Implementation satisfies the step-2 spec:
 - strategy==='extraction', hybrid without a callback, or no options at all keep the synchronous extraction call byte-identical to prior behavior (no strategy/extractionDigest fields).
 TESTS: npx tsx --test tests/hybridCompaction.test.ts => 14 pass / 0 fail (both step-1 turn-start tests now green; fail-before 'exactly ONE summarization pass' 0 !== 1 resolved). npm run test:gate => 298 pass / 0 fail / 1 skipped in 76.6s (<90s budget). Full npm run test NOT run (lifecycle test can tear down the stack).
 No deployment touched, no COMPACTION_STRATEGY flip, no kubectl rollout, no merge. Step 3 (gate + PR) waits on this bank.
+
+## HYBRID TURN-START FIX step 3 - rebase, gate, PR #70 (2026-11-12)
+Branch feature/compaction-hybrid-turnstart-fix rebased onto origin/develop (e8f2417). Remote tip before push was e7b0808; pushed --force-with-lease to a2eec6d (remote tip verified a2eec6d, branch in sync with origin).
+REBASE CONFLICTS: only docs/queue-steer-runlog.md (both sides appended entries). Resolved by union - kept develop's newer entries AND the branch's entries; duplicate identical entries deduplicated (the PR #67 audit-fix entry and the step-2 entry appeared verbatim on both sides). No entry dropped.
+PRODUCT DIFF UNCHANGED after rebase (git diff origin/develop --numstat): web-ui/app/api/chat/route.ts 30/2, web-ui/lib/threads/threadStore.ts 89/12, web-ui/tests/hybridCompaction.test.ts 132/2 - byte-identical to the pre-rebase step-2 diff.
+GATE: npm run test:gate via bridge PASSED 303 pass / 0 fail / 1 skipped in 62.1s (<90s budget). Targeted npx tsx --test tests/hybridCompaction.test.ts -> 14 pass / 0 fail (step-1 fail-before turn-start test green). Full npm run test NOT run (lifecycle test can tear down the stack).
+PR: #70 into develop opened (gh pr create), acceptance evidence in body (fix commit 5a9597d, gate line, rebase union note, product-diff-unchanged verification).
+No merge, no deploy, no COMPACTION_STRATEGY flip, no kubectl rollout in this job.
