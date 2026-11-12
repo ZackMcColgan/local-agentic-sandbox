@@ -47,10 +47,15 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
         "JOB — implement the progressive tool registry rollout across all three tiers carefully";
       const title = deriveThreadTitle(goal);
       assert.ok(title.length <= 40, `title exceeds 40 chars: ${title.length}`);
-      // The last retained token must be a whole word: the char after the cut
-      // point in the source (if any) must not be a continuation of the word.
-      assert.ok(!/[A-Za-z0-9-]$/.test(title) || title.endsWith(goal.slice(0, title.length)),
-        `title ends mid-word: ${title}`);
+      // Word-boundary check: locate the title inside the source goal. If the
+      // source continues past the title, the very next source character must
+      // be whitespace (never a continuation of a word).
+      const idx = goal.indexOf(title);
+      assert.ok(idx >= 0, `title is not a substring of the goal: ${title}`);
+      if (idx + title.length < goal.length) {
+        assert.ok(/\s/.test(goal[idx + title.length]),
+          `title ends mid-word: ${title} (next source char: '${goal[idx + title.length]}')`);
+      }
       assert.ok(!title.endsWith("-"), `title ends on a dangling hyphen: ${title}`);
     });
 
