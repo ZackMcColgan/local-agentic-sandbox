@@ -534,3 +534,5 @@ DEPLOYED: image local-agentic-sandbox-web-ui:v-b5c9694-fresh set on deployment/w
 - route.ts: round-boundary forced snapshot call hoisted the thought argument into roundThought so the wiring regex ([^)]* before traces) matches; traces arg + { force: true } + touchActiveTurn(activeThreadId) intact.
 - EVIDENCE: npx tsx --test tests/turnLiveness.test.ts -> 5 pass / 0 fail. npm run test:gate -> PASSED 388 pass / 0 fail / 1 skipped (61.5s).
 - No merge, no deploy. PR into develop opened by this step.
+
+- 2026-08-11 turn-liveness fix cycle (PR #69 CI red): gateManifestCompleteness flagged tests/turnLiveness.test.ts as unwired. Added one MAPPING_RULES entry in web-ui/lib/testGate.ts (chat route, threadStore, streamSnapshot, ThreadsSidebar -> turnLiveness.test.ts). No gate logic touched. Targeted: gateManifestCompleteness + turnLiveness 6/6 pass. npm run test:gate PASSED 6/0 in 2.76s. Commit 5bf65db pushed to feature/turn-liveness-step2.
