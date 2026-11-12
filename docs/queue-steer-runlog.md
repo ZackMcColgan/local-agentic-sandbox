@@ -539,3 +539,6 @@ DEPLOYED: image local-agentic-sandbox-web-ui:v-b5c9694-fresh set on deployment/w
  
 ## Deploy: turn-liveness PR 69 merge e4cd9f9 - 2026-11-11 
 ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-0d99143-fresh - current prod, banked before build 
+ 
+## Deploy: turn-liveness PR 69 merge e4cd9f9 - 2026-11-11 
+DEPLOYED: image local-agentic-sandbox-web-ui:v-6555510-fresh set on deployment/web-ui; rollout success; pod web-ui-755cbbb749-wb8bh 1/1 Running 0 restarts; gateway 200; /api/threads 200, 51 threads intact; UI render clean, screen matches record. Prod == develop 6555510 verified. Rollback target was v-0d99143-fresh. 
