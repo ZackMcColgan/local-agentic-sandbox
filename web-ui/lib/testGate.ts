@@ -84,6 +84,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostMode.test.ts",
       "tests/hostSettingsDefault.test.ts",
       "tests/hostFourState.test.ts",
+      "tests/patchTools.test.ts",
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
       "tests/hostLifecycleUnit.test.ts",
@@ -93,6 +94,11 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/unattendedGitOps.test.ts",
       "tests/unattendedGitToolAdmission.test.ts"
     ]
+  },
+  // Progressive tool registry (patch tool registration)
+  {
+    match: (p) => p.includes("progressiveTools"),
+    tests: ["tests/patchTools.test.ts"]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {

@@ -50,6 +50,7 @@ export const KNOWN_ONE_LINERS: Record<string, string> = {
   workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",
   workspace_read_file: "workspace_read_file(path, start_line?, end_line?, offset?, limit?): Read file contents with line numbers and pagination.",
   workspace_write_file: "workspace_write_file(path, content): Write code, MD, or SVG files.",
+  workspace_patch_file: "workspace_patch_file(path, patches[{search, replace}]): Surgically patch an existing file with exact search-and-replace edits. Preferred over workspace_write_file for edits to existing files.",
   workspace_run_command: "workspace_run_command(command, timeout_ms?): Run commands in sandbox.",
   git_status: "git_status(): Inspect git branch status.",
   git_diff: "git_diff(staged?, file_path?): Inspect diff.",
@@ -129,6 +130,29 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
         content: { type: "string", description: "File content" }
       },
       required: ["path", "content"]
+    }
+  },
+  workspace_patch_file: {
+    name: "workspace_patch_file",
+    description: "Surgically apply exact search-and-replace patches to an existing file. Preferred over workspace_write_file for edits to existing files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path" },
+        patches: {
+          type: "array",
+          description: "Search-and-replace patches, applied in order. Each search string must match the file exactly.",
+          items: {
+            type: "object",
+            properties: {
+              search: { type: "string", description: "Exact string to search for" },
+              replace: { type: "string", description: "Replacement string" }
+            },
+            required: ["search", "replace"]
+          }
+        }
+      },
+      required: ["path", "patches"]
     }
   },
   workspace_run_command: {

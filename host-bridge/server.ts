@@ -4,6 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { spawn, execSync } from "child_process";
 import { isDestructiveHostAction } from "./classifier";
+import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
 import {
   executeGitVerb,
@@ -504,6 +505,48 @@ async function handleToolExecution(
       success: true,
       path: rawPath,
       preImageExists,
+      preImageContent,
+      preImageTruncated,
+      preImageSha256
+    };
+  }
+
+  if (tool === "host_replace_string") {
+    const rawPath = String(args?.path || "");
+    const oldString = typeof args?.oldString === "string" ? args.oldString : "";
+    const newString = typeof args?.newString === "string" ? args.newString : "";
+    const replaceAll = args?.replaceAll === true;
+    const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(effectiveCwd, rawPath);
+
+    if (!rawPath) {
+      return { success: false, error: "path is required" };
+    }
+    if (!fs.existsSync(resolvedPath)) {
+      return { success: false, error: `File not found: ${rawPath}` };
+    }
+    const stats = fs.statSync(resolvedPath);
+    if (stats.size > MAX_FILE_READ_BYTES) {
+      return { success: false, error: `File exceeds 2MB limit: ${rawPath} (${stats.size} bytes)` };
+    }
+
+    const rawBytes = fs.readFileSync(resolvedPath);
+    const preImageSha256 = crypto.createHash("sha256").update(rawBytes).digest("hex");
+    const fullText = rawBytes.toString("utf8");
+    const preImageTruncated = fullText.length > MAX_OUTPUT_CHARS;
+    const preImageContent = preImageTruncated ? fullText.slice(0, MAX_OUTPUT_CHARS) : fullText;
+
+    const applied = applyReplaceString(fullText, oldString, newString, replaceAll);
+    if (!applied.success || typeof applied.content !== "string") {
+      return { success: false, error: applied.error || "replace failed", occurrences: applied.occurrences };
+    }
+
+    fs.writeFileSync(resolvedPath, applied.content, "utf8");
+    return {
+      success: true,
+      path: rawPath,
+      replacements: applied.replacements,
+      occurrences: applied.occurrences,
+      preImageExists: true,
       preImageContent,
       preImageTruncated,
       preImageSha256
