@@ -698,3 +698,13 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
   
 ## UI QA sweep deploy (2026-11-12)  
 - Rollback target banked: v-6b0bb0c-fresh (prod image before ui-qa-sweep deploy, S0 13:00 CT). Deploy target: v-f76e9de-fresh (develop f76e9de, PR #78 merged).  
+
+## qa-1 job - reconcile poll backoff + hidden-view stop (2026-11-12, UI-006 + UI-006b)
+- Branch feature/qa1-reconcile-poll-backoff from develop (df5e37a). Evidence read from docs/ui-qa-findings-2026-11-10.md UI-006/UI-006b (fixed 1s re-arm, no caps; 5 GETs/8s detached; kept polling while hidden on Settings).
+- Tests first: new web-ui/tests/reconcilePollBackoff.test.ts (existing source-inspection + pure-policy style, top-level test() calls). Fail-before confirmed: module missing -> import failure, exit 1 (df74375).
+- Policy extracted to web-ui/lib/reconcilePollPolicy.ts: RECONCILE_POLL_BASE_MS=1000, exponential base*2^attempt clamped at MAX_DELAY_MS=8000, MAX_ATTEMPTS=12, MAX_TOTAL_MS=60000; shouldStopReconcilePoll stops on hidden view OR attempt cap OR total-time cap.
+- ChatStream.tsx poll loop only: re-arm via reconcilePollDelayMs(attempts), consults shouldStopReconcilePoll with attempts/elapsedMs/isActiveView, effect early-returns when !isActiveView, deps [reconcilingThreadId, isActiveView]. Fixed setTimeout(pollDetachedTurn, 1000) removed. New prop isActiveView (default true) on ChatStreamProps.
+- app/page.tsx wiring: isActiveView={activeNavView === "sessions" && viewMode === "unified"} - the existing active-view signal, no new global.
+- reconcilePollBackoff.test.ts: 9 pass / 0 fail.
+- Gate wiring: lib/testGate.ts MAPPING_RULES entry added for lib/reconcilePollPolicy + reconcilePollBackoff (zero-coverage rejection hit first: new lib had no rule; gateManifestCompleteness also requires every tests/*.test.ts wired).
+- npm run test:gate (full branch diff vs develop): PASSED 335 pass / 0 fail, 112 suites, 17.7s (<90s budget). Commits: df74375 (failing test first) -> 9221dea (policy + ChatStream loop) -> eebd1cc (page wiring + runlog) -> 6fe45e7 (gate mapping).

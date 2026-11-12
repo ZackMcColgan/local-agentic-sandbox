@@ -536,6 +536,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/turnReconciliation") || p.includes("turnDeliveryReconciliation"),
     tests: ["tests/turnDeliveryReconciliation.test.ts"]
   },
+  // UI-006/UI-006b reconcile-poll backoff policy (ChatStream poll loop gating)
+  {
+    match: (p) => p.includes("lib/reconcilePollPolicy") || p.includes("reconcilePollBackoff"),
+    tests: ["tests/reconcilePollBackoff.test.ts"]
+  },
   // CHAT-STEER mid-turn server steer mailbox
   {
     match: (p) => p.includes("app/api/threads") && p.includes("steer"),

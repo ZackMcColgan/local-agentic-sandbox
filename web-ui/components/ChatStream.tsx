@@ -36,6 +36,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "../lib/clipboard";
+import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
@@ -159,6 +160,13 @@ interface ChatStreamProps {
   onToggleWorkspace?: () => void;
   isWorkspaceOpen?: boolean;
   onOpenProjects?: () => void;
+  /**
+   * UI-006b: whether ChatStream is the active view. app/page.tsx hides the
+   * chat view via CSS while it stays mounted; the detached-turn reconcile
+   * poll must stop entirely when this is false. Derived from the existing
+   * active-view signal (activeNavView === "sessions" && viewMode === "unified").
+   */
+  isActiveView?: boolean;
   initialSimulation?: {
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -274,6 +282,7 @@ export function ChatStream({
   isWorkspaceOpen = false,
   defaultComposerMode,
   onOpenProjects,
+  isActiveView = true,
   initialSimulation
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
@@ -580,11 +589,19 @@ export function ChatStream({
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const chatQueueRef = useRef<ChatQueue | null>(null);
 
-  // Poll and reconcile thread records if a stream disconnected mid-turn
+  // Poll and reconcile thread records if a stream disconnected mid-turn.
+  // UI-006/UI-006b (docs/ui-qa-findings-2026-11-10.md): the re-arm was a fixed
+  // 1s setTimeout with no backoff, no attempt cap, no total-time cap, and it
+  // kept polling while ChatStream was hidden (page.tsx hides via CSS; the
+  // component stays mounted). Now: exponential backoff, attempt + total-time
+  // caps, and no polling while ChatStream is not the active view.
   useEffect(() => {
     if (!reconcilingThreadId) return;
+    if (!isActiveView) return;
     let active = true;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const startedAt = Date.now();
 
     const pollDetachedTurn = async () => {
       try {
@@ -610,17 +627,25 @@ export function ChatStream({
       } catch (err) {
         console.warn("[ChatStream] Detached turn reconciliation poll error:", err);
       }
-      if (active) {
-        pollTimer = setTimeout(pollDetachedTurn, 1000);
+      attempts += 1;
+      if (
+        active &&
+        !shouldStopReconcilePoll({
+          attempts,
+          elapsedMs: Date.now() - startedAt,
+          isActiveView
+        })
+      ) {
+        pollTimer = setTimeout(pollDetachedTurn, reconcilePollDelayMs(attempts));
       }
     };
 
-    pollTimer = setTimeout(pollDetachedTurn, 1000);
+    pollTimer = setTimeout(pollDetachedTurn, reconcilePollDelayMs(0));
     return () => {
       active = false;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [reconcilingThreadId]);
+  }, [reconcilingThreadId, isActiveView]);
   useEffect(() => {
     const tid = activeThreadId || threadId;
     if (typeof window !== "undefined" && tid) {

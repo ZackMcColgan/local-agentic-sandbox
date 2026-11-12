@@ -895,6 +895,7 @@ export default function Home() {
               messages={messages}
               setMessages={setMessages}
               onTracesUpdate={handleTracesUpdate}
+              isActiveView={activeNavView === "sessions" && viewMode === "unified"}
               activeModel={selectedModel}
               agentMode={agentMode}
               reasoningEffort={reasoningEffort}
