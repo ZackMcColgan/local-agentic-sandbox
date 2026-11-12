@@ -708,3 +708,7 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - reconcilePollBackoff.test.ts: 9 pass / 0 fail.
 - Gate wiring: lib/testGate.ts MAPPING_RULES entry added for lib/reconcilePollPolicy + reconcilePollBackoff (zero-coverage rejection hit first: new lib had no rule; gateManifestCompleteness also requires every tests/*.test.ts wired).
 - npm run test:gate (full branch diff vs develop): PASSED 335 pass / 0 fail, 112 suites, 17.7s (<90s budget). Commits: df74375 (failing test first) -> 9221dea (policy + ChatStream loop) -> eebd1cc (page wiring + runlog) -> 6fe45e7 (gate mapping).
+ 
+## qa-1 deploy 2026-11-12 
+- Rollback target banked: v-df5e37a-fresh 
+- Deploy target: v-c71d541-fresh, develop c71d541, PR 79 merged 
