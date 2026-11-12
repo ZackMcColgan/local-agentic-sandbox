@@ -607,9 +607,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           } catch {}
         }
 
+        // Prohibited contexts: scheduled/subagent threads (flags are type-only and
+        // never assigned today) and task threads — taskId IS assigned on task threads,
+        // so it is the reliable signal for the standing host-tool prohibition.
         const isProhibitedContext = Boolean(
           threadData?.isSubagent ||
-          threadData?.isScheduled
+          threadData?.isScheduled ||
+          threadData?.taskId
         );
         const hostStatus = await determineHostRunnerState(threadHostAccess);
         const includeHostTools = !isProhibitedContext && shouldAdvertiseHostTools(threadHostAccess, hostStatus.runnerState);
