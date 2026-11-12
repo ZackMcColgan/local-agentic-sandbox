@@ -21,6 +21,8 @@ export interface LLMStreamChunk {
   done?: boolean;
   finish_reason?: string;
   outputTokens?: number;
+  /** TOKEN ECONOMICS (a): prompt tokens from usage.prompt_tokens on the finish chunk. */
+  promptTokens?: number;
   eval_count?: number;
   [key: string]: any;
 }
@@ -638,6 +640,9 @@ export class LlamaCppProvider implements LLMProvider {
 
           const finishReason = choice.finish_reason || parsed.finish_reason;
           const usageOutputTokens = parsed.usage?.completion_tokens;
+          // TOKEN ECONOMICS (a): same PR #63 usage extraction site now also carries
+          // prompt_tokens so per-round prompt cost rides the existing plumbing.
+          const usagePromptTokens = parsed.usage?.prompt_tokens;
 
           // Handle streaming delta reasoning
           const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
@@ -645,7 +650,8 @@ export class LlamaCppProvider implements LLMProvider {
             yield {
               message: { thinking: reasoning },
               finish_reason: finishReason || undefined,
-              outputTokens: usageOutputTokens
+              outputTokens: usageOutputTokens,
+              promptTokens: usagePromptTokens
             };
           }
 
@@ -679,7 +685,7 @@ export class LlamaCppProvider implements LLMProvider {
               yield { message: { content }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
             }
           } else if (finishReason) {
-            yield { finish_reason: finishReason, outputTokens: usageOutputTokens };
+            yield { finish_reason: finishReason, outputTokens: usageOutputTokens, promptTokens: usagePromptTokens };
           }
 
           // Handle streaming delta tool calls

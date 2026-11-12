@@ -4,11 +4,39 @@ import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
-import { summarizeTurnHistory } from "../conversationCompaction";
+import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
+import { summarizeTurnHistory, runHybridCompaction, resolveCompactionStrategy } from "../conversationCompaction";
+import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
+import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
+import type { ElisionMeta } from "../microElision";
+import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
 
-export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
+export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
+
+/** Result of turn-start conversation preparation (thread view + compaction report). */
+export interface TurnConversationPreparation {
+  messages: any[];
+  compactedThisTurn: boolean;
+  tokensBeforeCompaction?: number;
+  tokensAfterCompaction?: number;
+  /** True when the boundary summary placed in the model view is the MODEL DIGEST. */
+  modelSummaryUsed?: boolean;
+  /** Set when the hybrid pass failed and the extraction digest was used instead. */
+  fallbackReason?: HybridFallbackReason;
+}
+
+/** Options for the turn-start compaction path (strategy-aware dispatch). */
+export interface TurnStartCompactionOptions {
+  /** Overrides COMPACTION_STRATEGY for this call; defaults to resolveCompactionStrategy(). */
+  strategy?: CompactionStrategy;
+  /** Summarization callback for the hybrid rung. Absent => extraction rung. */
+  summarize?: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+  /** Injectable deadlines (test seam); default to the pinned guardrails. */
+  inactivityMs?: number;
+  totalDeadlineMs?: number;
+}
 
 export interface ThreadAttachment {
   name: string;
@@ -40,9 +68,69 @@ export interface ThreadMessage {
   status?: "completed" | "incomplete" | "error" | "streaming";
   finish_reason?: string;
   outputTokens?: number;
+  /** TOKEN ECONOMICS (a): prompt tokens recorded per model round in this turn. */
+  roundPromptTokens?: number[];
+  /** TOKEN ECONOMICS (c): micro-elision audit — every stub applied during the
+   * turn (tool, target, original size, round). The full results remain in
+   * `traces`, so a stubbed result stays recoverable from the thread record. */
+  microElisions?: ElisionMeta[];
+  /** TOKEN ECONOMICS (d): read-dedup audit — every unchanged re-read stubbed
+   * during the turn (path, content hash, the earlier read's round/trace, and
+   * the re-read's round). The full content of the first read remains in
+   * `traces`, so a stubbed read stays recoverable from the thread record. */
+  readDedups?: ReadDedupMeta[];
+  /** TOKEN ECONOMICS (a): per-job rollup for this turn (rounds, prompt integral, output, compactions). */
+  tokenEconomics?: JobTokenRollup;
+}
+
+/**
+ * TURN-LIVENESS: derived heartbeat state for a thread record.
+ * - "alive": turn is live and its record was touched within TURN_STALL_WINDOW_MS.
+ * - "stalled": turn is live but no activity landed past the stale window.
+ * - "settled": turn is not live (completed / stopped / failed / paused).
+ */
+export type ThreadLiveness = "alive" | "stalled" | "settled";
+
+/** How long a live turn may go without a record touch before it reads as stalled. */
+export const TURN_STALL_WINDOW_MS = 600000;
+
+/**
+ * Derives liveness from the record's last-activity timestamp (updatedAt) against the
+ * live-execution state. A live-but-stale turn is NEVER reconciled to completed here;
+ * reconciliation stays owned by reconcileThread.
+ */
+export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
+  const isLive =
+    thread.status === "active" ||
+    thread.status === "running" ||
+    activeExecutionSet.has(thread.id) ||
+    Boolean(getActiveTurn(thread.id));
+  if (!isLive) return "settled";
+  const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
+  if (!Number.isFinite(touchedAt)) return "stalled";
+  return now - touchedAt <= TURN_STALL_WINDOW_MS ? "alive" : "stalled";
+}
+
+/**
+ * TURN-LIVENESS heartbeat: refreshes the thread record's updatedAt without touching
+ * messages or status, so a working round reads ALIVE even between snapshot writes.
+ */
+export function touchActiveTurn(threadId: string): void {
+  try {
+    const filePath = path.join(resolveThreadsDir(), `${threadId}.json`);
+    if (!fs.existsSync(filePath)) return;
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+    if (!raw || raw.id !== threadId) return;
+    raw.updatedAt = new Date().toISOString();
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+  } catch {}
 }
 
 export interface ThreadCompactionBoundary {
+  strategy?: CompactionStrategy;
+  extractionDigest?: string;
+  fallbackLogged?: boolean;
+  fallbackReason?: HybridFallbackReason;
   throughMessageId: string;
   summary: string;
   compactedAt: string;
@@ -56,6 +144,7 @@ export interface Thread {
   status: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   createdAt: string;
   updatedAt: string;
+  liveness?: ThreadLiveness;
   model: string;
   reasoningEffort: "low" | "medium" | "xhigh";
   messages: ThreadMessage[];
@@ -68,6 +157,12 @@ export interface Thread {
   isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /**
+   * TOKEN ECONOMICS (a): per-job rollup aggregated across the thread's turns
+   * (rounds, prompt-token integral, output tokens, compaction count). Surfaced
+   * with the board item; no separate UI surface in this pass.
+   */
+  tokenEconomics?: JobTokenRollup;
 }
 
 export function resolveThreadsDir(): string {
@@ -537,6 +632,11 @@ export class ThreadStore {
       this.saveThread(thread);
     }
 
+    // TURN-LIVENESS: stamp the derived heartbeat state on the returned record. Derived
+    // AFTER reconciliation and never counted as a change, so a stale updatedAt is not
+    // rewritten (a save would refresh updatedAt and mask a stalled turn).
+    thread.liveness = computeTurnLiveness(thread, Date.now());
+
     return changed;
   }
 
@@ -646,6 +746,10 @@ export class ThreadStore {
       try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
     }
     thread.updatedAt = new Date().toISOString();
+    // TOKEN ECONOMICS (a): the per-job rollup rides on the thread record so the
+    // board item surfaces it without a separate UI surface. Recomputed on every
+    // save from the per-turn rollups recorded on assistant messages.
+    thread.tokenEconomics = computeThreadTokenEconomics(thread);
     const targetFile = this.getFilePath(thread.id);
     const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
     try {
@@ -767,6 +871,23 @@ export class ThreadStore {
 
   upsertMessage(threadId: string, message: ThreadMessage): Thread | null {
     return this.addMessage(threadId, message);
+  }
+
+  /**
+   * TOKEN ECONOMICS (a): small read path for the board item. Returns the
+   * per-job rollup (rounds, prompt-token integral, output tokens, compaction
+   * count) aggregated from the thread's per-turn records.
+   */
+  getTokenEconomics(threadId: string): JobTokenRollup {
+    const filePath = this.getFilePath(threadId);
+    let thread: Thread | null = null;
+    if (fs.existsSync(filePath)) {
+      try {
+        thread = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+      } catch {}
+    }
+    if (!thread) return { rounds: 0, promptTokens: 0, outputTokens: 0, compactions: 0 };
+    return thread.tokenEconomics ?? computeThreadTokenEconomics(thread);
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
@@ -1024,16 +1145,96 @@ export class ThreadStore {
     };
   }
 
+  async compactThreadIncrementalHybrid(
+    thread: Thread,
+    opts: { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>; inactivityMs?: number; totalDeadlineMs?: number }
+  ): Promise<{
+    noop: boolean;
+    reason?: string;
+    tokensBefore: number;
+    tokensAfter: number;
+    summary?: string;
+    throughMessageId?: string;
+    modelSummaryUsed: boolean;
+    fallbackReason?: HybridFallbackReason;
+    thread: Thread;
+  }> {
+    const messages = thread.messages || [];
+    const tokensBefore = estimateTokens(this.buildModelMessages(thread));
+    if (messages.length <= 4) {
+      return { noop: true, reason: "insufficient_messages", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const hasSystem = messages[0]?.role === "system";
+    const baseStartIdx = hasSystem ? 1 : 0;
+    const prevBoundaryIdx = thread.compaction?.throughMessageId
+      ? messages.findIndex((m) => m.id === thread.compaction?.throughMessageId)
+      : -1;
+    const uncompactedStartIdx = prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
+    const endIdx = Math.max(baseStartIdx, messages.length - 4);
+    if (endIdx <= uncompactedStartIdx) {
+      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const result = await runHybridCompaction(messages, {
+      strategy: "hybrid",
+      summarize: opts.summarize,
+      inactivityMs: opts.inactivityMs,
+      totalDeadlineMs: opts.totalDeadlineMs,
+    });
+    if (!result.compacted) {
+      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+    }
+    const throughMessage = messages[endIdx - 1];
+    this.applyCompactionBoundary(
+      thread,
+      result.liveContent ?? "",
+      throughMessage.id,
+      result.tokensBefore,
+      result.tokensAfter
+    );
+    thread.compaction!.strategy = "hybrid";
+    thread.compaction!.extractionDigest = result.extractionDigest;
+    if (result.fallback) {
+      thread.compaction!.fallbackLogged = true;
+      thread.compaction!.fallbackReason = result.fallbackReason;
+    }
+    this.saveThread(thread);
+    return {
+      noop: false,
+      tokensBefore: result.tokensBefore,
+      tokensAfter: result.tokensAfter,
+      summary: result.liveContent,
+      throughMessageId: throughMessage.id,
+      modelSummaryUsed: result.modelSummaryUsed,
+      fallbackReason: result.fallbackReason,
+      thread,
+    };
+  }
+
+  /**
+   * Turn-start conversation preparation.
+   *
+   * Overload contract: without a summarize callback the call stays synchronous
+   * (extraction rung, byte-identical to prior behavior). With a summarize
+   * callback the call returns a Promise driven by the hybrid rung.
+   */
   prepareTurnConversationMessages(
     thread: Thread | null,
     clientMessages: any[],
-    maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS
-  ): {
-    messages: any[];
-    compactedThisTurn: boolean;
-    tokensBeforeCompaction?: number;
-    tokensAfterCompaction?: number;
-  } {
+    maxBudgetTokens: number,
+    opts: TurnStartCompactionOptions & { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string> }
+  ): Promise<TurnConversationPreparation>;
+  prepareTurnConversationMessages(
+    thread: Thread | null,
+    clientMessages: any[],
+    maxBudgetTokens?: number,
+    opts?: TurnStartCompactionOptions
+  ): TurnConversationPreparation;
+  prepareTurnConversationMessages(
+    thread: Thread | null,
+    clientMessages: any[],
+    maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS,
+    opts?: TurnStartCompactionOptions
+  ): TurnConversationPreparation | Promise<TurnConversationPreparation> {
     if (thread && thread.messages && thread.messages.length > 0) {
       const clientUserMessages = (clientMessages || []).filter((m: any) => m.role === "user");
       const lastClientUser = clientUserMessages[clientUserMessages.length - 1];
@@ -1055,9 +1256,46 @@ export class ThreadStore {
       }
 
       let modelView = this.buildModelMessages(thread);
-      const triggerThreshold = Math.floor(maxBudgetTokens * 0.85);
+      const triggerThreshold = Math.floor(maxBudgetTokens * COMPACTION_THRESHOLD_RATIO);
 
       if (estimateTokens(modelView) > triggerThreshold) {
+        // TURN-START STRATEGY DISPATCH (compaction-hybrid turn-start fix): the
+        // turn-start path must consult COMPACTION_STRATEGY instead of always
+        // running the synchronous extraction rung. The hybrid rung previously
+        // lived only in the mid-turn fit branch, which turn-start compaction
+        // pre-empts, so a flag-on thread crossing the 85% trigger at turn start
+        // got the extraction digest with strategy null.
+        //
+        // strategy=hybrid WITH a summarize callback routes to the hybrid rung:
+        // extraction first, then exactly ONE guarded summarization pass when the
+        // post-extraction model view still exceeds 65% of the budget (temperature
+        // 0.2 pinned, generation capped 8192, 180s inactivity / 5-min total
+        // deadline, identifier post-check). ANY failure, timeout, truncation, or
+        // post-check rejection falls back to the extraction digest and is logged;
+        // the extraction digest is always retained on the thread record as the
+        // audit copy. strategy=extraction, hybrid without a callback, or no
+        // options at all keep the synchronous extraction call byte-identical.
+        const strategy = opts?.strategy ?? resolveCompactionStrategy();
+        if (strategy === "hybrid" && opts?.summarize) {
+          const summarize = opts.summarize;
+          return this.compactThreadIncrementalHybrid(thread, {
+            summarize,
+            inactivityMs: opts.inactivityMs,
+            totalDeadlineMs: opts.totalDeadlineMs
+          }).then((hybridResult) => {
+            if (!hybridResult.noop) {
+              return {
+                messages: this.buildModelMessages(thread),
+                compactedThisTurn: true,
+                tokensBeforeCompaction: hybridResult.tokensBefore,
+                tokensAfterCompaction: hybridResult.tokensAfter,
+                modelSummaryUsed: hybridResult.modelSummaryUsed,
+                fallbackReason: hybridResult.fallbackReason
+              };
+            }
+            return { messages: this.buildModelMessages(thread), compactedThisTurn: false };
+          });
+        }
         const compResult = this.compactThreadIncremental(thread);
         if (!compResult.noop) {
           modelView = this.buildModelMessages(thread);

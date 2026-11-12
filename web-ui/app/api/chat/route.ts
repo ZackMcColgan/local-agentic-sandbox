@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -52,9 +52,19 @@ import {
   estimateTokens,
   CHAT_CONTEXT_BUDGET_TOKENS,
   fitConversationToBudget,
-  HIGH_WATER_BANKING_DIRECTIVE
+  HIGH_WATER_BANKING_DIRECTIVE,
+  resolveRoundDeadlineMs,
+  TURN_TIMEOUT_MARKER,
+  TURN_SIZE_LIMIT_MARKER,
+  TURN_TRUNCATION_MARKER,
+  LENGTH_CONTINUATION_DIRECTIVE,
+  ROUND_TIMEOUT_DIRECTIVE,
+  MAX_STREAMED_CONTENT_CHARS
 } from "@/lib/contextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
+import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
+import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
+import { ReadDedupRegistry, type ReadDedupMeta } from "@/lib/readDedup";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -62,7 +72,7 @@ import {
   buildToolRegistry,
   describeTool
 } from "@/lib/progressiveTools";
-import { compactConversationHistory } from "@/lib/conversationCompaction";
+import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
@@ -110,6 +120,7 @@ const ADVERTISED_TOOLS = new Set([
   "workspace_grep",
   "workspace_read_file",
   "workspace_write_file",
+  "workspace_patch_file",
   "workspace_run_command",
   "git_status",
   "git_diff",
@@ -391,6 +402,9 @@ CRITICAL INSTRUCTIONS:
   - Bounded retries: maximum 2 identical runs of any command or tool call, and maximum 3 distinct strategies per subproblem; if still failing, stop and report BLOCKED with the exact error and command.
   - Targeted tests first: run only the specific test file(s) for the modified module before running any broader test gate.
   - Paging discipline: use startLine/endLine when reading large files instead of re-reading entire files repeatedly.
+- FILE EDITING DISCIPLINE (PATCHES, NOT BLOBS):
+  - Edit existing files with the patch tools: 'host_replace_string' on the host, 'workspace_patch_file' in the workspace. Reserve 'host_write_file' / 'workspace_write_file' for creating NEW files, or for a deliberate full-file rewrite.
+  - Work one file at a time: patch it, run the targeted check for that file, and commit it before editing the next file. Never hold a multi-file rewrite to dump at the end of a turn.
 ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
     let effortDirective = "";
@@ -430,6 +444,15 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     const turnPreImages = new Map<string, string>();
     const turnHostDiffs: TurnFileDiff[] = [];
     const traces: TraceItem[] = [];
+    // TOKEN ECONOMICS (c): micro-elision audit log for this turn — every stub
+    // applied during the turn, with tool + target + original size + round.
+    // Declared alongside the other turn state so both persist paths (abort and
+    // final) can carry it onto the assistant message.
+    const turnMicroElisions: ElisionMeta[] = [];
+    // TOKEN ECONOMICS (d): within-thread read dedup audit log — every stubbed
+    // unchanged re-read, carrying path + content hash + the earlier trace/round
+    // reference. Declared with the other turn state so both persist paths carry it.
+    const turnReadDedups: ReadDedupMeta[] = [];
     let accumulatedThoughts: string[] = [];
 
     let lastFinishReason: string | undefined = undefined;
@@ -462,7 +485,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           timestamp: new Date().toISOString(),
           status: "incomplete" as const,
           finish_reason: lastFinishReason || "abort",
-          outputTokens: finalOutputTokens
+          outputTokens: finalOutputTokens,
+          // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
+          microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
+          // TOKEN ECONOMICS (d): the read-dedup audit rides on the aborted record too.
+          readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined
         };
         threadStore.addMessage(activeThreadId, abortedMsg);
       } catch (err) {
@@ -661,10 +688,38 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const toolRegistry = buildToolRegistry(allTools);
         const llmTools = buildLayer1Tools(allTools);
 
-        const prep = threadStore.prepareTurnConversationMessages(
+        // TURN-START WIRING (compaction-hybrid turn-start fix): the turn-start
+        // prepare now receives the resolved strategy plus the summarize adapter so
+        // a flag-on thread crossing the 85% trigger at turn start reaches the
+        // hybrid rung instead of being pre-empted by the extraction digest.
+        // Flag OFF / unset resolves to "extraction" and the prepare stays on the
+        // synchronous extraction call (the callback is never invoked).
+        const prep = await threadStore.prepareTurnConversationMessages(
           threadData,
           messages,
-          CHAT_CONTEXT_BUDGET_TOKENS
+          CHAT_CONTEXT_BUDGET_TOKENS,
+          {
+            strategy: resolveCompactionStrategy(),
+            summarize: async (req) => {
+              let text = "";
+              let truncated = false;
+              for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+                model: activeModel,
+                messages: [
+                  { role: "system", content: req.prompt },
+                  { role: "user", content: req.digest }
+                ],
+                keep_alive: -1,
+                signal: req.signal,
+                options: { temperature: req.temperature, num_predict: req.maxTokens }
+              })) {
+                req.onProgress?.();
+                if (chunk.message?.content) text += chunk.message.content;
+                if (chunk.finish_reason === "length") truncated = true;
+              }
+              return { text, truncated };
+            }
+          }
         );
         let turnCompacted = prep.compactedThisTurn;
         let turnTokensBefore = prep.tokensBeforeCompaction;
@@ -808,11 +863,53 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let honestAbortInjected = false;
         let searchNudges = 0;
         let lastRoundTools: string[] = [];
+        // ROUND-DEADLINES forensics + honest-end bookkeeping:
+        //  - roundFinishReasons: per-round finish_reason recorded on the turn record.
+        //  - consecutiveDeadlineAborts: a SECOND consecutive deadline-aborted round
+        //    ends the turn with TURN_TIMEOUT_MARKER (never a silent endless retry).
+        //  - consecutiveLengthTruncations: text-round length truncation auto-continues
+        //    ONCE; a second consecutive truncation ends with TURN_TRUNCATION_MARKER.
+        const roundFinishReasons: string[] = [];
+        let consecutiveDeadlineAborts = 0;
+        let consecutiveLengthTruncations = 0;
+        let turnEndedByTimeout = false;
+        let turnEndedBySizeLimit = false;
+        let turnEndedByTruncation = false;
+        let honestEndMarker = "";
+        // Text carried across a length-truncated auto-continue: the final answer
+        // must contain EVERY produced half, never just the last round.
+        let carriedLengthContent = "";
+        // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
+        // rolled up onto the assistant message and the thread record.
+        const roundPromptTokens: number[] = [];
+        let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
+        // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
+        // turnMicroElisions declared with the other turn state, so both persist
+        // paths (abort and final) carry the elision audit onto the message.
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
+        // TOKEN ECONOMICS (d): WITHIN-THREAD READ DEDUP registry. Seeded from the
+        // conversation messages already in context (earlier turns' tool results)
+        // so a re-read in a later turn stubs against the earlier turn's read.
+        // Survives compaction (its own entries map), and the full result of the
+        // first read stays recoverable in the thread trace record.
+        const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
+
         while (true) {
           if (turnAbortController.signal.aborted) break;
+          console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
+
+          // TOKEN ECONOMICS (c): MICRO-ELISION. Superseded tool results (those
+          // past the recent window) are stubbed EVERY round, independent of the
+          // 85K fit trigger, so bulk that the model has already moved past stops
+          // paying prompt tokens. The recent window stays byte-identical; each
+          // stub carries tool + path/command + original size + round metadata and
+          // the full result remains in the thread trace record (audit copy).
+          const roundElision = applyMicroElision(conversationMessages, round + 1);
+          if (roundElision.stubbed > 0) {
+            turnMicroElisions.push(...roundElision.elisions);
+          }
 
           // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
           const compaction = fitConversationToBudget(conversationMessages, {
@@ -825,10 +922,42 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             turnTokensBefore = compaction.tokensBefore;
             turnTokensAfter = compaction.tokensAfter;
             turnCompactionActions = compaction.actions;
+            turnCompactionCount++;
 
             if (activeThreadId && threadData) {
               try {
-                threadStore.compactThreadIncremental(threadData);
+                // ROUTE WIRING (compaction-hybrid step 3): COMPACTION_STRATEGY=hybrid
+                // selects the async hybrid rung; unset/anything-else keeps the
+                // extraction call byte-identical. Summarization pass, identifier
+                // post-check, deadlines, and fallback live in the rung.
+                if (resolveCompactionStrategy() === "hybrid") {
+                  await threadStore.compactThreadIncrementalHybrid(threadData, {
+                    summarize: async (req) => {
+                      let text = "";
+                      let truncated = false;
+                      for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+                        model: activeModel,
+                        messages: [
+                          { role: "system", content: req.prompt },
+                          { role: "user", content: req.digest }
+                        ],
+                        keep_alive: -1,
+                        signal: req.signal,
+                        options: { temperature: req.temperature, num_predict: req.maxTokens }
+                      })) {
+                        // Per-chunk progress hook: re-arms the deadline wrapper's
+                        // inactivity timer so 180s means silence since the LAST
+                        // chunk, not elapsed time since start.
+                        req.onProgress?.();
+                        if (chunk.message?.content) text += chunk.message.content;
+                        if (chunk.finish_reason === "length") truncated = true;
+                      }
+                      return { text, truncated };
+                    }
+                  });
+                } else {
+                  threadStore.compactThreadIncremental(threadData);
+                }
               } catch {}
             }
 
@@ -933,6 +1062,30 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             registerRoundAbortController(activeThreadId, roundAbortController);
           }
 
+          // ROUND-DEADLINES: wall-clock leash on every round. The inactivity timer
+          // re-arms on each streamed chunk (silence since LAST chunk), the total
+          // timer is absolute. Both abort ONLY this round's controller, never the
+          // turn — the existing round-abort path then continues the turn once.
+          const { inactivityMs, totalMs } = resolveRoundDeadlineMs();
+          console.log(`[DBG] dispatch round ${round} inactivity=${inactivityMs} total=${totalMs}`);
+          let roundTimedOut: "inactivity" | "total" | null = null;
+          let roundInactivityTimer: any = null;
+          let roundTotalTimer: any = null;
+          const armRoundDeadline = () => {
+            if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
+            roundInactivityTimer = setTimeout(() => {
+              roundTimedOut = "inactivity";
+              roundAbortController.abort();
+            }, inactivityMs);
+            if (typeof roundInactivityTimer.unref === "function") roundInactivityTimer.unref();
+          };
+          armRoundDeadline();
+          roundTotalTimer = setTimeout(() => {
+            roundTimedOut = "total";
+            roundAbortController.abort();
+          }, totalMs);
+          if (typeof roundTotalTimer.unref === "function") roundTotalTimer.unref();
+
           const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
@@ -951,20 +1104,32 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
           let fullRoundContent = "";
           let roundThinking = "";
+          let roundFinishReason: string | undefined = undefined;
+          let roundSizeCapped = false;
           let toolCallsFromMessage: any[] = [];
 
           try {
             for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
               if (chunk.finish_reason) {
                 lastFinishReason = chunk.finish_reason;
+                roundFinishReason = chunk.finish_reason;
               }
               if (typeof chunk.outputTokens === "number") {
                 turnOutputTokens = chunk.outputTokens;
               } else if (typeof chunk.eval_count === "number") {
                 turnOutputTokens = chunk.eval_count;
               }
+              // TOKEN ECONOMICS (a): prompt tokens arrive on the finish chunk via
+              // the PR #63 usage plumbing (promptTokens) or Ollama's
+              // prompt_eval_count. Exactly one entry is pushed per round.
+              if (typeof chunk.promptTokens === "number") {
+                roundPromptTokens.push(chunk.promptTokens);
+              } else if (typeof chunk.prompt_eval_count === "number") {
+                roundPromptTokens.push(chunk.prompt_eval_count);
+              }
               if (chunk.message?.thinking) {
                 roundThinking += chunk.message.thinking;
+                armRoundDeadline();
                 const currentCumulativeThought = accumulatedThoughts.length > 0
                   ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
                   : roundThinking;
@@ -975,6 +1140,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
                 accumulatedStreamedTokens += textChunk;
+                armRoundDeadline();
+                // TURN SIZE LIMIT: hard cap on total streamed content. A runaway
+                // round (e.g. a huge tool-call payload as one generation) is cut
+                // off with an honest marker and the round ends.
+                if (accumulatedStreamedTokens.length > MAX_STREAMED_CONTENT_CHARS) {
+                  roundSizeCapped = true;
+                  accumulatedStreamedTokens += TURN_SIZE_LIMIT_MARKER;
+                  streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                  await sendEvent({ type: "token", content: TURN_SIZE_LIMIT_MARKER });
+                  roundAbortController.abort();
+                  break;
+                }
                 const currentCumulativeThought = accumulatedThoughts.length > 0
                   ? (roundThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}` : accumulatedThoughts.join("\n\n"))
                   : (roundThinking || undefined);
@@ -990,16 +1167,62 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               throw roundErr;
             }
           } finally {
+            if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
+            if (roundTotalTimer) clearTimeout(roundTotalTimer);
             if (activeThreadId) {
               clearRoundAbortController(activeThreadId, roundAbortController);
             }
           }
+
+          roundFinishReasons.push(roundFinishReason || "stop");
 
           if (roundThinking.trim()) {
             accumulatedThoughts.push(roundThinking.trim());
           }
 
           if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
+            console.log(`[DBG] round ${round} aborted timedOut=${roundTimedOut} sizeCapped=${roundSizeCapped} consec=${consecutiveDeadlineAborts}`);
+            if (roundSizeCapped) {
+              // Size limit hit: the turn ends honestly. No retry — the content
+              // cap exists precisely to stop runaway generations.
+              turnEndedBySizeLimit = true;
+              honestEndMarker = TURN_SIZE_LIMIT_MARKER;
+              reasoningSpan.end("ok", { roundSizeCapped: true });
+              break;
+            }
+            if (roundTimedOut) {
+              roundFinishReasons[roundFinishReasons.length - 1] = "timeout";
+              consecutiveDeadlineAborts++;
+              if (consecutiveDeadlineAborts >= 2) {
+                // Second consecutive deadline-aborted round: end the turn with the
+                // honest marker. Never a silent endless retry.
+                turnEndedByTimeout = true;
+                honestEndMarker = TURN_TIMEOUT_MARKER;
+                accumulatedStreamedTokens += TURN_TIMEOUT_MARKER;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                await sendEvent({ type: "token", content: TURN_TIMEOUT_MARKER });
+                reasoningSpan.end("ok", { roundTimedOut, consecutiveDeadlineAborts });
+                break;
+              }
+              // First abort: existing round-abort path, turn continues once. No
+              // marker in the content yet — a single abort is not an end.
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+              conversationMessages.push({
+                role: "user",
+                content: ROUND_TIMEOUT_DIRECTIVE
+              });
+              reasoningSpan.end("ok", { roundTimedOut });
+              // The retry round must actually be dispatched: lastRoundTools is
+              // empty after an abort, so without awaitingToolRound the loop
+              // would read the abort as "turn completed" and break.
+              groundingDirectivePending = true;
+              lastRoundTools = [];
+              round++;
+              continue;
+            }
             if (fullRoundContent.trim()) {
               conversationMessages.push({
                 role: "assistant",
@@ -1013,6 +1236,36 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
 
           reasoningSpan.end("ok");
+          consecutiveDeadlineAborts = 0;
+
+          console.log(`[DBG] round ${round} finish=${roundFinishReason} toolCalls=${toolCallsFromMessage.length} contentLen=${fullRoundContent.length}`);
+          // SIZE-LIMIT EVENT: finish_reason:"length" with a tool call whose
+          // arguments cannot be parsed = an oversized generation cut off mid-JSON.
+          // Never retried silently: end the turn with the honest marker naming the
+          // tool and the truncated argument byte size.
+          if (
+            roundFinishReason === "length" &&
+            toolCallsFromMessage.length > 0 &&
+            toolCallsFromMessage.some((tc: any) => {
+              const rawArgs = tc.function?.arguments;
+              if (typeof rawArgs !== "string") return false;
+              try { JSON.parse(rawArgs); return false; } catch { return true; }
+            })
+          ) {
+            const bad = toolCallsFromMessage.find((tc: any) => {
+              try { JSON.parse(tc.function?.arguments); return false; } catch { return true; }
+            });
+            const byteSize = (bad?.function?.arguments || "").length;
+            turnEndedBySizeLimit = true;
+            const sizeMarker = `${TURN_SIZE_LIMIT_MARKER} (tool: ${bad?.function?.name}, arguments truncated at ${byteSize} bytes)`;
+            honestEndMarker = sizeMarker;
+            accumulatedStreamedTokens += sizeMarker;
+            streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+            await sendEvent({ type: "token", content: sizeMarker });
+            reasoningSpan.end("ok", { sizeLimit: true, tool: bad?.function?.name, byteSize });
+            break;
+          }
+
           currentAssistantMessage = {
             role: "assistant",
             content: fullRoundContent,
@@ -1044,6 +1297,61 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               );
               round++;
               continue;
+            }
+            // AUTO-CONTINUE ON LENGTH: the model hit num_predict mid-answer.
+            // Continue ONCE with the directive; a second consecutive truncation
+            // ends the turn honestly with the truncation marker.
+            if (
+              roundFinishReason === "length" &&
+              fullRoundContent.trim() &&
+              !turnAbortController.signal.aborted
+            ) {
+              consecutiveLengthTruncations++;
+              if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
+                turnEndedByTruncation = true;
+                honestEndMarker = TURN_TRUNCATION_MARKER;
+                // Keep EVERY produced half: the final answer carries the earlier
+                // truncated rounds plus this one, never just the last round.
+                currentAssistantMessage = {
+                  role: "assistant",
+                  content: carriedLengthContent + fullRoundContent
+                };
+                accumulatedStreamedTokens += TURN_TRUNCATION_MARKER;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                await sendEvent({ type: "token", content: TURN_TRUNCATION_MARKER });
+                break;
+              }
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+              conversationMessages.push({
+                role: "user",
+                content: LENGTH_CONTINUATION_DIRECTIVE
+              });
+              // Bank this half so the final answer keeps every produced part.
+              carriedLengthContent += fullRoundContent;
+              await sendEvent({
+                type: "status",
+                status: "Generation hit the per-message size limit: continue exactly where you stopped."
+              });
+              // The continuation round must actually be dispatched: lastRoundTools
+              // is empty on a text round, so without awaitingToolRound the loop
+              // would read the truncation as "turn completed" and break.
+              groundingDirectivePending = true;
+              lastRoundTools = [];
+              round++;
+              continue;
+            }
+            consecutiveLengthTruncations = 0;
+            // If earlier rounds were length-truncated and auto-continued, the
+            // final answer must carry every produced half, not just this round.
+            if (carriedLengthContent) {
+              currentAssistantMessage = {
+                ...currentAssistantMessage,
+                content: carriedLengthContent + fullRoundContent
+              };
+              carriedLengthContent = "";
             }
             break;
           }
@@ -1402,6 +1710,27 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             });
 
             const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
+            // TOKEN ECONOMICS (d): within-thread read dedup. A read whose
+            // path + content hash matches an earlier read in this thread is
+            // answered with a short stub referencing the earlier trace/round; a
+            // changed file re-reads full and re-anchors the registry. The full
+            // result stays recoverable in the trace record (audit copy pushed
+            // above), and every stub is logged on the turn's readDedups field.
+            // The pinned clamp-bypass expression below stays byte-identical
+            // (chatFilePaging Pin 1 compliance); dedup swaps `result` itself.
+            if (isFileReadTool && !isExecutionError) {
+              const dedupDecision = readDedupRegistry.checkAndRecord(
+                toolName,
+                toolArgs,
+                JSON.stringify(result),
+                round,
+                traces.length - 1
+              );
+              if (dedupDecision.deduplicated && dedupDecision.stub && dedupDecision.meta) {
+                result = { status: "DEDUP_STUB", stub: dedupDecision.stub };
+                turnReadDedups.push({ ...dedupDecision.meta, reReadRound: round });
+              }
+            }
             conversationMessages.push({
               role: "tool",
               name: toolName,
@@ -1453,6 +1782,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
+          }
+
+          // TURN-LIVENESS: round boundary is a discrete progress event — persist the
+          // accumulated content + traces to the thread record immediately (bypassing the
+          // token throttle) and refresh the heartbeat so watchers read ALIVE in-flight work.
+          const roundThought = accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
+          streamSnapshot.maybeWrite(
+            accumulatedStreamedTokens,
+            roundThought,
+            traces as any,
+            { force: true }
+          );
+          if (activeThreadId) {
+            touchActiveTurn(activeThreadId);
           }
 
           if (searchBlocked) {
@@ -1516,6 +1859,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // we do NOT consume them so they return honestly in pendingSteers.
         const shouldSynthesize =
           !turnAbortController.signal.aborted &&
+          !honestEndMarker &&
           (pendingLateSteers.length > 0 ||
             shouldRunPostToolSynthesis({
               userPrompt,
@@ -1693,6 +2037,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               : EMPTY_SYNTHESIS_STAMP;
           }
         }
+
+        // ROUND-DEADLINES honest end: the marker that ended the turn must be in
+        // the persisted content (it was streamed live), and the turn is stamped
+        // incomplete — never a silent "completed".
+        if (honestEndMarker) {
+          turnStatus = "incomplete";
+          if (!cleanedContent.includes(honestEndMarker)) {
+            cleanedContent = cleanedContent.trim()
+              ? `${cleanedContent}\n\n${honestEndMarker}`
+              : honestEndMarker;
+          }
+        }
         // Gather turn attachments using exact write tracking
         const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
@@ -1718,7 +2074,22 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
         }
 
+        // TURN SIZE LIMIT: a runaway generation (e.g. a huge tool-call payload
+        // emitted as content) must never be persisted or streamed whole. Clamp
+        // to a safe prefix (prefer a newline boundary) and stamp honestly.
+        if (cleanedContent.length > MAX_STREAMED_CONTENT_CHARS) {
+          turnStatus = "incomplete";
+          let cut = cleanedContent.slice(0, MAX_STREAMED_CONTENT_CHARS);
+          const lastNewline = cut.lastIndexOf("\n");
+          if (lastNewline > MAX_STREAMED_CONTENT_CHARS / 2) {
+            cut = cut.slice(0, lastNewline);
+          }
+          cleanedContent = `${cut}\n\n${TURN_SIZE_LIMIT_MARKER}`;
+        }
+
         const finalOutputTokens = turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0);
+        // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
+        const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
 
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
@@ -1738,7 +2109,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
             finish_reason: lastFinishReason || "stop",
-            outputTokens: finalOutputTokens
+            roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
+            outputTokens: finalOutputTokens,
+            roundPromptTokens: roundPromptTokens,
+            // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
+            microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
+            // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
+            readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined,
+            tokenEconomics: buildJobTokenRollup({
+              rounds: round,
+              promptTokens: finalPromptTokens,
+              outputTokens: finalOutputTokens,
+              compactions: turnCompactionCount
+            })
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
           assistantPersisted = true;
@@ -1900,3 +2283,4 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     );
   }
 }
+
