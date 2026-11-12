@@ -632,3 +632,10 @@ PR #71 (feature/part-1b-round-deadlines -> develop): product fix commit 2e5c5c4 
 PR #72 (feature/l8-respec-self-termination -> develop, commit 9d753b5): docs/live-e2e.md L8 row amended + L8 Re-Spec section - PASS only by self-termination (TURN_SIZE_LIMIT_MARKER or TURN_TIMEOUT_MARKER, slot idle afterward); a watchdog stop during L8 = FAIL (product defect). Docs-only, gate-ignored.
 No merges, no deploys in this job.
 - ROLLBACK TARGET part-1b deploy before build: local-agentic-sandbox-web-ui:v-cdcf4ae-fresh, pod web-ui-548b99549f-665xt 1/1 Running 1 restart 01:01 CT OOMKill. PR 71 merged 1992039, audit PASS, CI all-four-green run 43194706739 on head 2d00832. Target image v-1992039-fresh.  
+
+## webui-memory-limit - web-ui memory limit 384Mi -> 1Gi (2026-11-12)
+Branch feature/webui-memory-limit from origin/develop @ 9f7528d. RCA: pod web-ui-548b99549f-665xt OOMKilled 01:01 CT Nov 12 2026 (1 restart) - deploy/k8s/web-ui.yaml resources.limits.memory 384Mi too low for the Next.js server under load.
+TEST-FIRST: web-ui/tests/permissions.test.ts Test 5 added (asserts limits block cpu 1000m + memory 1Gi, asserts 384Mi absent, asserts requests cpu 100m / memory 128Mi unchanged). Fail-before: npx tsx --test tests/permissions.test.ts -> 4 pass / 1 fail (Test 5 red on 384Mi). Banked as 331285c.
+PRODUCT PATCH: deploy/k8s/web-ui.yaml limits.memory 384Mi -> 1Gi only. CPU limits (1000m), requests (100m/128Mi), and every other service untouched. Banked as cd52beb.
+GATE: targeted npx tsx --test tests/permissions.test.ts -> 5 pass / 0 fail. npm run test:gate -- --since=origin/develop PASSED 5 pass / 0 fail in 2.631s (<90s budget); gate mapped deploy/k8s/web-ui.yaml to tests/permissions.test.ts (lib/testGate.ts:196-203 Deploy Manifests rule, deploy/k8s/web-ui.yaml coverage exception at lib/testGate.ts:685). Full npm run test NOT run (lifecycle test can tear down the stack).
+No merge, no deploy in this job - driver mechanics done separately.
