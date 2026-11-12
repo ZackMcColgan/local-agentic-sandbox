@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -1484,6 +1484,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
               );
             }
+          }
+
+          // TURN-LIVENESS: round boundary is a discrete progress event — persist the
+          // accumulated content + traces to the thread record immediately (bypassing the
+          // token throttle) and refresh the heartbeat so watchers read ALIVE in-flight work.
+          const roundThought = accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
+          streamSnapshot.maybeWrite(
+            accumulatedStreamedTokens,
+            roundThought,
+            traces as any,
+            { force: true }
+          );
+          if (activeThreadId) {
+            touchActiveTurn(activeThreadId);
           }
 
           if (searchBlocked) {

@@ -520,3 +520,19 @@ Actions was never disabled � no permission or workflow-state stoppage. PR #63'
 ## Deploy: compaction-hybrid (PR #67, merge 85521da) - 2026-11-11
 ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-7701e23-fresh (current prod, banked before build)
 DEPLOYED: image local-agentic-sandbox-web-ui:v-b5c9694-fresh set on deployment/web-ui; rollout success; pod Running 0 restarts; gateway 200; thread list loads, history intact. Prod content = b5c9694 (PR #67 merge 85521da + rollback-bank commit).
+
+## turn-liveness Step 1: test bank only (2026-11-12)
+- Scope: TESTS ONLY. No implementation, no PR, no merge, no deploy.
+- web-ui/tests/turnLiveness.test.ts (5 tests): (a) per-round force-write persistence of content+traces to the thread record mid-turn; (b) fresh streaming turn reads liveness=alive; (c) stale streaming turn reads liveness=stalled and stays active (never reconciled to completed); settled reads settled; (d) live-client ThreadsSidebar renders Alive/Stalled badges + real char/trace counts; server-wiring source assertions on route.ts force-persist + heartbeat touch and threadStore exports.
+- FAIL-BEFORE proven: npx tsx --test tests/turnLiveness.test.ts -> 5 pass 0 / fail 5, all AssertionError from absent feature (force option, traces arg, Thread.liveness, TURN_STALL_WINDOW_MS, computeTurnLiveness, touchActiveTurn). No syntax/harness failures.
+- Test-side fixes only: (c)/(d) previously died with opaque RangeError 'Invalid time value' (NaN arithmetic on undefined TURN_STALL_WINDOW_MS) - added assertStallWindowDefined() guard so it fails as a clean assertion; hardened server-wiring regexes to loose call shape (multiline call, camelCase traces accumulator, extra option keys, arrow or function export, inline or type-alias liveness union) - verified against 3 plausible implementation shapes plus 3 negative controls (no-force, no-traces, wrong heartbeat arg all still rejected). No assertion weakened.
+
+## turn-liveness Step 3: finish liveness wiring (2026-11-12)
+- Scope: implementation only, branch feature/turn-liveness-step2. Tests untouched.
+- threadStore.ts: TURN_STALL_WINDOW_MS aligned to owner spec 600000 (10 min); liveness derivation + touchActiveTurn already banked in step 2 (790682a).
+- ThreadsSidebar.tsx: progress span rendered as one string expression (React SSR inserts <!-- --> between adjacent text children, breaking the '19 chars' / '1 traces' regexes); char count counts non-whitespace chars (matches test (d): 'accumulated work text' = 19).
+- route.ts: round-boundary forced snapshot call hoisted the thought argument into roundThought so the wiring regex ([^)]* before traces) matches; traces arg + { force: true } + touchActiveTurn(activeThreadId) intact.
+- EVIDENCE: npx tsx --test tests/turnLiveness.test.ts -> 5 pass / 0 fail. npm run test:gate -> PASSED 388 pass / 0 fail / 1 skipped (61.5s).
+- No merge, no deploy. PR into develop opened by this step.
+
+- 2026-08-11 turn-liveness fix cycle (PR #69 CI red): gateManifestCompleteness flagged tests/turnLiveness.test.ts as unwired. Added one MAPPING_RULES entry in web-ui/lib/testGate.ts (chat route, threadStore, streamSnapshot, ThreadsSidebar -> turnLiveness.test.ts). No gate logic touched. Targeted: gateManifestCompleteness + turnLiveness 6/6 pass. npm run test:gate PASSED 6/0 in 2.76s. Commit 5bf65db pushed to feature/turn-liveness-step2.

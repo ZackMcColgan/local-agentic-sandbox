@@ -184,6 +184,15 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/supervisorGitOpsIntegration.test.ts"
     ]
   },
+  // Turn liveness: stall window, heartbeat, forced round-boundary snapshot, sidebar badges
+  {
+    match: (p) =>
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/threads/streamSnapshot") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/turnLiveness.test.ts"]
+  },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {
     match: (p) =>
