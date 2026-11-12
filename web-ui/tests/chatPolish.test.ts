@@ -281,6 +281,120 @@ Use \`run_command\` for shell actions.
         "Must NOT render compaction-turn-note when compactedThisTurn is false or omitted"
       );
     });
+
+    it("renders compaction action chips under the pill when the message carries compactionActions", () => {
+      const messagesWithActions: any[] = [
+        {
+          id: "m-asst-actions",
+          role: "assistant" as const,
+          content: "Reply after a compaction that applied real actions.",
+          compactedThisTurn: true,
+          tokensBeforeCompaction: 88400,
+          tokensAfterCompaction: 14200,
+          compactionActions: ["elide_tool_outputs", "drop_old_turns", "truncate_oversize"]
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: messagesWithActions
+        })
+      );
+
+      // Pill line must still be present unchanged
+      assert.ok(
+        html.includes('data-testid="compaction-turn-note"'),
+        "Compaction pill must still render when actions are present"
+      );
+      assert.ok(
+        html.includes("History compacted") && html.includes("88,400") && html.includes("14,200") && html.includes("tokens"),
+        "Pill must keep the existing 'History compacted: X -> Y tokens' line"
+      );
+
+      // Action chips must render from the real action data
+      assert.ok(
+        html.includes('data-testid="compaction-action-chip"'),
+        "Compaction action chips must render under the pill"
+      );
+      assert.ok(html.includes("Elide tool outputs"), "Chip must show elide_tool_outputs action");
+      assert.ok(html.includes("Drop old turns"), "Chip must show drop_old_turns action");
+      assert.ok(html.includes("Truncate oversize"), "Chip must show truncate_oversize action");
+    });
+
+    it("caps action chips and shows a '+N more' overflow when the action list exceeds the cap", () => {
+      const messagesOverflow: any[] = [
+        {
+          id: "m-asst-overflow",
+          role: "assistant" as const,
+          content: "Reply after a compaction with many actions.",
+          compactedThisTurn: true,
+          tokensBeforeCompaction: 90000,
+          tokensAfterCompaction: 15000,
+          compactionActions: [
+            "elide_tool_outputs",
+            "drop_old_turns",
+            "truncate_oversize",
+            "elide_tool_outputs",
+            "drop_old_turns"
+          ]
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: messagesOverflow
+        })
+      );
+
+      const chipCount = (html.match(/data-testid="compaction-action-chip"/g) || []).length;
+      assert.equal(chipCount, 3, "Action chips must be capped at 3 chips");
+      assert.ok(
+        html.includes('data-testid="compaction-action-overflow"') && html.includes("more"),
+        "Overflow chip must render '+N more' beyond the cap"
+      );
+    });
+
+    it("renders the pill line unchanged when a compaction has no actions", () => {
+      const messagesNoActions: any[] = [
+        {
+          id: "m-asst-no-actions",
+          role: "assistant" as const,
+          content: "Reply after a compaction with no recorded actions.",
+          compactedThisTurn: true,
+          tokensBeforeCompaction: 88400,
+          tokensAfterCompaction: 14200,
+          compactionActions: undefined
+        }
+      ];
+
+      const html = renderToString(
+        React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "qwen3.8:27b-q3_k_m",
+          reasoningEffort: "medium",
+          messages: messagesNoActions
+        })
+      );
+
+      assert.ok(
+        html.includes('data-testid="compaction-turn-note"'),
+        "Pill must render for compaction without actions"
+      );
+      assert.ok(
+        html.includes("History compacted") && html.includes("88,400") && html.includes("14,200") && html.includes("tokens"),
+        "Pill line must be unchanged when there are no actions"
+      );
+      assert.ok(
+        !html.includes('data-testid="compaction-action-chip"'),
+        "No action chips must render when compactionActions is absent"
+      );
+    });
   });
 
   // -------------------------------------------------------------
