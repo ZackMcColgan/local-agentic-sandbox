@@ -663,3 +663,10 @@ Pushed 8c5b5ef to origin/feature/token-economics. No PR, no merge, no deploy in 
 
 ## Deploy: token-economics (PR #74, merge 001066e) - 2026-11-12
 ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, banked before build)
+## Finding A job - host-tool prohibition gate reads unassigned flags (2026-11-12)
+- Bug: chat route prohibition gate (web-ui/app/api/chat/route.ts ~L610) read threadData.isSubagent/isScheduled - type-only declarations in threadStore.ts, never assigned anywhere. Task threads received host tools despite the standing prohibition.
+- Step 1 (test harness fix, commit 6614da0): verified the unverified hypothesis against web-ui/tests/hostSettingsDefault.test.ts L189 - loop did decoder.decode(value = undefined as any, ...) with reader.read() destructuring only { done }; strict-mode ReferenceError confirmed by direct run. Patched test only (destructure { done, value }). FAIL-BEFORE confirmed: 4 pass / 1 fail, failure is AssertionError 'Task thread must NEVER be offered host tool host_run_powershell' - red for the RIGHT reason (task thread IS offered host tools).
+- Step 2 (gate, commit 9d9da38): route.ts gate now treats Boolean(threadData?.isSubagent || threadData?.isScheduled || threadData?.taskId) as prohibited; taskId is assigned on task threads so it is the reliable signal.
+- Step 3 (threads route, commit 7fd0cbf): both task-thread createThread sites (app/api/threads/route.ts L105 and L116) now pass hostAccess: false.
+- Gate: npm run test:gate PASSED 233 pass / 0 fail, 38.7s (<90s budget). Behavioral test 5 now green: task thread offered NO host tools.
+- PR opened into develop by this job; no merge, no deploy (driver owns those).
