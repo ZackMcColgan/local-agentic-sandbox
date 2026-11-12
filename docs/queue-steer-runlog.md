@@ -670,3 +670,4 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Step 3 (threads route, commit 7fd0cbf): both task-thread createThread sites (app/api/threads/route.ts L105 and L116) now pass hostAccess: false.
 - Gate: npm run test:gate PASSED 233 pass / 0 fail, 38.7s (<90s budget). Behavioral test 5 now green: task thread offered NO host tools.
 - PR opened into develop by this job; no merge, no deploy (driver owns those).
+- 2026-11-12 finding-a deploy: rollback target v-001066e-fresh banked before build of v-d056034-fresh.  
