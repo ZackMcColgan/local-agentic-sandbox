@@ -618,3 +618,4 @@ No merge, no deploy, no COMPACTION_STRATEGY flip, no kubectl rollout in this job
   
 ## Deploy: compaction-hybrid turn-start fix (PR #70, merge 57518ac) - 2026-11-11  
 ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-6555510-fresh (current prod, banked before build)  
+DEPLOYED: image local-agentic-sandbox-web-ui:v-cdcf4ae-fresh set on deployment/web-ui; rollout success; pod web-ui-7dfbf5bfbb-vkmx6 1/1 Running 0 restarts; gateway 200; thread list loads (12.5MB), history intact. Prod content = cdcf4ae (PR #70 merge 57518ac + rollback-bank commit). Flag still extraction (COMPACTION_STRATEGY unset) - hybrid flip + live verification pending.  
