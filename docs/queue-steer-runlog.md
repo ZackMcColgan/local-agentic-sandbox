@@ -678,3 +678,4 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Added test 7 to existing web-ui/tests/threadDeleteUi.test.ts (same source-inspection style) asserting the branching copy and absence of the blanket claim.
 - docs/live-coverage.md: aiLifecycle.test.ts row reclassified as live-gated behind npm run test:lifecycle (PR #61), no longer dependency-free unit test.
 - Gate: npm run test:gate PASSED 153 pass / 0 fail, 25.5s (<90s budget).
+- 2026-11-12 doc-honesty deploy: rollback target v-d056034-fresh banked before build of v-a9736db-fresh.  
