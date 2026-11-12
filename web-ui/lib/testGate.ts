@@ -193,6 +193,18 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar"),
     tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
   },
+  // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
+  // micro-elision of superseded tool results, and within-thread read dedup
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/microElision") ||
+      p.includes("lib/readDedup") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/llm/"),
+    tests: ["tests/tokenEconomics.test.ts", "tests/microElision.test.ts", "tests/readDedup.test.ts"]
+  },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {
     match: (p) =>
