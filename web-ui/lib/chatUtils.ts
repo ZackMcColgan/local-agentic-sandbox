@@ -41,17 +41,17 @@ export function computeModelOptions(
 
   if (effectiveEffort === "low") {
     opts.temperature = 0.2;
-    opts.num_predict = 8192;
+    opts.num_predict = 16384;
   } else if (effectiveEffort === "xhigh") {
     opts.temperature = 0.7;
-    opts.num_predict = 8192;
+    opts.num_predict = 16384;
   } else if (effectiveEffort === "medium") {
     opts.temperature = 0.5;
-    opts.num_predict = 8192;
+    opts.num_predict = 16384;
   } else {
     // For models without reasoning effort support (e.g. Hermes 3), use standard unbiased defaults
     opts.temperature = 0.7;
-    opts.num_predict = 8192;
+    opts.num_predict = 16384;
   }
 
   return opts;

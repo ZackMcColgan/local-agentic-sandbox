@@ -340,7 +340,7 @@ export function resolveRoundModelOptions(params: {
     result.n_keep = params.numKeep;
     result.numKeep = params.numKeep;
   } else {
-    result.num_predict = baseOpts.num_predict || 8192;
+    result.num_predict = baseOpts.num_predict || 16384;
   }
   return result;
 }
