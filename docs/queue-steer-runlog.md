@@ -679,3 +679,4 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - docs/live-coverage.md: aiLifecycle.test.ts row reclassified as live-gated behind npm run test:lifecycle (PR #61), no longer dependency-free unit test.
 - Gate: npm run test:gate PASSED 153 pass / 0 fail, 25.5s (<90s budget).
 - 2026-11-12 doc-honesty deploy: rollback target v-d056034-fresh banked before build of v-a9736db-fresh.  
+- 2026-11-12 doc-honesty deploy: v-a9736db-fresh deployed and S4-verified. Pod web-ui-6698987686-z7z45 1/1 Running 0 restarts, gateway 200, /api/threads 200 with 64 threads. Rollback target was v-d056034-fresh. prod == develop at merge a9736db.  
