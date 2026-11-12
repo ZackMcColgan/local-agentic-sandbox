@@ -290,7 +290,7 @@ export function ThreadsSidebar({
             const isSelected = thread.id === selectedThreadId;
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
             const progressChars = (thread.messages || []).reduce(
-              (n, m) => n + (m.content ? m.content.length : 0),
+              (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
               0
             );
             const progressTraces = (thread.messages || []).reduce(
@@ -419,7 +419,7 @@ export function ThreadsSidebar({
                     )}
                     {livenessBadge && (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {progressChars} chars · {progressTraces} traces
+                        {`${progressChars} chars · ${progressTraces} traces`}
                       </span>
                     )}
                   </div>

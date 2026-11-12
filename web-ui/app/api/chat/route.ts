@@ -1489,9 +1489,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           // TURN-LIVENESS: round boundary is a discrete progress event — persist the
           // accumulated content + traces to the thread record immediately (bypassing the
           // token throttle) and refresh the heartbeat so watchers read ALIVE in-flight work.
+          const roundThought = accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
           streamSnapshot.maybeWrite(
             accumulatedStreamedTokens,
-            accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+            roundThought,
             traces as any,
             { force: true }
           );

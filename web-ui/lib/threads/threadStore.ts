@@ -52,7 +52,7 @@ export interface ThreadMessage {
 export type ThreadLiveness = "alive" | "stalled" | "settled";
 
 /** How long a live turn may go without a record touch before it reads as stalled. */
-export const TURN_STALL_WINDOW_MS = 30000;
+export const TURN_STALL_WINDOW_MS = 600000;
 
 /**
  * Derives liveness from the record's last-activity timestamp (updatedAt) against the
