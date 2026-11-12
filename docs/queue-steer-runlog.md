@@ -659,3 +659,7 @@ Implementation banked as 8c5b5ef (4 files, +262/-2): web-ui/lib/readDedup.ts (ne
 TESTS: npx tsx --test tests/readDedup.test.ts -> 6 pass / 0 fail (fail-before now green). Targeted batch readDedup+microElision+tokenEconomics+gateManifestCompleteness+testGate -> 31 pass / 0 fail. npm run test:gate via bridge PASSED 345 pass / 0 fail / 1 skipped in 60.2s (<90s budget). Full npm run test NOT run (lifecycle test can tear down the stack).
 Pushed 8c5b5ef to origin/feature/token-economics. No PR, no merge, no deploy in this step - driver issues the PR ticket next.
 
+
+
+## Deploy: token-economics (PR #74, merge 001066e) - 2026-11-12
+ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, banked before build)
