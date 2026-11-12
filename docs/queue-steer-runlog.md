@@ -626,3 +626,8 @@ PRODUCT PATCHES in web-ui/app/api/chat/route.ts: (1) per-round wall-clock deadli
 GATE WIRING: web-ui/lib/testGate.ts turn-liveness rule now maps tests/roundDeadlines.test.ts alongside turnLiveness.test.ts. gateManifestCompleteness + testGate 6/6 pass.
 GATE: npm run test:gate PASSED 249 pass / 0 fail in 57.2s (<90s budget). Full npm run test NOT run (lifecycle test can tear down the stack).
 No merge, no deploy. PR into develop opened by next step.
+
+## PART 1B PR #71 opened + L8 re-spec PR #72 opened (2026-11-12)
+PR #71 (feature/part-1b-round-deadlines -> develop): product fix commit 2e5c5c4 on top of wip bank 798f4f4. Branch diff vs develop: route.ts 224/1, contextBudget.ts 65/1, testGate.ts 1/1, roundDeadlines.test.ts 399/0, runlog 7/0. Body carries acceptance evidence (pre-fix 5/5 red, post-fix 10/10 green, gate 249/0 in 57.2s).
+PR #72 (feature/l8-respec-self-termination -> develop, commit 9d753b5): docs/live-e2e.md L8 row amended + L8 Re-Spec section - PASS only by self-termination (TURN_SIZE_LIMIT_MARKER or TURN_TIMEOUT_MARKER, slot idle afterward); a watchdog stop during L8 = FAIL (product defect). Docs-only, gate-ignored.
+No merges, no deploys in this job.
