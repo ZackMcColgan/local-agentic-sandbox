@@ -63,6 +63,7 @@ import {
 } from "@/lib/contextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
+import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -442,6 +443,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     const turnPreImages = new Map<string, string>();
     const turnHostDiffs: TurnFileDiff[] = [];
     const traces: TraceItem[] = [];
+    // TOKEN ECONOMICS (c): micro-elision audit log for this turn — every stub
+    // applied during the turn, with tool + target + original size + round.
+    // Declared alongside the other turn state so both persist paths (abort and
+    // final) can carry it onto the assistant message.
+    const turnMicroElisions: ElisionMeta[] = [];
     let accumulatedThoughts: string[] = [];
 
     let lastFinishReason: string | undefined = undefined;
@@ -474,7 +480,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           timestamp: new Date().toISOString(),
           status: "incomplete" as const,
           finish_reason: lastFinishReason || "abort",
-          outputTokens: finalOutputTokens
+          outputTokens: finalOutputTokens,
+          // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
+          microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined
         };
         threadStore.addMessage(activeThreadId, abortedMsg);
       } catch (err) {
@@ -864,12 +872,26 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // rolled up onto the assistant message and the thread record.
         const roundPromptTokens: number[] = [];
         let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
+        // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
+        // turnMicroElisions declared with the other turn state, so both persist
+        // paths (abort and final) carry the elision audit onto the message.
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (true) {
           if (turnAbortController.signal.aborted) break;
           console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
+
+          // TOKEN ECONOMICS (c): MICRO-ELISION. Superseded tool results (those
+          // past the recent window) are stubbed EVERY round, independent of the
+          // 85K fit trigger, so bulk that the model has already moved past stops
+          // paying prompt tokens. The recent window stays byte-identical; each
+          // stub carries tool + path/command + original size + round metadata and
+          // the full result remains in the thread trace record (audit copy).
+          const roundElision = applyMicroElision(conversationMessages, round + 1);
+          if (roundElision.stubbed > 0) {
+            turnMicroElisions.push(...roundElision.elisions);
+          }
 
           // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
           const compaction = fitConversationToBudget(conversationMessages, {
@@ -2051,6 +2073,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
             outputTokens: finalOutputTokens,
             roundPromptTokens: roundPromptTokens,
+            // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
+            microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
             tokenEconomics: buildJobTokenRollup({
               rounds: round,
               promptTokens: finalPromptTokens,

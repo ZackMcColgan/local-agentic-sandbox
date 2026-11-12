@@ -138,8 +138,11 @@ describe("Micro-elision (c): stub metadata", () => {
   });
 
   it("a stub for a command-bearing tool carries the command as the target", () => {
-    const messages = buildToolConversation(6, 6000);
-    applyMicroElision(messages, 6);
+    // 8 results with a window of 5 leaves indices 0..2 stale: the read (0), the
+    // command (1), and the next read (2). The command-bearing result must be
+    // stubbed with its command as the target.
+    const messages = buildToolConversation(8, 6000);
+    applyMicroElision(messages, 8);
     const cmdStub = messages.find(
       (m) => m.role === "tool" && m.elided && m.name === "workspace_run_command"
     ) as any;
