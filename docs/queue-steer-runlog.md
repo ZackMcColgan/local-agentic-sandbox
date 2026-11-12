@@ -671,3 +671,10 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Gate: npm run test:gate PASSED 233 pass / 0 fail, 38.7s (<90s budget). Behavioral test 5 now green: task thread offered NO host tools.
 - PR opened into develop by this job; no merge, no deploy (driver owns those).
 - 2026-11-12 finding-a deploy: rollback target v-001066e-fresh banked before build of v-d056034-fresh.  
+
+## Doc-honesty job - truthful thread-delete copy + live-coverage row (2026-11-12)
+- Verified threadStore.deleteThread (web-ui/lib/threads/threadStore.ts): ghost task thread (id === thread-<taskId> or thread-task-*, L913-915) UNLINKS checkpoint manifest (L920-926); real thread with taskId RETAINS checkpoint and marks task cancelled (L927-941); ordinary thread has no checkpoint.
+- ThreadsSidebar.tsx (~L587) and NavigationDrawer.tsx (~L546) dialog copy now branches on the same ghost-id condition: ghost -> 'All messages and the task checkpoint ... removed'; real task -> 'checkpoint is retained and the task will be marked cancelled'; ordinary -> messages only. Old copy claimed checkpoints removed for every thread.
+- Added test 7 to existing web-ui/tests/threadDeleteUi.test.ts (same source-inspection style) asserting the branching copy and absence of the blanket claim.
+- docs/live-coverage.md: aiLifecycle.test.ts row reclassified as live-gated behind npm run test:lifecycle (PR #61), no longer dependency-free unit test.
+- Gate: npm run test:gate PASSED 153 pass / 0 fail, 25.5s (<90s budget).

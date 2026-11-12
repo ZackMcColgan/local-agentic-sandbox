@@ -541,7 +541,14 @@ export function NavigationDrawer({
                   Delete &ldquo;{confirmDeleteThread.title || "Untitled session"}&rdquo;?
                 </h3>
                 <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
-                  This action is permanent and cannot be undone. All messages and task checkpoints for this session will be removed.
+                  This action is permanent and cannot be undone.{" "}
+                  {confirmDeleteThread.taskId &&
+                  (confirmDeleteThread.id === `thread-${confirmDeleteThread.taskId}` ||
+                    confirmDeleteThread.id.startsWith("thread-task-"))
+                    ? "All messages and the task checkpoint for this session will be removed."
+                    : confirmDeleteThread.taskId
+                      ? "All messages for this session will be removed. The task checkpoint is retained and the task will be marked cancelled."
+                      : "All messages for this session will be removed."}
                 </p>
               </div>
             </div>
