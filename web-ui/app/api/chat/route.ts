@@ -52,7 +52,14 @@ import {
   estimateTokens,
   CHAT_CONTEXT_BUDGET_TOKENS,
   fitConversationToBudget,
-  HIGH_WATER_BANKING_DIRECTIVE
+  HIGH_WATER_BANKING_DIRECTIVE,
+  resolveRoundDeadlineMs,
+  TURN_TIMEOUT_MARKER,
+  TURN_SIZE_LIMIT_MARKER,
+  TURN_TRUNCATION_MARKER,
+  LENGTH_CONTINUATION_DIRECTIVE,
+  ROUND_TIMEOUT_DIRECTIVE,
+  MAX_STREAMED_CONTENT_CHARS
 } from "@/lib/contextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
@@ -836,11 +843,25 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let honestAbortInjected = false;
         let searchNudges = 0;
         let lastRoundTools: string[] = [];
+        // ROUND-DEADLINES forensics + honest-end bookkeeping:
+        //  - roundFinishReasons: per-round finish_reason recorded on the turn record.
+        //  - consecutiveDeadlineAborts: a SECOND consecutive deadline-aborted round
+        //    ends the turn with TURN_TIMEOUT_MARKER (never a silent endless retry).
+        //  - consecutiveLengthTruncations: text-round length truncation auto-continues
+        //    ONCE; a second consecutive truncation ends with TURN_TRUNCATION_MARKER.
+        const roundFinishReasons: string[] = [];
+        let consecutiveDeadlineAborts = 0;
+        let consecutiveLengthTruncations = 0;
+        let turnEndedByTimeout = false;
+        let turnEndedBySizeLimit = false;
+        let turnEndedByTruncation = false;
+        let honestEndMarker = "";
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
         while (true) {
           if (turnAbortController.signal.aborted) break;
+          console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
 
           // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
           const compaction = fitConversationToBudget(conversationMessages, {
@@ -992,6 +1013,30 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             registerRoundAbortController(activeThreadId, roundAbortController);
           }
 
+          // ROUND-DEADLINES: wall-clock leash on every round. The inactivity timer
+          // re-arms on each streamed chunk (silence since LAST chunk), the total
+          // timer is absolute. Both abort ONLY this round's controller, never the
+          // turn — the existing round-abort path then continues the turn once.
+          const { inactivityMs, totalMs } = resolveRoundDeadlineMs();
+          console.log(`[DBG] dispatch round ${round} inactivity=${inactivityMs} total=${totalMs}`);
+          let roundTimedOut: "inactivity" | "total" | null = null;
+          let roundInactivityTimer: any = null;
+          let roundTotalTimer: any = null;
+          const armRoundDeadline = () => {
+            if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
+            roundInactivityTimer = setTimeout(() => {
+              roundTimedOut = "inactivity";
+              roundAbortController.abort();
+            }, inactivityMs);
+            if (typeof roundInactivityTimer.unref === "function") roundInactivityTimer.unref();
+          };
+          armRoundDeadline();
+          roundTotalTimer = setTimeout(() => {
+            roundTimedOut = "total";
+            roundAbortController.abort();
+          }, totalMs);
+          if (typeof roundTotalTimer.unref === "function") roundTotalTimer.unref();
+
           const llmPayload: any = {
             model: activeModel,
             messages: fitContextWindow(conversationMessages, {
@@ -1010,12 +1055,15 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
           let fullRoundContent = "";
           let roundThinking = "";
+          let roundFinishReason: string | undefined = undefined;
+          let roundSizeCapped = false;
           let toolCallsFromMessage: any[] = [];
 
           try {
             for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
               if (chunk.finish_reason) {
                 lastFinishReason = chunk.finish_reason;
+                roundFinishReason = chunk.finish_reason;
               }
               if (typeof chunk.outputTokens === "number") {
                 turnOutputTokens = chunk.outputTokens;
@@ -1024,6 +1072,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               }
               if (chunk.message?.thinking) {
                 roundThinking += chunk.message.thinking;
+                armRoundDeadline();
                 const currentCumulativeThought = accumulatedThoughts.length > 0
                   ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
                   : roundThinking;
@@ -1034,6 +1083,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
                 accumulatedStreamedTokens += textChunk;
+                armRoundDeadline();
+                // TURN SIZE LIMIT: hard cap on total streamed content. A runaway
+                // round (e.g. a huge tool-call payload as one generation) is cut
+                // off with an honest marker and the round ends.
+                if (accumulatedStreamedTokens.length > MAX_STREAMED_CONTENT_CHARS) {
+                  roundSizeCapped = true;
+                  accumulatedStreamedTokens += TURN_SIZE_LIMIT_MARKER;
+                  streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                  await sendEvent({ type: "token", content: TURN_SIZE_LIMIT_MARKER });
+                  roundAbortController.abort();
+                  break;
+                }
                 const currentCumulativeThought = accumulatedThoughts.length > 0
                   ? (roundThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}` : accumulatedThoughts.join("\n\n"))
                   : (roundThinking || undefined);
@@ -1049,16 +1110,62 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               throw roundErr;
             }
           } finally {
+            if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
+            if (roundTotalTimer) clearTimeout(roundTotalTimer);
             if (activeThreadId) {
               clearRoundAbortController(activeThreadId, roundAbortController);
             }
           }
+
+          roundFinishReasons.push(roundFinishReason || "stop");
 
           if (roundThinking.trim()) {
             accumulatedThoughts.push(roundThinking.trim());
           }
 
           if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
+            console.log(`[DBG] round ${round} aborted timedOut=${roundTimedOut} sizeCapped=${roundSizeCapped} consec=${consecutiveDeadlineAborts}`);
+            if (roundSizeCapped) {
+              // Size limit hit: the turn ends honestly. No retry — the content
+              // cap exists precisely to stop runaway generations.
+              turnEndedBySizeLimit = true;
+              honestEndMarker = TURN_SIZE_LIMIT_MARKER;
+              reasoningSpan.end("ok", { roundSizeCapped: true });
+              break;
+            }
+            if (roundTimedOut) {
+              roundFinishReasons[roundFinishReasons.length - 1] = "timeout";
+              consecutiveDeadlineAborts++;
+              if (consecutiveDeadlineAborts >= 2) {
+                // Second consecutive deadline-aborted round: end the turn with the
+                // honest marker. Never a silent endless retry.
+                turnEndedByTimeout = true;
+                honestEndMarker = TURN_TIMEOUT_MARKER;
+                accumulatedStreamedTokens += TURN_TIMEOUT_MARKER;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                await sendEvent({ type: "token", content: TURN_TIMEOUT_MARKER });
+                reasoningSpan.end("ok", { roundTimedOut, consecutiveDeadlineAborts });
+                break;
+              }
+              // First abort: existing round-abort path, turn continues once. No
+              // marker in the content yet — a single abort is not an end.
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+              conversationMessages.push({
+                role: "user",
+                content: ROUND_TIMEOUT_DIRECTIVE
+              });
+              reasoningSpan.end("ok", { roundTimedOut });
+              // The retry round must actually be dispatched: lastRoundTools is
+              // empty after an abort, so without awaitingToolRound the loop
+              // would read the abort as "turn completed" and break.
+              groundingDirectivePending = true;
+              lastRoundTools = [];
+              round++;
+              continue;
+            }
             if (fullRoundContent.trim()) {
               conversationMessages.push({
                 role: "assistant",
@@ -1072,6 +1179,35 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
 
           reasoningSpan.end("ok");
+          consecutiveDeadlineAborts = 0;
+
+          console.log(`[DBG] round ${round} finish=${roundFinishReason} toolCalls=${toolCallsFromMessage.length} contentLen=${fullRoundContent.length}`);
+          // SIZE-LIMIT EVENT: finish_reason:"length" with a tool call whose
+          // arguments cannot be parsed = an oversized generation cut off mid-JSON.
+          // Never retried silently: end the turn with the honest marker naming the
+          // tool and the truncated argument byte size.
+          if (
+            roundFinishReason === "length" &&
+            toolCallsFromMessage.length > 0 &&
+            toolCallsFromMessage.some((tc: any) => {
+              const rawArgs = tc.function?.arguments;
+              if (typeof rawArgs !== "string") return false;
+              try { JSON.parse(rawArgs); return false; } catch { return true; }
+            })
+          ) {
+            const bad = toolCallsFromMessage.find((tc: any) => {
+              try { JSON.parse(tc.function?.arguments); return false; } catch { return true; }
+            });
+            const byteSize = (bad?.function?.arguments || "").length;
+            turnEndedBySizeLimit = true;
+            const sizeMarker = `${TURN_SIZE_LIMIT_MARKER} (tool: ${bad?.function?.name}, arguments truncated at ${byteSize} bytes)`;
+            accumulatedStreamedTokens += sizeMarker;
+            streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+            await sendEvent({ type: "token", content: sizeMarker });
+            reasoningSpan.end("ok", { sizeLimit: true, tool: bad?.function?.name, byteSize });
+            break;
+          }
+
           currentAssistantMessage = {
             role: "assistant",
             content: fullRoundContent,
@@ -1104,6 +1240,38 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               round++;
               continue;
             }
+            // AUTO-CONTINUE ON LENGTH: the model hit num_predict mid-answer.
+            // Continue ONCE with the directive; a second consecutive truncation
+            // ends the turn honestly with the truncation marker.
+            if (
+              roundFinishReason === "length" &&
+              fullRoundContent.trim() &&
+              !turnAbortController.signal.aborted
+            ) {
+              consecutiveLengthTruncations++;
+              if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
+                turnEndedByTruncation = true;
+                accumulatedStreamedTokens += TURN_TRUNCATION_MARKER;
+                streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                await sendEvent({ type: "token", content: TURN_TRUNCATION_MARKER });
+                break;
+              }
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent
+              });
+              conversationMessages.push({
+                role: "user",
+                content: LENGTH_CONTINUATION_DIRECTIVE
+              });
+              await sendEvent({
+                type: "status",
+                status: "Generation hit the per-message size limit: continue exactly where you stopped."
+              });
+              round++;
+              continue;
+            }
+            consecutiveLengthTruncations = 0;
             break;
           }
 
@@ -1766,6 +1934,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               : EMPTY_SYNTHESIS_STAMP;
           }
         }
+
+        // ROUND-DEADLINES honest end: the marker that ended the turn must be in
+        // the persisted content (it was streamed live), and the turn is stamped
+        // incomplete — never a silent "completed".
+        if (honestEndMarker) {
+          turnStatus = "incomplete";
+          if (!cleanedContent.includes(honestEndMarker)) {
+            cleanedContent = cleanedContent.trim()
+              ? `${cleanedContent}\n\n${honestEndMarker}`
+              : honestEndMarker;
+          }
+        }
         // Gather turn attachments using exact write tracking
         const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
@@ -1789,6 +1969,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           if (!cleanedContent.includes("⚠️ [Turn incomplete:")) {
             cleanedContent = cleanedContent.trim() ? `${cleanedContent}\n\n${truncationNotice}` : truncationNotice;
           }
+        }
+
+        // TURN SIZE LIMIT: a runaway generation (e.g. a huge tool-call payload
+        // emitted as content) must never be persisted or streamed whole. Clamp
+        // to a safe prefix (prefer a newline boundary) and stamp honestly.
+        if (cleanedContent.length > MAX_STREAMED_CONTENT_CHARS) {
+          turnStatus = "incomplete";
+          let cut = cleanedContent.slice(0, MAX_STREAMED_CONTENT_CHARS);
+          const lastNewline = cut.lastIndexOf("\n");
+          if (lastNewline > MAX_STREAMED_CONTENT_CHARS / 2) {
+            cut = cut.slice(0, lastNewline);
+          }
+          cleanedContent = `${cut}\n\n${TURN_SIZE_LIMIT_MARKER}`;
         }
 
         const finalOutputTokens = turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0);
@@ -1973,3 +2166,4 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     );
   }
 }
+
