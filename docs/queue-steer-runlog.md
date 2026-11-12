@@ -689,3 +689,9 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 
 ## Compaction-pill deploy (2026-11-12)
 - Rollback target banked: v-a9736db-fresh (prod image before compaction-pill deploy, S0 10:37 CT). Deploy target: v-6b0bb0c-fresh (develop 6b0bb0c, PR #77 merged).
+
+## UI QA sweep - findings-only (2026-11-12, job ui-qa-sweep)
+- Branch feature/ui-qa-sweep from develop (5b335e4). Findings-only; no product code touched.
+- Delivered docs/ui-qa-findings-2026-11-10.md: verified ledger items UI-003/006/007/008/011 with fresh Playwright evidence against prod 192.168.50.254 (desktop + mobile viewports); watched this job's own tool-using turn end to end (record trace count grew 1->2->4->7->10 while screen trace rows stayed 0 until completion -> UI-003 confirmed).
+- New sub-findings: UI-006b reconcile poll keeps firing while ChatStream is hidden (Settings view keeps it mounted; 5 thread GETs/8s measured); UI-011a trace rows have no aria-label (0 [aria-label*=Tool] elements). UI-001/002/010 not reproduced this sweep (zombie scan: 0 streaming records >5min old across all 20 threads). UI-009 server default path verified correct; needs real-device check.
+- Scratch probes: D:\AI\orchestrator-scratch\qa-probe-1..7.js + json + shots/.
