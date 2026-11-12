@@ -639,3 +639,4 @@ TEST-FIRST: web-ui/tests/permissions.test.ts Test 5 added (asserts limits block 
 PRODUCT PATCH: deploy/k8s/web-ui.yaml limits.memory 384Mi -> 1Gi only. CPU limits (1000m), requests (100m/128Mi), and every other service untouched. Banked as cd52beb.
 GATE: targeted npx tsx --test tests/permissions.test.ts -> 5 pass / 0 fail. npm run test:gate -- --since=origin/develop PASSED 5 pass / 0 fail in 2.631s (<90s budget); gate mapped deploy/k8s/web-ui.yaml to tests/permissions.test.ts (lib/testGate.ts:196-203 Deploy Manifests rule, deploy/k8s/web-ui.yaml coverage exception at lib/testGate.ts:685). Full npm run test NOT run (lifecycle test can tear down the stack).
 No merge, no deploy in this job - driver mechanics done separately.
+- 2026-11-12 04:22 CT driver deploy PR73 webui-memory-limit: rollback target v-1992039-fresh; deploying v-d0ee2e7-fresh.  
