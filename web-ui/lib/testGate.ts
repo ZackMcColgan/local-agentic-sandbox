@@ -191,7 +191,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/threads/threadStore") ||
       p.includes("lib/threads/streamSnapshot") ||
       p.includes("components/ThreadsSidebar"),
-    tests: ["tests/turnLiveness.test.ts"]
+    tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {

@@ -856,6 +856,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         let turnEndedBySizeLimit = false;
         let turnEndedByTruncation = false;
         let honestEndMarker = "";
+        // Text carried across a length-truncated auto-continue: the final answer
+        // must contain EVERY produced half, never just the last round.
+        let carriedLengthContent = "";
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
@@ -1201,6 +1204,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const byteSize = (bad?.function?.arguments || "").length;
             turnEndedBySizeLimit = true;
             const sizeMarker = `${TURN_SIZE_LIMIT_MARKER} (tool: ${bad?.function?.name}, arguments truncated at ${byteSize} bytes)`;
+            honestEndMarker = sizeMarker;
             accumulatedStreamedTokens += sizeMarker;
             streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
             await sendEvent({ type: "token", content: sizeMarker });
@@ -1251,6 +1255,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               consecutiveLengthTruncations++;
               if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
                 turnEndedByTruncation = true;
+                honestEndMarker = TURN_TRUNCATION_MARKER;
+                // Keep EVERY produced half: the final answer carries the earlier
+                // truncated rounds plus this one, never just the last round.
+                currentAssistantMessage = {
+                  role: "assistant",
+                  content: carriedLengthContent + fullRoundContent
+                };
                 accumulatedStreamedTokens += TURN_TRUNCATION_MARKER;
                 streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
                 await sendEvent({ type: "token", content: TURN_TRUNCATION_MARKER });
@@ -1264,14 +1275,30 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 role: "user",
                 content: LENGTH_CONTINUATION_DIRECTIVE
               });
+              // Bank this half so the final answer keeps every produced part.
+              carriedLengthContent += fullRoundContent;
               await sendEvent({
                 type: "status",
                 status: "Generation hit the per-message size limit: continue exactly where you stopped."
               });
+              // The continuation round must actually be dispatched: lastRoundTools
+              // is empty on a text round, so without awaitingToolRound the loop
+              // would read the truncation as "turn completed" and break.
+              groundingDirectivePending = true;
+              lastRoundTools = [];
               round++;
               continue;
             }
             consecutiveLengthTruncations = 0;
+            // If earlier rounds were length-truncated and auto-continued, the
+            // final answer must carry every produced half, not just this round.
+            if (carriedLengthContent) {
+              currentAssistantMessage = {
+                ...currentAssistantMessage,
+                content: carriedLengthContent + fullRoundContent
+              };
+              carriedLengthContent = "";
+            }
             break;
           }
 
@@ -1757,6 +1784,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // we do NOT consume them so they return honestly in pendingSteers.
         const shouldSynthesize =
           !turnAbortController.signal.aborted &&
+          !honestEndMarker &&
           (pendingLateSteers.length > 0 ||
             shouldRunPostToolSynthesis({
               userPrompt,
@@ -2004,6 +2032,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
             finish_reason: lastFinishReason || "stop",
+            roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
             outputTokens: finalOutputTokens
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
