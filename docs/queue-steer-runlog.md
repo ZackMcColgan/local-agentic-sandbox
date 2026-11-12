@@ -720,3 +720,9 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Existing assertion updated: web-ui/tests/sessionIntegrity.test.ts S4 'derives title from first ~40 characters' asserted the raw mid-word slice ('How does the critic handle crashes in wo') - the exact UI-008 defect; now asserts word-boundary title 'How does the critic handle crashes in'. S4 'New thread' and retroactive-title assertions unchanged.
 - Gate wiring: lib/testGate.ts threads rule tests[] now includes tests/threadTitleDerivation.test.ts (gateManifestCompleteness requires every tests/*.test.ts wired).
 - npm run test:gate: PASSED 167 pass / 0 fail, 56 suites, 61.8s (<90s budget).
+
+## qa-2 fix cycle - PR #80 CI red on 1ed71eb (2026-11-12, UI-008)
+- CI run 43302923352: Unit Tests & Static Analysis FAIL, 1 of 1149 - tests/threadTitleDerivation.test.ts subtest 'never cuts mid-word when truncating', error 'title ends mid-word: implement the progressive tool registry'.
+- Root cause (driver-verified): old assertion compared derived title against raw goal prefix (goal.slice(0, title.length)); after 'JOB - ' prefix strip the title is no longer a raw prefix, so the check failed although the title itself ended on whole word 'registry' with next stripped-source char a space. Implementation deriveThreadTitle correct; only assertion wrong.
+- Fix: assertion now locates title inside goal via indexOf and requires the next source char to be whitespace (no weakening, no other files touched). Commit 6d155c7 pushed to feature/qa2-thread-titles.
+- Suite: node --test --import tsx tests/threadTitleDerivation.test.ts -> 11 pass / 0 fail. npm run test:gate via bridge -> PASSED 11 pass / 0 fail in 2.257s (<90s budget). New head: 6d155c7.
