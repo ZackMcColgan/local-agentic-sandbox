@@ -181,7 +181,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatTurnPresence.test.ts",
       "tests/chatThinkingPreservation.test.ts",
       "tests/buildLaunchVisibility.test.ts",
-      "tests/supervisorGitOpsIntegration.test.ts"
+      "tests/supervisorGitOpsIntegration.test.ts",
+      // UI-008: readable thread-list titles derived at record-create time
+      "tests/threadTitleDerivation.test.ts"
     ]
   },
   // Turn liveness: stall window, heartbeat, forced round-boundary snapshot, sidebar badges
