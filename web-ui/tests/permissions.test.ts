@@ -198,4 +198,28 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
       "mcp-runner.yaml must define supplementalGroups: [1001]"
     );
   });
+
+  it("Test 5: web-ui container memory limit is 1Gi (OOMKill RCA: 384Mi ceiling)", () => {
+    const webUiPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
+    const webUiYaml = fs.readFileSync(webUiPath, "utf8");
+
+    // RCA: pod web-ui-548b99549f-665xt was OOMKilled at 01:01 CT Nov 12 2026
+    // under load with limits.memory: 384Mi. The web-ui container limit must be 1Gi.
+    assert.match(
+      webUiYaml,
+      /limits:\s*\n\s*cpu:\s*"?1000m"?\s*\n\s*memory:\s*"1Gi"/,
+      "deploy/k8s/web-ui.yaml must set the web-ui container memory limit to 1Gi"
+    );
+
+    // The old 384Mi ceiling must be gone entirely.
+    assert.ok(
+      !webUiYaml.includes("384Mi"),
+      "deploy/k8s/web-ui.yaml must no longer contain the 384Mi memory limit"
+    );
+
+    // CPU limits and requests must remain unchanged.
+    assert.match(webUiYaml, /cpu:\s*"?1000m"?/, "web-ui CPU limit must stay 1000m");
+    assert.match(webUiYaml, /requests:\s*\n\s*cpu:\s*"?100m"?\s*\n\s*memory:\s*"128Mi"/,
+      "web-ui requests must stay cpu 100m / memory 128Mi");
+  });
 });
