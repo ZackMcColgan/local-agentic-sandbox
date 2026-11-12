@@ -62,6 +62,7 @@ import {
   MAX_STREAMED_CONTENT_CHARS
 } from "@/lib/contextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
+import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -859,6 +860,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // Text carried across a length-truncated auto-continue: the final answer
         // must contain EVERY produced half, never just the last round.
         let carriedLengthContent = "";
+        // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
+        // rolled up onto the assistant message and the thread record.
+        const roundPromptTokens: number[] = [];
+        let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
 
         const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
@@ -877,6 +882,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             turnTokensBefore = compaction.tokensBefore;
             turnTokensAfter = compaction.tokensAfter;
             turnCompactionActions = compaction.actions;
+            turnCompactionCount++;
 
             if (activeThreadId && threadData) {
               try {
@@ -1072,6 +1078,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 turnOutputTokens = chunk.outputTokens;
               } else if (typeof chunk.eval_count === "number") {
                 turnOutputTokens = chunk.eval_count;
+              }
+              // TOKEN ECONOMICS (a): prompt tokens arrive on the finish chunk via
+              // the PR #63 usage plumbing (promptTokens) or Ollama's
+              // prompt_eval_count. Exactly one entry is pushed per round.
+              if (typeof chunk.promptTokens === "number") {
+                roundPromptTokens.push(chunk.promptTokens);
+              } else if (typeof chunk.prompt_eval_count === "number") {
+                roundPromptTokens.push(chunk.prompt_eval_count);
               }
               if (chunk.message?.thinking) {
                 roundThinking += chunk.message.thinking;
@@ -2013,6 +2027,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         const finalOutputTokens = turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0);
+        // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
+        const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
 
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
@@ -2033,7 +2049,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             status: turnStatus || ("completed" as const),
             finish_reason: lastFinishReason || "stop",
             roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
-            outputTokens: finalOutputTokens
+            outputTokens: finalOutputTokens,
+            roundPromptTokens: roundPromptTokens,
+            tokenEconomics: buildJobTokenRollup({
+              rounds: round,
+              promptTokens: finalPromptTokens,
+              outputTokens: finalOutputTokens,
+              compactions: turnCompactionCount
+            })
           };
           threadStore.addMessage(activeThreadId, assistantMsgToSave);
           assistantPersisted = true;

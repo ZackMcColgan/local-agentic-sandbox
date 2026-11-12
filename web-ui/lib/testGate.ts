@@ -193,6 +193,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar"),
     tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
   },
+  // Token Economics part (a): per-round prompt tokens + per-job rollup
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/llm/"),
+    tests: ["tests/tokenEconomics.test.ts"]
+  },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {
     match: (p) =>

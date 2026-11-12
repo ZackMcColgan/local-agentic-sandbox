@@ -8,6 +8,7 @@ import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
 import { summarizeTurnHistory, runHybridCompaction, resolveCompactionStrategy } from "../conversationCompaction";
 import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
+import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
 import { getHostSettings } from "../hostSettings";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
@@ -65,6 +66,10 @@ export interface ThreadMessage {
   status?: "completed" | "incomplete" | "error" | "streaming";
   finish_reason?: string;
   outputTokens?: number;
+  /** TOKEN ECONOMICS (a): prompt tokens recorded per model round in this turn. */
+  roundPromptTokens?: number[];
+  /** TOKEN ECONOMICS (a): per-job rollup for this turn (rounds, prompt integral, output, compactions). */
+  tokenEconomics?: JobTokenRollup;
 }
 
 /**
@@ -141,6 +146,12 @@ export interface Thread {
   isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /**
+   * TOKEN ECONOMICS (a): per-job rollup aggregated across the thread's turns
+   * (rounds, prompt-token integral, output tokens, compaction count). Surfaced
+   * with the board item; no separate UI surface in this pass.
+   */
+  tokenEconomics?: JobTokenRollup;
 }
 
 export function resolveThreadsDir(): string {
@@ -724,6 +735,10 @@ export class ThreadStore {
       try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
     }
     thread.updatedAt = new Date().toISOString();
+    // TOKEN ECONOMICS (a): the per-job rollup rides on the thread record so the
+    // board item surfaces it without a separate UI surface. Recomputed on every
+    // save from the per-turn rollups recorded on assistant messages.
+    thread.tokenEconomics = computeThreadTokenEconomics(thread);
     const targetFile = this.getFilePath(thread.id);
     const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
     try {
@@ -845,6 +860,23 @@ export class ThreadStore {
 
   upsertMessage(threadId: string, message: ThreadMessage): Thread | null {
     return this.addMessage(threadId, message);
+  }
+
+  /**
+   * TOKEN ECONOMICS (a): small read path for the board item. Returns the
+   * per-job rollup (rounds, prompt-token integral, output tokens, compaction
+   * count) aggregated from the thread's per-turn records.
+   */
+  getTokenEconomics(threadId: string): JobTokenRollup {
+    const filePath = this.getFilePath(threadId);
+    let thread: Thread | null = null;
+    if (fs.existsSync(filePath)) {
+      try {
+        thread = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+      } catch {}
+    }
+    if (!thread) return { rounds: 0, promptTokens: 0, outputTokens: 0, compactions: 0 };
+    return thread.tokenEconomics ?? computeThreadTokenEconomics(thread);
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
