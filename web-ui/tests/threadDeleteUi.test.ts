@@ -160,4 +160,37 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     assert.ok(drawerSrc.includes('e.key === "Escape"'), "Escape key must close dialogs");
     assert.ok(drawerSrc.includes('e.key === "Tab"'), "Focus must be trapped inside confirm dialog");
   });
+
+  it("7. Confirm-dialog copy is truthful per thread kind (matches threadStore.deleteThread behavior)", () => {
+    const fs = require("fs");
+    const path = require("path");
+
+    for (const rel of ["../components/ThreadsSidebar.tsx", "../components/NavigationDrawer.tsx"]) {
+      const src = fs.readFileSync(path.resolve(__dirname, rel), "utf-8");
+
+      // Must NOT claim checkpoints are removed for every thread (real task threads retain the checkpoint).
+      assert.ok(
+        !src.includes("All messages and task checkpoints for this session will be removed"),
+        `${rel} must not promise checkpoint removal for all threads`
+      );
+
+      // Real thread with taskId: checkpoint retained, task marked cancelled (threadStore.ts L927-941).
+      assert.ok(
+        src.includes("The task checkpoint is retained and the task will be marked cancelled"),
+        `${rel} must state the checkpoint is retained and the task cancelled for real task threads`
+      );
+
+      // Ghost/checkpoint-synthesized thread: checkpoint manifest removed (threadStore.ts L920-926).
+      assert.ok(
+        src.includes("All messages and the task checkpoint for this session will be removed"),
+        `${rel} must state checkpoint removal for ghost task threads`
+      );
+
+      // Ghost detection mirrors deleteThread's isGhostTaskThread condition.
+      assert.ok(
+        src.includes("`thread-${") && src.includes('startsWith("thread-task-")'),
+        `${rel} must branch on the ghost-thread id condition (thread-<taskId> / thread-task-*)`
+      );
+    }
+  });
 });

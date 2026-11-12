@@ -585,7 +585,7 @@ The suite contains **80 test files** comprising **492 pure-local tests** whose c
 
 ### Pure-Local Suite Inventory (80 files, 492 tests):
 - `agentGroundingAndHeadroom.test.ts` (7 tests) — Local component logic, state storage, or UI layout verification without LLM runtime dependencies.
-- `aiLifecycle.test.ts` (4 tests) — Local component logic, state storage, or UI layout verification without LLM runtime dependencies.
+- ~~`aiLifecycle.test.ts`~~ **RECLASSIFIED (PR #61)** — No longer a dependency-free unit test. Relocated to `web-ui/tests-live/aiLifecycle.live.ts` (3 tests) behind `npm run test:lifecycle`; it drives the real host-runner daemon lifecycle and must not run in the default suite.
 - `blockingGateRevert.test.ts` (4 tests) — Local component logic, state storage, or UI layout verification without LLM runtime dependencies.
 - `browserMcpConnectivity.test.ts` (2 tests) — Local component logic, state storage, or UI layout verification without LLM runtime dependencies.
 - `buildLaunchVisibility.test.ts` (5 tests) — Local component logic, state storage, or UI layout verification without LLM runtime dependencies.
