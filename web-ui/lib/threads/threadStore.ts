@@ -43,6 +43,49 @@ export interface ThreadMessage {
   outputTokens?: number;
 }
 
+/**
+ * TURN-LIVENESS: derived heartbeat state for a thread record.
+ * - "alive": turn is live and its record was touched within TURN_STALL_WINDOW_MS.
+ * - "stalled": turn is live but no activity landed past the stale window.
+ * - "settled": turn is not live (completed / stopped / failed / paused).
+ */
+export type ThreadLiveness = "alive" | "stalled" | "settled";
+
+/** How long a live turn may go without a record touch before it reads as stalled. */
+export const TURN_STALL_WINDOW_MS = 30000;
+
+/**
+ * Derives liveness from the record's last-activity timestamp (updatedAt) against the
+ * live-execution state. A live-but-stale turn is NEVER reconciled to completed here;
+ * reconciliation stays owned by reconcileThread.
+ */
+export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
+  const isLive =
+    thread.status === "active" ||
+    thread.status === "running" ||
+    activeExecutionSet.has(thread.id) ||
+    Boolean(getActiveTurn(thread.id));
+  if (!isLive) return "settled";
+  const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
+  if (!Number.isFinite(touchedAt)) return "stalled";
+  return now - touchedAt <= TURN_STALL_WINDOW_MS ? "alive" : "stalled";
+}
+
+/**
+ * TURN-LIVENESS heartbeat: refreshes the thread record's updatedAt without touching
+ * messages or status, so a working round reads ALIVE even between snapshot writes.
+ */
+export function touchActiveTurn(threadId: string): void {
+  try {
+    const filePath = path.join(resolveThreadsDir(), `${threadId}.json`);
+    if (!fs.existsSync(filePath)) return;
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+    if (!raw || raw.id !== threadId) return;
+    raw.updatedAt = new Date().toISOString();
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+  } catch {}
+}
+
 export interface ThreadCompactionBoundary {
   strategy?: CompactionStrategy;
   extractionDigest?: string;
@@ -61,6 +104,7 @@ export interface Thread {
   status: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   createdAt: string;
   updatedAt: string;
+  liveness?: ThreadLiveness;
   model: string;
   reasoningEffort: "low" | "medium" | "xhigh";
   messages: ThreadMessage[];
@@ -541,6 +585,11 @@ export class ThreadStore {
     if (changed) {
       this.saveThread(thread);
     }
+
+    // TURN-LIVENESS: stamp the derived heartbeat state on the returned record. Derived
+    // AFTER reconciliation and never counted as a change, so a stale updatedAt is not
+    // rewritten (a save would refresh updatedAt and mask a stalled turn).
+    thread.liveness = computeTurnLiveness(thread, Date.now());
 
     return changed;
   }

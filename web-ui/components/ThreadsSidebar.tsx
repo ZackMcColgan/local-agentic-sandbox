@@ -289,6 +289,16 @@ export function ThreadsSidebar({
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
+            const progressChars = (thread.messages || []).reduce(
+              (n, m) => n + (m.content ? m.content.length : 0),
+              0
+            );
+            const progressTraces = (thread.messages || []).reduce(
+              (n, m) => n + (m.traces ? m.traces.length : 0),
+              0
+            );
+            const livenessBadge =
+              thread.liveness === "alive" || thread.liveness === "stalled" ? thread.liveness : null;
             const rawStatus = (thread.status as string) || "";
             const statusLabel = (() => {
               if (rawStatus === "running") return "Running";
@@ -394,6 +404,24 @@ export function ThreadsSidebar({
                     >
                       {statusLabel}
                     </span>
+                    {livenessBadge && (
+                      <span
+                        data-testid={`thread-liveness-${thread.id}`}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
+                          livenessBadge === "alive"
+                            ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+                            : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
+                        }`}
+                        title={livenessBadge === "alive" ? "Turn active — activity within the last 30s" : "Turn stalled — no activity past the stale window"}
+                      >
+                        {livenessBadge === "alive" ? "Alive" : "Stalled"}
+                      </span>
+                    )}
+                    {livenessBadge && (
+                      <span data-testid={`thread-progress-${thread.id}`}>
+                        {progressChars} chars · {progressTraces} traces
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
