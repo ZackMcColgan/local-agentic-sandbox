@@ -1,4 +1,5 @@
 import { isReasoningEffortSupported, getModelProfile } from "../config/models";
+import { ROUND_MAX_TOKENS } from "./modelLimits";
 
 export interface ModelOptions {
   num_ctx: number;
@@ -41,17 +42,17 @@ export function computeModelOptions(
 
   if (effectiveEffort === "low") {
     opts.temperature = 0.2;
-    opts.num_predict = 16384;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else if (effectiveEffort === "xhigh") {
     opts.temperature = 0.7;
-    opts.num_predict = 16384;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else if (effectiveEffort === "medium") {
     opts.temperature = 0.5;
-    opts.num_predict = 16384;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else {
     // For models without reasoning effort support (e.g. Hermes 3), use standard unbiased defaults
     opts.temperature = 0.7;
-    opts.num_predict = 16384;
+    opts.num_predict = ROUND_MAX_TOKENS;
   }
 
   return opts;

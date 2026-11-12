@@ -7,6 +7,7 @@
 
 import { computeModelOptions } from "./chatUtils";
 import { compactConversationHistory } from "./conversationCompaction";
+import { COMPACTION_THRESHOLD_RATIO, ROUND_MAX_TOKENS } from "./modelLimits";
 
 export { compactConversationHistory } from "./conversationCompaction";
 
@@ -340,7 +341,7 @@ export function resolveRoundModelOptions(params: {
     result.n_keep = params.numKeep;
     result.numKeep = params.numKeep;
   } else {
-    result.num_predict = baseOpts.num_predict || 16384;
+    result.num_predict = baseOpts.num_predict || ROUND_MAX_TOKENS;
   }
   return result;
 }
@@ -854,7 +855,7 @@ export function fitConversationToBudget(
   }
 
   const budgetTokens = options?.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
-  const thresholdRatio = options?.compactionThreshold ?? 0.85;
+  const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
   const initialTokens = estimateTokens(messages);
   let workingMessages = messages.map((m) => ({ ...m }));

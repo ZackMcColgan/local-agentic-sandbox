@@ -22,15 +22,18 @@
  */
 
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "./contextBudget";
+import { COMPACTION_THRESHOLD_RATIO, HYBRID_ESCALATION_RATIO } from "./modelLimits";
 
-export const DEFAULT_COMPACTION_THRESHOLD = 0.85;
+/** Single-source-of-truth ratio aliases (modelLimits leaf module); existing
+ * import paths keep working byte-for-byte in behavior. */
+export const DEFAULT_COMPACTION_THRESHOLD = COMPACTION_THRESHOLD_RATIO;
 export const DEFAULT_PRESERVE_RECENT_MESSAGES = 4; // ~2 full turns (user + assistant)
 
 export type CompactionStrategy = "extraction" | "hybrid";
 
 /** Post-extraction escalation threshold: hybrid summarization runs only when the
  * extraction-compacted model view still exceeds 65% of the context budget. */
-export const HYBRID_ESCALATION_THRESHOLD = 0.65;
+export const HYBRID_ESCALATION_THRESHOLD = HYBRID_ESCALATION_RATIO;
 
 /** Guardrails pinned by the owner ruling for the single summarization pass. */
 export const SUMMARIZATION_TEMPERATURE = 0.2;

@@ -137,7 +137,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus"),
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
     tests: [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
@@ -159,7 +159,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatTurnHonesty.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
-      "tests/capDefault8192.test.ts",
+      "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
       "tests/chatWebResearchCap.test.ts"
     ]
