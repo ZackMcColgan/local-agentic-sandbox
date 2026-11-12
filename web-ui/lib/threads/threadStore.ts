@@ -4,12 +4,13 @@ import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
+import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
 import { summarizeTurnHistory, runHybridCompaction, resolveCompactionStrategy } from "../conversationCompaction";
 import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
 import { getHostSettings } from "../hostSettings";
 
-export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * 0.85);
+export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
@@ -1212,7 +1213,7 @@ export class ThreadStore {
       }
 
       let modelView = this.buildModelMessages(thread);
-      const triggerThreshold = Math.floor(maxBudgetTokens * 0.85);
+      const triggerThreshold = Math.floor(maxBudgetTokens * COMPACTION_THRESHOLD_RATIO);
 
       if (estimateTokens(modelView) > triggerThreshold) {
         // TURN-START STRATEGY DISPATCH (compaction-hybrid turn-start fix): the

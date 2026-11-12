@@ -7,6 +7,7 @@
 
 import { computeModelOptions } from "./chatUtils";
 import { compactConversationHistory } from "./conversationCompaction";
+import { COMPACTION_THRESHOLD_RATIO, ROUND_MAX_TOKENS } from "./modelLimits";
 
 export { compactConversationHistory } from "./conversationCompaction";
 
@@ -34,7 +35,71 @@ export const MAX_WEB_RESEARCH_CALLS = 100;
  */
 export const TOOL_ROUND_BACKSTOP = 1000;
 
-export type ToolLoopStopReason = "completed" | "budget" | "backstop" | "web-research-cap";
+/**
+ * ROUND-DEADLINES: wall-clock leashes on a single model round. A runaway round
+ * (a huge tool call streamed as one generation, or a silent stream) previously
+ * had no deadline at all — the per-round AbortController only fired on an
+ * explicit stop, so the turn held the single engine slot looking frozen until a
+ * human pressed stop. Two leashes:
+ *  - ROUND_INACTIVITY_DEADLINE_MS: silence since the LAST chunk (re-armed per
+ *    chunk) — catches a stream that stalls mid-generation.
+ *  - ROUND_TOTAL_DEADLINE_MS: elapsed since round start regardless of activity
+ *    — catches a round that keeps streaming forever (the critical case).
+ * Env overrides exist for tests and tuning; defaults are the pinned values.
+ */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export const ROUND_INACTIVITY_DEADLINE_MS = envInt(
+  "ROUND_INACTIVITY_DEADLINE_MS",
+  180_000
+);
+export const ROUND_TOTAL_DEADLINE_MS = envInt("ROUND_TOTAL_DEADLINE_MS", 900_000);
+
+/**
+ * Resolve the active deadline values at round time. The exported constants are
+ * pinned defaults computed at module load; tests (and ops tuning) override via
+ * env AFTER the module graph is cached, so the route must re-read env per round.
+ */
+export function resolveRoundDeadlineMs(): { inactivityMs: number; totalMs: number } {
+  return {
+    inactivityMs: envInt("ROUND_INACTIVITY_DEADLINE_MS", ROUND_INACTIVITY_DEADLINE_MS),
+    totalMs: envInt("ROUND_TOTAL_DEADLINE_MS", ROUND_TOTAL_DEADLINE_MS)
+  };
+}
+
+/** Honest end marker when two consecutive rounds die at a deadline. */
+export const TURN_TIMEOUT_MARKER = "Turn ended: generation timed out.";
+
+/** Honest end marker when a length-truncated tool call cannot be parsed/executed. */
+export const TURN_SIZE_LIMIT_MARKER =
+  "Turn ended: a tool call exceeded the per-message size limit.";
+
+/** Honest end marker after a second consecutive length-truncated text round. */
+export const TURN_TRUNCATION_MARKER =
+  "Turn ended: generation truncated at the per-message size limit.";
+
+/** Directive for the single auto-continue round after a length-truncated text round. */
+export const LENGTH_CONTINUATION_DIRECTIVE =
+  `[LENGTH CONTINUATION]: Your previous answer was cut off at the per-message size limit. Continue exactly where you stopped — output ONLY the remaining continuation, starting from the exact point you stopped, without repeating anything already produced.`;
+
+/** Directive injected after a deadline abort so the next round avoids repeating the runaway. */
+export const ROUND_TIMEOUT_DIRECTIVE =
+  `[ROUND DEADLINE]: The previous round was aborted by the round deadline while still generating (likely an oversized single generation or a stalled stream). Do NOT attempt the same oversized output again. Break the work into smaller steps (e.g. patch_file instead of one giant write_file, or a shorter answer), or synthesize from what already exists.`;
+
+/** Hard cap on persisted/streamed turn content: a runaway generation is clamped. */
+export const MAX_STREAMED_CONTENT_CHARS = 64_000;
+
+export type ToolLoopStopReason =
+  | "completed"
+  | "budget"
+  | "backstop"
+  | "web-research-cap"
+  | "round-timeout";
 
 export interface ToolLoopDecision {
   canContinue: boolean;
@@ -276,7 +341,7 @@ export function resolveRoundModelOptions(params: {
     result.n_keep = params.numKeep;
     result.numKeep = params.numKeep;
   } else {
-    result.num_predict = baseOpts.num_predict || 8192;
+    result.num_predict = baseOpts.num_predict || ROUND_MAX_TOKENS;
   }
   return result;
 }
@@ -790,7 +855,7 @@ export function fitConversationToBudget(
   }
 
   const budgetTokens = options?.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
-  const thresholdRatio = options?.compactionThreshold ?? 0.85;
+  const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
   const initialTokens = estimateTokens(messages);
   let workingMessages = messages.map((m) => ({ ...m }));

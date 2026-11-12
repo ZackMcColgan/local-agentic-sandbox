@@ -598,7 +598,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.equal(lastUser?.content, "Create an SVG architecture diagram of the cluster");
     });
 
-    it("resolveRoundModelOptions drops effort to 'low' and defaults num_predict to 8192 on artifact synthesis/post-tool rounds", async () => {
+    it("resolveRoundModelOptions drops effort to 'low' and defaults num_predict to 16384 on artifact synthesis/post-tool rounds", async () => {
       const { resolveRoundModelOptions } = await import("../lib/contextBudget.js") as any;
       assert.equal(typeof resolveRoundModelOptions, "function");
 
@@ -612,7 +612,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       });
       assert.equal(round0Opts.reasoning_effort, "low", "Artifact turn must use low reasoning effort on round 0 to avoid runaway pre-tool thinking");
       assert.equal(round0Opts.temperature, 0.2, "Artifact turn must use temperature 0.2 on round 0");
-      assert.equal(round0Opts.num_predict, 8192, "Round 0 must cap generation at default 8192");
+      assert.equal(round0Opts.num_predict, 16384, "Round 0 must cap generation at default 16384");
 
       // Synthesis / post-tool rounds
       const opts = resolveRoundModelOptions({
@@ -625,7 +625,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       assert.equal(opts.reasoning_effort, "low", "Should drop to low effort on post-tool artifact rounds");
       assert.equal(opts.temperature, 0.2, "Should drop to low effort (temperature 0.2) after tool calls on artifact turn");
-      assert.equal(opts.num_predict, 8192, "Must default num_predict to 8192 to prevent uncapped runaway rounds");
+      assert.equal(opts.num_predict, 16384, "Must default num_predict to 16384 to prevent uncapped runaway rounds");
     });
 
     it("constrained-context artifact completion regression: delivers complete untruncated <svg>...</svg> when tool outputs exceed 10,000 chars", async () => {
@@ -717,8 +717,8 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         );
       }
 
-      // Round 2+ (after tool calls completed on artifact turn) defaults num_predict to 8192 and uses fast effort
-      assert.equal(capturedPayloads[1].options.num_predict, 8192);
+      // Round 2+ (after tool calls completed on artifact turn) defaults num_predict to 16384 and uses fast effort
+      assert.equal(capturedPayloads[1].options.num_predict, 16384);
       assert.equal(capturedPayloads[1].options.temperature, 0.2);
 
       const extracted = extractSvgsFromMessage({
