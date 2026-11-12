@@ -197,10 +197,11 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("lib/tokenEconomics") ||
+      p.includes("lib/microElision") ||
       p.includes("app/api/chat/route") ||
       p.includes("lib/threads/threadStore") ||
       p.includes("lib/llm/"),
-    tests: ["tests/tokenEconomics.test.ts"]
+    tests: ["tests/tokenEconomics.test.ts", "tests/microElision.test.ts"]
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {
