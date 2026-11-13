@@ -779,7 +779,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "sessions" && viewMode === "unified"
-                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
                 : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
             }`}
             title="Chat & Sessions"
@@ -793,7 +793,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "builds"
-                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
                 : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
             }`}
             title="Autonomous Builds"
@@ -807,7 +807,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "morning-report"
-                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
                 : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
             }`}
             title="Morning Report"
@@ -821,7 +821,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all relative ${
               activeNavView === "skills"
-                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
                 : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
             }`}
             title="Skills Flywheel"
@@ -842,7 +842,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "settings"
-                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
                 : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
             }`}
             title="System Settings"

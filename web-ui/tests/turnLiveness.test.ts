@@ -210,7 +210,9 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*19 chars/, "alive row must render real in-flight char count");
     assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*1 traces/, "alive row must render real trace count");
     assert.doesNotMatch(html, /thread-liveness-t-ui-done/, "settled rows must not carry a liveness badge");
-    assert.match(html, /Completed/, "completed row still reads Completed (stalled must not conflate with completed)");
+    // Board parity (PR #94): completed rows carry the FINAL-DESIGN DONE chip
+    // instead of the old plain-text "Completed" label.
+    assert.match(html, /DONE/, "completed row still reads DONE (stalled must not conflate with completed)");
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

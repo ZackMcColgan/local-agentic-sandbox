@@ -356,10 +356,10 @@ export function NavigationDrawer({
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                   onTouchCancel={handleTouchEnd}
-                  className={`group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors min-h-[44px] ${
+                  className={`group relative flex items-center justify-between rounded-[14px] px-3.5 py-3 text-xs transition-colors min-h-[44px] bg-white dark:bg-[#18181b] border ${
                     isSelected
-                      ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold border border-emerald-200/60 dark:border-emerald-800/60"
-                      : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60"
+                      ? "text-emerald-900 dark:text-emerald-200 font-semibold border-emerald-500/50"
+                      : "text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
                   }`}
                 >
                   <button
@@ -384,7 +384,7 @@ export function NavigationDrawer({
                     className="flex-1 min-w-0 text-left flex flex-col gap-0.5 focus:outline-none"
                     title={thread.title}
                   >
-                    <span className="truncate text-xs font-medium">{thread.title || "Untitled session"}</span>
+                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{thread.title || "Untitled session"}</span>
                     {timeLabel && (
                       <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">
                         {timeLabel}

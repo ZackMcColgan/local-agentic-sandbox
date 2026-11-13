@@ -359,8 +359,11 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.ok(html.includes("Sessions") || html.includes("Threads"), "Renders Sessions header");
       assert.ok(html.includes("Rebuild settings in Material 3"), "Renders thread 1 title");
       assert.ok(html.includes("How does the critic decide?"), "Renders thread 2 title");
-      assert.ok(html.includes("Active"), "Renders Active status");
-      assert.ok(html.includes("Completed"), "Renders Completed status");
+      // Board parity (PR #94): sidebar status renders as the FINAL-DESIGN
+      // chips — RUNNING for an active thread, DONE for a completed one —
+      // replacing the old plain-text "Active" / "Completed" labels.
+      assert.ok(html.includes("RUNNING"), "Renders Active status as the board RUNNING chip");
+      assert.ok(html.includes("DONE"), "Renders Completed status as the board DONE chip");
     });
 
     it("renders ModelBottomSheet with M3 segmented buttons and model rows", async () => {

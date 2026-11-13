@@ -258,6 +258,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/LiveActivityHeader"),
     tests: ["tests/parityChatSurfaces.test.ts"]
   },
+  // Board parity PR3 (FINAL-DESIGN): sessions sidebar + drawer + rail —
+  // board session cards, status chips, running-card actions, rail selection
+  {
+    match: (p) =>
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/NavigationDrawer") ||
+      p.endsWith("app/page.tsx"),
+    tests: ["tests/paritySidebarDrawer.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {
