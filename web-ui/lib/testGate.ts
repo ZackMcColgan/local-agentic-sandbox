@@ -648,7 +648,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/SettingsView"),
-    tests: ["tests/settingsMemoryUi.test.ts"]
+    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"]
   },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
