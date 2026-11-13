@@ -157,6 +157,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatUiHonestyAndCopy.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
+      "tests/incompleteStatusAffordance.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",

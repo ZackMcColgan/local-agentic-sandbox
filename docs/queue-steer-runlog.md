@@ -751,3 +751,10 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Rollback target banked: v-8063453-fresh 
 - Deploy target: v-0a08c89-fresh, develop 0a08c89, PR 82 merged 
 - Deploy VERIFIED 2026-11-12 ~21:50 CT: image v-0a08c89-fresh, pod web-ui-79957c5b77-rnjj4 1/1 Running 0 restarts, gateway 200, /api/threads 200, prod == develop 0a08c89 
+
+## qa-5 incomplete-status affordance 2026-11-12 (UI-007)
+- Grounding (driver-verified): the amber 'Incomplete' chip already existed (ChatStream.tsx:2413-2421, asserted by chatTurnHonesty.test.ts:183). The real UI-007 gap is the retry/resume affordance: once reconciliation ended, an 'incomplete' turn had no recovery control.
+- Tests-first: web-ui/tests/incompleteStatusAffordance.test.ts (4 subtests: chip + retry affordance on incomplete record; completed turns stay bare prose; marker text unchanged). Fail-before confirmed: 3 pass / 1 fail (affordance absent).
+- Implementation: 'Retry turn' button beside the amber chip (RefreshCw icon, onClick handleRetry -> re-sends last user message). Presentation + affordance only; persisted marker text and reconciliation behavior untouched.
+- Gate mapping: suite added to ChatStream group in lib/testGate.ts MAPPING_RULES.
+- npm run test:gate via bridge -> PASSED 320 pass / 0 fail, 110 suites (<90s budget). Commits 8c05dad (fix+test), 845fb51 (gate mapping). PR #89 into develop, no merge/deploy in this job.
