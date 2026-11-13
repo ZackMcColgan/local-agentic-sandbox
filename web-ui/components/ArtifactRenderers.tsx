@@ -136,9 +136,9 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
       {canvasBadge && (
         <span
           data-testid="canvas-update-badge"
-          className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-semibold whitespace-nowrap"
+          className="px-2 py-0.5 rounded-full border border-emerald-600/50 dark:border-emerald-500/60 bg-white/85 dark:bg-[rgba(9,9,11,0.85)] text-emerald-700 dark:text-[#34d399] text-[11px] font-bold whitespace-nowrap"
         >
-          Updated · file changed
+          ↻ Updated · file changed
         </span>
       )}
       <button

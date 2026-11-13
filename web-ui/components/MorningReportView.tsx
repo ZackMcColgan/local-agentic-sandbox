@@ -221,6 +221,9 @@ export function MorningReportView({
     return { state, headline, subline };
   }, [kpis, flags]);
 
+  const windowLabel =
+    windowFilter === "overnight" ? "Overnight" : windowFilter === "24h" ? "Last 24h" : "All Runs";
+
   const handlePreviewArtifact = async (art: MorningReportArtifact) => {
     if (previewArtifact?.path === art.path) {
       setPreviewArtifact(null);
@@ -280,38 +283,72 @@ export function MorningReportView({
           <div
             data-testid="verdict-banner"
             data-verdict={verdict.state}
-            className={`sticky top-0 z-30 flex items-center gap-3 rounded-2xl border p-4 sm:p-5 shadow-sm ${
+            className={`sticky top-0 z-30 rounded-2xl border p-4 sm:p-5 shadow-sm bg-white dark:bg-[#121215] ${
               verdict.state === "failed"
-                ? "bg-rose-50 dark:bg-rose-950/70 border-rose-300 dark:border-rose-800"
+                ? "border-rose-300 dark:border-rose-800"
                 : verdict.state === "attention"
-                  ? "bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-800"
+                  ? "border-amber-300 dark:border-amber-800"
                   : verdict.state === "empty"
-                    ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800"
-                    : "bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-800"
+                    ? "border-slate-200 dark:border-zinc-800"
+                    : "border-emerald-300 dark:border-emerald-800"
             }`}
           >
-            {verdict.state === "failed" ? (
-              <XCircle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
-            ) : verdict.state === "attention" ? (
-              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-            ) : verdict.state === "empty" ? (
-              <Clock className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            )}
-            <div className="min-w-0">
-              <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-zinc-100">
-                {verdict.headline}
+            <div className="flex items-center gap-3">
+              {verdict.state === "failed" ? (
+                <XCircle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              ) : verdict.state === "attention" ? (
+                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              ) : verdict.state === "empty" ? (
+                <Clock className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-zinc-100">
+                  {verdict.headline}
+                </div>
+                <div className="text-xs text-slate-600 dark:text-zinc-400">{verdict.subline}</div>
               </div>
-              <div className="text-xs text-slate-600 dark:text-zinc-400">{verdict.subline}</div>
+              <span className="ml-auto shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-white/70 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300">
+                {windowLabel}
+              </span>
             </div>
-            <span className="ml-auto shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-white/70 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300">
-              {windowFilter === "overnight" ? "Overnight" : windowFilter === "24h" ? "Last 24h" : "All Runs"}
-            </span>
+            <div
+              data-testid="kpi-strip"
+              className="mt-3.5 pt-3.5 border-t border-slate-100 dark:border-zinc-800 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs"
+            >
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-500">Total</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-500">Total Tasks</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.total}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-500">Completed</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.completed}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-500">Failed</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.failed}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-500">Stalled</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.stalled}</span>
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-500">
+              Stats shown for the {windowLabel} window; counts are Completed / Failed / Stalled.
+            </p>
           </div>
 
           {/* Summary KPI Banner */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
               <div>
                 <div className="flex items-center gap-2">
@@ -370,24 +407,6 @@ export function MorningReportView({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Tasks</div>
-                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{kpis.total}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
-                <div className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Completed</div>
-                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{kpis.completed}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
-                <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Stalled</div>
-                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{kpis.stalled}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
-                <div className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Failed</div>
-                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{kpis.failed}</div>
-              </div>
-            </div>
           </div>
 
           {/* 1. What Needs Attention (Stalled & Failed Tasks) */}
@@ -412,10 +431,10 @@ export function MorningReportView({
                 {overnight.attentionItems.map((item) => (
                   <div
                     key={item.taskId}
-                    className={`p-3.5 rounded-xl border ${
+                    className={`p-3.5 rounded-xl border bg-white dark:bg-black border-slate-200 dark:border-zinc-800 ${
                       item.status === "parked"
-                        ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-950 dark:text-amber-200"
-                        : "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 text-rose-950 dark:text-rose-200"
+                        ? "shadow-[inset_3px_0_0_#f59e0b]"
+                        : "shadow-[inset_3px_0_0_#ef4444]"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -429,20 +448,21 @@ export function MorningReportView({
                         >
                           {statusDisplayLabel(item.status)}
                         </span>
-                        <span className="text-xs font-bold">{item.goal}</span>
-                        <span className="text-[11px] font-mono opacity-75">({item.taskId})</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{item.goal}</span>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-500">({item.taskId})</span>
                       </div>
                       {item.threadUrl && (
                         <a
                           href={item.threadUrl}
-                          className="inline-flex items-center gap-1 text-xs font-semibold underline hover:opacity-80"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-bold transition-colors"
                         >
                           <span>Open Session</span>
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>
-                    <p className="mt-1.5 text-xs font-mono leading-relaxed break-words">
+                    <p className="mt-1.5 text-xs leading-relaxed break-words text-slate-600 dark:text-zinc-400">
+                      <span className="font-semibold text-slate-800 dark:text-zinc-200">Reasoning: </span>
                       {item.reason}
                     </p>
                   </div>
@@ -456,7 +476,7 @@ export function MorningReportView({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-indigo-500" />
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
                   <span>Ambiguity Flags &amp; Judgment Calls</span>
                 </h2>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -474,13 +494,13 @@ export function MorningReportView({
                       className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
                         flag.reviewed
                           ? "border-slate-200 dark:border-zinc-800 opacity-80"
-                          : "border-indigo-200 dark:border-indigo-900/60 shadow-sm"
+                          : "border-slate-200 dark:border-zinc-800 shadow-[inset_3px_0_0_#f59e0b]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 font-semibold">
                               {flag.id} • {flag.milestoneId}
                             </span>
                             {flag.reviewed && (
@@ -551,12 +571,12 @@ export function MorningReportView({
                                 }))
                               }
                               placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
-                              className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             />
                             <button
                               type="button"
                               onClick={() => handleAdjustSubmit(flag.id)}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-sm"
+                              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-semibold transition-colors shadow-sm"
                             >
                               Submit
                             </button>
@@ -574,7 +594,7 @@ export function MorningReportView({
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                  <FileCode2 className="h-4 w-4 text-indigo-500" />
+                  <FileCode2 className="h-4 w-4 text-emerald-500" />
                   <span>What Was Produced</span>
                 </h3>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -607,7 +627,7 @@ export function MorningReportView({
                           <button
                             type="button"
                             onClick={() => handlePreviewArtifact(art)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-[11px] font-semibold transition-colors"
                           >
                             <Eye className="h-3 w-3" />
                             <span>{previewArtifact?.path === art.path ? "Hide" : "Preview"}</span>
@@ -634,7 +654,7 @@ export function MorningReportView({
                           href={previewArtifact.previewUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                          className="text-emerald-700 dark:text-[#34d399] hover:underline flex items-center gap-1"
                         >
                           <span>Open raw</span>
                           <ExternalLink className="h-3 w-3" />

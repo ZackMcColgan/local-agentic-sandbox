@@ -8,7 +8,6 @@ import {
   Copy,
   Download,
   ExternalLink,
-  FileCode,
   Monitor,
   RefreshCw,
   Smartphone,
@@ -111,27 +110,22 @@ export function CanvasDiffCard({
   return (
     <div
       data-testid="canvas-diff-card"
-      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs w-full"
+      className="flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-zinc-800 w-full"
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 shrink-0">
-          <FileCode className="h-5 w-5" />
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span className="font-semibold text-sm text-slate-900 dark:text-zinc-100">
-            {totals.fileCount} {totals.fileCount === 1 ? "file" : "files"} changed
-          </span>
-          <span className="text-xs font-mono">
-            <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
-            <span className="text-rose-600 dark:text-rose-400">−{totals.removedLines}</span>
-          </span>
-        </div>
+      <div className="flex flex-col min-w-0">
+        <span className="font-mono text-[12.5px] text-slate-900 dark:text-zinc-100">
+          {totals.fileCount} {totals.fileCount === 1 ? "file" : "files"} changed
+        </span>
+        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-500">
+          <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
+          <span className="text-rose-600 dark:text-rose-400">−{totals.removedLines}</span>
+        </span>
       </div>
       <button
         type="button"
         data-testid="canvas-diff-open"
         onClick={() => canvas.openCanvas(artifact, "diff")}
-        className="min-h-[44px] px-3.5 rounded-xl border border-emerald-600/40 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1 shrink-0 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+        className="min-h-[44px] px-2 text-xs font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1 shrink-0"
       >
         <span>View diff</span>
         <ChevronRight className="h-3.5 w-3.5" />
@@ -166,7 +160,7 @@ export function CanvasFileOpenButton({
       type="button"
       data-testid="canvas-file-open"
       onClick={() => canvas.openCanvas(artifact, "preview")}
-      className="min-h-[44px] min-w-[44px] px-3.5 py-2 rounded-xl border border-emerald-600/40 dark:border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+      className="min-h-[44px] min-w-[44px] px-2 py-2 text-emerald-700 dark:text-[#34d399] text-xs font-bold flex items-center justify-center gap-1"
       title="Open in canvas"
     >
       <span>Open</span>
@@ -178,30 +172,31 @@ export function CanvasFileOpenButton({
 function DiffRows({ file }: { file: CanvasDiffFile }) {
   const rows = useMemo(() => buildDiffRows(file.diff), [file.diff]);
   return (
-    <div className="min-w-max font-mono text-[11px] leading-5">
+    <div className="min-w-max font-mono text-[11px] leading-[1.8] lg:text-[12.3px] lg:leading-[1.75]">
       {rows.map((row, idx) => {
-        let rowClass = "text-slate-700 dark:text-zinc-300";
+        let rowClass = "text-slate-700 dark:text-zinc-100";
+        let signClass = "text-slate-400 dark:text-zinc-500";
         let sign = " ";
         if (row.kind === "add") {
-          rowClass = "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300";
+          rowClass = "bg-emerald-500/10 dark:bg-[rgba(16,185,129,0.13)] text-emerald-900 dark:text-zinc-100";
+          signClass = "text-emerald-600 dark:text-[#34d399]";
           sign = "+";
         } else if (row.kind === "del") {
-          rowClass = "bg-rose-500/10 text-rose-800 dark:text-rose-300";
+          rowClass = "bg-rose-500/10 dark:bg-[rgba(248,113,113,0.12)] text-rose-900 dark:text-zinc-100";
+          signClass = "text-rose-600 dark:text-[#f87171]";
           sign = "−";
         } else if (row.kind === "hunk") {
-          rowClass = "bg-sky-500/10 text-sky-700 dark:text-sky-300 font-semibold";
+          rowClass = "bg-sky-500/10 dark:bg-[rgba(56,189,248,0.07)] text-sky-700 dark:text-[#7dd3fc] font-semibold";
         } else if (row.kind === "meta") {
           rowClass = "text-slate-400 dark:text-zinc-500";
         }
+        const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
         return (
           <div key={idx} data-testid="canvas-diff-row" className={`flex whitespace-pre ${rowClass}`}>
-            <span className="w-12 shrink-0 text-right pr-2 select-none text-slate-400 dark:text-zinc-600">
-              {row.oldLine ?? ""}
+            <span className="w-[34px] shrink-0 text-right pr-2 select-none text-[#52525b]">
+              {lineNo ?? ""}
             </span>
-            <span className="w-12 shrink-0 text-right pr-2 select-none text-slate-400 dark:text-zinc-600">
-              {row.newLine ?? ""}
-            </span>
-            <span className="w-4 shrink-0 select-none text-center">{sign}</span>
+            <span className={`w-4 shrink-0 select-none text-center ${signClass}`}>{sign}</span>
             <span>{row.text}</span>
           </div>
         );
@@ -222,14 +217,14 @@ function CanvasDiffView({
   const totals = diffTotals(artifact.files);
   const file = artifact.files[Math.min(selected, artifact.files.length - 1)];
 
-  const fileButtonClass = (active: boolean) =>
+  const chipClass = (active: boolean) =>
     active
-      ? "border-emerald-600 dark:border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40"
-      : "border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 bg-white dark:bg-zinc-900";
+      ? "border-emerald-600 dark:border-emerald-500 text-slate-900 dark:text-zinc-100 bg-emerald-50 dark:bg-[rgba(16,185,129,0.13)]"
+      : "border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 bg-white dark:bg-[#18181b]";
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="px-3 py-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800 shrink-0">
+      <div className="lg:hidden px-3 py-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800 shrink-0">
         {totals.fileCount} {totals.fileCount === 1 ? "file" : "files"} ·{" "}
         <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
         <span className="text-rose-600 dark:text-rose-400">−{totals.removedLines}</span>
@@ -244,7 +239,7 @@ function CanvasDiffView({
             type="button"
             data-testid="canvas-diff-chip"
             onClick={() => setSelected(idx)}
-            className={`min-h-[44px] px-3 rounded-xl border text-[11px] font-mono whitespace-nowrap flex items-center gap-1.5 ${fileButtonClass(idx === selected)}`}
+            className={`min-h-[44px] px-3 rounded-full border text-[11px] font-mono whitespace-nowrap flex items-center gap-1.5 ${chipClass(idx === selected)}`}
           >
             <span>{f.path.split("/").pop()}</span>
             <span className="text-emerald-600 dark:text-emerald-400">+{f.addedLines}</span>
@@ -255,20 +250,29 @@ function CanvasDiffView({
 
       <div className="flex flex-1 min-h-0">
         {/* Desktop: file rail */}
-        <div className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-200 dark:border-zinc-800 overflow-y-auto py-2">
+        <div className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-y-auto py-2 px-2 gap-1">
+          <div
+            data-testid="canvas-diff-rail-header"
+            className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-mono tracking-[0.14em] text-slate-500 dark:text-zinc-500"
+          >
+            {totals.fileCount} {totals.fileCount === 1 ? "FILE" : "FILES"} ·{" "}
+            <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
+            <span className="text-rose-600 dark:text-rose-400">−{totals.removedLines}</span>
+          </div>
           {artifact.files.map((f, idx) => (
             <button
               key={`${f.path}-${idx}`}
               type="button"
               data-testid="canvas-diff-rail-file"
               onClick={() => setSelected(idx)}
-              className={`px-3 py-2 text-left text-[11px] font-mono flex items-center justify-between gap-2 border-l-2 ${
+              title={f.path}
+              className={`px-2.5 py-2 text-left text-[11px] font-mono rounded-[10px] border flex items-center justify-between gap-2 ${
                 idx === selected
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-slate-900 dark:text-zinc-100"
-                  : "border-transparent text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                  ? "bg-slate-100 dark:bg-[#18181b] border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100"
+                  : "border-transparent text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-[#18181b]"
               }`}
             >
-              <span className="truncate">{f.path}</span>
+              <span className="truncate">{f.path.split("/").pop()}</span>
               <span className="shrink-0">
                 <span className="text-emerald-600 dark:text-emerald-400">+{f.addedLines}</span>{" "}
                 <span className="text-rose-600 dark:text-rose-400">−{f.removedLines}</span>
@@ -291,6 +295,10 @@ function CanvasDiffView({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="lg:hidden px-3 py-2 text-[11.5px] leading-relaxed text-slate-500 dark:text-zinc-500 border-t border-slate-100 dark:border-zinc-800 shrink-0">
+        Code lines never wrap — swipe sideways inside the diff. Every hunk is here; nothing is cut to fit the phone.
       </div>
     </div>
   );
@@ -319,7 +327,7 @@ function CanvasFileView({
     }
     const lines = artifact.code.split("\n");
     return (
-      <div className="flex-1 min-h-0 overflow-auto bg-slate-50 dark:bg-zinc-900">
+      <div className="flex-1 min-h-0 overflow-auto bg-slate-50 dark:bg-[#121215]">
         <div className="flex p-3.5 text-xs font-mono leading-relaxed min-w-max">
           <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
             {lines.map((_, i) => (
@@ -441,25 +449,41 @@ export function ArtifactCanvasPane() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
-  const tabButton = (v: CanvasView) => (
-    <button
-      key={v}
-      type="button"
-      data-testid="canvas-tab"
-      aria-pressed={activeView === v}
-      onClick={() => canvas.setView(v)}
-      className={`flex-1 lg:flex-none min-h-[44px] lg:min-h-[36px] px-4 rounded-xl text-xs font-semibold transition-colors ${
-        activeView === v
-          ? "bg-white dark:bg-zinc-700 text-emerald-800 dark:text-emerald-300 shadow-xs"
-          : "text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200"
-      }`}
-    >
-      {VIEW_LABELS[v]}
-    </button>
-  );
+  const tabButton = (v: CanvasView, variant: "desktop" | "mobile") =>
+    variant === "mobile" ? (
+      <button
+        key={v}
+        type="button"
+        data-testid="canvas-tab"
+        aria-pressed={activeView === v}
+        onClick={() => canvas.setView(v)}
+        className={`flex-1 min-h-[44px] px-4 rounded-[10px] border text-xs font-semibold transition-colors ${
+          activeView === v
+            ? "bg-white dark:bg-[#27272a] border-slate-300 dark:border-emerald-500 text-slate-900 dark:text-zinc-100"
+            : "bg-white dark:bg-[#18181b] border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400"
+        }`}
+      >
+        {VIEW_LABELS[v]}
+      </button>
+    ) : (
+      <button
+        key={v}
+        type="button"
+        data-testid="canvas-tab"
+        aria-pressed={activeView === v}
+        onClick={() => canvas.setView(v)}
+        className={`px-4 h-9 rounded-[7px] text-xs font-semibold transition-colors ${
+          activeView === v
+            ? "bg-white dark:bg-[#27272a] text-slate-900 dark:text-zinc-100 shadow-xs"
+            : "text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200"
+        }`}
+      >
+        {VIEW_LABELS[v]}
+      </button>
+    );
 
   const iconBtnClass =
-    "h-11 w-11 lg:h-9 lg:w-9 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0";
+    "h-11 w-11 lg:h-8 lg:w-8 rounded-xl lg:rounded-[9px] border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] text-slate-600 dark:text-zinc-400 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0";
 
   return (
     <section
@@ -468,7 +492,7 @@ export function ArtifactCanvasPane() {
       className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-black lg:relative lg:inset-auto lg:z-auto lg:w-[min(880px,58%)] lg:shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-zinc-800 lg:h-full"
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-2 border-b border-slate-200 dark:border-zinc-800 shrink-0">
+      <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-2 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shrink-0">
         <button
           type="button"
           data-testid="canvas-close"
@@ -479,26 +503,26 @@ export function ArtifactCanvasPane() {
           <span>Chat</span>
         </button>
         <span
-          className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate min-w-0"
+          className="font-mono text-[12.5px] font-normal text-slate-600 dark:text-zinc-400 truncate min-w-0"
           title={title}
         >
           {title}
         </span>
 
         {resolvedViews.length > 1 && (
-          <div className="hidden lg:flex items-center rounded-xl bg-slate-200/70 dark:bg-zinc-800 p-0.5 ml-2 shrink-0">
-            {resolvedViews.map(tabButton)}
+          <div className="hidden lg:flex items-center rounded-[10px] bg-slate-200/70 dark:bg-[#18181b] border border-slate-300/60 dark:border-zinc-800 p-[3px] ml-2 shrink-0">
+            {resolvedViews.map((v) => tabButton(v, "desktop"))}
           </div>
         )}
 
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
           {activeView === "preview" && artifact.kind === "file" && (
             <>
-              <div className="hidden lg:flex items-center rounded-xl bg-slate-200/70 dark:bg-zinc-800 p-0.5 mr-1">
+              <div className="hidden lg:flex items-center gap-1.5 mr-1">
                 <button
                   type="button"
                   onClick={() => setDevice("full")}
-                  className={`h-8 w-9 rounded-lg flex items-center justify-center ${device === "full" ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300" : "text-slate-500 dark:text-zinc-400"}`}
+                  className={`h-8 w-8 rounded-[9px] border flex items-center justify-center bg-white dark:bg-[#18181b] ${device === "full" ? "border-slate-300 dark:border-emerald-500 text-slate-700 dark:text-[#34d399]" : "border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400"}`}
                   title="Full width preview"
                   aria-label="Full width preview"
                 >
@@ -507,7 +531,7 @@ export function ArtifactCanvasPane() {
                 <button
                   type="button"
                   onClick={() => setDevice("phone")}
-                  className={`h-8 w-9 rounded-lg flex items-center justify-center ${device === "phone" ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300" : "text-slate-500 dark:text-zinc-400"}`}
+                  className={`h-8 w-8 rounded-[9px] border flex items-center justify-center bg-white dark:bg-[#18181b] ${device === "phone" ? "border-slate-300 dark:border-emerald-500 text-slate-700 dark:text-[#34d399]" : "border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400"}`}
                   title="Phone width preview"
                   aria-label="Phone width preview"
                 >
@@ -585,8 +609,8 @@ export function ArtifactCanvasPane() {
 
       {/* Mobile: view tabs live in a bottom bar with full-size targets */}
       {resolvedViews.length > 1 && (
-        <div className="lg:hidden flex items-center gap-2 px-3 py-2 border-t border-slate-200 dark:border-zinc-800 shrink-0 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-          {resolvedViews.map(tabButton)}
+        <div className="lg:hidden flex items-center gap-2 px-3 py-2 border-t border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shrink-0 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+          {resolvedViews.map((v) => tabButton(v, "mobile"))}
         </div>
       )}
     </section>
