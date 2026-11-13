@@ -472,7 +472,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/MorningReportView") ||
       p.includes("app/morning-report") ||
       p.includes("app/api/morning-report"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
+    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/morningReportViewRestructure.test.ts"]
   },
   // Run Ledger & Run Controls (Sprint 12 Phase 4)
   {
