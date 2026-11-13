@@ -799,3 +799,4 @@ Deploy v-a8f7d12-fresh verified: rollout success, pod web-ui-5f59676f87-mfl6r 1/
 - 2026-11-13 09:05 CT self-update DONE: prod 0ac826d to 9d94628; drift 0acf1c2 runlog-only, CI 43445804217 all-four-green; deploy v-9d94628-fresh S4 verified: rollout success, pod web-ui-5bdb87ddfd-25zkh 1/1 Running 0 restarts, gateway 200, api-threads 200. Rollback target was v-0ac826d-fresh.  
 PR #96 (UI-023/UI-024 chat diff collapse + canvas full diff) merged f9e97e2, deployed v-f9e97e2-fresh, S4 verified (pod web-ui-6dbcd6c8b5-9h2wx Running 0 restarts, gateway 200, /api/threads 200). Rollback target v-9d94628-fresh.
 2026-11-13 10:40 CT - self-update S1: rollback target v-f9e97e2-fresh; drift head 649b152 runlog-only; CI green run 43462895948.  
+2026-11-13 10:54 CT - self-update DONE prod aaecd8e; S4 verified, gateway 200, threads 200; rollback was v-f9e97e2-fresh.  
