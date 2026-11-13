@@ -44,14 +44,17 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
   });
 
   describe("ChatStream Integration", () => {
-    it("mounts EngineStatusPill in top header bar", () => {
+    // uir-0 header diet (owner ruling Nov 12, 2026): the Engine pill left the
+    // chat header; engine status and controls live in Settings. The pill
+    // component itself is unchanged and still covered above.
+    it("does NOT mount EngineStatusPill in the chat header (uir-0 header diet)", () => {
       assert.ok(
-        chatFile.includes("<EngineStatusPill"),
-        "ChatStream header must render EngineStatusPill component"
+        !chatFile.includes("<EngineStatusPill"),
+        "ChatStream header must not render EngineStatusPill after the header diet"
       );
       assert.ok(
-        chatFile.includes("import { EngineStatusPill }"),
-        "ChatStream must import EngineStatusPill"
+        !chatFile.includes("import { EngineStatusPill }"),
+        "ChatStream must not import EngineStatusPill after the header diet"
       );
     });
   });

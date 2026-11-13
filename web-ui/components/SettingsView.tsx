@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
 
 export interface DeployHistoryItem {
@@ -80,6 +80,8 @@ export function SettingsView({
   const [memoryText, setMemoryText] = useState("");
   const [memoryMessage, setMemoryMessage] = useState<string | null>(null);
   const [memorySaving, setMemorySaving] = useState(false);
+  const [deployHistoryExpanded, setDeployHistoryExpanded] = useState(false);
+  const [gitActivityExpanded, setGitActivityExpanded] = useState(false);
   const memoryTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [hostSettings, setHostSettingsState] = useState<{
@@ -297,6 +299,16 @@ export function SettingsView({
   };
 
   const activeModel = defaultModel || selectedModel;
+  const engineStatusLabel = engineData.status === "running" ? "Running" : engineData.status === "starting" ? "Starting" : "Stopped";
+  const engineDotClass = engineData.status === "running" ? "bg-emerald-500" : engineData.status === "starting" ? "bg-amber-500 animate-pulse" : "bg-slate-400 dark:bg-zinc-600";
+  const hostStatusLabel = hostSettings.hostAccessEnabled ? (hostSettings.runnerAvailable ? "Connected" : "Runner offline") : "Off";
+  const hostDotClass = hostSettings.hostAccessEnabled && hostSettings.runnerAvailable ? "bg-emerald-500" : hostSettings.hostAccessEnabled ? "bg-amber-500" : "bg-slate-400 dark:bg-zinc-600";
+  const stripModel = engineData.model || activeModel;
+  const latestDeploy = deployHistory.length > 0 ? [...deployHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : undefined;
+  const latestDeployLabel = latestDeploy ? `${latestDeploy.newSha.slice(0, 7)} · ${latestDeploy.status === "rolled_back" || latestDeploy.rollbackStatus === "rolled_back" ? "Rolled back" : latestDeploy.status === "failed" ? "Failed" : "Deployed"}` : "No deploys yet";
+  const visibleDeployHistory = deployHistoryExpanded ? deployHistory : deployHistory.slice(0, 2);
+  const gitActivityNewestFirst = [...(hostSettings.recentActivity || [])].slice(-8).reverse();
+  const visibleGitActivity = gitActivityExpanded ? gitActivityNewestFirst : gitActivityNewestFirst.slice(0, 2);
   const isSelfDeployActive = propsSelfDeployEnabled !== undefined ? propsSelfDeployEnabled : localSelfDeployEnabled;
   const handleClose = onBack || onClose || (() => {});
 
@@ -352,8 +364,43 @@ export function SettingsView({
           </h1>
         </div>
 
+        {/* Live Status Strip: pinned engine / host / model / prod summary */}
+        <div
+          className="sticky -top-4 sm:-top-6 z-20 bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
+          data-testid="settings-live-status-strip"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Engine</div>
+              <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                <span className={`h-2 w-2 rounded-full ${engineDotClass}`} />
+                <span>{engineStatusLabel}</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Host</div>
+              <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                <span className={`h-2 w-2 rounded-full ${hostDotClass}`} />
+                <span>{hostStatusLabel}</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Model</div>
+              <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={stripModel}>
+                {stripModel}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Last deploy</div>
+              <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={latestDeployLabel}>
+                {latestDeployLabel}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Section 1: Appearance */}
-        <div>
+        <div data-testid="settings-zone-appearance">
           <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Appearance
           </h2>
@@ -411,31 +458,8 @@ export function SettingsView({
           </div>
         </div>
 
-        {/* Section 2: Models */}
-        <div>
-          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
-            Models
-          </h2>
-
-          <div
-            onClick={onOpenModelSheet}
-            className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-slate-50/80 dark:hover:bg-zinc-850/80 transition-colors"
-          >
-            <div className="space-y-1">
-              <div className="text-base font-semibold text-slate-900 dark:text-zinc-100">
-                Default model
-              </div>
-              <div className="text-xs text-slate-500 dark:text-zinc-400">
-                {getShortModelName(activeModel)} · {getReasoningLabel(reasoningEffort)}
-              </div>
-            </div>
-
-            <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-500" />
-          </div>
-        </div>
-
         {/* Section 3: Engine Management */}
-        <div>
+        <div data-testid="settings-zone-engine">
           <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Engine Management
           </h2>
@@ -543,10 +567,30 @@ export function SettingsView({
               </button>
             </div>
           </div>
-        </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-2 px-1">
+              Models
+            </h3>
 
+          <div
+            onClick={onOpenModelSheet}
+            className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-slate-50/80 dark:hover:bg-zinc-850/80 transition-colors"
+          >
+            <div className="space-y-1">
+              <div className="text-base font-semibold text-slate-900 dark:text-zinc-100">
+                Default model
+              </div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400">
+                {getShortModelName(activeModel)} · {getReasoningLabel(reasoningEffort)}
+              </div>
+            </div>
+
+            <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-500" />
+          </div>
+          </div>
+        </div>
         {/* Section 4: Self-Deploy Pipeline (Sprint 12 Phase 10) */}
-        <div>
+        <div data-testid="settings-zone-self-deploy">
           <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
             Self-Deploy Pipeline
           </h2>
@@ -556,27 +600,18 @@ export function SettingsView({
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Kill switch (SELF_DEPLOY_ENABLED)</span>
+                  <span>Self-deploy status</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  When OFF, self-deploy is completely disabled. Default is OFF.
+                  {isSelfDeployActive
+                    ? "Self-deploy is ON. Its kill switch lives in the Danger Zone at the bottom of Settings."
+                    : "Self-deploy is OFF (kill switch engaged). Its kill switch lives in the Danger Zone at the bottom of Settings."}
                 </p>
               </div>
-
-              <button
-                type="button"
-                onClick={toggleSelfDeploy}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isSelfDeployActive ? "bg-emerald-600 dark:bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
-                }`}
-                title="Toggle self-deploy kill switch"
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    isSelfDeployActive ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
+              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${isSelfDeployActive ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"}`}>
+                <span className={`h-2 w-2 rounded-full ${isSelfDeployActive ? "bg-emerald-500" : "bg-slate-400 dark:bg-zinc-600"}`} />
+                <span>{isSelfDeployActive ? "ON" : "OFF"}</span>
+              </div>
             </div>
 
             {/* Deploy History with LOUD rollback alerts */}
@@ -587,8 +622,8 @@ export function SettingsView({
                   <span>Recent Self-Deploy History</span>
                 </div>
 
-                <div className="space-y-2">
-                  {deployHistory.map((item) => {
+                <div className={deployHistoryExpanded ? "space-y-2 max-h-[220px] overflow-y-auto pr-1" : "space-y-2"}>
+                  {visibleDeployHistory.map((item) => {
                     const isRolledBack = item.status === "rolled_back" || item.rollbackStatus === "rolled_back";
                     return (
                       <div
@@ -626,138 +661,20 @@ export function SettingsView({
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Section 5: Notifications */}
-        <div data-testid="settings-notifications-card">
-          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
-            Notifications
-          </h2>
-
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Telegram Notifications</span>
-                </div>
-                <p
-                  data-testid="notifications-status-reason"
-                  className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm"
-                >
-                  {!notifStatus.configured
-                    ? "Missing Telegram credentials (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)."
-                    : !notifStatus.enabled
-                    ? "Outbound Telegram notifications are currently disabled."
-                    : "Outbound Telegram notifications active for completed/failed runs, morning reports, and host approvals."}
-                </p>
-              </div>
-
-              {/* Status Badge */}
-              <div
-                data-testid="notifications-status-badge"
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                  notifStatus.configured && notifStatus.enabled
-                    ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
-                    : notifStatus.configured && !notifStatus.enabled
-                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
-                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    notifStatus.configured && notifStatus.enabled
-                      ? "bg-emerald-500"
-                      : notifStatus.configured && !notifStatus.enabled
-                      ? "bg-amber-500"
-                      : "bg-slate-400 dark:bg-zinc-600"
-                  }`}
-                />
-                <span>
-                  {notifStatus.configured && notifStatus.enabled
-                    ? "Connected"
-                    : notifStatus.configured && !notifStatus.enabled
-                    ? "Disabled"
-                    : "Not configured"}
-                </span>
-              </div>
-            </div>
-
-            {/* Toggle Switch */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800">
-              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                Enable Notifications
-              </span>
-              <button
-                type="button"
-                role="switch"
-                data-testid="notifications-toggle-btn"
-                aria-checked={notifStatus.enabled}
-                onClick={handleToggleNotifications}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  notifStatus.enabled
-                    ? "bg-emerald-600 dark:bg-emerald-500"
-                    : "bg-slate-300 dark:bg-zinc-700"
-                }`}
-                title="Toggle notifications"
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    notifStatus.enabled ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Test Button & Result */}
-            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  data-testid="notifications-test-btn"
-                  disabled={notifTesting || !notifStatus.configured || !notifStatus.enabled}
-                  onClick={handleTestNotification}
-                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                    notifTesting || !notifStatus.configured || !notifStatus.enabled
-                      ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
-                      : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
-                  }`}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  <span>{notifTesting ? "Sending..." : "Send test notification"}</span>
-                </button>
-
-                {notifTestMessage && (
-                  <span className="text-xs text-slate-500 dark:text-zinc-400">
-                    {notifTestMessage}
-                  </span>
+                {deployHistory.length > 2 && (
+                  <button
+                    type="button"
+                    data-testid="deploy-history-expand-btn"
+                    onClick={() => setDeployHistoryExpanded(!deployHistoryExpanded)}
+                    className="flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
+                  >
+                    <span>{deployHistoryExpanded ? "Show less" : `Show all ${deployHistory.length}`}</span>
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${deployHistoryExpanded ? "rotate-180" : ""}`} />
+                  </button>
                 )}
               </div>
-
-              {notifStatus.lastResult && (
-                <div
-                  data-testid="notifications-last-result"
-                  className="text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
-                >
-                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                    {notifStatus.lastResult.ok
-                      ? "Sent"
-                      : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
-                  </span>{" "}
-                  · {notifStatus.lastResult.event} ·{" "}
-                  {new Date(notifStatus.lastResult.at).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit"
-                  })}
-                  {notifStatus.lastResult.messageId !== undefined && (
-                    <span> (msg #{notifStatus.lastResult.messageId})</span>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
@@ -933,7 +850,7 @@ export function SettingsView({
                   data-testid="host-git-activity-list"
                   className="space-y-2 max-h-60 overflow-y-auto pr-1"
                 >
-                  {hostSettings.recentActivity.slice(-8).reverse().map((item, idx) => (
+                  {visibleGitActivity.map((item, idx) => (
                     <div
                       key={idx}
                       className="p-2.5 rounded-2xl border border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-850/60 text-xs space-y-1"
@@ -991,6 +908,147 @@ export function SettingsView({
                   No unattended git operations recorded yet.
                 </div>
               )}
+              {gitActivityNewestFirst.length > 2 && (
+                <button
+                  type="button"
+                  data-testid="host-git-activity-expand-btn"
+                  onClick={() => setGitActivityExpanded(!gitActivityExpanded)}
+                  className="flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
+                >
+                  <span>{gitActivityExpanded ? "Show less" : `Show all ${gitActivityNewestFirst.length}`}</span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${gitActivityExpanded ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 5: Notifications */}
+        <div data-testid="settings-notifications-card">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
+            Telegram
+          </h2>
+
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Telegram Notifications</span>
+                </div>
+                <p
+                  data-testid="notifications-status-reason"
+                  className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm"
+                >
+                  {!notifStatus.configured
+                    ? "Missing Telegram credentials (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)."
+                    : !notifStatus.enabled
+                    ? "Outbound Telegram notifications are currently disabled."
+                    : "Outbound Telegram notifications active for completed/failed runs, morning reports, and host approvals."}
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div
+                data-testid="notifications-status-badge"
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                  notifStatus.configured && notifStatus.enabled
+                    ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+                    : notifStatus.configured && !notifStatus.enabled
+                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    notifStatus.configured && notifStatus.enabled
+                      ? "bg-emerald-500"
+                      : notifStatus.configured && !notifStatus.enabled
+                      ? "bg-amber-500"
+                      : "bg-slate-400 dark:bg-zinc-600"
+                  }`}
+                />
+                <span>
+                  {notifStatus.configured && notifStatus.enabled
+                    ? "Connected"
+                    : notifStatus.configured && !notifStatus.enabled
+                    ? "Disabled"
+                    : "Not configured"}
+                </span>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                Enable Notifications
+              </span>
+              <button
+                type="button"
+                role="switch"
+                data-testid="notifications-toggle-btn"
+                aria-checked={notifStatus.enabled}
+                onClick={handleToggleNotifications}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  notifStatus.enabled
+                    ? "bg-emerald-600 dark:bg-emerald-500"
+                    : "bg-slate-300 dark:bg-zinc-700"
+                }`}
+                title="Toggle notifications"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    notifStatus.enabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Test Button & Result */}
+            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  data-testid="notifications-test-btn"
+                  disabled={notifTesting || !notifStatus.configured || !notifStatus.enabled}
+                  onClick={handleTestNotification}
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                    notifTesting || !notifStatus.configured || !notifStatus.enabled
+                      ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
+                      : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
+                  }`}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{notifTesting ? "Sending..." : "Send test notification"}</span>
+                </button>
+
+                {notifTestMessage && (
+                  <span className="text-xs text-slate-500 dark:text-zinc-400">
+                    {notifTestMessage}
+                  </span>
+                )}
+              </div>
+
+              {notifStatus.lastResult && (
+                <div
+                  data-testid="notifications-last-result"
+                  className="text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
+                >
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                    {notifStatus.lastResult.ok
+                      ? "Sent"
+                      : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
+                  </span>{" "}
+                  · {notifStatus.lastResult.event} ·{" "}
+                  {new Date(notifStatus.lastResult.at).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit"
+                  })}
+                  {notifStatus.lastResult.messageId !== undefined && (
+                    <span> (msg #{notifStatus.lastResult.messageId})</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1044,6 +1102,45 @@ export function SettingsView({
                 {memoryMessage}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Danger Zone: destructive controls only, separated at the bottom */}
+        <div data-testid="settings-zone-danger">
+          <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-400 mb-3 px-1">
+            Danger Zone
+          </h2>
+
+          <div className="bg-rose-50 dark:bg-rose-950/30 rounded-3xl p-5 shadow-sm border border-rose-300 dark:border-rose-900 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  <span>Kill switch (SELF_DEPLOY_ENABLED)</span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  When OFF, self-deploy is completely disabled. Default is OFF.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleSelfDeploy}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  isSelfDeployActive ? "bg-emerald-600 dark:bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
+                }`}
+                role="switch"
+                aria-checked={isSelfDeployActive}
+                data-testid="self-deploy-kill-switch-btn"
+                title="Toggle self-deploy kill switch"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isSelfDeployActive ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
 

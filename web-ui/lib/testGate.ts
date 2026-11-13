@@ -162,7 +162,17 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
-      "tests/chatWebResearchCap.test.ts"
+      "tests/chatWebResearchCap.test.ts",
+      "tests/uirHeaderActivity.test.ts"
+    ]
+  },
+  // uir-0/uir-1: Live Activity Header, live-activity helpers, header diet
+  {
+    match: (p) => p.includes("lib/liveActivity") || p.includes("components/LiveActivityHeader"),
+    tests: [
+      "tests/uirHeaderActivity.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatPolish.test.ts"
     ]
   },
   // Threads store & Threads API
@@ -242,6 +252,16 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("deploy/k8s/mcp-runner") ||
       p.includes("deploy/k8s/web-ui"),
     tests: ["tests/permissions.test.ts"]
+  },
+  // Artifact canvas (uir-2): core logic, pane, and its card affordances
+  {
+    match: (p) =>
+      p.includes("lib/canvas") ||
+      p.includes("components/ArtifactCanvas") ||
+      p.includes("components/CanvasContext") ||
+      p.includes("components/ArtifactRenderers") ||
+      p.includes("components/ChatStream"),
+    tests: ["tests/uirCanvas.test.ts"]
   },
   // Unified Agent UI (Material 3) components & design tokens
   {
@@ -667,7 +687,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/SettingsView"),
-    tests: ["tests/settingsMemoryUi.test.ts"]
+    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"]
   },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {

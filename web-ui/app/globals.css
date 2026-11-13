@@ -80,6 +80,16 @@ body {
   background: rgba(150, 150, 150, 0.4);
 }
 
+/* Live Activity Header (UI-017): indeterminate pulse — travels the track,
+   signals work continuing without claiming a completion percentage. */
+@keyframes live-activity-pulse-slide {
+  0% { left: -33%; }
+  100% { left: 100%; }
+}
+.live-activity-pulse {
+  animation: live-activity-pulse-slide 1.6s ease-in-out infinite;
+}
+
 /* Touch-friendly horizontal scroller hiding ugly scrollbars */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
