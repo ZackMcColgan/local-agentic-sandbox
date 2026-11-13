@@ -125,13 +125,14 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
     const slotLocator = page.locator('[data-testid="turn-status-slot"]');
     expect(await slotLocator.count()).toBeLessThanOrEqual(1);
 
-    // Once turn-status-slot appears, its boundingBox height is > 0 and <= 36
-    if (await slotLocator.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-      const box = await slotLocator.first().boundingBox();
-      if (box) {
-        expect(box.height).toBeGreaterThan(0);
-        expect(box.height).toBeLessThanOrEqual(36);
-      }
+    // Once turn-status-slot appears, its boundingBox height is > 0 and <= 36.
+    // The slot is transient (it unmounts when the tail message starts
+    // rendering its thinking panel), so read the box in a single attempt
+    // instead of isVisible-then-boundingBox, which races the unmount.
+    const slotBox = await slotLocator.first().boundingBox({ timeout: 2500 }).catch(() => null);
+    if (slotBox) {
+      expect(slotBox.height).toBeGreaterThan(0);
+      expect(slotBox.height).toBeLessThanOrEqual(36);
     }
     expect(await slotLocator.count()).toBeLessThanOrEqual(1);
 

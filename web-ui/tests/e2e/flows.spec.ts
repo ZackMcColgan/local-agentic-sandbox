@@ -137,31 +137,23 @@ test.describe("Real User Interaction Flows", () => {
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
   });
 
-  test("Flow 4: Composer Chat/Build switch and stubbed streaming completion", async ({ page }) => {
+  test("Flow 4: Composer has no Chat/Build switch (uir-0) and stubbed streaming completion", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("textarea");
 
-    // 1. Chat / Build mode selector
-    const buildPill = page.locator('button[role="radio"]:has-text("Build")').first();
-    const chatPill = page.locator('button[role="radio"]:has-text("Chat")').first();
+    // 1. uir-0 removed the Chat/Build composer toggle by owner order; build
+    // dispatch stays reachable via the /build prefix instead.
+    const buildPill = page.locator('button[role="radio"]:has-text("Build")');
+    const chatPill = page.locator('button[role="radio"]:has-text("Chat")');
+    await expect(buildPill).toHaveCount(0);
+    await expect(chatPill).toHaveCount(0);
 
-    await expect(buildPill).toBeVisible();
-    await expect(chatPill).toBeVisible();
-
-    // 2. Toggle to Build
-    await buildPill.click();
-    await page.waitForTimeout(100);
-
-    // 3. Toggle back to Chat
-    await chatPill.click();
-    await page.waitForTimeout(100);
-
-    // 4. Send message and verify stubbed streaming
+    // 2. Send message and verify stubbed streaming
     const textarea = page.locator("textarea");
     await textarea.fill("Hello local agent, run verification!");
     await textarea.press("Enter");
 
-    // 5. Verify assistant stubbed streaming reply renders
+    // 3. Verify assistant stubbed streaming reply renders
     await expect(page.locator("text=Analysis complete.")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("text=All systems verified operational.")).toBeVisible({ timeout: 5000 });
   });
