@@ -59,6 +59,28 @@ export function sumRoundPromptTokens(rounds: number[] | undefined): number {
 }
 
 /**
+ * The live context size for the header meter (qa-7 / UI-013): the LAST round's
+ * actual prompt tokens, read from the per-round records persisted on the
+ * thread's assistant messages. Scans from the newest message backwards and
+ * returns the last valid entry of the first non-empty round array; 0 when the
+ * record holds no round data yet. Pure — safe for render paths.
+ */
+export function latestRoundPromptTokens(
+  messages: Array<{ roundPromptTokens?: number[] }> | undefined
+): number {
+  if (!Array.isArray(messages)) return 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const rounds = messages[i]?.roundPromptTokens;
+    if (!Array.isArray(rounds)) continue;
+    for (let j = rounds.length - 1; j >= 0; j--) {
+      const v = rounds[j];
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+    }
+  }
+  return 0;
+}
+
+/**
  * Aggregates the per-turn rollups recorded on a thread's assistant messages
  * into the thread-level economics (the board-item read path).
  */
