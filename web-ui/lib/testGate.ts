@@ -224,6 +224,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("deploy/k8s/web-ui"),
     tests: ["tests/permissions.test.ts"]
   },
+  // Artifact canvas (uir-2): core logic, pane, and its card affordances
+  {
+    match: (p) =>
+      p.includes("lib/canvas") ||
+      p.includes("components/ArtifactCanvas") ||
+      p.includes("components/ArtifactRenderers") ||
+      p.includes("components/ChatStream"),
+    tests: ["tests/uirCanvas.test.ts"]
+  },
   // Unified Agent UI (Material 3) components & design tokens
   {
     match: (p) =>

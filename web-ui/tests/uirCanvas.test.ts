@@ -6,8 +6,19 @@
 // canvas shows every line, unlike the capped trace-card preview), the
 // feature-flag read, the unseen-update badge rule, and scroll capture /
 // restore used by the mobile sheet's exact-position return to chat.
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { GlobalWindow } from "happy-dom";
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { CanvasProvider } from "../components/CanvasContext";
+import {
+  ArtifactCanvasPane,
+  CanvasDiffCard,
+} from "../components/ArtifactCanvas";
+import { CodeBlock } from "../components/ArtifactRenderers";
 import {
   CANVAS_FLAG_KEY,
   isCanvasEnabled,
@@ -220,6 +231,31 @@ describe("uir-2 canvas: views per artifact", () => {
   });
 });
 
+describe("uir-2 canvas: UI wiring (source assertions)", () => {
+  it("testGate maps the canvas sources to this suite", () => {
+    const gate = fs.readFileSync(path.resolve(__dirname, "../lib/testGate.ts"), "utf8");
+    assert.ok(
+      gate.includes('"tests/uirCanvas.test.ts"'),
+      "MAPPING_RULES must run tests/uirCanvas.test.ts for canvas changes"
+    );
+  });
+
+  it("ChatStream mounts the canvas provider and pane around the chat column", () => {
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+    assert.ok(src.includes("CanvasProvider"), "ChatStream must wrap its tree in CanvasProvider");
+    assert.ok(src.includes("ArtifactCanvasPane"), "ChatStream must mount the ArtifactCanvasPane");
+    assert.ok(src.includes("CanvasDiffCard"), "ChatStream diff cards must offer the canvas diff door");
+    assert.ok(src.includes("CanvasFileOpenButton"), "ChatStream file cards must offer the canvas open door");
+  });
+
+  it("CodeBlock cards carry the Open affordance and the update badge hook", () => {
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/ArtifactRenderers.tsx"), "utf8");
+    assert.ok(src.includes('data-testid="canvas-open"'), "CodeBlock must render the canvas Open button");
+    assert.ok(src.includes('data-testid="canvas-update-badge"'), "CodeBlock must render the unseen-update badge");
+    assert.ok(src.includes("Open"), "the affordance is labelled Open");
+  });
+});
+
 describe("uir-2 canvas: scroll capture and restore", () => {
   it("captures and restores the exact scrollTop of the chat container", () => {
     const el = { scrollTop: 1234 };
@@ -234,5 +270,204 @@ describe("uir-2 canvas: scroll capture and restore", () => {
     assert.equal(captureScrollPosition(null), 0);
     restoreScrollPosition(null, 500);
     restoreScrollPosition(undefined, 500);
+  });
+});
+
+describe("uir-2 canvas: rendered UI", () => {
+  let win: GlobalWindow;
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+  let scrollEl: HTMLDivElement;
+  let scrollRef: { current: HTMLDivElement | null };
+
+  beforeEach(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    win = new GlobalWindow({ url: "http://localhost:3000" });
+    (globalThis as any).window = win;
+    (globalThis as any).document = win.document;
+    (globalThis as any).localStorage = win.localStorage;
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container);
+    scrollEl = win.document.createElement("div") as unknown as HTMLDivElement;
+    scrollRef = { current: scrollEl };
+  });
+
+  afterEach(async () => {
+    if (root) {
+      await act(async () => {
+        root!.unmount();
+      });
+    }
+    root = null;
+    win.localStorage.clear();
+  });
+
+  const renderTree = async (tree: React.ReactNode) => {
+    if (!root) root = createRoot(container);
+    await act(async () => {
+      root!.render(tree as React.ReactElement);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  };
+
+  const click = async (el: Element | null) => {
+    assert.ok(el, "element to click must exist");
+    await act(async () => {
+      (el as HTMLElement).click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  };
+
+  it("code card Open opens the pane (filename + Preview/Code tabs); closing restores the exact chat scroll position", async () => {
+    scrollEl.scrollTop = 777;
+    await renderTree(
+      React.createElement(
+        CanvasProvider,
+        { scrollElRef: scrollRef },
+        React.createElement(CodeBlock, {
+          language: "html",
+          code: "<html><body>v1</body></html>",
+          filename: "page.html",
+        }),
+        React.createElement(ArtifactCanvasPane)
+      )
+    );
+
+    const openBtn = container.querySelector('[data-testid="canvas-open"]');
+    assert.ok(openBtn, "Open affordance renders on the artifact card");
+    assert.equal(
+      container.querySelector('[data-testid="canvas-update-badge"]'),
+      null,
+      "no update badge before the artifact is ever opened"
+    );
+
+    await click(openBtn);
+    const pane = container.querySelector('[data-testid="canvas-pane"]');
+    assert.ok(pane, "canvas pane opens");
+    assert.ok(pane!.textContent?.includes("page.html"), "pane header shows the filename");
+    const tabLabels = Array.from(
+      container.querySelectorAll('[data-testid="canvas-tab"]')
+    ).map((t) => t.textContent);
+    assert.deepEqual(
+      [...new Set(tabLabels)],
+      ["Preview", "Code"],
+      "the artifact offers exactly its Preview and Code views"
+    );
+
+    // The sheet opening must not lose the chat position: simulate the
+    // container being reset while the canvas is up, then close via ‹ Chat.
+    scrollEl.scrollTop = 0;
+    await click(container.querySelector('[data-testid="canvas-close"]'));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    assert.equal(
+      container.querySelector('[data-testid="canvas-pane"]'),
+      null,
+      "pane closes"
+    );
+    assert.equal(scrollEl.scrollTop, 777, "exact prior scroll position restored");
+  });
+
+  it("shows the Updated badge when a seen artifact changes while the canvas is closed", async () => {
+    const tree = (code: string) =>
+      React.createElement(
+        CanvasProvider,
+        { scrollElRef: scrollRef },
+        React.createElement(CodeBlock, { language: "html", code, filename: "page.html" }),
+        React.createElement(ArtifactCanvasPane)
+      );
+    await renderTree(tree("<html><body>v1</body></html>"));
+    await click(container.querySelector('[data-testid="canvas-open"]'));
+    await click(container.querySelector('[data-testid="canvas-close"]'));
+
+    await renderTree(tree("<html><body>v2</body></html>"));
+    const badge = container.querySelector('[data-testid="canvas-update-badge"]');
+    assert.ok(badge, "badge appears after the artifact changed while closed");
+    assert.ok(badge!.textContent?.includes("Updated"), "badge says Updated");
+    assert.ok(badge!.textContent?.includes("file changed"), "badge says file changed");
+  });
+
+  it("diff card opens the FULL diff — every row, file chips and rail, no truncation", async () => {
+    const bigBody: string[] = [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1,400 +1,400 @@ big",
+    ];
+    for (let i = 0; i < 400; i++) bigBody.push(` line-${i}`);
+    const diffs = [
+      { path: "src/a.ts", diff: bigBody.join("\n"), addedLines: 0, removedLines: 0 },
+      {
+        path: "src/b.ts",
+        diff: "@@ -1,1 +1,1 @@\n-old\n+new",
+        addedLines: 1,
+        removedLines: 1,
+      },
+    ];
+    await renderTree(
+      React.createElement(
+        CanvasProvider,
+        { scrollElRef: scrollRef },
+        React.createElement(CanvasDiffCard, { diffs }),
+        React.createElement(ArtifactCanvasPane)
+      )
+    );
+
+    const card = container.querySelector('[data-testid="canvas-diff-card"]');
+    assert.ok(card, "diff summary card renders");
+    assert.ok(card!.textContent?.includes("2 files changed"), "card counts the files");
+
+    await click(container.querySelector('[data-testid="canvas-diff-open"]'));
+    assert.ok(container.querySelector('[data-testid="canvas-pane"]'), "pane opens");
+    assert.equal(
+      container.querySelectorAll('[data-testid="canvas-diff-chip"]').length,
+      2,
+      "mobile file chips: one per file"
+    );
+    assert.equal(
+      container.querySelectorAll('[data-testid="canvas-diff-rail-file"]').length,
+      2,
+      "desktop file rail: one entry per file"
+    );
+    assert.equal(
+      container.querySelectorAll('[data-testid="canvas-diff-row"]').length,
+      404,
+      "full diff renders a row for every line (4 header/hunk + 400 body)"
+    );
+
+    const chips = container.querySelectorAll('[data-testid="canvas-diff-chip"]');
+    await click(chips[1]);
+    assert.equal(
+      container.querySelectorAll('[data-testid="canvas-diff-row"]').length,
+      3,
+      "switching files swaps the rendered full diff"
+    );
+  });
+
+  it("feature flag off removes the Open affordance (inline rendering is the fallback)", async () => {
+    win.localStorage.setItem("las.canvas.enabled", "0");
+    await renderTree(
+      React.createElement(
+        CanvasProvider,
+        { scrollElRef: scrollRef },
+        React.createElement(CodeBlock, {
+          language: "html",
+          code: "<html><body>v1</body></html>",
+          filename: "page.html",
+        }),
+        React.createElement(ArtifactCanvasPane)
+      )
+    );
+    assert.equal(
+      container.querySelector('[data-testid="canvas-open"]'),
+      null,
+      "no Open button when the canvas flag is off"
+    );
+    assert.ok(container.innerHTML.includes("page.html"), "inline card still renders");
   });
 });
