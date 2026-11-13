@@ -758,3 +758,9 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Implementation: 'Retry turn' button beside the amber chip (RefreshCw icon, onClick handleRetry -> re-sends last user message). Presentation + affordance only; persisted marker text and reconciliation behavior untouched.
 - Gate mapping: suite added to ChatStream group in lib/testGate.ts MAPPING_RULES.
 - npm run test:gate via bridge -> PASSED 320 pass / 0 fail, 110 suites (<90s budget). Commits 8c05dad (fix+test), 845fb51 (gate mapping). PR #89 into develop, no merge/deploy in this job.
+ 
+## qa-5 deploy 2026-11-13 (PR #89, UI-007) 
+- Rollback target banked: v-0a08c89-fresh 
+- Deploy target: v-31a705f-fresh, develop 31a705f, PR #89 merged 06:52:46Z 
+- Driver audit PASS: scope matches brief, Retry turn button beside Incomplete chip, existing handleRetry, 4 new tests additive, testGate mapping-only, no guard touched, no brand names, CI all-four-green run 43380495415 head 2d9821c. 
+- FLAG process not blocker: qa-5 turn ran on swift-15-27b-mtp medium, not briefed qwen3.8-flash-next-gyro-gyro-s LOW. Deliverable verified by CI plus driver diff audit; engine deviation recorded for morning report. 
