@@ -126,6 +126,42 @@ export type ThreadLiveness = "alive" | "stalled" | "settled";
 export const TURN_STALL_WINDOW_MS = 600000;
 
 /**
+ * qa-6 / UI-001 + UI-002: hard cap on zombie live signals. A turn-presence
+ * entry (or execution-set entry) whose thread record has gone untouched
+ * past this cap belongs to a turn that died without clearing its live
+ * signals — reconcile reaps it instead of trusting it forever. A genuinely
+ * live turn heartbeats its record (touchActiveTurn + per-round snapshots),
+ * so its record never approaches this cap while it works.
+ */
+export const ZOMBIE_TURN_AGE_CAP_MS = 6 * 60 * 60 * 1000;
+
+/** True when the thread record has not been touched for longer than windowMs. */
+export function isRecordStaleBeyond(thread: Thread, now: number, windowMs: number): boolean {
+  const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
+  if (!Number.isFinite(touchedAt)) return false;
+  return now - touchedAt > windowMs;
+}
+
+/**
+ * A presence entry is a zombie when it is older than the hard cap AND the
+ * thread record has been stale past the ordinary stall window. Both
+ * conditions are required: an ancient presence with a fresh record is a
+ * live long turn; a young presence with a stale record may just be a
+ * quiet round.
+ */
+export function isZombiePresence(
+  presence: { startedAt: string } | null | undefined,
+  thread: Thread,
+  now: number = Date.now()
+): boolean {
+  if (!presence) return false;
+  const startedAt = Date.parse(presence.startedAt || "");
+  if (!Number.isFinite(startedAt)) return false;
+  if (now - startedAt <= ZOMBIE_TURN_AGE_CAP_MS) return false;
+  return isRecordStaleBeyond(thread, now, TURN_STALL_WINDOW_MS);
+}
+
+/**
  * Derives liveness from the record's last-activity timestamp (updatedAt) against the
  * live-execution state. A live-but-stale turn is NEVER reconciled to completed here;
  * reconciliation stays owned by reconcileThread.
@@ -299,11 +335,11 @@ export function clearTurnAbortController(threadId: string): void {
   activeTurnAbortControllers.delete(threadId);
 }
 
-export function markTurnActive(threadId: string): void {
+export function markTurnActive(threadId: string, startedAtIso?: string): void {
   if (!activeTurnRegistry.has(threadId)) {
     activeTurnRegistry.set(threadId, {
       threadId,
-      startedAt: new Date().toISOString(),
+      startedAt: startedAtIso ?? new Date().toISOString(),
       status: "streaming"
     });
   }
@@ -582,10 +618,25 @@ export class ThreadStore {
   reconcileThread(thread: Thread): boolean {
     let changed = false;
 
-    const isLive =
+    // qa-6: reap zombie live signals first. A leaked presence entry older
+    // than the hard cap with a stale record is deleted so it cannot keep a
+    // dead turn "live" forever; a leaked execution-set entry is discounted
+    // (not deleted — the set is shared bookkeeping) when the record has
+    // been untouched past the same cap.
+    const now = Date.now();
+    const presence = getActiveTurn(thread.id);
+    const presenceZombie = isZombiePresence(presence, thread, now);
+    if (presenceZombie) {
+      clearTurnActive(thread.id);
+    }
+    let executionLive =
       activeExecutionSet.has(thread.id) ||
-      Boolean(getActiveTurn(thread.id)) ||
       (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
+    if (executionLive && isRecordStaleBeyond(thread, now, ZOMBIE_TURN_AGE_CAP_MS)) {
+      executionLive = false;
+    }
+
+    const isLive = executionLive || (Boolean(presence) && !presenceZombie);
 
     // S2: Reconcile active status against live activeExecutionSet / activeTurnRegistry
     if (thread.status === "active" && !isLive) {

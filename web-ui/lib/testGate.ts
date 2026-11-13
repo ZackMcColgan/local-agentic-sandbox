@@ -196,6 +196,13 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar"),
     tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
   },
+  // qa-6 / UI-001 + UI-002: zombie streaming cap — leaked presence /
+  // execution live signals older than the hard cap with a stale record are
+  // reaped by reconcile instead of keeping a dead turn live forever
+  {
+    match: (p) => p.includes("lib/threads/threadStore"),
+    tests: ["tests/zombieStreamingCap.test.ts"]
+  },
   // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
   // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
   {
