@@ -157,6 +157,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatUiHonestyAndCopy.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
+      "tests/incompleteStatusAffordance.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
@@ -213,6 +214,14 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") ||
       p.includes("app/api/chat/route"),
     tests: ["tests/uirLiveMeter.test.ts"]
+  },
+  // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
+  // title wrap (UI-012), long-brief collapse (UI-014)
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/uirChatTextFixes.test.ts"]
   },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup

@@ -751,3 +751,21 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Rollback target banked: v-8063453-fresh 
 - Deploy target: v-0a08c89-fresh, develop 0a08c89, PR 82 merged 
 - Deploy VERIFIED 2026-11-12 ~21:50 CT: image v-0a08c89-fresh, pod web-ui-79957c5b77-rnjj4 1/1 Running 0 restarts, gateway 200, /api/threads 200, prod == develop 0a08c89 
+
+## qa-5 incomplete-status affordance 2026-11-12 (UI-007)
+- Grounding (driver-verified): the amber 'Incomplete' chip already existed (ChatStream.tsx:2413-2421, asserted by chatTurnHonesty.test.ts:183). The real UI-007 gap is the retry/resume affordance: once reconciliation ended, an 'incomplete' turn had no recovery control.
+- Tests-first: web-ui/tests/incompleteStatusAffordance.test.ts (4 subtests: chip + retry affordance on incomplete record; completed turns stay bare prose; marker text unchanged). Fail-before confirmed: 3 pass / 1 fail (affordance absent).
+- Implementation: 'Retry turn' button beside the amber chip (RefreshCw icon, onClick handleRetry -> re-sends last user message). Presentation + affordance only; persisted marker text and reconciliation behavior untouched.
+- Gate mapping: suite added to ChatStream group in lib/testGate.ts MAPPING_RULES.
+- npm run test:gate via bridge -> PASSED 320 pass / 0 fail, 110 suites (<90s budget). Commits 8c05dad (fix+test), 845fb51 (gate mapping). PR #89 into develop, no merge/deploy in this job.
+ 
+## qa-5 deploy 2026-11-13 (PR #89, UI-007) 
+- Rollback target banked: v-0a08c89-fresh 
+- Deploy target: v-31a705f-fresh, develop 31a705f, PR #89 merged 06:52:46Z 
+- Driver audit PASS: scope matches brief, Retry turn button beside Incomplete chip, existing handleRetry, 4 new tests additive, testGate mapping-only, no guard touched, no brand names, CI all-four-green run 43380495415 head 2d9821c. 
+- FLAG process not blocker: qa-5 turn ran on swift-15-27b-mtp medium, not briefed qwen3.8-flash-next-gyro-gyro-s LOW. Deliverable verified by CI plus driver diff audit; engine deviation recorded for morning report. 
+- Deploy VERIFIED 2026-11-13 01:05 CT: image v-31a705f-fresh, pod web-ui-84f9c5759c-b7pj8 1/1 Running 0 restarts, gateway 200, /api/threads 200 (72 threads incl. qa-5), UI render clean (qa-5 thread Completed top, screen matches record). prod == develop 31a705f in code content; develop head 1aac52b is runlog-only S1 commit, no redeploy warranted. 
+- Deploy notes: WMI launch redirect bug - carets in the quoted cmd line made the redirect literal, so no build log file; build still ran detached (PID 9784) and landed - verify via docker images plus crictl, not the log. Next deploy: put the redirect INSIDE the .bat itself. 
+- FLAG: qa-5 turn ran on swift-15-27b-mtp medium, not briefed qwen3.8-flash-next-gyro-gyro-s LOW. Deliverable verified by CI plus driver diff audit; engine deviation recorded for morning report. 
+- 2026-11-13 ~01:20 CT — PR #83 (uir-1 slice 1: UI-012 sidebar title wrap, UI-014 long-brief collapse, UI-016 user-text wrap) merged c763fce. Rollback target: v-31a705f-fresh (PR #89 qa-5 image).
+- 2026-11-13 ~01:35 CT — PR #83 deployed v-c763fce-fresh. S4 verified: pod web-ui-6dd4cbf7dc-vxjk4 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order (Nov 12, 22:48 CT) after qa-5; qa-6 Sandy turn stopped by owner order Nov 13, 01:17 CT.
