@@ -33,10 +33,11 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
       "Workspace toggle must be hidden on mobile (< md:)"
     );
 
-    // EngineStatusPill / Stop button: hidden on mobile header (lives with turn in composer/stream)
+    // uir-0 header diet: the Engine pill is out of the header entirely
+    // (engine lives in Settings), on mobile and desktop alike.
     assert.ok(
-      file.includes("hidden md:flex") && file.includes("<EngineStatusPill"),
-      "EngineStatusPill must be hidden on mobile (< md:) in ChatStream topbar"
+      !file.includes("<EngineStatusPill"),
+      "EngineStatusPill must not be mounted in the ChatStream topbar (uir-0 header diet)"
     );
 
     // Projects button: accessible with min-h-[44px] min-w-[44px]

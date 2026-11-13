@@ -30,6 +30,16 @@ import type {
 import { isWithinOvernightWindow } from "@/lib/subagents/morningReportUtils";
 import type { AmbiguityFlag } from "@/lib/subagents/types";
 
+const TASK_LIST_CAP = 5;
+
+type VerdictState = "failed" | "attention" | "clear" | "empty";
+
+// The report data still carries the legacy "parked" status value; the view
+// presents it as "stalled" — parking was abolished, so the word must match reality.
+function statusDisplayLabel(status: string): string {
+  return status === "parked" ? "stalled" : status;
+}
+
 interface MorningReportViewProps {
   report?: MorningReport | null;
   overnightReport?: OvernightMorningReport | null;
@@ -51,6 +61,7 @@ export function MorningReportView({
   const [previewArtifact, setPreviewArtifact] = useState<MorningReportArtifact | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   const overnight = React.useMemo<OvernightMorningReport | null>(() => {
     if (propOvernightReport) return propOvernightReport;
@@ -175,10 +186,40 @@ export function MorningReportView({
   const kpis = React.useMemo(() => {
     const total = displayTasks.length;
     const completed = displayTasks.filter((t) => t.status === "completed").length;
-    const parked = displayTasks.filter((t) => t.status === "parked").length;
+    const stalled = displayTasks.filter((t) => t.status === "parked").length;
     const failed = displayTasks.filter((t) => t.status === "failed").length;
-    return { total, completed, parked, failed };
+    return { total, completed, stalled, failed };
   }, [displayTasks]);
+
+  const visibleTasks = showAllTasks ? displayTasks : displayTasks.slice(0, TASK_LIST_CAP);
+
+  // Verdict derives only from numbers the view already has: the KPI counts for
+  // the visible window plus the unreviewed flag count. No invented statistics.
+  const verdict = React.useMemo(() => {
+    const unreviewedFlags = flags.filter((f) => !f.reviewed).length;
+    const parts: string[] = [];
+    if (kpis.failed > 0) parts.push(`${kpis.failed} failed`);
+    if (kpis.stalled > 0) parts.push(`${kpis.stalled} stalled`);
+    if (unreviewedFlags > 0)
+      parts.push(
+        `${unreviewedFlags} flag${unreviewedFlags === 1 ? "" : "s"} need${unreviewedFlags === 1 ? "s" : ""} a decision`
+      );
+    let state: VerdictState = "clear";
+    if (kpis.failed > 0) state = "failed";
+    else if (kpis.stalled > 0 || unreviewedFlags > 0) state = "attention";
+    else if (kpis.total === 0) state = "empty";
+    const headline =
+      state === "empty"
+        ? "Night verdict: no tasks ran in this window"
+        : `Night verdict: ${kpis.completed}/${kpis.total} tasks completed`;
+    const subline =
+      parts.length > 0
+        ? parts.join(" · ")
+        : state === "empty"
+          ? "Nothing to review yet."
+          : "All clear. Nothing needs you.";
+    return { state, headline, subline };
+  }, [kpis, flags]);
 
   const handlePreviewArtifact = async (art: MorningReportArtifact) => {
     if (previewArtifact?.path === art.path) {
@@ -235,6 +276,40 @@ export function MorningReportView({
       {/* OVERNIGHT MULTI-TASK SUMMARY SECTION */}
       {overnight && (
         <div className="space-y-5">
+          {/* 0. Verdict Banner — first and sticky; one line, real counts only */}
+          <div
+            data-testid="verdict-banner"
+            data-verdict={verdict.state}
+            className={`sticky top-0 z-30 flex items-center gap-3 rounded-2xl border p-4 sm:p-5 shadow-sm ${
+              verdict.state === "failed"
+                ? "bg-rose-50 dark:bg-rose-950/70 border-rose-300 dark:border-rose-800"
+                : verdict.state === "attention"
+                  ? "bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-800"
+                  : verdict.state === "empty"
+                    ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800"
+                    : "bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-800"
+            }`}
+          >
+            {verdict.state === "failed" ? (
+              <XCircle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+            ) : verdict.state === "attention" ? (
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            ) : verdict.state === "empty" ? (
+              <Clock className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <div className="min-w-0">
+              <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-zinc-100">
+                {verdict.headline}
+              </div>
+              <div className="text-xs text-slate-600 dark:text-zinc-400">{verdict.subline}</div>
+            </div>
+            <span className="ml-auto shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-white/70 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300">
+              {windowFilter === "overnight" ? "Overnight" : windowFilter === "24h" ? "Last 24h" : "All Runs"}
+            </span>
+          </div>
+
           {/* Summary KPI Banner */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
@@ -254,7 +329,7 @@ export function MorningReportView({
                   <button
                     type="button"
                     data-testid="filter-overnight"
-                    onClick={() => setWindowFilter("overnight")}
+                    onClick={() => { setWindowFilter("overnight"); setShowAllTasks(false); }}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                       windowFilter === "overnight"
                         ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
@@ -266,7 +341,7 @@ export function MorningReportView({
                   <button
                     type="button"
                     data-testid="filter-24h"
-                    onClick={() => setWindowFilter("24h")}
+                    onClick={() => { setWindowFilter("24h"); setShowAllTasks(false); }}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                       windowFilter === "24h"
                         ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
@@ -278,7 +353,7 @@ export function MorningReportView({
                   <button
                     type="button"
                     data-testid="filter-all"
-                    onClick={() => setWindowFilter("all")}
+                    onClick={() => { setWindowFilter("all"); setShowAllTasks(false); }}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                       windowFilter === "all"
                         ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
@@ -305,8 +380,8 @@ export function MorningReportView({
                 <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{kpis.completed}</div>
               </div>
               <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
-                <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Parked</div>
-                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{kpis.parked}</div>
+                <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Stalled</div>
+                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{kpis.stalled}</div>
               </div>
               <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
                 <div className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Failed</div>
@@ -315,7 +390,7 @@ export function MorningReportView({
             </div>
           </div>
 
-          {/* 1. What Needs Attention (Parked & Failed Tasks) */}
+          {/* 1. What Needs Attention (Stalled & Failed Tasks) */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
@@ -330,7 +405,7 @@ export function MorningReportView({
             {overnight.attentionItems.length === 0 ? (
               <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>All overnight runs completed cleanly without parked tasks or failures.</span>
+                <span>All overnight runs completed cleanly without stalled tasks or failures.</span>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -352,7 +427,7 @@ export function MorningReportView({
                               : "bg-rose-200/80 dark:bg-rose-900 text-rose-900 dark:text-rose-200"
                           }`}
                         >
-                          {item.status}
+                          {statusDisplayLabel(item.status)}
                         </span>
                         <span className="text-xs font-bold">{item.goal}</span>
                         <span className="text-[11px] font-mono opacity-75">({item.taskId})</span>
@@ -376,7 +451,126 @@ export function MorningReportView({
             )}
           </div>
 
-            {/* 2. What Was Produced (Artifacts with Preview Links) */}
+          {/* 2. Ambiguity Flags & One-Tap Actions (owner decisions — above artifacts) */}
+          {flags.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-indigo-500" />
+                  <span>Ambiguity Flags &amp; Judgment Calls</span>
+                </h2>
+                <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
+                  {flags.length} logged
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {flags.map((flag) => {
+                  const isExpanded = expandedFlagId === flag.id;
+
+                  return (
+                    <div
+                      key={flag.id}
+                      className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
+                        flag.reviewed
+                          ? "border-slate-200 dark:border-zinc-800 opacity-80"
+                          : "border-indigo-200 dark:border-indigo-900/60 shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
+                              {flag.id} • {flag.milestoneId}
+                            </span>
+                            {flag.reviewed && (
+                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                ✓ Reviewed
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="mt-1.5 text-xs font-bold text-slate-900 dark:text-zinc-100">
+                            {flag.question}
+                          </h3>
+                          <p className="mt-1 text-xs text-slate-700 dark:text-zinc-300">
+                            <span className="font-semibold text-slate-900 dark:text-zinc-100">
+                              Judgment Call:{" "}
+                            </span>
+                            {flag.judgmentCall}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
+                            <span className="font-semibold">Reasoning: </span>
+                            {flag.reasoning}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRevert(flag)}
+                            disabled={revertingId === flag.id}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-medium transition-all shadow-sm disabled:opacity-50"
+                            title="Revert the judgment call commit immediately"
+                          >
+                            <RotateCcw
+                              className={`h-3 w-3 ${revertingId === flag.id ? "animate-spin" : ""}`}
+                            />
+                            <span>Revert</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedFlagId(isExpanded ? null : flag.id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-medium transition-all shadow-sm"
+                          >
+                            <SlidersHorizontal className="h-3 w-3" />
+                            <span>Adjust</span>
+                            {isExpanded ? (
+                              <ChevronUp className="h-3 w-3" />
+                            ) : (
+                              <ChevronDown className="h-3 w-3" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 animate-in fade-in duration-150">
+                          <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                            Provide Morning Guidance / Override:
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={adjustInputs[flag.id] || ""}
+                              onChange={(e) =>
+                                setAdjustInputs((prev) => ({
+                                  ...prev,
+                                  [flag.id]: e.target.value
+                                }))
+                              }
+                              placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustSubmit(flag.id)}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-sm"
+                            >
+                              Submit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+            {/* 3. What Was Produced (Artifacts with Preview Links) */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
@@ -461,7 +655,7 @@ export function MorningReportView({
               )}
             </div>
 
-            {/* 3. What Ran (Overnight Task Log) */}
+            {/* 4. What Ran (Overnight Task Log) */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
@@ -478,9 +672,9 @@ export function MorningReportView({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {displayTasks.map((t) => {
+                  {visibleTasks.map((t) => {
                     const isComp = t.status === "completed";
-                    const isPark = t.status === "parked";
+                    const isStalled = t.status === "parked";
                     const isFail = t.status === "failed";
                     const isExpanded = !!expandedTaskDetails[t.taskId];
 
@@ -496,7 +690,7 @@ export function MorningReportView({
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold uppercase ${
                                 isComp
                                   ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                                  : isPark
+                                  : isStalled
                                   ? "bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
                                   : isFail
                                   ? "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
@@ -505,12 +699,12 @@ export function MorningReportView({
                             >
                               {isComp ? (
                                 <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                              ) : isPark ? (
+                              ) : isStalled ? (
                                 <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                               ) : isFail ? (
                                 <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
                               ) : null}
-                              <span>{t.status}</span>
+                              <span>{statusDisplayLabel(t.status)}</span>
                             </span>
                             <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-zinc-100 break-words">
                               {t.goal}
@@ -569,7 +763,7 @@ export function MorningReportView({
                         {(t.parkedReason || t.errorSummary) && (
                           <div
                             className={`p-2.5 rounded-lg text-xs font-mono ${
-                              isPark
+                              isStalled
                                 ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50"
                                 : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
                             }`}
@@ -610,128 +804,25 @@ export function MorningReportView({
                   })}
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Ambiguity Flags & One-Tap Actions (Promoted as standalone section, no duplicate task card) */}
-        {flags.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-indigo-500" />
-                <span>Ambiguity Flags &amp; Judgment Calls</span>
-              </h2>
-              <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-                {flags.length} logged
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {flags.map((flag) => {
-                const isExpanded = expandedFlagId === flag.id;
-
-                return (
-                  <div
-                    key={flag.id}
-                    className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
-                      flag.reviewed
-                        ? "border-slate-200 dark:border-zinc-800 opacity-80"
-                        : "border-indigo-200 dark:border-indigo-900/60 shadow-sm"
-                    }`}
+              {displayTasks.length > TASK_LIST_CAP && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                    Showing {visibleTasks.length} of {displayTasks.length} tasks
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="task-list-toggle"
+                    onClick={() => setShowAllTasks((prev) => !prev)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
-                            {flag.id} • {flag.milestoneId}
-                          </span>
-                          {flag.reviewed && (
-                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                              ✓ Reviewed
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 className="mt-1.5 text-xs font-bold text-slate-900 dark:text-zinc-100">
-                          {flag.question}
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-700 dark:text-zinc-300">
-                          <span className="font-semibold text-slate-900 dark:text-zinc-100">
-                            Judgment Call:{" "}
-                          </span>
-                          {flag.judgmentCall}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
-                          <span className="font-semibold">Reasoning: </span>
-                          {flag.reasoning}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleRevert(flag)}
-                          disabled={revertingId === flag.id}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-medium transition-all shadow-sm disabled:opacity-50"
-                          title="Revert the judgment call commit immediately"
-                        >
-                          <RotateCcw
-                            className={`h-3 w-3 ${revertingId === flag.id ? "animate-spin" : ""}`}
-                          />
-                          <span>Revert</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setExpandedFlagId(isExpanded ? null : flag.id)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-medium transition-all shadow-sm"
-                        >
-                          <SlidersHorizontal className="h-3 w-3" />
-                          <span>Adjust</span>
-                          {isExpanded ? (
-                            <ChevronUp className="h-3 w-3" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 animate-in fade-in duration-150">
-                        <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                          Provide Morning Guidance / Override:
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={adjustInputs[flag.id] || ""}
-                            onChange={(e) =>
-                              setAdjustInputs((prev) => ({
-                                ...prev,
-                                [flag.id]: e.target.value
-                              }))
-                            }
-                            placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
-                            className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleAdjustSubmit(flag.id)}
-                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-sm"
-                          >
-                            Submit
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    <span>{showAllTasks ? "Show fewer tasks" : `Show all ${displayTasks.length} tasks`}</span>
+                    {showAllTasks ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              )}            </div>
           </div>
         )}
+
     </div>
   );
 }
