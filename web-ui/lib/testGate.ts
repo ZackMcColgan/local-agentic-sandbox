@@ -229,6 +229,7 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("lib/canvas") ||
       p.includes("components/ArtifactCanvas") ||
+      p.includes("components/CanvasContext") ||
       p.includes("components/ArtifactRenderers") ||
       p.includes("components/ChatStream"),
     tests: ["tests/uirCanvas.test.ts"]
