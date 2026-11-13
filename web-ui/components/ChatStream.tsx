@@ -292,18 +292,30 @@ function UserMessageContent({ content }: { content: string }) {
       <div className={expanded ? undefined : "relative max-h-[9rem] overflow-hidden"}>
         {markdown}
         {!expanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-sky-950 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-[#03151a] to-transparent" />
         )}
       </div>
-      <button
-        type="button"
-        data-testid="brief-collapse-toggle"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
-        className="mt-1.5 text-xs font-semibold text-blue-700 dark:text-sky-300 hover:underline cursor-pointer"
-      >
-        {expanded ? "Show less" : "Show full brief"}
-      </button>
+      <div className="mt-2 -mb-1 border-t border-blue-200/70 dark:border-[rgba(56,189,248,0.25)]">
+        <button
+          type="button"
+          data-testid="brief-collapse-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-blue-700 dark:text-[#bae6fd] hover:underline cursor-pointer"
+        >
+          {expanded ? (
+            <>
+              <span>Show less</span>
+              <ChevronUp className="h-3.5 w-3.5" />
+            </>
+          ) : (
+            <>
+              <span>Show full brief ({content.length.toLocaleString()} chars)</span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -386,6 +398,9 @@ export function ChatStream({
   // ChatStream's own state so rows received before a stream cut stay on screen
   // even when the messages prop/setMessages cannot reflect them.
   const [liveTurnTraces, setLiveTurnTraces] = useState<ExecutionTraceItem[]>([]);
+  // Board trace grouping: only the latest window of live rows renders by
+  // default; older calls collapse behind an "earlier tool calls" row.
+  const [showAllLiveTraces, setShowAllLiveTraces] = useState(false);
   // uir-1 Live Activity Header + stream banners: turn start, last observed
   // stream activity, recovery timestamp, and the just-completed turn whose
   // DONE chip replaces the activity header.
@@ -1737,6 +1752,7 @@ export function ChatStream({
     setStreamStatus("Connecting to model...");
     // UI-003 / UI-011b: fresh live-turn trace rows for this turn.
     setLiveTurnTraces([]);
+    setShowAllLiveTraces(false);
     // uir-1: a new turn starts the activity clock and retires the DONE chip.
     turnStartedAtRef.current = Date.now();
     setCompletedTurnMsgId(null);
@@ -2389,7 +2405,7 @@ export function ChatStream({
               {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
               {isUser ? (
                 <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg min-w-0">
-                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed min-w-0">
+                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-[rgba(14,116,144,0.18)] dark:border-[rgba(56,189,248,0.32)] dark:text-[#e0f2fe] rounded-2xl px-4 py-3.5 shadow-xs text-sm font-normal leading-relaxed min-w-0">
                     <div className="prose dark:prose-invert max-w-none break-words text-sm text-blue-950 dark:text-sky-100">
                       <UserMessageContent content={m.content} />
                     </div>
@@ -2823,6 +2839,15 @@ export function ChatStream({
                       >
                         {wrapRawSvgInMarkdown(m.content)}
                       </ReactMarkdown>
+                      {m.status === "streaming" && (
+                        <span
+                          data-testid="stream-cursor"
+                          aria-hidden="true"
+                          className="text-emerald-400 animate-pulse font-bold"
+                        >
+                          ▍
+                        </span>
+                      )}
                     </div>
 
                     {/* Copy Response Action: phone-tappable button copying raw assistant markdown */}
@@ -3122,24 +3147,34 @@ export function ChatStream({
             before a stream cut remain visible on the live screen. */}
         {liveTurnTraces.length > 0 && (
           <div className="w-full max-w-[840px]" data-testid="live-trace-rows">
-            <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/60 overflow-hidden">
-              <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 border-b border-slate-200 dark:border-zinc-800">
+            <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-[#121215] overflow-hidden">
+              <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-200 border-b border-slate-200 dark:border-zinc-800">
                 Live tool steps ({liveTurnTraces.length})
               </div>
-              {liveTurnTraces.map((t, i) => {
+              {liveTurnTraces.length > 8 && !showAllLiveTraces && (
+                <button
+                  type="button"
+                  data-testid="earlier-calls-toggle"
+                  onClick={() => setShowAllLiveTraces(true)}
+                  className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-500 dark:text-zinc-400 bg-slate-100/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors border-b border-slate-200 dark:border-zinc-800 cursor-pointer"
+                >
+                  ▸ {liveTurnTraces.length - 8} earlier tool calls ({liveTurnTraces.length - 8} ok) — Show all
+                </button>
+              )}
+              {(showAllLiveTraces ? liveTurnTraces : liveTurnTraces.slice(-8)).map((t, i) => {
                 const readable = formatHumanReadableTrace(t);
                 return (
                   <button
                     key={`${t.tool}-${i}`}
                     type="button"
                     aria-label={`Tool: ${t.tool}`}
-                    className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                    className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-[12.8px] font-mono"
                   >
-                    <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-300">
-                      <Check size={10} className="text-emerald-500" />
+                    <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-100">
+                      <Check size={12} className="text-emerald-400 shrink-0" />
                       <span>{readable.title || t.tool}</span>
                     </span>
-                    <span className="text-slate-400 dark:text-zinc-500">{readable.duration || ""}</span>
+                    <span className="text-slate-400 dark:text-zinc-400">{readable.duration || ""}</span>
                   </button>
                 );
               })}

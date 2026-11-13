@@ -248,6 +248,16 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") || p.includes("lib/tokenEconomics"),
     tests: ["tests/parityHeaderComposer.test.ts"]
   },
+  // Board parity PR2 (FINAL-DESIGN): chat surfaces — brief bubble, thinking
+  // card, live trace rows, RUNNING pill, activity header details
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThinkingPanel") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("components/LiveActivityHeader"),
+    tests: ["tests/parityChatSurfaces.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {
