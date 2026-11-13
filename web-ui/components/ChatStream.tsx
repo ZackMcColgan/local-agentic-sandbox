@@ -30,12 +30,14 @@ import {
   FolderGit2,
   FileCode,
   ExternalLink,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "../lib/clipboard";
+import { latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
@@ -253,6 +255,55 @@ function fileToBase64(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
+}
+
+// UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
+// "Show full brief" toggle so a pasted job brief never walls off the thread.
+const BRIEF_COLLAPSE_MAX_CHARS = 320;
+const BRIEF_COLLAPSE_MAX_LINES = 6;
+
+function UserMessageContent({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible =
+    content.length > BRIEF_COLLAPSE_MAX_CHARS ||
+    content.split("\n").length > BRIEF_COLLAPSE_MAX_LINES;
+  const markdown = (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code: ({ children }: any) => (
+          <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
+            {children}
+          </code>
+        ),
+        p: ({ children }: any) => (
+          <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
+        )
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+  if (!collapsible) return <>{markdown}</>;
+  return (
+    <div>
+      <div className={expanded ? undefined : "relative max-h-[9rem] overflow-hidden"}>
+        {markdown}
+        {!expanded && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-sky-950 to-transparent" />
+        )}
+      </div>
+      <button
+        type="button"
+        data-testid="brief-collapse-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-1.5 text-xs font-semibold text-blue-700 dark:text-sky-300 hover:underline cursor-pointer"
+      >
+        {expanded ? "Show less" : "Show full brief"}
+      </button>
+    </div>
+  );
 }
 
 export function ChatStream({
@@ -614,6 +665,17 @@ export function ChatStream({
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
+
+  // qa-7 / UI-013: the context meter shows the latest round's ACTUAL prompt
+  // tokens from the thread record (roundPromptTokens persisted per assistant
+  // message, snapshots included), so watching clients and refreshed views
+  // never sit at 0K. The SSE estimate remains the fallback on the initiating
+  // client before the first round persists.
+  const recordContextTokens = latestRoundPromptTokens(
+    messages as unknown as Array<{ roundPromptTokens?: number[] }>
+  );
+  const displayContextTokens =
+    recordContextTokens > 0 ? recordContextTokens : contextStats.estimatedTokens;
 
   // CHAT-QUEUE: Client-side message queue during active turns
   const turnActiveRef = useRef<boolean>(false);
@@ -2070,18 +2132,18 @@ export function ChatStream({
           <div
             data-testid="context-meter-pill"
             className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[10px] sm:text-[11px] font-mono shrink-0"
-            title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
+            title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
           >
             <span
               className={`font-semibold ${
-                contextStats.estimatedTokens > 85000
+                displayContextTokens > 85000
                   ? "text-rose-600 dark:text-rose-400"
-                  : contextStats.estimatedTokens > 70000
+                  : displayContextTokens > 70000
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-slate-600 dark:text-zinc-400"
               }`}
             >
-              {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
+              {Math.round(displayContextTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
             {/* uir-0: widened meter track (128px at >=420px / 240px desktop;
                 48px on narrow phones so the header row fits 390px with the
@@ -2092,15 +2154,15 @@ export function ChatStream({
               className="relative h-[5px] w-[40px] min-[420px]:w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
-                className={`absolute left-0 top-0 h-full rounded-full transition-all ${
-                  contextStats.estimatedTokens > 85000
+                className={`h-full transition-all ${
+                  displayContextTokens > 85000
                     ? "bg-rose-500"
-                    : contextStats.estimatedTokens > 70000
+                    : displayContextTokens > 70000
                     ? "bg-amber-500"
                     : "bg-emerald-500"
                 }`}
                 style={{
-                  width: `${Math.min(100, Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100))}%`
+                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`
                 }}
               />
               <span
@@ -2314,22 +2376,10 @@ export function ChatStream({
 
               {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
               {isUser ? (
-                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
-                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
-                    <div className="prose dark:prose-invert max-w-none text-sm text-blue-950 dark:text-sky-100">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ children }: any) => (
-                            <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
-                              {children}
-                            </code>
-                          ),
-                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
+                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg min-w-0">
+                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed min-w-0">
+                    <div className="prose dark:prose-invert max-w-none break-words text-sm text-blue-950 dark:text-sky-100">
+                      <UserMessageContent content={m.content} />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-500">
@@ -2428,6 +2478,25 @@ export function ChatStream({
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                           <span>Incomplete</span>
                         </div>
+                      )}
+                      {/* UI-007: recoverable-status affordance. The transient
+                          reconcile banner (ChatStream.tsx:1646-1652) only lives
+                          while actively reconciling; once reconciliation ends an
+                          'incomplete' turn must stay distinct from bare prose
+                          and expose a retry/resume control so the turn can be
+                          recovered from the UI. Presentation + affordance only:
+                          the persisted marker text and reconciliation behavior
+                          are untouched. */}
+                      {m.status === "incomplete" && !isLoading && (
+                        <button
+                          type="button"
+                          data-testid="incomplete-retry"
+                          onClick={handleRetry}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-400 dark:border-amber-700 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/60 transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          <span>Retry turn</span>
+                        </button>
                       )}
                       {m.status === "error" && (
                         <div
