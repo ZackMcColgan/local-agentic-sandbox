@@ -741,3 +741,8 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 ## qa-3 deploy 2026-11-12
 - Rollback target banked: v-add4375-fresh
 - Deploy target: v-8063453-fresh, develop 8063453, PR 81 merged
+
+## qa-4 (UI-011a trace-row accessible names) — 2026-11-10
+- Grounding: PR #81 already labels ChatStream proof rows (ChatStream.tsx:2479), live strip (ChatStream.tsx:2992), LiveRunBlock strip (LiveRunBlock.tsx:538). Remaining uncovered completed-thread trace list: ExecutionTrace accordion button (ExecutionTrace.tsx:84-88, rendered page.tsx:1265). TraceWaterfall rows are OTel span divs, not tool buttons - out of scope.
+- Tests-first: web-ui/tests/traceRowAccessibleNames.test.ts (happy-dom createRoot/act, same harness as chatLiveTraceRows). Failed on ExecutionTrace rows before fix; passes after.
+- Banked: d59ed33 fix(ui-011a) ExecutionTrace aria-label + test; 428dae5 gate-mapping wiring. npm run test:gate PASSED 48/48 (<90s).
