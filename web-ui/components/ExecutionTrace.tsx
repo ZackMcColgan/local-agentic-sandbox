@@ -84,6 +84,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               <button
                 type="button"
                 onClick={() => toggleIndex(idx)}
+                aria-label={`Tool: ${trace.tool}`}
                 className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
