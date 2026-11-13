@@ -162,16 +162,16 @@ export function ThreadsSidebar({
       const day = d.getDate();
       const month = d.toLocaleDateString(undefined, { month: "short" });
       const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-      return `• ${day} ${month} • ${time}`;
+      return `${day} ${month} · ${time}`;
     } catch {
       return "";
     }
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-white dark:bg-black border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-[#121215] border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
       {/* Top Header matching Mockup media_1791044464191.webp */}
-      <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
+      <div className="p-4 bg-white dark:bg-[#121215] border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">
           {onOpenDrawer && (
             <button
@@ -184,7 +184,7 @@ export function ThreadsSidebar({
               <Menu className="h-6 w-6" />
             </button>
           )}
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+          <h1 className="text-[19px] font-bold tracking-tight text-slate-900 dark:text-zinc-100">
             Sessions
           </h1>
         </div>
@@ -216,11 +216,11 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={onNewThread}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-emerald-500 text-[#052e16] hover:bg-emerald-400 transition-colors shrink-0"
             title="New session"
             aria-label="New session"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
           </button>
 
           {/* Overflow Menu */}
@@ -256,7 +256,7 @@ export function ThreadsSidebar({
       {/* Expandable Search Input */}
       {isSearchOpen && (
         <div className="px-4 py-2.5 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 animate-in fade-in duration-100">
-          <div className="relative flex items-center bg-[#edf1f7] dark:bg-zinc-800 rounded-full px-3.5 py-1.5 border border-slate-200/50 dark:border-zinc-700">
+          <div className="relative flex items-center bg-white dark:bg-[#18181b] rounded-[11px] px-3.5 py-2 border border-slate-200 dark:border-zinc-800">
             <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
             <input
               type="text"
@@ -279,8 +279,12 @@ export function ThreadsSidebar({
         </div>
       )}
 
+      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-400 dark:text-zinc-500">
+        RECENTS
+      </div>
+
       {/* Elevated Cards Session List matching Mockup media_1791044464191.webp */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3" role="list" aria-label="Sessions list">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]" role="list" aria-label="Sessions list">
         {filteredThreads.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-500">
             {searchQuery ? "No matching sessions" : "No sessions yet. Tap + to start one."}
@@ -289,10 +293,6 @@ export function ThreadsSidebar({
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
-            const progressChars = (thread.messages || []).reduce(
-              (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
-              0
-            );
             const progressTraces = (thread.messages || []).reduce(
               (n, m) => n + (m.traces ? m.traces.length : 0),
               0
@@ -307,6 +307,18 @@ export function ThreadsSidebar({
               if (rawStatus === "failed") return "Failed";
               if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0)) return "Completed";
               return "New";
+            })();
+            const isRunning = statusLabel === "Running" || statusLabel === "Active";
+            const statusChip = (() => {
+              if (isRunning)
+                return { label: "● RUNNING", classes: "bg-emerald-500/15 text-emerald-700 dark:text-[#34d399]" };
+              if (statusLabel === "Completed")
+                return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-[#34d399]" };
+              if (statusLabel === "Failed")
+                return { label: "✕ FAILED", classes: "bg-red-500/10 text-red-700 dark:text-[#fca5a5]" };
+              if (statusLabel === "Needs Input")
+                return { label: "NEEDS INPUT", classes: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
+              return { label: "NEW", classes: "bg-slate-500/10 text-slate-500 dark:text-zinc-400" };
             })();
 
             return (
@@ -340,16 +352,18 @@ export function ThreadsSidebar({
                   }
                   onSelectThread(thread.id);
                 }}
-                className={`group relative overflow-hidden rounded-3xl p-4 sm:p-5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                  isSelected
-                    ? "bg-white dark:bg-zinc-900 ring-2 ring-emerald-500 shadow-md"
-                    : "bg-white dark:bg-zinc-900 hover:shadow-md shadow-xs border border-slate-100 dark:border-zinc-850"
+                className={`group relative overflow-hidden rounded-[14px] px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  isRunning
+                    ? "bg-white dark:bg-[#18181b] border border-[rgba(16,185,129,0.45)] shadow-[inset_3px_0_0_#10b981]"
+                    : isSelected
+                    ? "bg-white dark:bg-[#18181b] ring-2 ring-emerald-500 shadow-md border border-transparent"
+                    : "bg-white dark:bg-[#18181b] hover:shadow-md shadow-xs border border-slate-200 dark:border-zinc-800"
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <h2
-                      className={`text-sm sm:text-base leading-snug line-clamp-2 break-words ${
+                      className={`text-[14.5px] leading-snug line-clamp-2 break-words ${
                         isSelected
                           ? "font-bold text-slate-900 dark:text-zinc-100"
                           : "font-semibold text-slate-900 dark:text-zinc-100"
@@ -386,23 +400,18 @@ export function ThreadsSidebar({
                   </div>
 
                   {/* Subtext matching Mockup: "• 12 Oct • 2:34 PM • 3 participants • Active" */}
-                  <div className="mt-2 text-xs text-slate-500 dark:text-zinc-400 flex items-center flex-wrap gap-1 font-normal">
-                    <span>{timeFormatted || "• Today"}</span>
-                    <span>•</span>
+                  <div
+                    className={`mt-2 font-mono text-[12.3px] flex items-center flex-wrap gap-x-1.5 gap-y-1 ${
+                      isRunning ? "text-slate-600 dark:text-[#34d399]" : "text-slate-500 dark:text-zinc-500"
+                    }`}
+                  >
+                    <span>{timeFormatted || "Today"}</span>
+                    <span>·</span>
                     <span
-                      className={
-                        statusLabel === "Running" || statusLabel === "Active"
-                          ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                          : statusLabel === "Needs Input"
-                          ? "text-amber-600 dark:text-amber-400 font-semibold"
-                          : statusLabel === "Failed"
-                          ? "text-rose-600 dark:text-rose-400 font-semibold"
-                          : statusLabel === "Completed"
-                          ? "text-slate-600 dark:text-zinc-300 font-medium"
-                          : "text-slate-400 dark:text-zinc-500"
-                      }
+                      data-testid={`thread-status-chip-${thread.id}`}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold font-sans ${statusChip.classes}`}
                     >
-                      {statusLabel}
+                      {statusChip.label}
                     </span>
                     {livenessBadge && (
                       <span
@@ -417,12 +426,41 @@ export function ThreadsSidebar({
                         {livenessBadge === "alive" ? "Alive" : "Stalled"}
                       </span>
                     )}
-                    {livenessBadge && (
+                    {progressTraces > 0 && (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${progressTraces} traces`}
+                        {`· ${progressTraces} traces`}
                       </span>
                     )}
                   </div>
+
+                  {isRunning && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid={`thread-resume-${thread.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectThread(thread.id);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 text-[#052e16] text-xs font-bold hover:bg-emerald-400 transition-colors"
+                      >
+                        Resume
+                      </button>
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          data-testid={`thread-open-settings-${thread.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigate("settings");
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                        >
+                          Open settings
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
