@@ -157,6 +157,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatUiHonestyAndCopy.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/chatTurnHonesty.test.ts",
+      "tests/incompleteStatusAffordance.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
@@ -203,6 +204,24 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/LiveRunBlock") ||
       p.includes("app/page"),
     tests: ["tests/chatLiveTraceRows.test.ts"]
+  },
+  // qa-7 / UI-013: live header context meter — latest round's actual prompt
+  // tokens from the record on every client (helper, snapshot carriage, pill)
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/api/chat/route"),
+    tests: ["tests/uirLiveMeter.test.ts"]
+  },
+  // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
+  // title wrap (UI-012), long-brief collapse (UI-014)
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/uirChatTextFixes.test.ts"]
   },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
