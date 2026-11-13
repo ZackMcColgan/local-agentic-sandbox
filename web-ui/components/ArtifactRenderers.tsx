@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Check, ChevronRight, Copy, Download } from "lucide-react";
 import { copyText } from "../lib/clipboard";
 import { SvgViewer } from "./SvgViewer";
 import { isSvgCode } from "../lib/svgUtils";
 import { inferAttachmentMimeType } from "../lib/attachmentMime";
+import { useCanvas } from "./CanvasContext";
+import type { CanvasArtifact } from "../lib/canvas";
 
 export function highlightTokens(code: string, language?: string): React.ReactNode[] {
   // Simple, ultra-clean zero-dependency token highlighting for key languages
@@ -99,6 +101,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
+  const canvas = useCanvas();
 
   const isSvg = isSvgCode(code, language);
   const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
@@ -106,6 +109,50 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   const lines = code.split("\n");
   const showLineNumbers = lines.length >= 3;
   const isLong = lines.length > 20;
+
+  // Canvas door (uir-2): when the canvas is enabled and a provider is
+  // mounted, this card can open the artifact beside the chat. With the flag
+  // off (or no provider) nothing here renders — the inline card is the
+  // fallback, byte for byte.
+  const canvasArtifact: CanvasArtifact | null = canvas?.enabled
+    ? {
+        kind: "file",
+        id: `file:${filename || `snippet.${langDisplay}`}`,
+        filename: filename || `snippet.${langDisplay}`,
+        language: langDisplay,
+        code,
+      }
+    : null;
+  const canvasBadge = canvasArtifact ? canvas?.unseenUpdate(canvasArtifact) : false;
+
+  useEffect(() => {
+    if (canvasArtifact) canvas?.syncArtifact(canvasArtifact);
+    // Only the code content changing matters for the live sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  const canvasAffordance = canvasArtifact ? (
+    <>
+      {canvasBadge && (
+        <span
+          data-testid="canvas-update-badge"
+          className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-semibold whitespace-nowrap"
+        >
+          Updated · file changed
+        </span>
+      )}
+      <button
+        type="button"
+        data-testid="canvas-open"
+        onClick={() => canvas?.openCanvas(canvasArtifact)}
+        className="flex items-center gap-0.5 font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200 transition-colors whitespace-nowrap"
+        title="Open in canvas"
+      >
+        <span>Open</span>
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </>
+  ) : null;
 
   const handleCopy = async () => {
     const ok = await copyText(code);
@@ -153,6 +200,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {canvasAffordance}
             {isLong && activeTab === "code" && (
               <button
                 type="button"
@@ -236,6 +284,11 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   if (isSvg) {
     return (
       <div className="my-3">
+        {canvasAffordance && (
+          <div className="flex items-center justify-end gap-2 mb-1.5 text-[11px] font-mono">
+            {canvasAffordance}
+          </div>
+        )}
         <SvgViewer
           code={code}
           title={filename || `${langDisplay.toUpperCase()} Vector Graphic`}
@@ -259,6 +312,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {canvasAffordance}
           {isLong && (
             <button
               type="button"
