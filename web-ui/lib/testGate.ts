@@ -162,7 +162,17 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
-      "tests/chatWebResearchCap.test.ts"
+      "tests/chatWebResearchCap.test.ts",
+      "tests/uirHeaderActivity.test.ts"
+    ]
+  },
+  // uir-0/uir-1: Live Activity Header, live-activity helpers, header diet
+  {
+    match: (p) => p.includes("lib/liveActivity") || p.includes("components/LiveActivityHeader"),
+    tests: [
+      "tests/uirHeaderActivity.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatPolish.test.ts"
     ]
   },
   // Threads store & Threads API

@@ -924,6 +924,7 @@ export default function Home() {
               }}
               onBackToList={handleBackToList}
               onOpenModelSheet={() => setIsModelSheetOpen(true)}
+              onOpenSettings={() => { setActiveNavView("settings"); setViewMode("unified"); }}
               onOpenDrawer={() => setIsDrawerOpen(true)}
               onLaunchTask={handleLaunchTask}
               onNewThread={handleNewThread}

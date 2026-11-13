@@ -6,6 +6,8 @@ import { GlobalWindow } from "happy-dom";
 import { ChatStream } from "../components/ChatStream";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 import { TaskManifest } from "../lib/subagents/types";
+import fs from "fs";
+import path from "path";
 
 describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suite", () => {
   let win: GlobalWindow;
@@ -78,21 +80,10 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
     const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
     assert.ok(textarea, "Textarea input must exist");
 
-    const builderPrompt = "Build an autonomous microservice architecture diagram";
-
-    const buildBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Build"
-    );
-    if (buildBtn) {
-      await act(async () => {
-        const btnPropsKey = Object.keys(buildBtn).find((k) => k.startsWith("__reactProps"));
-        if (btnPropsKey && (buildBtn as any)[btnPropsKey]?.onClick) {
-          (buildBtn as any)[btnPropsKey].onClick({ preventDefault: () => {} });
-        } else {
-          buildBtn.click();
-        }
-      });
-    }
+    // uir-0: the Chat|Build toggle is gone; Build is entered via the /build
+    // prefix. The launched goal is the prompt with the prefix stripped.
+    const builderPrompt = "/build Build an autonomous microservice architecture diagram";
+    const expectedGoal = "Build an autonomous microservice architecture diagram";
 
     await act(async () => {
       const textareaPropsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
@@ -120,7 +111,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
     });
 
     assert.equal(launchTaskCalled, true, "onLaunchTask must be called for builder prompt");
-    assert.equal(launchedGoal, builderPrompt, "Goal passed to onLaunchTask must match input prompt");
+    assert.equal(launchedGoal, expectedGoal, "Goal passed to onLaunchTask must match input prompt with the /build prefix stripped");
     assert.equal(
       addMessageDispatched,
       false,
@@ -298,7 +289,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
   });
 
   describe("Sprint U3 — Simple Chat | Build Mode Toggle, Historical Thinking Collapse & Model Deduplication", () => {
-    it("Task 1: ChatStream renders 2-button segmented toggle labeled Chat and Build", async () => {
+    it("Task 1: ChatStream renders NO Chat|Build composer toggle (uir-0, owner ruling Nov 12 2026); Build stays on the /build prefix", async () => {
       root = createRoot(container);
       await act(async () => {
         root!.render(
@@ -312,8 +303,14 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
       });
       const chatBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Chat");
       const buildBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Build");
-      assert.ok(chatBtn, "Must render 'Chat' toggle button");
-      assert.ok(buildBtn, "Must render 'Build' toggle button");
+      assert.equal(chatBtn, undefined, "Must NOT render a 'Chat' toggle button (uir-0 header/composer diet)");
+      assert.equal(buildBtn, undefined, "Must NOT render a 'Build' toggle button (uir-0 header/composer diet)");
+      // Build routing survives the toggle: dispatch still honors the /build prefix
+      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(
+        chatStreamSrc.includes('composerMode === "build" || isBuildPrefix'),
+        "Build dispatch must still route via composerMode or the /build prefix"
+      );
       // Snippet / Script / Project must NOT be rendered
       assert.ok(!container.textContent?.includes("Snippet"), "Must not render Snippet option");
       assert.ok(!container.textContent?.includes("Script"), "Must not render Script option");
