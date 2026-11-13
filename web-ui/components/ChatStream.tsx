@@ -2024,7 +2024,7 @@ export function ChatStream({
           </h1>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
           {/* Simulation Mode Badge */}
           {activeSimulation && (
             <div
@@ -2083,11 +2083,13 @@ export function ChatStream({
             >
               {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
-            {/* uir-0: widened meter track (128px mobile / 240px desktop) with
-                the redline tick at the 85% (85K) compaction trigger */}
+            {/* uir-0: widened meter track (128px at >=420px / 240px desktop;
+                48px on narrow phones so the header row fits 390px with the
+                disconnect chip visible) with the redline tick at the 85%
+                (85K) compaction trigger */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[5px] w-[40px] min-[420px]:w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
                 className={`absolute left-0 top-0 h-full rounded-full transition-all ${
@@ -2123,12 +2125,12 @@ export function ChatStream({
           {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
               guest allowed in the freed slot is the host disconnect alert chip,
               rendered ONLY while the host runner is down. */}
-          {hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
+          {!activeSimulation && hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
             <button
               type="button"
               data-testid="host-disconnect-chip"
               onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-wide shrink-0 min-h-[32px]"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] sm:min-h-[32px]"
               title={runnerReason || "Host runner is unreachable — open Settings"}
               aria-label="Host disconnected — open Settings"
             >
@@ -2142,12 +2144,12 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[44px] flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="max-w-[54px] sm:max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
+            <span className="hidden min-[420px]:inline-block max-w-[54px] sm:max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
