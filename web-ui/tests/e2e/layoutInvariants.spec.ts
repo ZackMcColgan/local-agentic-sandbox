@@ -60,17 +60,29 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await expect(page).toHaveScreenshot("builds-view.png");
   });
 
-  test("Projects View — layout invariants and baseline", async ({ page }) => {
+  test("Projects View — layout invariants and baseline", async ({ page, isMobile }) => {
     await page.goto("/");
-    await page.locator('button[aria-label="Open Projects"]').click();
+    // UI-019: header Projects button is desktop-only; mobile uses the drawer.
+    if (isMobile) {
+      await page.locator('button[aria-label="Open navigation menu"]').first().click();
+      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+    } else {
+      await page.locator('button[aria-label="Open Projects"]').click();
+    }
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
     await assertLayoutInvariants(page, "Projects View");
     await expect(page).toHaveScreenshot("projects-view.png");
   });
 
-  test("Projects Registration Modal — layout invariants and baseline", async ({ page }) => {
+  test("Projects Registration Modal — layout invariants and baseline", async ({ page, isMobile }) => {
     await page.goto("/");
-    await page.locator('button[aria-label="Open Projects"]').click();
+    // UI-019: header Projects button is desktop-only; mobile uses the drawer.
+    if (isMobile) {
+      await page.locator('button[aria-label="Open navigation menu"]').first().click();
+      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+    } else {
+      await page.locator('button[aria-label="Open Projects"]').click();
+    }
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
 
     // Click "Register Folder" (desktop) or "Register" (mobile) button

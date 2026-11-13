@@ -240,6 +240,14 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar"),
     tests: ["tests/uirChatTextFixes.test.ts"]
   },
+  // Board parity PR1 (FINAL-DESIGN): header composition + context meter
+  // format/geometry + composer/send geometry in ChatStream, formatContextK
+  // in tokenEconomics
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") || p.includes("lib/tokenEconomics"),
+    tests: ["tests/parityHeaderComposer.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {
