@@ -39,7 +39,7 @@ export function DiffViewer({
   return (
     <div className={`rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
       {/* Header Bar */}
-      <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-50/80 dark:bg-zinc-950/60 border-b border-slate-200 dark:border-zinc-800">
+      <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-50/80 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -129,7 +129,7 @@ export function DiffViewer({
                 <span>Architecture Diagram Preview (.drawio.svg)</span>
               </div>
               <div
-                className="overflow-x-auto max-h-72 p-2 bg-white dark:bg-zinc-950 rounded border border-slate-200 dark:border-zinc-800 flex items-center justify-center"
+                className="overflow-x-auto max-h-72 p-2 bg-white dark:bg-black rounded border border-slate-200 dark:border-zinc-800 flex items-center justify-center"
                 dangerouslySetInnerHTML={{ __html: diagramSvg }}
               />
             </div>

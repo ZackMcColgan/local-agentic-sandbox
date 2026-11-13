@@ -296,7 +296,7 @@ export function MorningReportView({
             </div>
 
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+              <div className="p-3 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800">
                 <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Tasks</div>
                 <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{kpis.total}</div>
               </div>
@@ -389,7 +389,7 @@ export function MorningReportView({
               </div>
 
               {uniqueArtifacts.length === 0 ? (
-                <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400">
                   No file artifacts recorded yet in this window.
                 </div>
               ) : (
@@ -399,7 +399,7 @@ export function MorningReportView({
                       <div
                         key={art.path}
                         data-testid="artifact-card"
-                        className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2"
+                        className="p-3 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
@@ -433,7 +433,7 @@ export function MorningReportView({
                   </div>
 
                   {previewArtifact && (
-                    <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                    <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800">
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-zinc-800 text-xs font-mono">
                         <span className="font-bold text-slate-900 dark:text-zinc-100">{previewArtifact.path}</span>
                         <a
@@ -473,7 +473,7 @@ export function MorningReportView({
               </div>
 
               {displayTasks.length === 0 ? (
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 text-center">
+                <div className="p-4 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 text-center">
                   No tasks have executed in this window yet.
                 </div>
               ) : (
@@ -488,7 +488,7 @@ export function MorningReportView({
                       <div
                         key={t.taskId}
                         data-testid="task-row"
-                        className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 space-y-2.5"
+                        className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 space-y-2.5"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -714,7 +714,7 @@ export function MorningReportView({
                               }))
                             }
                             placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
-                            className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                           />
                           <button
                             type="button"

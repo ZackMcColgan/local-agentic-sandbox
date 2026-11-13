@@ -182,7 +182,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
       {/* Waterfall Visualizer Gantt Chart */}
       <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
         {/* Waterfall Header */}
-        <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-zinc-950/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-medium text-slate-500 dark:text-zinc-400">
+        <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-medium text-slate-500 dark:text-zinc-400">
           <div className="w-1/3 min-w-[120px]">Span Operation</div>
           <div className="flex-1 flex justify-between px-2 font-mono">
             <span>0 ms</span>
@@ -239,7 +239,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                     </div>
 
                     {/* Gantt Bar Lane */}
-                    <div className="flex-1 relative h-5 bg-slate-100/60 dark:bg-zinc-950/40 rounded mx-2 overflow-hidden flex items-center">
+                    <div className="flex-1 relative h-5 bg-slate-100/60 dark:bg-black/40 rounded mx-2 overflow-hidden flex items-center">
                       <div
                         style={{
                           left: `${leftPercent}%`,
@@ -259,7 +259,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
 
                   {/* Expanded Detail View */}
                   {isExpanded && (
-                    <div className="px-6 py-3 bg-slate-50/90 dark:bg-zinc-950/80 border-t border-slate-100 dark:border-zinc-800/70 text-[11px] flex flex-col gap-2">
+                    <div className="px-6 py-3 bg-slate-50/90 dark:bg-black/80 border-t border-slate-100 dark:border-zinc-800/70 text-[11px] flex flex-col gap-2">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-600 dark:text-zinc-400">
                         <div>
                           <span className="font-semibold block text-slate-700 dark:text-zinc-300">Span ID:</span>

@@ -1803,7 +1803,7 @@ export function ChatStream({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative flex flex-col h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
+      className={`relative flex flex-col h-full bg-white dark:bg-black transition-colors overflow-hidden ${
         isDraggingOver ? "bg-emerald-50/30 dark:bg-emerald-950/20" : ""
       }`}
     >
@@ -1852,7 +1852,7 @@ export function ChatStream({
                 <span>After: ~{threadCompaction.tokensAfter} tokens</span>
               </div>
               <p className="font-semibold text-slate-800 dark:text-zinc-200">Retained Digest:</p>
-              <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
+              <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-black font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
                 {threadCompaction.summary}
               </pre>
             </div>
@@ -1899,7 +1899,7 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
-      <header className="sticky top-0 z-30 px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md flex items-center justify-between shrink-0">
+      <header className="sticky top-0 z-30 px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
@@ -2241,7 +2241,7 @@ export function ChatStream({
         onWheel={handleContainerWheel}
         onTouchMove={handleContainerTouchMove}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-zinc-950 relative"
+        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-black relative"
       >
         <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-8">
         {deduplicatedMessages.length === 0 && !activeTask && (
@@ -3245,7 +3245,7 @@ export function ChatStream({
       )}
 
       {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
-      <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
+      <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-black/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
         
         {/* CHAT-STEER: Pending Steer indicator above composer */}
         {pendingSteers.length > 0 && (

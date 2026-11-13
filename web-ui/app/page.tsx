@@ -736,7 +736,7 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
+    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isOpen={isDrawerOpen}
@@ -772,7 +772,7 @@ export default function Home() {
       />
 
       {/* 1. PERSISTENT LABELED LEFT NAVIGATION RAIL (82px — Icon + Explicit Text Label) */}
-      <nav className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 py-3 justify-between items-center z-20 select-none" aria-label="Primary Navigation">
+      <nav className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-black py-3 justify-between items-center z-20 select-none" aria-label="Primary Navigation">
         <div className="flex flex-col items-center gap-2 w-full px-1.5">
           <button
             type="button"
@@ -869,7 +869,7 @@ export default function Home() {
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
-              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 md:z-10 flex-col overflow-hidden"
+              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-black md:z-10 flex-col overflow-hidden"
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
@@ -889,7 +889,7 @@ export default function Home() {
 
           {/* Center Main Stage */}
           <main
-            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950"
+            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
           >
             <ChatStream
               messages={messages}
@@ -951,7 +951,7 @@ export default function Home() {
               aria-label="Workspace Panel"
             >
               {/* Inspector Header */}
-              <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-zinc-950 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
+              <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-black border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1197,7 +1197,7 @@ export default function Home() {
         )}
 
         {activeNavView === "morning-report" && (
-          <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
             <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
               <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1233,7 +1233,7 @@ export default function Home() {
         )}
 
         {viewMode === "security" && (
-          <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-zinc-950">
+          <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-black">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">

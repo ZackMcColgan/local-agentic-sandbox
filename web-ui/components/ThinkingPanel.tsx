@@ -158,7 +158,7 @@ export function ThinkingPanel({
 
       {/* Expanded Body */}
       {isExpanded && (
-        <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-zinc-950/40">
+        <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-black/40">
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
@@ -192,7 +192,7 @@ export function ThinkingPanel({
                 </div>
 
                 {/* Narrative Text */}
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-850/80 text-xs text-slate-600 dark:text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
+                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-black border border-slate-100 dark:border-zinc-850/80 text-xs text-slate-600 dark:text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
                   {phaseItem.narrative}
                 </div>
 

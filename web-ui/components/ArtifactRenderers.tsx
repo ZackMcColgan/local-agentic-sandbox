@@ -194,7 +194,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
         </div>
 
         {activeTab === "preview" ? (
-          <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
+          <div className="p-2 bg-white dark:bg-black min-h-[220px]">
             <iframe
               srcDoc={code}
               sandbox="allow-scripts"
