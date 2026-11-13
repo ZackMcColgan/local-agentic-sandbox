@@ -58,6 +58,16 @@ export function buildDiffFiles(
   return files;
 }
 
+/**
+ * UI-024: chip/rail labels show the basename. Paths come from both POSIX
+ * workspace writes and Windows host writes, so split on either separator —
+ * split("/") alone rendered a host path as the full "D:\AI\…" string.
+ */
+export function diffFileBasename(p: string): string {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : p;
+}
+
 function downloadText(filename: string, text: string, mime: string) {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
   const blobUrl = URL.createObjectURL(blob);
@@ -238,10 +248,11 @@ function CanvasDiffView({
             key={`${f.path}-${idx}`}
             type="button"
             data-testid="canvas-diff-chip"
+            title={f.path}
             onClick={() => setSelected(idx)}
             className={`min-h-[44px] px-3 rounded-full border text-[11px] font-mono whitespace-nowrap flex items-center gap-1.5 ${chipClass(idx === selected)}`}
           >
-            <span>{f.path.split("/").pop()}</span>
+            <span>{diffFileBasename(f.path)}</span>
             <span className="text-emerald-600 dark:text-emerald-400">+{f.addedLines}</span>
             <span className="text-rose-600 dark:text-rose-400">−{f.removedLines}</span>
           </button>
@@ -272,7 +283,7 @@ function CanvasDiffView({
                   : "border-transparent text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-[#18181b]"
               }`}
             >
-              <span className="truncate">{f.path.split("/").pop()}</span>
+              <span className="truncate">{diffFileBasename(f.path)}</span>
               <span className="shrink-0">
                 <span className="text-emerald-600 dark:text-emerald-400">+{f.addedLines}</span>{" "}
                 <span className="text-rose-600 dark:text-rose-400">−{f.removedLines}</span>

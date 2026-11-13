@@ -147,6 +147,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/unifiedUi.test.ts",
       "tests/chatPolish.test.ts",
+      "tests/chatDiffCollapseCanvasSwitch.test.ts",
       "tests/sprint2UiNavigationAndScroll.test.ts",
       "tests/chatContextBudget.test.ts",
       "tests/chatActionDiscipline.test.ts",
@@ -307,7 +308,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/CanvasContext") ||
       p.includes("components/ArtifactRenderers") ||
       p.includes("components/ChatStream"),
-    tests: ["tests/uirCanvas.test.ts"]
+    tests: ["tests/uirCanvas.test.ts", "tests/chatDiffCollapseCanvasSwitch.test.ts"]
   },
   // Unified Agent UI (Material 3) components & design tokens
   {
@@ -656,7 +657,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/artifactDeliveryAndPolish.test.ts",
       "tests/projectsNavAndWorkflow.test.ts",
       "tests/selfDeployWiring.test.ts",
-      "tests/traceRowAccessibleNames.test.ts"
+      "tests/traceRowAccessibleNames.test.ts",
+      "tests/chatDiffCollapseCanvasSwitch.test.ts"
     ]
   },
   // MCP server files

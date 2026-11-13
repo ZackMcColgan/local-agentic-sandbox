@@ -407,6 +407,14 @@ export interface ChatFileDiffItem {
   addedLines: number;
   removedLines: number;
   diffPreview: string;
+  /**
+   * UI-024: the UNCAPPED diff for the same item. diffPreview is capped for
+   * the inline chat card; the canvas contract is the full diff ("every line,
+   * nothing truncated"), and two files whose capped previews coincide (same
+   * 40-line head, e.g. one file written to two paths) rendered identically
+   * in the canvas, so switching files appeared to do nothing.
+   */
+  diffFull: string;
 }
 
 /**
@@ -455,6 +463,7 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
           diffPreview += `\n... (${lines.length - 40} more lines)`;
         }
       }
+      const diffFull = lines.map((l: string) => "+ " + l).join("\n");
 
       items.push({
         id,
@@ -462,7 +471,8 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
         tool,
         addedLines,
         removedLines,
-        diffPreview
+        diffPreview,
+        diffFull
       });
     } else if (tool === "workspace_patch_file") {
       const hasOldOrNew =
@@ -493,7 +503,8 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
           tool,
           addedLines,
           removedLines,
-          diffPreview
+          diffPreview,
+          diffFull: lines.join("\n")
         });
       } else {
         const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
@@ -513,13 +524,19 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
           ...newLines.slice(0, 20).map((l: string) => "+ " + l)
         ].join("\n");
 
+        const diffFull = [
+          ...oldLines.map((l: string) => "- " + l),
+          ...newLines.map((l: string) => "+ " + l)
+        ].join("\n");
+
         items.push({
           id,
           path: filePath,
           tool,
           addedLines,
           removedLines,
-          diffPreview
+          diffPreview,
+          diffFull
         });
       }
     }
