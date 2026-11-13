@@ -737,3 +737,7 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - Implementation: LiveRunBlock.tsx takes liveTraces?: ExecutionTraceItem[] and renders a "Live tool steps" strip (formatHumanReadableTrace titles, aria-label "Tool: <name>") above the Run Controls footer (commit 3a59397). ChatStream.tsx takes liveTraces prop, passes it to both LiveRunBlock mounts (2553, 2969), holds its own liveTurnTraces state fed by stream trace events (reset at turn start), renders the same strip while a chat turn streams so rows survive a mid-turn stream cut even when setMessages cannot reflect them; per-message proof rows got aria-label "Tool: <name>" (commit ef17265). page.tsx wires liveTraces={traces} into ChatStream.
 - Driver adaptation (assertions unchanged): happy-dom events never reach React 19 synthetic listeners in this repo harness; test drives composer via __reactProps$ onChange and send via props onClick with click() fallback - the repo-established pattern from tests/uiStateAndDedup.test.ts.
 - npm run test:gate via bridge -> PASSED 386 pass / 0 fail, 140 suites, 36.4s (<90s budget). Head ef17265 pushed to feature/qa3-live-trace-rows.
+
+## qa-3 deploy 2026-11-12
+- Rollback target banked: v-add4375-fresh
+- Deploy target: v-8063453-fresh, develop 8063453, PR 81 merged
