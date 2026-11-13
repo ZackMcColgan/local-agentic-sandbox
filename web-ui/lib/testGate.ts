@@ -195,6 +195,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar"),
     tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
   },
+  // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
+  // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("app/page"),
+    tests: ["tests/chatLiveTraceRows.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {
