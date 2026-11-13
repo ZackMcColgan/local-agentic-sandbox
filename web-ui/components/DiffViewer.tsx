@@ -10,6 +10,12 @@ interface DiffViewerProps {
   modifiedFiles?: string[];
   diagramSvg?: string;
   className?: string;
+  /**
+   * UI-023: chat diff cards pass false so a message's diffs start collapsed
+   * (header + counts only) instead of walling off the chat. Defaults to true
+   * so ProjectsView and the workspace inspector keep opening expanded.
+   */
+  defaultOpen?: boolean;
 }
 
 export function DiffViewer({
@@ -17,9 +23,10 @@ export function DiffViewer({
   diff = "",
   modifiedFiles = [],
   diagramSvg,
-  className = ""
+  className = "",
+  defaultOpen = true
 }: DiffViewerProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [showDiagram, setShowDiagram] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -43,6 +50,7 @@ export function DiffViewer({
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
           className="flex items-center gap-2 text-left group"
         >
           {isOpen ? (

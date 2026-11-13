@@ -149,7 +149,13 @@ describe("Flash 3.8 Frontend Shakeout — Fix 4: UI-P0-4 & UI-P2-2 Fake Telemetr
     const diffViewerFile = path.resolve(findRepoRoot(), "web-ui/components/DiffViewer.tsx");
     const content = fs.readFileSync(diffViewerFile, "utf8");
 
-    assert.match(content, /useState\(true\)/, "DiffViewer must initialize isOpen = true by default");
+    // UI-023 (Nov 13, 2026, owner direction): the open state is now seeded
+    // from a defaultOpen prop so CHAT diff cards can start collapsed, but
+    // the prop itself defaults to true — surfaces that pass nothing
+    // (ProjectsView, workspace inspector) still initialize open, which is
+    // the behavior this punchlist assertion protects.
+    assert.match(content, /defaultOpen = true/, "DiffViewer defaultOpen prop must default to true");
+    assert.match(content, /useState\(defaultOpen\)/, "DiffViewer must initialize isOpen from defaultOpen (true by default)");
   });
 });
 

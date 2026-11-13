@@ -3010,6 +3010,7 @@ export function ChatStream({
                     const fileDiffs: Array<{
                       path: string;
                       diff: string;
+                      diffFull?: string;
                       addedLines: number;
                       removedLines: number;
                       truncated?: boolean;
@@ -3020,6 +3021,7 @@ export function ChatStream({
                       : extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
                           path: d.path,
                           diff: d.diffPreview,
+                          diffFull: d.diffFull,
                           addedLines: d.addedLines,
                           removedLines: d.removedLines,
                           truncated: d.diffPreview.includes("more lines")
@@ -3029,7 +3031,17 @@ export function ChatStream({
 
                     return (
                       <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                        <CanvasDiffCard diffs={fileDiffs} />
+                        {/* UI-024: the canvas gets the FULL diff (diffFull ?? the
+                            stored diff for server-side turn diffs); the inline
+                            cards below keep the capped preview. */}
+                        <CanvasDiffCard
+                          diffs={fileDiffs.map((d) => ({
+                            path: d.path,
+                            diff: d.diffFull ?? d.diff,
+                            addedLines: d.addedLines,
+                            removedLines: d.removedLines
+                          }))}
+                        />
                         {fileDiffs.map((diffItem, diffIdx) => (
                           <div
                             key={`${m.id}-diff-${diffIdx}-${diffItem.path}`}
@@ -3051,6 +3063,7 @@ export function ChatStream({
                               branch={diffItem.path}
                               diff={diffItem.diff}
                               modifiedFiles={[diffItem.path]}
+                              defaultOpen={false}
                             />
                             {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
                               <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
