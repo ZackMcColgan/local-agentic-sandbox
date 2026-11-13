@@ -157,17 +157,25 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
         );
       });
 
-      // Drive the real composer control: textarea input event, then send-button click.
+      // Drive the real composer control via React props (repo-established
+      // driver pattern, see tests/uiStateAndDedup.test.ts): happy-dom events
+      // do not reach React's synthetic listeners, so invoke onChange/onClick.
       const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
       assert.ok(textarea, "ChatStream must render a composer textarea");
       await act(async () => {
-        textarea.value = "go";
-        textarea.dispatchEvent(new (win as any).Event("input", { bubbles: true }));
+        const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
+        assert.ok(propsKey, "Composer textarea must have React props");
+        (textarea as any)[propsKey].onChange({ target: { value: "go" } });
       });
       const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
       assert.ok(sendBtn, "ChatStream must render the send-button control");
       await act(async () => {
-        sendBtn.click();
+        const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
+        if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
+          (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+        } else {
+          sendBtn.click();
+        }
       });
 
       // Row rendered from the trace event received before the cut.

@@ -127,6 +127,7 @@ export interface UiHostApproval {
 
 interface ChatStreamProps {
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
+  liveTraces?: ExecutionTraceItem[];
   activeModel: string;
   agentMode?: AgentMode;
   reasoningEffort: "low" | "medium" | "xhigh";
@@ -249,6 +250,7 @@ function fileToBase64(file: File): Promise<string> {
 
 export function ChatStream({
   onTracesUpdate,
+  liveTraces,
   activeModel,
   agentMode = "auto",
   reasoningEffort,
@@ -317,6 +319,10 @@ export function ChatStream({
     activeThreadIdRef.current = threadId;
   }, [threadId]);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
+  // UI-003 / UI-011b: trace rows accumulated during the current turn, held in
+  // ChatStream's own state so rows received before a stream cut stay on screen
+  // even when the messages prop/setMessages cannot reflect them.
+  const [liveTurnTraces, setLiveTurnTraces] = useState<ExecutionTraceItem[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
@@ -1084,6 +1090,10 @@ export function ChatStream({
           } else if (event.type === "trace") {
             currentTraces = [...currentTraces, event.trace];
             onTracesUpdate(currentTraces);
+            // UI-003 / UI-011b: mirror the trace into ChatStream's own live-turn
+            // state so rows survive a mid-turn stream cut even if the messages
+            // prop cannot reflect them (severed-stream end-state assertion).
+            setLiveTurnTraces((prev) => [...prev, event.trace]);
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,
@@ -1623,6 +1633,8 @@ export function ChatStream({
     // Otherwise, dispatch to standard streaming chat path
     setIsLoading(true);
     setStreamStatus("Connecting to model...");
+    // UI-003 / UI-011b: fresh live-turn trace rows for this turn.
+    setLiveTurnTraces([]);
 
     const startTime = performance.now();
     const abortController = new AbortController();
@@ -2464,6 +2476,7 @@ export function ChatStream({
                               <button
                                 type="button"
                                 onClick={() => toggleProof(proofKey)}
+                                aria-label={`Tool: ${trace.tool}`}
                                 className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
                               >
                                 <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
@@ -2550,6 +2563,7 @@ export function ChatStream({
                   {isTaskHostMessage && activeTask && (
                     <LiveRunBlock
                       task={activeTask}
+                      liveTraces={liveTraces}
                       onStopRun={onStopTask}
                       onPauseRun={() => handleRunControlAction("pause")}
                       onResumeRun={() => handleRunControlAction("resume")}
@@ -2960,11 +2974,42 @@ export function ChatStream({
           );
         })}
 
+        {/* UI-003 / UI-011b: live tool-call trace rows for the current turn.
+            Rendered from ChatStream's own liveTurnTraces state so rows received
+            before a stream cut remain visible on the live screen. */}
+        {liveTurnTraces.length > 0 && (
+          <div className="w-full max-w-[840px]" data-testid="live-trace-rows">
+            <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/60 overflow-hidden">
+              <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 border-b border-slate-200 dark:border-zinc-800">
+                Live tool steps ({liveTurnTraces.length})
+              </div>
+              {liveTurnTraces.map((t, i) => {
+                const readable = formatHumanReadableTrace(t);
+                return (
+                  <button
+                    key={`${t.tool}-${i}`}
+                    type="button"
+                    aria-label={`Tool: ${t.tool}`}
+                    className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
+                  >
+                    <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-300">
+                      <Check size={10} className="text-emerald-500" />
+                      <span>{readable.title || t.tool}</span>
+                    </span>
+                    <span className="text-slate-400 dark:text-zinc-500">{readable.durationFormatted || ""}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
         {activeTask && lastLinkedTaskMsgIndex === -1 && (
           <div className="w-full max-w-[840px]">
             <LiveRunBlock
               task={activeTask}
+              liveTraces={liveTraces}
               onStopRun={onStopTask}
               onPauseRun={() => handleRunControlAction("pause")}
               onResumeRun={() => handleRunControlAction("resume")}
