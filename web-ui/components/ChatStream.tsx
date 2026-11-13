@@ -40,7 +40,12 @@ import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcileP
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
-import { EngineStatusPill } from "./EngineStatusPill";
+import { LiveActivityHeader } from "./LiveActivityHeader";
+import {
+  phaseLabelForTool,
+  hostDisconnectChipVisible,
+  streamBannerKind
+} from "../lib/liveActivity";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
@@ -55,7 +60,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
@@ -107,6 +112,7 @@ export interface ChatMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  roundPromptTokens?: number[];
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
 }
@@ -147,6 +153,7 @@ interface ChatStreamProps {
   onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
+  onOpenSettings?: () => void;
   onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope, autoDeployOnGreen?: boolean) => Promise<void>;
   defaultComposerMode?: "chat" | "build";
   onNewThread?: () => void;
@@ -270,6 +277,7 @@ export function ChatStream({
   onTaskUpdated,
   onBackToList,
   onOpenModelSheet,
+  onOpenSettings,
   onLaunchTask,
   onNewThread,
   onDeleteThread,
@@ -293,8 +301,10 @@ export function ChatStream({
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
 
-  // Composer Mode state (Chat | Build)
-  const [composerMode, setComposerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
+  // Composer Mode state: the Chat|Build toggle is removed (uir-0), so the
+  // mode is fixed at mount from defaultComposerMode; Build is entered via
+  // the /build prefix or the Builds view, never a composer toggle.
+  const [composerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
   const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">(() => {
     if (typeof window !== "undefined" && threadId) {
@@ -323,6 +333,25 @@ export function ChatStream({
   // ChatStream's own state so rows received before a stream cut stay on screen
   // even when the messages prop/setMessages cannot reflect them.
   const [liveTurnTraces, setLiveTurnTraces] = useState<ExecutionTraceItem[]>([]);
+  // uir-1 Live Activity Header + stream banners: turn start, last observed
+  // stream activity, recovery timestamp, and the just-completed turn whose
+  // DONE chip replaces the activity header.
+  const turnStartedAtRef = useRef<number | null>(null);
+  const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
+  const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
+  const [completedTurnMsgId, setCompletedTurnMsgId] = useState<string | null>(null);
+
+  // Any stream-visible change counts as activity for the freshness readout.
+  useEffect(() => {
+    if (isLoading) setLastActivityAtMs(Date.now());
+  }, [isLoading, streamStatus, messages, liveTurnTraces]);
+
+  // The RECOVERED banner clears itself after its display window.
+  useEffect(() => {
+    if (recoveredAtMs === null) return;
+    const timer = setTimeout(() => setRecoveredAtMs(null), 10500);
+    return () => clearTimeout(timer);
+  }, [recoveredAtMs]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
@@ -626,6 +655,9 @@ export function ChatStream({
               setIsTransientDisconnected(false);
               setReconcilingThreadId(null);
               setHasResolvedDetachedTurn(true);
+              // uir-1: surface the RECOVERED banner where the DISCONNECTED
+              // banner stood, so the drop and the recovery are both visible.
+              setRecoveredAtMs(Date.now());
               return;
             }
           }
@@ -1189,6 +1221,10 @@ export function ChatStream({
               }))
             );
 
+            // uir-1: the DONE chip replaces the Live Activity Header on the
+            // message this turn just completed.
+            setCompletedTurnMsgId(assistantMsgId);
+
             // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
             setPendingSteers([]);
             if (Array.isArray(event.pendingSteers) && event.pendingSteers.length > 0 && chatQueueRef.current) {
@@ -1236,6 +1272,8 @@ export function ChatStream({
     setIsLoading(true);
     setStreamStatus("Continuing after host approval...");
     setErrorMsg(null);
+    turnStartedAtRef.current = Date.now();
+    setCompletedTurnMsgId(null);
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -1635,6 +1673,10 @@ export function ChatStream({
     setStreamStatus("Connecting to model...");
     // UI-003 / UI-011b: fresh live-turn trace rows for this turn.
     setLiveTurnTraces([]);
+    // uir-1: a new turn starts the activity clock and retires the DONE chip.
+    turnStartedAtRef.current = Date.now();
+    setCompletedTurnMsgId(null);
+    setRecoveredAtMs(null);
 
     const startTime = performance.now();
     const abortController = new AbortController();
@@ -2041,9 +2083,14 @@ export function ChatStream({
             >
               {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
-            <div className="hidden 2xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+            {/* uir-0: widened meter track (128px mobile / 240px desktop) with
+                the redline tick at the 85% (85K) compaction trigger */}
+            <div
+              data-testid="context-meter-track"
+              className="relative h-[5px] w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+            >
               <div
-                className={`h-full transition-all ${
+                className={`absolute left-0 top-0 h-full rounded-full transition-all ${
                   contextStats.estimatedTokens > 85000
                     ? "bg-rose-500"
                     : contextStats.estimatedTokens > 70000
@@ -2053,6 +2100,12 @@ export function ChatStream({
                 style={{
                   width: `${Math.min(100, Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100))}%`
                 }}
+              />
+              <span
+                data-testid="context-meter-tick"
+                aria-hidden="true"
+                title="85K compaction trigger"
+                className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] rounded-full bg-rose-500"
               />
             </div>
             {threadCompaction ? (
@@ -2067,68 +2120,23 @@ export function ChatStream({
             ) : null}
           </div>
 
-          {/* Engine Status Pill - desktop only (on mobile, Stop lives with turn in composer/stream) */}
-          <div className="hidden xl:flex items-center">
-            <EngineStatusPill onOpenSettings={onOpenModelSheet} />
-          </div>
-
-          {/* Host Read-Only Status Chip (controlled via global Settings switch) */}
-          {(() => {
-            if (!hostAccess) {
-              return (
-                <div
-                  data-testid="host-access-chip"
-                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-slate-500/10 text-slate-600 dark:text-zinc-400 border border-slate-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                  title="Host access disabled in Settings"
-                  aria-label="Host offline"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
-                  <span className="hidden sm:inline">Host offline</span>
-                  <span className="sm:hidden">Offline</span>
-                </div>
-              );
-            }
-            if (runnerState === "READY" || (runnerState === null && runnerAvailable === true)) {
-              return (
-                <div
-                  data-testid="host-access-chip"
-                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                  title="Host access ON"
-                  aria-label="Host access ON"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                  <span className="hidden sm:inline">Host access ON</span>
-                  <span className="sm:hidden">ON</span>
-                </div>
-              );
-            }
-            if (runnerState === "MISMATCH") {
-              return (
-                <div
-                  data-testid="host-access-chip"
-                  className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                  title={runnerReason || "Host runner daemon version/digest mismatch. Run AI-ON.ps1 to update."}
-                  aria-label="Host update required"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
-                  <span className="hidden sm:inline">Host update required</span>
-                  <span className="sm:hidden">Update</span>
-                </div>
-              );
-            }
-            return (
-              <div
-                data-testid="host-access-chip"
-                className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-semibold shrink-0"
-                title={runnerReason || "Host runner is unreachable (Host offline)"}
-                aria-label="Host offline"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                <span className="hidden sm:inline">Host offline</span>
-                <span className="sm:hidden">Offline</span>
-              </div>
-            );
-          })()}
+          {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
+              guest allowed in the freed slot is the host disconnect alert chip,
+              rendered ONLY while the host runner is down. */}
+          {hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
+            <button
+              type="button"
+              data-testid="host-disconnect-chip"
+              onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-wide shrink-0 min-h-[32px]"
+              title={runnerReason || "Host runner is unreachable — open Settings"}
+              aria-label="Host disconnected — open Settings"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="hidden sm:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
+              <span className="sm:hidden">HOST DISCONNECTED</span>
+            </button>
+          )}
 
           {/* Model Chip Button: opens ModelBottomSheet on tap */}
           <button
@@ -2431,26 +2439,74 @@ export function ChatStream({
                     </div>
                   )}
 
-                  {/* Worker Reasoning Panel (Prominent, Phased, Expanded by Default - Suppressed on task host message) */}
+                  {/* Live Activity Header + Worker Reasoning Panel (Suppressed on task host message) */}
                   {!isTaskHostMessage && (() => {
                     const isStreamingThis = Boolean(
                       m.status === "streaming" ||
                       (isLoading && m.id === activeAssistantMsgIdRef.current)
                     );
                     const shouldRenderThinking = Boolean(m.thought || isStreamingThis);
-                    if (!shouldRenderThinking) return null;
+                    const showDoneChip = Boolean(
+                      !isStreamingThis &&
+                      completedTurnMsgId === m.id &&
+                      typeof m.durationMs === "number"
+                    );
+                    if (!shouldRenderThinking && !showDoneChip) return null;
 
                     const rawThought = m.thought || (isStreamingThis && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
 
+                    // uir-1 (UI-017): activity header inputs. The phase is the
+                    // latest observed tool in words; the round comes only from
+                    // the record's per-round token array when it exists (never
+                    // fabricated mid-turn).
+                    const liveLastTrace = liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
+                    const msgLastTrace = m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
+                    const statusTool = streamStatus
+                      ? (streamStatus.match(/^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i)?.[1] ?? null)
+                      : null;
+                    const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
+                    const phaseLabel = toolForPhase
+                      ? phaseLabelForTool(toolForPhase)
+                      : (resolveTurnStatusPhase({
+                          isStreaming: true,
+                          streamStatus,
+                          hasThought: Boolean(m.thought),
+                          hasContent: Boolean(m.content)
+                        }) ?? "Starting turn…");
+                    const parsedTs = m.timestamp ? Date.parse(m.timestamp) : NaN;
+                    const startedAtMs = turnStartedAtRef.current ?? (Number.isNaN(parsedTs) ? lastActivityAtMs : parsedTs);
+                    const traceCount = Math.max(m.traces?.length ?? 0, isStreamingThis ? liveTurnTraces.length : 0);
+
                     return (
-                      <div className="w-full">
-                        <ThinkingPanel
-                          rawThought={rawThought}
-                          isStreaming={isStreamingThis}
-                          streamStatus={isStreamingThis ? streamStatus : null}
-                          hasContent={Boolean(m.content && m.content.trim())}
-                          defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
-                        />
+                      <div className="w-full space-y-2">
+                        {isStreamingThis && (
+                          <LiveActivityHeader
+                            startedAtMs={startedAtMs}
+                            lastActivityAtMs={lastActivityAtMs}
+                            round={m.roundPromptTokens?.length}
+                            traceCount={traceCount}
+                            phaseLabel={phaseLabel}
+                            activityLabel={statusTool ? null : streamStatus}
+                            isStreaming={isStreamingThis}
+                          />
+                        )}
+                        {showDoneChip && (
+                          <div
+                            data-testid="turn-done-chip"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
+                          >
+                            <span>{`✓ DONE · ${m.traces?.length ?? 0} traces · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
+                          </div>
+                        )}
+                        {shouldRenderThinking && (
+                          <ThinkingPanel
+                            rawThought={rawThought}
+                            isStreaming={isStreamingThis}
+                            streamStatus={isStreamingThis ? streamStatus : null}
+                            hasContent={Boolean(m.content && m.content.trim())}
+                            defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
+                          />
+                        )}
                       </div>
                     );
                   })()}
@@ -3176,16 +3232,39 @@ export function ChatStream({
           );
         })()}
 
-        {/* Deliverable 3: Transient stream disconnected indicator */}
-        {isTransientDisconnected && (
-          <div
-            data-testid="turn-transient-disconnected"
-            className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
-          >
-            <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>Connection interrupted — turn continuing server-side...</span>
-          </div>
-        )}
+        {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
+            drops mid-turn, RECOVERED when the detached turn is reconciled.
+            Both render at the interruption point so the drop and the
+            recovery stay auditable in the stream. */}
+        {(() => {
+          const banner = streamBannerKind({
+            isDisconnected: isTransientDisconnected,
+            recoveredAtMs,
+            nowMs: Date.now()
+          });
+          if (banner === "disconnected") {
+            return (
+              <div
+                data-testid="turn-transient-disconnected"
+                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+              >
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>
+              </div>
+            );
+          }
+          if (banner === "recovered") {
+            return (
+              <div
+                data-testid="stream-recovered-banner"
+                className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium w-full max-w-xl"
+              >
+                <span>↻ RECOVERED · Reconnected — turn state restored from the record</span>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {errorMsg && (() => {
           const formatted = formatChatErrorMessage(errorMsg);
@@ -3433,42 +3512,12 @@ export function ChatStream({
                 </div>
               )}
 
-              {/* Composer Mode Toggle (Chat | Build) */}
-              <div
-                role="radiogroup"
-                aria-label="Composer Mode Selector"
-                className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-800/90 text-[11px] font-medium select-none"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={composerMode === "chat"}
-                  onClick={() => setComposerMode("chat")}
-                  className={`px-3 py-1 rounded-full transition-all ${
-                    composerMode === "chat"
-                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Chat
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={composerMode === "build"}
-                  onClick={() => setComposerMode("build")}
-                  className={`px-3 py-1 rounded-full transition-all ${
-                    composerMode === "build"
-                      ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Build
-                </button>
-              </div>
-
-              {/* Opt-in Auto-Deploy on Green Gate Checkbox (Sprint A4 / CEO Decision 3) */}
-              {composerMode === "build" && (
+              {/* uir-0: the Chat|Build composer toggle is removed (owner ruling).
+                  Build stays reachable via the /build prefix and the Builds view;
+                  the dispatch check (composerMode === "build" || isBuildPrefix)
+                  is unchanged. The auto-deploy opt-in now also appears when the
+                  draft itself starts with the /build prefix. */}
+              {(composerMode === "build" || input.trim().toLowerCase().startsWith("/build ")) && (
                 <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-zinc-400 cursor-pointer select-none px-1">
                   <input
                     type="checkbox"
