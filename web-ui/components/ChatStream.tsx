@@ -37,6 +37,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "../lib/clipboard";
+import { latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
@@ -635,6 +636,17 @@ export function ChatStream({
 
   const isTaskActive = activeTask?.status === "active";
   const isGeneratingOrRunning = isLoading || isTaskActive;
+
+  // qa-7 / UI-013: the context meter shows the latest round's ACTUAL prompt
+  // tokens from the thread record (roundPromptTokens persisted per assistant
+  // message, snapshots included), so watching clients and refreshed views
+  // never sit at 0K. The SSE estimate remains the fallback on the initiating
+  // client before the first round persists.
+  const recordContextTokens = latestRoundPromptTokens(
+    messages as unknown as Array<{ roundPromptTokens?: number[] }>
+  );
+  const displayContextTokens =
+    recordContextTokens > 0 ? recordContextTokens : contextStats.estimatedTokens;
 
   // CHAT-QUEUE: Client-side message queue during active turns
   const turnActiveRef = useRef<boolean>(false);
@@ -2078,30 +2090,30 @@ export function ChatStream({
           <div
             data-testid="context-meter-pill"
             className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[10px] sm:text-[11px] font-mono shrink-0"
-            title={`Context budget: ${contextStats.estimatedTokens} / ${contextStats.budgetTokens} tokens (${Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100)}%)`}
+            title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
           >
             <span
               className={`font-semibold ${
-                contextStats.estimatedTokens > 85000
+                displayContextTokens > 85000
                   ? "text-rose-600 dark:text-rose-400"
-                  : contextStats.estimatedTokens > 70000
+                  : displayContextTokens > 70000
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-slate-600 dark:text-zinc-400"
               }`}
             >
-              {Math.round(contextStats.estimatedTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
+              {Math.round(displayContextTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
             </span>
             <div className="hidden 2xl:block w-10 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
               <div
                 className={`h-full transition-all ${
-                  contextStats.estimatedTokens > 85000
+                  displayContextTokens > 85000
                     ? "bg-rose-500"
-                    : contextStats.estimatedTokens > 70000
+                    : displayContextTokens > 70000
                     ? "bg-amber-500"
                     : "bg-emerald-500"
                 }`}
                 style={{
-                  width: `${Math.min(100, Math.round((contextStats.estimatedTokens / contextStats.budgetTokens) * 100))}%`
+                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`
                 }}
               />
             </div>

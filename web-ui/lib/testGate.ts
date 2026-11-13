@@ -205,6 +205,16 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/page"),
     tests: ["tests/chatLiveTraceRows.test.ts"]
   },
+  // qa-7 / UI-013: live header context meter — latest round's actual prompt
+  // tokens from the record on every client (helper, snapshot carriage, pill)
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/api/chat/route"),
+    tests: ["tests/uirLiveMeter.test.ts"]
+  },
   // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
   // title wrap (UI-012), long-brief collapse (UI-014)
   {

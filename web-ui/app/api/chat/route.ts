@@ -1792,7 +1792,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             accumulatedStreamedTokens,
             roundThought,
             traces as any,
-            { force: true }
+            { force: true, roundPromptTokens: [...roundPromptTokens] }
           );
           if (activeThreadId) {
             touchActiveTurn(activeThreadId);

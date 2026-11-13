@@ -21,6 +21,9 @@ export interface StreamingSnapshotMessage {
   content: string;
   thought?: string;
   traces?: ExecutionTraceItem[];
+  /** qa-7: per-round prompt tokens so far, so watching clients can show the
+   * live context meter mid-turn instead of waiting for the turn to settle. */
+  roundPromptTokens?: number[];
   status: "streaming";
   timestamp: string;
 }
@@ -31,6 +34,7 @@ export interface StreamingSnapshotSink {
 
 export class ThrottledStreamSnapshot {
   private lastWriteMs = -Infinity;
+  private lastRoundPromptTokens: number[] | undefined;
 
   constructor(
     private sink: StreamingSnapshotSink,
@@ -52,9 +56,14 @@ export class ThrottledStreamSnapshot {
     content: string,
     thought?: string,
     traces?: ExecutionTraceItem[],
-    opts?: { force?: boolean }
+    opts?: { force?: boolean; roundPromptTokens?: number[] }
   ): boolean {
     if (!this.threadId) return false;
+    // qa-7: cache the round token record the moment a caller supplies it, so
+    // every later snapshot carries it even when the caller passes content only.
+    if (Array.isArray(opts?.roundPromptTokens) && opts.roundPromptTokens.length > 0) {
+      this.lastRoundPromptTokens = [...opts.roundPromptTokens];
+    }
     const hasContent = Boolean(content && content.trim());
     const hasThought = Boolean(thought && thought.trim());
     const hasTraces = Array.isArray(traces) && traces.length > 0;
@@ -68,6 +77,7 @@ export class ThrottledStreamSnapshot {
       content: content || "",
       thought: hasThought ? thought : undefined,
       traces: hasTraces ? traces : undefined,
+      roundPromptTokens: this.lastRoundPromptTokens,
       status: "streaming",
       timestamp: new Date().toISOString()
     });
