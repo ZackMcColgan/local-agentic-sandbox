@@ -779,3 +779,5 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - 2026-11-13 ~03:09 CT — PR #87 deployed v-72af484-fresh. S4 verified: pod web-ui-54c4c5984d-8sftk 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order. Settings Playwright baselines needed no regeneration (CI Playwright green as-is).
 - 2026-11-13 ~03:15 CT — PR #88 (uir-4 Morning Report: verdict banner from KPI counts, view restructure, Stalled display label) merged 64ab27c. Rollback target: v-72af484-fresh (PR #87 image).
 - 2026-11-13 ~03:24 CT — PR #88 deployed v-64ab27c-fresh. S4 verified: pod web-ui-78df65df89-728lx 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order.
+- 2026-11-13 ~03:35 CT — PR #90 (OLED true black: dark canvas surfaces to pure black, elevated surfaces stay lifted zinc) merged c47cba9. Rollback target: v-64ab27c-fresh (PR #88 image).
+- 2026-11-13 ~03:41 CT — PR #90 deployed v-c47cba9-fresh. S4 verified: pod web-ui-745c669445-t4ddc 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order.
