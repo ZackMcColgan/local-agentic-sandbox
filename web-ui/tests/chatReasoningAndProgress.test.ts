@@ -79,7 +79,7 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
     it("ThinkingPanel source contains phased cards (Planning, Building, Validating), streaming badge, and is expanded by default", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ThinkingPanel.tsx"), "utf8");
       assert.ok(src.includes("planning") && src.includes("building") && src.includes("validating"), "Must have 3 pipeline phases");
-      assert.ok(src.includes("Worker reasoning"), "Must have panel header matching mockup");
+      assert.ok(src.includes("Thinking") && src.includes("formatThoughtLabel"), "Must have panel header matching the final design board (Thinking / Thought for …)");
       assert.ok(src.includes("Streaming") || src.includes("streaming-badge"), "Must have streaming badge");
       assert.ok(src.includes("defaultExpanded = true"), "Must be expanded by default as requested by user");
     });
