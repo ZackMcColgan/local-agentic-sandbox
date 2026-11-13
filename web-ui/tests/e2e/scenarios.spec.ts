@@ -39,9 +39,9 @@ test.describe("Simulation Mode & State Invariants Suite", () => {
     await page.goto("/");
     await page.waitForSelector("textarea");
 
-    // Enter simulation command in composer (default 1x speed gives ~2s stream to verify mid-stream state)
+    // Enter simulation command in composer (0.5x speed stretches the ~2s stream so the mid-stream state stays observable under CI load)
     const textarea = page.locator("textarea").first();
-    await textarea.fill("/simulate chat-fast");
+    await textarea.fill("/simulate chat-fast 0.5");
     await textarea.press("Enter");
 
     // 1. Simulation badge is visible in header
@@ -119,7 +119,7 @@ test.describe("Simulation Mode & State Invariants Suite", () => {
     await expect(page.locator('[data-testid="send-button"]').first()).toBeVisible({ timeout: 10000 });
 
     // 1. Thinking panel visible and expandable
-    const thinkingHeader = page.locator('text=Worker reasoning').first();
+    const thinkingHeader = page.locator('[data-testid="thinking-panel"]').first();
     await expect(thinkingHeader).toBeVisible();
 
     // 2. Failed command step is visible

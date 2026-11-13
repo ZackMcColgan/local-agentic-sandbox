@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
+import { formatElapsedDuration } from "../lib/chatUtils";
+import { formatThoughtLabel } from "../lib/liveActivity";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
 
@@ -22,7 +24,8 @@ export interface ThinkingPhaseCardData {
   timeAgo?: string;
   narrative: string;
   status: "complete" | "in_progress" | "pending";
-  progressPercent: number;
+  /** Legacy field kept for data compatibility; never rendered (UI-017). */
+  progressPercent?: number;
 }
 
 interface ThinkingPanelProps {
@@ -51,9 +54,30 @@ export function ThinkingPanel({
   const prevStreamingRef = useRef(isStreaming);
   const userToggledRef = useRef(false);
 
+  // Thinking duration: measured from the first streaming render to the
+  // moment the stream ends, so the collapsed row can honestly read
+  // "Thought for …". Panels mounted after the fact have no measured
+  // duration and never fabricate one.
+  const streamStartRef = useRef<number | null>(null);
+  const [thoughtDurationMs, setThoughtDurationMs] = useState<number | null>(null);
+  const [headerNowMs, setHeaderNowMs] = useState<number>(() => Date.now());
+  if (isStreaming && streamStartRef.current === null) {
+    streamStartRef.current = Date.now();
+  }
+
+  useEffect(() => {
+    if (!isStreaming) return;
+    const timer = setInterval(() => setHeaderNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
+
   // Auto-collapse when generation finishes unless the user manually toggled it
   useEffect(() => {
     if (prevStreamingRef.current && !isStreaming) {
+      if (streamStartRef.current !== null) {
+        setThoughtDurationMs(Date.now() - streamStartRef.current);
+        streamStartRef.current = null;
+      }
       if (!userToggledRef.current) {
         setIsExpanded(false);
       }
@@ -79,8 +103,7 @@ export function ThinkingPanel({
           timestamp: formattedTime,
           timeAgo: "Now",
           narrative: rawThought.trim(),
-          status: isStreaming ? "in_progress" : "complete",
-          progressPercent: isStreaming ? 0 : 100
+          status: isStreaming ? "in_progress" : "complete"
         }
       ];
     }
@@ -98,6 +121,10 @@ export function ThinkingPanel({
     hasContent
   });
 
+  const streamStartMs = streamStartRef.current;
+  const headerTitle =
+    !isStreaming && thoughtDurationMs != null ? formatThoughtLabel(thoughtDurationMs) : "Thinking";
+
   return (
     <div
       data-testid="thinking-panel"
@@ -113,8 +140,13 @@ export function ThinkingPanel({
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 truncate">
-            Worker reasoning
+            {headerTitle}
           </span>
+          {isStreaming && streamStartMs !== null && (
+            <span className="font-mono tabular-nums text-[11px] text-slate-500 dark:text-zinc-400 shrink-0">
+              {formatElapsedDuration(Math.max(0, Math.floor((headerNowMs - streamStartMs) / 1000)))}
+            </span>
+          )}
           <span
             data-testid="streaming-badge"
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
@@ -165,7 +197,6 @@ export function ThinkingPanel({
             const isValidating = phaseItem.phase === "validating";
 
             const Icon = isPlanning ? Map : isBuilding ? Cog : CheckCircle2;
-            const isCompleted = phaseItem.status === "complete";
             const isInProgress = phaseItem.status === "in_progress";
 
             return (
@@ -191,35 +222,19 @@ export function ThinkingPanel({
                   </div>
                 </div>
 
-                {/* Narrative Text */}
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-850/80 text-xs text-slate-600 dark:text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
-                  {phaseItem.narrative}
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-1 pt-0.5">
-                  <div className="w-full h-1 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                {/* Narrative Text — full reasoning, bottom fade while streaming.
+                    No progress bar: a turn's total length is unknowable, so a
+                    percent-complete would be fabricated (UI-017). */}
+                <div className="relative">
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-850/80 text-xs text-slate-600 dark:text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-72 overflow-y-auto">
+                    {phaseItem.narrative}
+                  </div>
+                  {isInProgress && (
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        isCompleted
-                          ? "bg-emerald-600"
-                          : "bg-emerald-500"
-                      }`}
-                      style={{ width: `${Math.min(Math.max(phaseItem.progressPercent, 5), 100)}%` }}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-lg bg-gradient-to-t from-slate-50 dark:from-zinc-950 to-transparent"
                     />
-                  </div>
-
-                  <div className="flex justify-end text-[10px] font-medium text-slate-400 dark:text-zinc-500">
-                    {isCompleted ? (
-                      <span className="text-emerald-700 dark:text-emerald-400">Complete</span>
-                    ) : isInProgress ? (
-                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                        In progress · {phaseItem.progressPercent}%
-                      </span>
-                    ) : (
-                      <span>Pending</span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             );
