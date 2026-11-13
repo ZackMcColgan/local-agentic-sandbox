@@ -750,3 +750,4 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 ## qa-4 deploy 2026-11-12 
 - Rollback target banked: v-8063453-fresh 
 - Deploy target: v-0a08c89-fresh, develop 0a08c89, PR 82 merged 
+- Deploy VERIFIED 2026-11-12 ~21:50 CT: image v-0a08c89-fresh, pod web-ui-79957c5b77-rnjj4 1/1 Running 0 restarts, gateway 200, /api/threads 200, prod == develop 0a08c89 
