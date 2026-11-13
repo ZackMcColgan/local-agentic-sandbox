@@ -11,10 +11,17 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
     await page.waitForSelector("header");
 
     const projectsBtn = page.locator('button[aria-label="Open Projects"], button[title="Open Projects"]').first();
-    await expect(projectsBtn).toBeVisible();
+
+    if (isMobile) {
+      // UI-019 (owner order): the header Projects button is removed on
+      // mobile — Projects lives in the drawer. Absence is the stronger
+      // form of this regression's guarantee: no button, no overlap.
+      await expect(projectsBtn).toBeHidden();
+    } else {
+      await expect(projectsBtn).toBeVisible();
+    }
 
     const projectsBox = await projectsBtn.boundingBox();
-    expect(projectsBox).not.toBeNull();
 
     if (isMobile) {
       // On mobile, Stop pill must NOT be in the header at all
@@ -22,6 +29,7 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
       await expect(mobileStopHeader).toBeHidden();
     } else {
       // On desktop, Engine pill / Stop button may exist, but MUST NOT overlap Projects button
+      expect(projectsBox).not.toBeNull();
       const enginePill = page.locator("header .engine-status-pill, header button:has-text('Stop'), header [aria-label*='Engine']").first();
       if (await enginePill.isVisible()) {
         const engineBox = await enginePill.boundingBox();

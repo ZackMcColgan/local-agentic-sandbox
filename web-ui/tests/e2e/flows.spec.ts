@@ -95,11 +95,17 @@ test.describe("Real User Interaction Flows", () => {
     }
   });
 
-  test("Flow 3: Projects registration and management end-to-end", async ({ page }) => {
+  test("Flow 3: Projects registration and management end-to-end", async ({ page, isMobile }) => {
     await page.goto("/");
 
-    // 1. Navigate to Projects
-    await page.locator('button[aria-label="Open Projects"]').click();
+    // 1. Navigate to Projects. UI-019: the header Projects button is
+    // desktop-only; on mobile Projects is reached through the drawer.
+    if (isMobile) {
+      await page.locator('button[aria-label="Open navigation menu"]').first().click();
+      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+    } else {
+      await page.locator('button[aria-label="Open Projects"]').click();
+    }
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
 
     // 2. Open Register Modal
