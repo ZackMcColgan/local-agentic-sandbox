@@ -293,6 +293,10 @@ export function ThreadsSidebar({
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
+            const progressChars = (thread.messages || []).reduce(
+              (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
+              0
+            );
             const progressTraces = (thread.messages || []).reduce(
               (n, m) => n + (m.traces ? m.traces.length : 0),
               0
@@ -426,11 +430,15 @@ export function ThreadsSidebar({
                         {livenessBadge === "alive" ? "Alive" : "Stalled"}
                       </span>
                     )}
-                    {progressTraces > 0 && (
+                    {livenessBadge ? (
+                      <span data-testid={`thread-progress-${thread.id}`}>
+                        {`${progressChars} chars · ${progressTraces} traces`}
+                      </span>
+                    ) : progressTraces > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
                         {`· ${progressTraces} traces`}
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
                   {isRunning && (
