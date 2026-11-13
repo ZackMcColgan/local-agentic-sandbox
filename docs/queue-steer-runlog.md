@@ -793,3 +793,5 @@ Merge PR #95 board parity PR4 verification pass (a8f7d12): canvas pane/tabs/diff
 Deploy v-a8f7d12-fresh verified: rollout success, pod web-ui-5f59676f87-mfl6r 1/1 Running 0 restarts, gateway 200, /api/threads 200. Follows v-2556a9d-fresh (parity PR3).
 2026-11-13 08:42 CT self-update S1 rollback target v-a8f7d12-fresh deploying develop 846e9822 
 2026-11-13 08:47 CT self-update DONE prod 0ac826d v-0ac826d-fresh S4 verified rollout success pod web-ui-5ccbc75b7d-mbkpf 1/1 0 restarts UI 200 threads 200 
+  
+- 2026-11-13 09:02 CT self-update S1: rollback target v-0ac826d-fresh; drift 0acf1c2 runlog-only; CI run 43445804217 all-four-green.  
