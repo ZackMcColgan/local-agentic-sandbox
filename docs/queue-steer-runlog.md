@@ -730,3 +730,10 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 ## qa-2 deploy 2026-11-12 
 - Rollback target banked: v-c71d541-fresh 
 - Deploy target: v-add4375-fresh, develop add4375, PR 80 merged 
+
+## qa-3 live trace rows 2026-11-12 (UI-003 / UI-011b, retry 1)
+- Cause (driver-verified): LiveRunBlock.tsx had zero trace rendering; ChatStream.tsx:2550-2552 task-host message embedded only LiveRunBlock. Live trace events reached the global ExecutionTrace panel via onTracesUpdate (page.tsx) while the live screen showed nothing.
+- Test-first: web-ui/tests/chatLiveTraceRows.test.ts (3 subtests: LiveRunBlock rows from liveTraces prop; ChatStream passes liveTraces to both LiveRunBlock mounts; severed-stream end-state keeps rows received before the cut). Fail-before confirmed: all 3 failed (rows absent). Banked as 0ef784c.
+- Implementation: LiveRunBlock.tsx takes liveTraces?: ExecutionTraceItem[] and renders a "Live tool steps" strip (formatHumanReadableTrace titles, aria-label "Tool: <name>") above the Run Controls footer (commit 3a59397). ChatStream.tsx takes liveTraces prop, passes it to both LiveRunBlock mounts (2553, 2969), holds its own liveTurnTraces state fed by stream trace events (reset at turn start), renders the same strip while a chat turn streams so rows survive a mid-turn stream cut even when setMessages cannot reflect them; per-message proof rows got aria-label "Tool: <name>" (commit ef17265). page.tsx wires liveTraces={traces} into ChatStream.
+- Driver adaptation (assertions unchanged): happy-dom events never reach React 19 synthetic listeners in this repo harness; test drives composer via __reactProps$ onChange and send via props onClick with click() fallback - the repo-established pattern from tests/uiStateAndDedup.test.ts.
+- npm run test:gate via bridge -> PASSED 386 pass / 0 fail, 140 suites, 36.4s (<90s budget). Head ef17265 pushed to feature/qa3-live-trace-rows.
