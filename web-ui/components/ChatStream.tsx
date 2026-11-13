@@ -2996,7 +2996,7 @@ export function ChatStream({
                       <Check size={10} className="text-emerald-500" />
                       <span>{readable.title || t.tool}</span>
                     </span>
-                    <span className="text-slate-400 dark:text-zinc-500">{readable.durationFormatted || ""}</span>
+                    <span className="text-slate-400 dark:text-zinc-500">{readable.duration || ""}</span>
                   </button>
                 );
               })}
