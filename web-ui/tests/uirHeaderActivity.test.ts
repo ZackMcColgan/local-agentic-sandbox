@@ -103,7 +103,11 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     assert.ok(html.includes('data-testid="live-activity-elapsed"'), "elapsed testid present");
     assert.ok(html.includes("14m 22s"), "elapsed hero shows 14m 22s");
     assert.ok(html.includes("Round 74 · 73 traces"), "mono meta shows Round N · M traces");
-    assert.ok(html.includes("Writing code — host_run_file_write"), "phase label in words with tool");
+    // Parity PR2: the tool half of the phase line renders in its own mono
+    // muted span (board styling), so the full label is asserted on the
+    // tag-stripped rendered text — same semantic guarantee.
+    const renderedText = html.replace(/<[^>]+>/g, "");
+    assert.ok(renderedText.includes("Writing code — host_run_file_write"), "phase label in words with tool");
     assert.ok(html.includes("Live"), "freshness shows Live");
     assert.ok(!html.includes("%"), "no percentage anywhere in the activity header");
   });

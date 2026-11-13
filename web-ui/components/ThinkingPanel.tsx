@@ -7,7 +7,6 @@ import {
   Map,
   Cog,
   CheckCircle2,
-  Sparkles,
   Loader2
 } from "lucide-react";
 
@@ -138,8 +137,15 @@ export function ThinkingPanel({
         aria-expanded={isExpanded}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 truncate">
+          <span
+            aria-hidden="true"
+            className={`h-2 w-2 rounded-full shrink-0 ${
+              isStreaming
+                ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse"
+                : "bg-emerald-500"
+            }`}
+          />
+          <span className="text-[13px] font-bold text-slate-800 dark:text-zinc-100 truncate">
             {headerTitle}
           </span>
           {isStreaming && streamStartMs !== null && (
@@ -226,13 +232,13 @@ export function ThinkingPanel({
                     No progress bar: a turn's total length is unknowable, so a
                     percent-complete would be fabricated (UI-017). */}
                 <div className="relative">
-                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-black border border-slate-100 dark:border-zinc-850/80 text-xs text-slate-600 dark:text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-72 overflow-y-auto">
+                  <div className="text-[13px] text-slate-600 dark:text-zinc-100 leading-relaxed whitespace-pre-wrap max-h-72 overflow-y-auto pr-1">
                     {phaseItem.narrative}
                   </div>
                   {isInProgress && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-lg bg-gradient-to-t from-slate-50 dark:from-zinc-950 to-transparent"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white dark:from-zinc-900 to-transparent"
                     />
                   )}
                 </div>

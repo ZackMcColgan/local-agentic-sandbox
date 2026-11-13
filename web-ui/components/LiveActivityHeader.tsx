@@ -55,15 +55,30 @@ export function LiveActivityHeader({
   if (round != null && round > 0) metaParts.push(`Round ${round}`);
   metaParts.push(`${traceCount} ${traceCount === 1 ? "trace" : "traces"}`);
 
+  // Board phase line: the activity in words, the tool as a mono muted tail
+  // ("Writing code — host_run_file_write").
+  const phaseParts = phaseLabel.split(" — ");
+  const phaseText = phaseParts[0];
+  const phaseTool = phaseParts.length > 1 ? phaseParts.slice(1).join(" — ") : null;
+
   return (
     <div
       data-testid="live-activity-header"
-      className="w-full max-w-2xl rounded-2xl bg-white/90 dark:bg-zinc-900/90 border border-slate-200/80 dark:border-zinc-800 shadow-2xs px-4 py-3 space-y-2"
+      className="w-full max-w-2xl rounded-2xl bg-white/90 dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-2xs px-4 py-3 space-y-2"
     >
       {/* Phase in words + freshness */}
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 truncate">
-          {phaseLabel}
+          {phaseText}
+          {phaseTool && (
+            <span
+              data-testid="live-activity-tool"
+              className="font-mono font-normal text-xs text-slate-400 dark:text-zinc-500"
+            >
+              {" — "}
+              {phaseTool}
+            </span>
+          )}
         </span>
         {freshness.state === "live" && (
           <span
@@ -96,7 +111,7 @@ export function LiveActivityHeader({
       {/* Hero readout: elapsed time only */}
       <div
         data-testid="live-activity-elapsed"
-        className="font-mono tabular-nums text-[34px] leading-none font-semibold tracking-wide text-slate-900 dark:text-zinc-50"
+        className="font-mono tabular-nums text-[27px] sm:text-[34px] leading-none font-semibold tracking-wide text-slate-900 dark:text-zinc-50"
       >
         {formatElapsedDuration(elapsedSeconds)}
       </div>
@@ -104,7 +119,7 @@ export function LiveActivityHeader({
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
         <div className="relative h-[2px] rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden" aria-hidden="true">
-          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-emerald-500" />
+          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400" />
         </div>
       )}
 

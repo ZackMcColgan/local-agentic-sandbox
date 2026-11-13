@@ -125,7 +125,7 @@ export function LiveRunBlock({
   })();
 
   return (
-    <div className="w-full max-w-[840px] my-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-md transition-all space-y-3.5">
+    <div className="w-full max-w-[840px] my-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#121215] border border-slate-200/90 dark:border-zinc-800 shadow-md transition-all space-y-3.5">
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -143,9 +143,12 @@ export function LiveRunBlock({
               </span>
             )}
             {!isPlanning && isRunning && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-200/60 dark:border-emerald-800/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Running</span>
+              <span
+                data-testid="running-pill"
+                className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500 text-[#052e16] flex items-center gap-1.5"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-[#052e16] animate-pulse" />
+                <span>RUNNING · {formatElapsedDuration(elapsedSeconds)}</span>
               </span>
             )}
             {task.scope && (
@@ -538,8 +541,8 @@ export function LiveRunBlock({
               aria-label={`Tool: ${trace.tool}`}
               className="w-full px-3.5 py-2 flex items-center justify-between text-left rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-xs font-mono"
             >
-              <span className="truncate">{trace.tool}</span>
-              <span className="text-[10px] text-slate-400">{new Date(trace.timestamp).toLocaleTimeString()}</span>
+              <span className="truncate text-slate-700 dark:text-zinc-100">{trace.tool}</span>
+              <span className="text-[10px] text-slate-400 dark:text-zinc-400">{new Date(trace.timestamp).toLocaleTimeString()}</span>
             </button>
           ))}
         </div>
