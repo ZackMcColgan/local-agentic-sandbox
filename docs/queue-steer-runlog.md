@@ -781,3 +781,5 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - 2026-11-13 ~03:24 CT — PR #88 deployed v-64ab27c-fresh. S4 verified: pod web-ui-78df65df89-728lx 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order.
 - 2026-11-13 ~03:35 CT — PR #90 (OLED true black: dark canvas surfaces to pure black, elevated surfaces stay lifted zinc) merged c47cba9. Rollback target: v-64ab27c-fresh (PR #88 image).
 - 2026-11-13 ~03:41 CT — PR #90 deployed v-c47cba9-fresh. S4 verified: pod web-ui-745c669445-t4ddc 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order.
+Merge PR #91 qa-6 zombie streaming cap (b574a74): reconcileThread reaps leaked live-presence older than the 6h cap when the record is stale, so dead turns stop rendering as streaming forever (UI-001, UI-002).
+Deploy v-b574a74-fresh verified: rollout success, gateway 200, /api/threads 200. Follows v-c47cba9-fresh (OLED true black).
