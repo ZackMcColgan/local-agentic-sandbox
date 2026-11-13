@@ -57,6 +57,8 @@ import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
+import { CanvasProvider } from "./CanvasContext";
+import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
 import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
@@ -1803,10 +1805,12 @@ export function ChatStream({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative flex flex-col h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
+      className={`relative flex h-full bg-white dark:bg-zinc-950 transition-colors overflow-hidden ${
         isDraggingOver ? "bg-emerald-50/30 dark:bg-emerald-950/20" : ""
       }`}
     >
+    <CanvasProvider scrollElRef={chatContainerRef}>
+    <div className="flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
       {/* Hidden File Input */}
       <input
         ref={fileInputRef}
@@ -2809,6 +2813,9 @@ export function ChatStream({
 
                             <div className="flex items-center gap-2 shrink-0">
                               {canOpenInTab && (
+                                <CanvasFileOpenButton name={att.name} url={openUrl} />
+                              )}
+                              {canOpenInTab && (
                                 <a
                                   href={openUrl}
                                   target="_blank"
@@ -2862,6 +2869,7 @@ export function ChatStream({
 
                     return (
                       <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+                        <CanvasDiffCard diffs={fileDiffs} />
                         {fileDiffs.map((diffItem, diffIdx) => (
                           <div
                             key={`${m.id}-diff-${diffIdx}-${diffItem.path}`}
@@ -3528,6 +3536,9 @@ export function ChatStream({
           </div>
         </form>
       </div>
+    </div>
+    <ArtifactCanvasPane />
+    </CanvasProvider>
     </div>
   );
 }
