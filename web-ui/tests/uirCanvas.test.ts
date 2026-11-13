@@ -312,6 +312,9 @@ describe("uir-2 canvas: rendered UI", () => {
     });
   };
 
+  const withProvider = (...children: React.ReactNode[]) =>
+    React.createElement(CanvasProvider, { scrollElRef: scrollRef, children });
+
   const click = async (el: Element | null) => {
     assert.ok(el, "element to click must exist");
     await act(async () => {
@@ -325,9 +328,7 @@ describe("uir-2 canvas: rendered UI", () => {
   it("code card Open opens the pane (filename + Preview/Code tabs); closing restores the exact chat scroll position", async () => {
     scrollEl.scrollTop = 777;
     await renderTree(
-      React.createElement(
-        CanvasProvider,
-        { scrollElRef: scrollRef },
+      withProvider(
         React.createElement(CodeBlock, {
           language: "html",
           code: "<html><body>v1</body></html>",
@@ -375,9 +376,7 @@ describe("uir-2 canvas: rendered UI", () => {
 
   it("shows the Updated badge when a seen artifact changes while the canvas is closed", async () => {
     const tree = (code: string) =>
-      React.createElement(
-        CanvasProvider,
-        { scrollElRef: scrollRef },
+      withProvider(
         React.createElement(CodeBlock, { language: "html", code, filename: "page.html" }),
         React.createElement(ArtifactCanvasPane)
       );
@@ -410,9 +409,7 @@ describe("uir-2 canvas: rendered UI", () => {
       },
     ];
     await renderTree(
-      React.createElement(
-        CanvasProvider,
-        { scrollElRef: scrollRef },
+      withProvider(
         React.createElement(CanvasDiffCard, { diffs }),
         React.createElement(ArtifactCanvasPane)
       )
@@ -452,9 +449,7 @@ describe("uir-2 canvas: rendered UI", () => {
   it("feature flag off removes the Open affordance (inline rendering is the fallback)", async () => {
     win.localStorage.setItem("las.canvas.enabled", "0");
     await renderTree(
-      React.createElement(
-        CanvasProvider,
-        { scrollElRef: scrollRef },
+      withProvider(
         React.createElement(CodeBlock, {
           language: "html",
           code: "<html><body>v1</body></html>",
