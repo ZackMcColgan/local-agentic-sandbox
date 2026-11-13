@@ -30,7 +30,8 @@ import {
   FolderGit2,
   FileCode,
   ExternalLink,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -2418,6 +2419,25 @@ export function ChatStream({
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                           <span>Incomplete</span>
                         </div>
+                      )}
+                      {/* UI-007: recoverable-status affordance. The transient
+                          reconcile banner (ChatStream.tsx:1646-1652) only lives
+                          while actively reconciling; once reconciliation ends an
+                          'incomplete' turn must stay distinct from bare prose
+                          and expose a retry/resume control so the turn can be
+                          recovered from the UI. Presentation + affordance only:
+                          the persisted marker text and reconciliation behavior
+                          are untouched. */}
+                      {m.status === "incomplete" && !isLoading && (
+                        <button
+                          type="button"
+                          data-testid="incomplete-retry"
+                          onClick={handleRetry}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-400 dark:border-amber-700 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/60 transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          <span>Retry turn</span>
+                        </button>
                       )}
                       {m.status === "error" && (
                         <div
