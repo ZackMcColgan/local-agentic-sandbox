@@ -267,6 +267,18 @@ const MAPPING_RULES: MappingRule[] = [
       p.endsWith("app/page.tsx"),
     tests: ["tests/paritySidebarDrawer.test.ts"]
   },
+  // Board parity PR4 (FINAL-DESIGN + canvas boards): canvas pane/diff form,
+  // chat canvas doors, Morning Report verdict/KPI/attention forms, and the
+  // UI-021 completed-turn trace surfaces (ExecutionTrace, TraceWaterfall)
+  {
+    match: (p) =>
+      p.includes("components/ArtifactCanvas") ||
+      p.includes("components/ArtifactRenderers") ||
+      p.includes("components/MorningReportView") ||
+      p.includes("components/ExecutionTrace") ||
+      p.includes("components/TraceWaterfall"),
+    tests: ["tests/parityVerificationPass.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {

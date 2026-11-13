@@ -140,7 +140,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
         <button
           onClick={fetchTraceData}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
           <span>Refresh</span>
@@ -149,30 +149,30 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
 
       {/* Overview Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Duration</span>
+        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Total Duration</span>
           <span className="text-lg font-bold text-slate-900 dark:text-zinc-100 font-mono">
             {totalDuration.toLocaleString()} ms
           </span>
         </div>
 
-        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Active Spans</span>
+        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Active Spans</span>
           <span className="text-lg font-bold text-slate-900 dark:text-zinc-100 font-mono">
             {spans.length}
           </span>
         </div>
 
-        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Security Boundary</span>
+        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Security Boundary</span>
           <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1 font-mono">
             <ShieldCheck className="w-3.5 h-3.5" />
             UID 10001 Sandboxed
           </span>
         </div>
 
-        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Trace ID</span>
+        <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Trace ID</span>
           <span className="text-[11px] font-mono text-slate-700 dark:text-zinc-300 truncate mt-1" title={session?.traceId || "No active trace"}>
             {session?.traceId ? `${session.traceId.slice(0, 12)}...` : "idle"}
           </span>
@@ -180,7 +180,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
       </div>
 
       {/* Waterfall Visualizer Gantt Chart */}
-      <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-hidden shadow-sm">
         {/* Waterfall Header */}
         <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-medium text-slate-500 dark:text-zinc-400">
           <div className="w-1/3 min-w-[120px]">Span Operation</div>
@@ -284,7 +284,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                       {Object.keys(span.attributes).length > 0 && (
                         <div>
                           <span className="font-semibold block text-slate-700 dark:text-zinc-300 mb-1">Attributes:</span>
-                          <pre className="p-2 rounded bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 font-mono text-[10px] overflow-x-auto text-slate-800 dark:text-zinc-200">
+                          <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] overflow-x-auto text-slate-800 dark:text-zinc-200">
                             {JSON.stringify(span.attributes, null, 2)}
                           </pre>
                         </div>

@@ -36,9 +36,9 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
 
   if (!traces || traces.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center shadow-sm">
-        <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-600 mx-auto mb-2 opacity-50" />
-        <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-300">No Tool Executions Yet</h4>
+      <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] p-6 text-center shadow-sm">
+        <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-500 mx-auto mb-2 opacity-50" />
+        <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-100">No Tool Executions Yet</h4>
         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
           When the autonomous agent invokes tools inside the sandboxed container, execution logs and security boundary proofs will appear here.
         </p>
@@ -51,7 +51,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <h3 className="text-sm font-medium text-slate-800 dark:text-zinc-200">
+          <h3 className="text-sm font-medium text-slate-800 dark:text-zinc-100">
             Agent Execution Trace ({traces.length})
           </h3>
         </div>
@@ -78,7 +78,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
           return (
             <div
               key={idx}
-              className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm transition-all duration-200"
+              className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-hidden shadow-sm transition-all duration-200"
             >
               {/* Accordion Header */}
               <button
@@ -98,7 +98,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                   ) : (
                     <AlertTriangle className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0" />
                   )}
-                  <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                  <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-100">
                     {trace.tool}
                   </span>
                 </div>
@@ -109,7 +109,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                       {trace.model}
                     </span>
                   )}
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 dark:text-zinc-300">
                     <Clock className="h-3 w-3" />
                     {trace.durationMs}ms
                   </span>
@@ -125,7 +125,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                   
                   {/* Tool Arguments / Code */}
                   <div>
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1 flex items-center justify-between">
+                    <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-300 mb-1 flex items-center justify-between">
                       <span>Payload Arguments:</span>
                       <button
                         type="button"
@@ -152,7 +152,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
 
                   {/* Execution Output */}
                   <div>
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1">
+                    <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-300 mb-1">
                       Execution Result & Sandbox Attestation:
                     </div>
                     <pre className="text-xs font-mono bg-slate-900 dark:bg-black p-2.5 rounded-lg border border-slate-800 dark:border-zinc-800 text-emerald-300 overflow-x-auto max-h-56">
