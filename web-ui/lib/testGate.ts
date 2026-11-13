@@ -204,6 +204,16 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/page"),
     tests: ["tests/chatLiveTraceRows.test.ts"]
   },
+  // qa-7 / UI-013: live header context meter — latest round's actual prompt
+  // tokens from the record on every client (helper, snapshot carriage, pill)
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/api/chat/route"),
+    tests: ["tests/uirLiveMeter.test.ts"]
+  },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
   {
