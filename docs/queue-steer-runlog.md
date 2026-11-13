@@ -769,3 +769,5 @@ ROLLBACK TARGET: local-agentic-sandbox-web-ui:v-d0ee2e7-fresh (current prod, ban
 - FLAG: qa-5 turn ran on swift-15-27b-mtp medium, not briefed qwen3.8-flash-next-gyro-gyro-s LOW. Deliverable verified by CI plus driver diff audit; engine deviation recorded for morning report. 
 - 2026-11-13 ~01:20 CT — PR #83 (uir-1 slice 1: UI-012 sidebar title wrap, UI-014 long-brief collapse, UI-016 user-text wrap) merged c763fce. Rollback target: v-31a705f-fresh (PR #89 qa-5 image).
 - 2026-11-13 ~01:35 CT — PR #83 deployed v-c763fce-fresh. S4 verified: pod web-ui-6dd4cbf7dc-vxjk4 1/1 Running 0 restarts, gateway 200, /api/threads 200. Landed by Muse directly per owner order (Nov 12, 22:48 CT) after qa-5; qa-6 Sandy turn stopped by owner order Nov 13, 01:17 CT.
+- 2026-11-13 ~01:57 CT — PR #84 (qa-7 / UI-013: live header context meter from the thread record) merged 8b9e1df after Muse resolved the lib/testGate.ts conflict with PR #83 (both gate rules kept; 28/28 affected tests pass). Rollback target: v-c763fce-fresh.
+- 2026-11-13 ~02:02 CT — PR #84 deployed v-8b9e1df-fresh. S4 verified: pod web-ui-74875775f9-m9t2k 1/1 Running 0 restarts, gateway 200, /api/threads 200.
