@@ -23,6 +23,7 @@ import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
 import { SvgViewer } from "./SvgViewer";
 import { CodeBlock } from "./ArtifactRenderers";
 import { ThinkingPanel } from "./ThinkingPanel";
+import { ExecutionTraceItem } from "./ExecutionTrace";
 
 interface LiveRunBlockProps {
   task: TaskManifest;
@@ -32,6 +33,7 @@ interface LiveRunBlockProps {
   onRestartRun?: () => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   isStopping?: boolean;
+  liveTraces?: ExecutionTraceItem[];
 }
 
 export function LiveRunBlock({
@@ -41,7 +43,8 @@ export function LiveRunBlock({
   onResumeRun,
   onRestartRun,
   onDeployRun,
-  isStopping
+  isStopping,
+  liveTraces
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
@@ -522,6 +525,23 @@ export function LiveRunBlock({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Live tool-call trace rows during the turn (UI-003 / UI-011b) */}
+      {liveTraces && liveTraces.length > 0 && (
+        <div className="mt-2.5 space-y-2 w-full" data-testid="live-trace-rows">
+          {liveTraces.map((trace, tIdx) => (
+            <button
+              key={tIdx}
+              type="button"
+              aria-label={`Tool: ${trace.tool}`}
+              className="w-full px-3.5 py-2 flex items-center justify-between text-left rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-xs font-mono"
+            >
+              <span className="truncate">{trace.tool}</span>
+              <span className="text-[10px] text-slate-400">{new Date(trace.timestamp).toLocaleTimeString()}</span>
+            </button>
+          ))}
         </div>
       )}
 
