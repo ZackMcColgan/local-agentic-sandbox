@@ -2192,13 +2192,13 @@ export function ChatStream({
               type="button"
               data-testid="host-disconnect-chip"
               onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] sm:min-h-[32px]"
+              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
               title={runnerReason || "Host runner is unreachable — open Settings"}
               aria-label="Host disconnected — open Settings"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
               <span className="hidden sm:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
-              <span className="sm:hidden">HOST DISCONNECTED</span>
+              <span className="sr-only">HOST DISCONNECTED</span>
             </button>
           )}
 
