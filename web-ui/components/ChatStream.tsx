@@ -248,6 +248,55 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+// UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
+// "Show full brief" toggle so a pasted job brief never walls off the thread.
+const BRIEF_COLLAPSE_MAX_CHARS = 320;
+const BRIEF_COLLAPSE_MAX_LINES = 6;
+
+function UserMessageContent({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible =
+    content.length > BRIEF_COLLAPSE_MAX_CHARS ||
+    content.split("\n").length > BRIEF_COLLAPSE_MAX_LINES;
+  const markdown = (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code: ({ children }: any) => (
+          <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
+            {children}
+          </code>
+        ),
+        p: ({ children }: any) => (
+          <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
+        )
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+  if (!collapsible) return <>{markdown}</>;
+  return (
+    <div>
+      <div className={expanded ? undefined : "relative max-h-[9rem] overflow-hidden"}>
+        {markdown}
+        {!expanded && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-sky-950 to-transparent" />
+        )}
+      </div>
+      <button
+        type="button"
+        data-testid="brief-collapse-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-1.5 text-xs font-semibold text-blue-700 dark:text-sky-300 hover:underline cursor-pointer"
+      >
+        {expanded ? "Show less" : "Show full brief"}
+      </button>
+    </div>
+  );
+}
+
 export function ChatStream({
   onTracesUpdate,
   liveTraces,
@@ -2304,22 +2353,10 @@ export function ChatStream({
 
               {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
               {isUser ? (
-                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg">
-                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed">
-                    <div className="prose dark:prose-invert max-w-none text-sm text-blue-950 dark:text-sky-100">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ children }: any) => (
-                            <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
-                              {children}
-                            </code>
-                          ),
-                          p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
+                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg min-w-0">
+                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-sky-950/40 dark:border-sky-500/30 dark:text-sky-100 rounded-3xl p-4 shadow-xs text-sm font-normal leading-relaxed min-w-0">
+                    <div className="prose dark:prose-invert max-w-none break-words text-sm text-blue-950 dark:text-sky-100">
+                      <UserMessageContent content={m.content} />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-500">
