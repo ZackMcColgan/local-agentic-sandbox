@@ -349,7 +349,7 @@ export function ThreadsSidebar({
                 <div className="min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <h2
-                      className={`text-sm sm:text-base leading-snug line-clamp-2 ${
+                      className={`text-sm sm:text-base leading-snug line-clamp-2 break-words ${
                         isSelected
                           ? "font-bold text-slate-900 dark:text-zinc-100"
                           : "font-semibold text-slate-900 dark:text-zinc-100"
