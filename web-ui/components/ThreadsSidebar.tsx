@@ -169,7 +169,7 @@ export function ThreadsSidebar({
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-white dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-black border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
       {/* Top Header matching Mockup media_1791044464191.webp */}
       <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">

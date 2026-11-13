@@ -100,8 +100,8 @@ describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-
     );
     assert.match(
       content,
-      /className=["']app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950["']/,
-      "app-main must always be flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-zinc-950"
+      /className=["']app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black["']/,
+      "app-main must always be flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
     );
   });
 

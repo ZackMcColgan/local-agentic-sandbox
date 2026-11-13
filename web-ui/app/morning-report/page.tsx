@@ -42,8 +42,8 @@ export default function MorningReportPage() {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased font-sans">
-      <header className="sticky top-0 z-20 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-4 sm:px-6 py-3">
+    <div className="min-h-[100dvh] flex flex-col bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased font-sans">
+      <header className="sticky top-0 z-20 bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-4 sm:px-6 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <a

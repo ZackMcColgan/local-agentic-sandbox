@@ -470,7 +470,7 @@ export function ProjectsView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header matching M3 Principles */}
@@ -726,7 +726,7 @@ export function ProjectsView({
                 </div>
 
                 {/* File Preview Pane */}
-                <div className="flex-1 p-4 overflow-y-auto max-h-[600px] flex flex-col bg-slate-50/30 dark:bg-zinc-950/30">
+                <div className="flex-1 p-4 overflow-y-auto max-h-[600px] flex flex-col bg-slate-50/30 dark:bg-black/30">
                   {selectedFilePath ? (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -976,7 +976,7 @@ export function ProjectsView({
                           className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs"
                         >
                           {/* File Header */}
-                          <div className="p-3 sm:p-4 bg-slate-50/60 dark:bg-zinc-950/60 border-b border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                          <div className="p-3 sm:p-4 bg-slate-50/60 dark:bg-black/60 border-b border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0">
                               <span
                                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold font-mono border ${typeColor}`}

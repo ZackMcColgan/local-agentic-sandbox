@@ -284,6 +284,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/threadsLaunchTask.test.ts",
       "tests/unifiedUi.test.ts",
+      "tests/oledTrueBlack.test.ts",
       "tests/sessionIntegrity.test.ts",
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",

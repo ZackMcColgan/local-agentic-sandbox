@@ -277,7 +277,7 @@ function CanvasDiffView({
           ))}
         </div>
 
-        <div className="flex-1 min-w-0 overflow-auto bg-white dark:bg-zinc-950 p-2">
+        <div className="flex-1 min-w-0 overflow-auto bg-white dark:bg-black p-2">
           {file ? (
             <>
               <div className="px-1 pb-2 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 min-w-max">
@@ -357,7 +357,7 @@ function CanvasFileView({
       )}
     </div>
   );
-  return <div className="flex-1 min-h-0 overflow-auto bg-white dark:bg-zinc-950">{frame}</div>;
+  return <div className="flex-1 min-h-0 overflow-auto bg-white dark:bg-black">{frame}</div>;
 }
 
 /**
@@ -465,7 +465,7 @@ export function ArtifactCanvasPane() {
     <section
       data-testid="canvas-pane"
       aria-label={`Canvas: ${title}`}
-      className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-zinc-950 lg:relative lg:inset-auto lg:z-auto lg:w-[min(880px,58%)] lg:shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-zinc-800 lg:h-full"
+      className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-black lg:relative lg:inset-auto lg:z-auto lg:w-[min(880px,58%)] lg:shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-zinc-800 lg:h-full"
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-2 border-b border-slate-200 dark:border-zinc-800 shrink-0">

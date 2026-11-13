@@ -346,7 +346,7 @@ export function SettingsView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-zinc-950 overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
       <div className="max-w-xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header Card: "< Settings" matching Mockup media_1791044464169.webp */}

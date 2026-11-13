@@ -121,7 +121,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
 
               {/* Accordion Body */}
               {isOpen && (
-                <div className="p-3.5 pt-0 border-t border-slate-100 dark:border-zinc-800/80 space-y-3 bg-slate-50/50 dark:bg-zinc-950/40">
+                <div className="p-3.5 pt-0 border-t border-slate-100 dark:border-zinc-800/80 space-y-3 bg-slate-50/50 dark:bg-black/40">
                   
                   {/* Tool Arguments / Code */}
                   <div>

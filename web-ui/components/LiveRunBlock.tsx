@@ -365,7 +365,7 @@ export function LiveRunBlock({
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
-                <div className="p-2 bg-white dark:bg-zinc-950 min-h-[220px]">
+                <div className="p-2 bg-white dark:bg-black min-h-[220px]">
                   <iframe
                     src={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
                     sandbox="allow-scripts"

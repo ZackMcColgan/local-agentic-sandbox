@@ -84,11 +84,11 @@
   color-scheme: dark;
 
   /* 1. Surfaces (AGENTS.md 2.B: Deep Zinc Contrast — Zero Muddy Purple #17141f) */
-  --bg-canvas: #09090b;          /* zinc-950 */
+  --bg-canvas: #000000;          /* OLED true black (owner, Nov 13 2026): pixels off */
   --bg-surface-1: #121215;       /* elevated panel surface */
   --bg-surface-2: #18181b;       /* zinc-900 card surface */
   --bg-surface-3: #27272a;       /* zinc-800 interactive pill / hover */
-  --bg-glass: rgba(18, 18, 21, 0.88);
+  --bg-glass: rgba(0, 0, 0, 0.88);
   --bg-composer: #141418;
 
   /* 2. Typography */
@@ -137,7 +137,7 @@
   --status-danger-dot: #ef4444;
 
   /* 7. Code & Diff Surfaces */
-  --code-bg: #0c0c0f;
+  --code-bg: #000000;
   --code-header-bg: #18181b;
   --code-border: #27272a;
   --diff-add-bg: rgba(16, 185, 129, 0.16);

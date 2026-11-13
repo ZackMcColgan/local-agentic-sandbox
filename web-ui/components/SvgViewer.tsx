@@ -157,7 +157,7 @@ export function SvgViewer({
 
   const bgClasses: Record<BgMode, string> = {
     white: "bg-white",
-    dark: "bg-zinc-950",
+    dark: "bg-black",
     grid: "bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:16px_16px] bg-slate-50 dark:bg-zinc-900"
   };
 
