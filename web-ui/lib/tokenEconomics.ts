@@ -81,6 +81,15 @@ export function latestRoundPromptTokens(
 }
 
 /**
+ * Board format for the header context meter (FINAL-DESIGN): one decimal
+ * place, e.g. 72400 -> "72.4K", 3000 -> "3.0K". The budget side of the
+ * meter stays whole-K ("100K"). Pure — safe for render paths.
+ */
+export function formatContextK(tokens: number): string {
+  return `${(tokens / 1000).toFixed(1)}K`;
+}
+
+/**
  * Aggregates the per-turn rollups recorded on a thread's assistant messages
  * into the thread-level economics (the board-item read path).
  */

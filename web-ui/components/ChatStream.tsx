@@ -37,7 +37,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
 import { copyText } from "../lib/clipboard";
-import { latestRoundPromptTokens } from "../lib/tokenEconomics";
+import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
@@ -2014,7 +2014,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-[10px] border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
@@ -2037,7 +2037,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onOpenProjects}
-              className="panel-toggle-btn min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shrink-0"
+              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0"
               title="Open Projects"
               aria-label="Open Projects"
             >
@@ -2135,35 +2135,42 @@ export function ChatStream({
           {/* Context Meter Pill - visible on both mobile and desktop */}
           <div
             data-testid="context-meter-pill"
-            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[10px] sm:text-[11px] font-mono shrink-0"
+            className="flex items-center gap-2 shrink-0"
             title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
           >
-            <span
-              className={`font-semibold ${
-                displayContextTokens > 85000
-                  ? "text-rose-600 dark:text-rose-400"
-                  : displayContextTokens > 70000
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-slate-600 dark:text-zinc-400"
-              }`}
-            >
-              {Math.round(displayContextTokens / 1000)}K / {Math.round(contextStats.budgetTokens / 1000)}K
-            </span>
-            {/* uir-0: widened meter track (128px at >=420px / 240px desktop;
-                48px on narrow phones so the header row fits 390px with the
-                disconnect chip visible) with the redline tick at the 85%
-                (85K) compaction trigger */}
+            <div className="flex flex-col gap-1">
+              <span className="font-mono text-[11px] sm:text-xs leading-none whitespace-nowrap">
+                <span
+                  className={`font-semibold ${
+                    displayContextTokens > 85000
+                      ? "text-rose-600 dark:text-rose-400"
+                      : displayContextTokens > 70000
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-slate-700 dark:text-zinc-100"
+                  }`}
+                >
+                  {formatContextK(displayContextTokens)}
+                </span>{" "}
+                <span className="text-slate-400 dark:text-zinc-500">
+                  / {Math.round(contextStats.budgetTokens / 1000)}K
+                </span>
+              </span>
+            {/* Board parity (FINAL-DESIGN): the meter is bare — value over a
+                128px track on phones, 240px on desktop — with the emerald
+                gradient fill and the redline tick at the 85% (85K) compaction
+                trigger. State colors stay semantic: amber past 70%, rose past
+                the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[40px] min-[420px]:w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[5px] w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
-                className={`h-full transition-all ${
+                className={`h-full rounded-full transition-all ${
                   displayContextTokens > 85000
                     ? "bg-rose-500"
                     : displayContextTokens > 70000
                     ? "bg-amber-500"
-                    : "bg-emerald-500"
+                    : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
                 }`}
                 style={{
                   width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`
@@ -2175,6 +2182,7 @@ export function ChatStream({
                 title="85K compaction trigger"
                 className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] rounded-full bg-rose-500"
               />
+            </div>
             </div>
             {threadCompaction ? (
               <button
@@ -2201,7 +2209,8 @@ export function ChatStream({
               aria-label="Host disconnected — open Settings"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
-              <span className="hidden sm:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
+              <span className="hidden min-[420px]:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
+              <span className="min-[420px]:hidden">DISCONNECTED</span>
               <span className="sr-only">HOST DISCONNECTED</span>
             </button>
           )}
@@ -2210,12 +2219,11 @@ export function ChatStream({
           <button
             type="button"
             onClick={onOpenModelSheet}
-            className="min-h-[44px] min-w-[44px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-700 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] justify-center flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
             aria-label={`Configure model: currently ${shortModelLabel}`}
           >
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="hidden min-[420px]:inline-block max-w-[54px] sm:max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
+            <span className="inline-block max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
           </button>
 
           {/* New Session Button - desktop only */}
@@ -3522,7 +3530,7 @@ export function ChatStream({
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-[840px] mx-auto rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
+          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#141418] border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea
@@ -3615,7 +3623,7 @@ export function ChatStream({
                   type="button"
                   onClick={handleStop}
                   data-testid="stop-button"
-                  className="h-9 w-9 rounded-full bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
+                  className="h-10 w-10 rounded-xl bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
                   title="Stop generation / halt workers"
                   aria-label="Stop generation"
                 >
@@ -3629,10 +3637,10 @@ export function ChatStream({
                   type="submit"
                   disabled={isSubmittingSteer || (!input.trim() && attachedFiles.length === 0)}
                   data-testid="send-button"
-                  className={`h-9 w-9 rounded-full text-white flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
+                  className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
                     isGeneratingOrRunning && midTurnAction === "steer"
-                      ? "bg-sky-600 hover:bg-sky-700"
-                      : "bg-emerald-600 hover:bg-emerald-700"
+                      ? "bg-sky-600 hover:bg-sky-700 text-white"
+                      : "bg-emerald-500 hover:bg-emerald-400 text-[#052e16]"
                   }`}
                   title={
                     isGeneratingOrRunning
@@ -3649,7 +3657,7 @@ export function ChatStream({
                       : "Send message"
                   }
                 >
-                  <Send className="h-3.5 w-3.5 text-white fill-white ml-0.5" />
+                  <Send className="h-4 w-4 fill-current ml-0.5" />
                 </button>
               )}
             </div>
