@@ -27,6 +27,13 @@ export interface ThinkingPhaseCardData {
   progressPercent?: number;
 }
 
+export interface TurnPhaseTimings {
+  contextPrepMs?: number;
+  thinkingMs?: number;
+  toolsMs?: number;
+  writingMs?: number;
+}
+
 interface ThinkingPanelProps {
   phases?: ThinkingPhaseCardData[];
   rawThought?: string;
@@ -38,6 +45,7 @@ interface ThinkingPanelProps {
   activeTool?: string | null;
   hasContent?: boolean;
   durationMs?: number;
+  phaseTimings?: TurnPhaseTimings;
 }
 
 export function ThinkingPanel({
@@ -49,7 +57,8 @@ export function ThinkingPanel({
   streamStatus = null,
   activeTool = null,
   hasContent = false,
-  durationMs
+  durationMs,
+  phaseTimings
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -218,6 +227,32 @@ export function ThinkingPanel({
       {/* Expanded Body */}
       {isExpanded && (
         <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-black/40">
+          {phaseTimings &&
+            (phaseTimings.contextPrepMs || phaseTimings.thinkingMs || phaseTimings.toolsMs || phaseTimings.writingMs) && (
+              <div
+                data-testid="phase-timings-breakdown"
+                className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400"
+              >
+                {[
+                  { label: "Context prep", ms: phaseTimings.contextPrepMs },
+                  { label: "Thinking", ms: phaseTimings.thinkingMs },
+                  { label: "Tools", ms: phaseTimings.toolsMs },
+                  { label: "Writing", ms: phaseTimings.writingMs },
+                ]
+                  .filter((p): p is { label: string; ms: number } => typeof p.ms === "number" && p.ms > 0)
+                  .map((p) => (
+                    <span
+                      key={p.label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800"
+                    >
+                      <span>{p.label}</span>
+                      <span className="text-slate-800 dark:text-zinc-200 font-semibold">
+                        {p.ms < 1000 ? "<1s" : formatElapsedDuration(Math.round(p.ms / 1000))}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            )}
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";

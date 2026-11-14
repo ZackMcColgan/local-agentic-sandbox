@@ -4,6 +4,7 @@ import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { ThinkingPanel } from "../components/ThinkingPanel";
+import { sanitizeMessagesForStorage } from "../lib/chatHistory";
 
 describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", () => {
   let win: GlobalWindow;
@@ -121,5 +122,52 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
         `Phase pill label must yield on small screens (hidden sm:inline), got: ${labelSpan!.className}`
       );
     }
+  });
+
+  it("UI-041: persists phaseTimings through sanitizeMessagesForStorage and renders breakdown in expanded ThinkingPanel", () => {
+    const phaseTimings = {
+      contextPrepMs: 1000,
+      thinkingMs: 4000,
+      toolsMs: 5000,
+      writingMs: 2000,
+    };
+    const sanitized = sanitizeMessagesForStorage([
+      {
+        id: "m-1",
+        role: "assistant",
+        content: "Done.",
+        thought: "Checked files.",
+        durationMs: 12000,
+        thinkingDurationMs: 12000,
+        phaseTimings,
+      } as any,
+    ]);
+    assert.deepEqual((sanitized[0] as any).phaseTimings, phaseTimings);
+    assert.equal((sanitized[0] as any).thinkingDurationMs, 12000);
+
+    act(() => {
+      root.render(
+        React.createElement(ThinkingPanel, {
+          rawThought: "Checked files.",
+          isStreaming: false,
+          durationMs: 12000,
+          phaseTimings,
+        } as any)
+      );
+    });
+
+    const toggleBtn = container.querySelector("button[aria-expanded]");
+    assert.ok(toggleBtn, "Toggle button should exist");
+    act(() => {
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+    });
+
+    const breakdown = container.querySelector("[data-testid='phase-timings-breakdown']");
+    assert.ok(breakdown, "Expanded ThinkingPanel should render phase-timings-breakdown");
+    const text = breakdown!.textContent ?? "";
+    assert.match(text, /Context prep/i);
+    assert.match(text, /Thinking/i);
+    assert.match(text, /Tools/i);
+    assert.match(text, /Writing/i);
   });
 });

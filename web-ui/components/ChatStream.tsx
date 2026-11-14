@@ -110,6 +110,12 @@ export interface ChatMessage {
   selectedModel?: string;
   durationMs?: number;
   thinkingDurationMs?: number;
+  phaseTimings?: {
+    contextPrepMs?: number;
+    thinkingMs?: number;
+    toolsMs?: number;
+    writingMs?: number;
+  };
   taskId?: string;
   isStopped?: boolean;
   isStreaming?: boolean;
@@ -2665,6 +2671,7 @@ export function ChatStream({
                             hasContent={Boolean(m.content && m.content.trim())}
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                             durationMs={m.thinkingDurationMs ?? m.durationMs}
+                            phaseTimings={m.phaseTimings}
                           />
                         )}
                       </div>
