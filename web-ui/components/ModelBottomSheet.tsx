@@ -27,6 +27,22 @@ export function ModelBottomSheet({
 }: ModelBottomSheetProps) {
   const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
   const [engineLoading, setEngineLoading] = useState(false);
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  const [engineError, setEngineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setConfirmingStop(false);
+    setEngineError(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,7 +61,8 @@ export function ModelBottomSheet({
   const handleToggleEngine = async () => {
     const action = engineStatus === "running" ? "stop" : "start";
     setEngineLoading(true);
-    setEngineStatus(action === "stop" ? "stopped" : "starting");
+    setEngineError(null);
+    setConfirmingStop(false);
     try {
       const res = await fetch("/api/engine", {
         method: "POST",
@@ -53,9 +70,15 @@ export function ModelBottomSheet({
         body: JSON.stringify({ action })
       });
       const data = await res.json().catch(() => ({}));
-      if (data.status) setEngineStatus(data.status);
+      if (!res.ok || data.success === false) {
+        setEngineError(data.error || "Engine stop not supported by current runner");
+      } else if (data.status) {
+        setEngineStatus(data.status);
+      } else if (action === "start") {
+        setEngineStatus("starting");
+      }
     } catch {
-      // ignore
+      setEngineError("Engine stop not supported by current runner");
     } finally {
       setEngineLoading(false);
     }
@@ -286,7 +309,13 @@ export function ModelBottomSheet({
             </div>
             <button
               type="button"
-              onClick={handleToggleEngine}
+              onClick={() => {
+                if (engineStatus === "running" && !confirmingStop) {
+                  setConfirmingStop(true);
+                  return;
+                }
+                handleToggleEngine();
+              }}
               disabled={engineLoading}
               className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
                 engineStatus === "running"
@@ -295,9 +324,22 @@ export function ModelBottomSheet({
               }`}
             >
               <Power className="h-3.5 w-3.5" />
-              <span>{engineLoading ? "Updating..." : engineStatus === "running" ? "Turn Off" : "Start Engine"}</span>
+              <span>
+                {engineLoading
+                  ? "Updating..."
+                  : engineStatus === "running"
+                    ? confirmingStop
+                      ? "Confirm Turn Off"
+                      : "Turn Off"
+                    : "Start Engine"}
+              </span>
             </button>
           </div>
+          {engineError && (
+            <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 px-1">
+              {engineError}
+            </p>
+          )}
 
           {/* Done button */}
           <button
