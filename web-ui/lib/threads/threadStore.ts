@@ -26,7 +26,7 @@ const THREAD_TITLE_MAX_CHARS = 40;
  * sidebar never shows a raw prefix or a mid-word cut. Plain goals pass
  * through unchanged apart from the word-boundary truncation.
  */
-export function deriveThreadTitle(raw: string | undefined): string {
+export function deriveStoredThreadTitle(raw: string | undefined): string {
   let text = (raw ?? "").trim();
   // Strip stacked style prefixes: 'Session:' / 'JOB' followed by an em/en dash,
   // hyphen, or colon separator. Only the exact prefix tokens are removed —
@@ -37,10 +37,15 @@ export function deriveThreadTitle(raw: string | undefined): string {
   }
   // First line only — multi-line briefs keep the summary line.
   const firstLine = text.split(/\r?\n/)[0].trim();
-  if (!firstLine) return "New thread";
-  if (firstLine.length <= THREAD_TITLE_MAX_CHARS) return firstLine;
+  return firstLine || "New thread";
+}
+
+export function deriveThreadTitle(raw: string | undefined, maxChars: number = THREAD_TITLE_MAX_CHARS): string {
+  const firstLine = deriveStoredThreadTitle(raw);
+  if (firstLine === "New thread") return firstLine;
+  if (firstLine.length <= maxChars) return firstLine;
   // Truncate at a word boundary: cut at the last whitespace before the cap.
-  const window = firstLine.slice(0, THREAD_TITLE_MAX_CHARS);
+  const window = firstLine.slice(0, maxChars);
   const lastBoundary = window.lastIndexOf(" ");
   const cut = lastBoundary > 0 ? window.slice(0, lastBoundary) : window;
   return cut.trim();
@@ -688,26 +693,28 @@ export class ThreadStore {
       }
     }
 
-    // S4: Titles from content: retroactively title if "New thread", "New Thread", "Untitled Thread", or "New session"
-    if (
+    // S4: Titles from content: retroactively title if placeholder or chopped mid-word
+    const firstUserMsg = thread.messages?.find((m) => m.role === "user");
+    const isPlaceholderTitle =
       !thread.title ||
       thread.title.toLowerCase() === "new thread" ||
       thread.title.toLowerCase() === "untitled thread" ||
       thread.title.toLowerCase() === "new task" ||
-      thread.title.toLowerCase() === "new session"
-    ) {
-      const firstUserMsg = thread.messages?.find((m) => m.role === "user");
-      if (firstUserMsg && firstUserMsg.content && firstUserMsg.content.trim()) {
-        const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
-        const derived = firstUserMsg.content.trim().slice(0, maxLen);
-        if (derived && derived !== thread.title) {
-          thread.title = derived;
-          changed = true;
-        }
-      } else if (!thread.title) {
-        thread.title = "New thread";
+      thread.title.toLowerCase() === "new session";
+
+    if (firstUserMsg && firstUserMsg.content && firstUserMsg.content.trim()) {
+      const derived = deriveStoredThreadTitle(firstUserMsg.content);
+      const isChoppedPrefix =
+        Boolean(thread.title) &&
+        derived.length > thread.title.length &&
+        derived.startsWith(thread.title);
+      if ((isPlaceholderTitle || isChoppedPrefix) && derived && derived !== thread.title) {
+        thread.title = derived;
         changed = true;
       }
+    } else if (!thread.title) {
+      thread.title = "New thread";
+      changed = true;
     }
 
     if (changed) {
@@ -933,8 +940,7 @@ export class ThreadStore {
       ) {
         const content = message.content || "";
         if (content.trim()) {
-          const maxLen = thread.title?.toLowerCase() === "new session" ? 48 : 40;
-          thread.title = content.trim().slice(0, maxLen);
+          thread.title = deriveStoredThreadTitle(content);
         }
       }
     } else if (message.role === "assistant") {

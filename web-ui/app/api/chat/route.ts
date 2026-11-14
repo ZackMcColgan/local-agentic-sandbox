@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { resolveThreadsDir, ThreadStore, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
+import { resolveThreadsDir, ThreadStore, deriveStoredThreadTitle, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import {
   buildFileDeliverablesDirective,
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
         if (!threadData) {
           threadData = threadStore.createThread({
             id: activeThreadId,
-            title: userPrompt.slice(0, 40) || "New thread",
+            title: deriveStoredThreadTitle(userPrompt),
             hostAccess: threadHostAccess
           });
         }

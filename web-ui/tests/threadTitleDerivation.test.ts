@@ -114,4 +114,44 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       assert.equal(thread.title, "New thread");
     });
   });
+
+  describe("Lane A Item 1: full first-line storage & additive re-derivation", () => {
+    it("addMessage stores the full first line of a long first user message without mid-word cut", async () => {
+      const thread = store.createThread({ title: "New thread" });
+      const longFirstLine =
+        "Investigate why the authentication middleware rejects valid refresh tokens";
+      store.addMessage(thread.id, {
+        id: "msg-1",
+        role: "user",
+        content: `${longFirstLine}\n\nSecond paragraph with extra details.`,
+        createdAt: new Date().toISOString()
+      });
+      const loaded = await store.getThread(thread.id);
+      assert.equal(loaded?.title, longFirstLine);
+    });
+
+    it("getThread re-derives a title already stored in chopped form from its first user message", async () => {
+      const longFirstLine =
+        "Investigate why the authentication middleware rejects valid refresh tokens";
+      // Simulate a legacy thread whose title was chopped mid-word at 40 chars
+      const chopped = longFirstLine.slice(0, 40);
+      const thread = store.createThread({ title: chopped });
+      // Write message directly to disk to bypass addMessage
+      const filePath = path.join(tmpDir, `${thread.id}.json`);
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      raw.messages = [
+        {
+          id: "msg-1",
+          role: "user",
+          content: longFirstLine,
+          createdAt: new Date().toISOString()
+        }
+      ];
+      fs.writeFileSync(filePath, JSON.stringify(raw, null, 2));
+
+      const loaded = await store.getThread(thread.id);
+      assert.equal(loaded?.title, longFirstLine);
+    });
+  });
 });
+
