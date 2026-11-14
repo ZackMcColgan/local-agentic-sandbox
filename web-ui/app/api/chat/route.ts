@@ -468,9 +468,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
         const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
 
+        const abortMarker = explicitStopped || turnAbortController.signal.aborted
+          ? "*[Stopped by user]*"
+          : "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
         const abortContent = accumulatedStreamedTokens.trim()
-          ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn incomplete: Stream aborted or disconnected.]`
-          : `⚠️ [Turn incomplete: Stream aborted or disconnected.]`;
+          ? `${accumulatedStreamedTokens}\n\n${abortMarker}`
+          : abortMarker;
 
         const finalOutputTokens = turnOutputTokens ?? (accumulatedStreamedTokens ? estimateTokens(accumulatedStreamedTokens) : 0);
 
@@ -486,6 +489,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           selectedModel: requestedModel || activeModel,
           timestamp: new Date().toISOString(),
           status: "incomplete" as const,
+          isStopped: explicitStopped || turnAbortController.signal.aborted ? true : undefined,
           finish_reason: lastFinishReason || "abort",
           outputTokens: finalOutputTokens,
           // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
