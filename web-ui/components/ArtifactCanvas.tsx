@@ -530,7 +530,7 @@ export function ArtifactCanvasPane() {
           <span>Chat</span>
         </button>
         <span
-          className="font-mono text-[12.5px] font-normal text-slate-600 dark:text-zinc-400 truncate min-w-0"
+          className="font-mono text-[12.5px] font-normal text-slate-600 dark:text-zinc-400 line-clamp-2 break-words min-w-0"
           title={title}
         >
           {title}

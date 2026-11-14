@@ -16,7 +16,7 @@ import { getHostSettings } from "../hostSettings";
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
 /** Max characters for a derived thread-list title (UI-008). */
-const THREAD_TITLE_MAX_CHARS = 40;
+export const THREAD_TITLE_MAX_CHARS = 80;
 
 /**
  * UI-008: derive a readable thread-list title from a goal/prompt at

@@ -2140,7 +2140,7 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[160px] truncate"
+            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[320px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
