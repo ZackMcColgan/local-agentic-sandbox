@@ -178,7 +178,7 @@ export function SvgViewer({
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 truncate">
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="truncate max-w-[200px] sm:max-w-xs">{title}</span>
+            <span className="line-clamp-2" title={title}>{title}</span>
           </div>
           {isDrawio && (
             <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
@@ -469,7 +469,7 @@ export function SvgViewer({
           {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
         </span>
         {activeTab === "preview" && (
-          <span className="hidden sm:inline text-slate-400 dark:text-zinc-500 shrink-0">
+          <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
             Click +/- or zoom buttons to inspect details
           </span>
         )}
@@ -541,7 +541,7 @@ export function SvgFileLink({
     <span className="inline-flex flex-col my-1 max-w-full align-middle">
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs shadow-xs font-mono">
         <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span className="font-semibold truncate max-w-[200px] sm:max-w-xs">{title}</span>
+        <span className="font-semibold line-clamp-2" title={title}>{title}</span>
         <button
           type="button"
           onClick={() => setShowInline(!showInline)}

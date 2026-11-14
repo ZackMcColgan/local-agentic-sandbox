@@ -548,3 +548,28 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
 export * from "./chatDiffs";
 
 
+
+/**
+ * Formats a message timestamp with date context for older-than-today items
+ * and relative labels ("Now", "5m ago") for fresh items from today.
+ */
+export function formatMessageTimestamp(timestamp: string | number | Date, now: Date = new Date()): string {
+  const d = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  if (isNaN(d.getTime())) return String(timestamp);
+
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  if (isToday) {
+    const diffMs = now.getTime() - d.getTime();
+    if (diffMs >= 0 && diffMs < 60_000) return `${time} · Now`;
+    if (diffMs >= 60_000 && diffMs < 3_600_000) return `${time} · ${Math.floor(diffMs / 60_000)}m ago`;
+    return time;
+  }
+
+  const datePart = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${datePart}, ${time}`;
+}

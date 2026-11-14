@@ -319,31 +319,31 @@ export function MorningReportView({
               className="mt-3.5 pt-3.5 border-t border-slate-100 dark:border-zinc-800 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs"
             >
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-slate-500 dark:text-zinc-500">Total</span>
+                <span className="text-slate-500 dark:text-zinc-400">Total</span>
                 <span className="font-semibold text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</span>
               </span>
-              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-slate-500 dark:text-zinc-500">Total Tasks</span>
+                <span className="text-slate-500 dark:text-zinc-400">Total Tasks</span>
                 <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.total}</span>
               </span>
-              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-slate-500 dark:text-zinc-500">Completed</span>
+                <span className="text-slate-500 dark:text-zinc-400">Completed</span>
                 <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.completed}</span>
               </span>
-              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-slate-500 dark:text-zinc-500">Failed</span>
+                <span className="text-slate-500 dark:text-zinc-400">Failed</span>
                 <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.failed}</span>
               </span>
-              <span className="text-slate-300 dark:text-zinc-700">·</span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-slate-500 dark:text-zinc-500">Stalled</span>
+                <span className="text-slate-500 dark:text-zinc-400">Stalled</span>
                 <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.stalled}</span>
               </span>
             </div>
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-500">
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-400">
               Stats shown for the {windowLabel} window; counts are Completed / Failed / Stalled.
             </p>
           </div>
@@ -824,7 +824,7 @@ export function MorningReportView({
                                     <span className="font-mono font-semibold text-[10px] text-indigo-600 dark:text-indigo-400 mr-1.5">
                                       {m.id}
                                     </span>
-                                    <span className="text-slate-800 dark:text-zinc-200 truncate">{m.title}</span>
+                                    <span className="text-slate-800 dark:text-zinc-200 line-clamp-2" title={m.title}>{m.title}</span>
                                   </div>
                                   {m.commitSha && (
                                     <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-400 shrink-0">

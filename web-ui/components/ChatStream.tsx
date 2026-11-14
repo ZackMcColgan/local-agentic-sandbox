@@ -62,7 +62,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
@@ -110,6 +110,12 @@ export interface ChatMessage {
   selectedModel?: string;
   durationMs?: number;
   thinkingDurationMs?: number;
+  phaseTimings?: {
+    contextPrepMs?: number;
+    thinkingMs?: number;
+    toolsMs?: number;
+    writingMs?: number;
+  };
   taskId?: string;
   isStopped?: boolean;
   isStreaming?: boolean;
@@ -430,6 +436,17 @@ export function ChatStream({
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
+  useEffect(() => {
+    const handleOverlayOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ source?: string }>).detail;
+      if (detail?.source !== "header-overflow") {
+        setShowOverflowMenu(false);
+      }
+    };
+    window.addEventListener("ui:overlay-open", handleOverlayOpen);
+    return () => window.removeEventListener("ui:overlay-open", handleOverlayOpen);
+  }, []);
 
   // Host Mode & Approvals state
   const [hostAccess, setHostAccess] = useState<boolean>(threadHostAccess ?? true);
@@ -2299,7 +2316,16 @@ export function ChatStream({
           <div className="hidden @md/chat:block relative">
             <button
               type="button"
-              onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+              onClick={() => {
+                const next = !showOverflowMenu;
+                if (next && typeof window !== "undefined") {
+                  const Evt = window.CustomEvent ?? globalThis.CustomEvent;
+                  if (Evt) {
+                    window.dispatchEvent(new Evt("ui:overlay-open", { detail: { source: "header-overflow" } }));
+                  }
+                }
+                setShowOverflowMenu(next);
+              }}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="More options"
               aria-label="More options"
@@ -2386,7 +2412,7 @@ export function ChatStream({
         <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
+            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
               <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
@@ -2450,7 +2476,7 @@ export function ChatStream({
                       <UserMessageContent content={m.content} />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-500">
+                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-400">
                     <button
                       type="button"
                       data-testid="copy-user-message-btn"
@@ -2472,14 +2498,7 @@ export function ChatStream({
                       )}
                     </button>
                     {m.timestamp && (
-                      <span>
-                        {(() => {
-                          const d = new Date(m.timestamp);
-                          return isNaN(d.getTime())
-                            ? m.timestamp
-                            : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-                        })()}
-                      </span>
+                      <span>{formatMessageTimestamp(m.timestamp)}</span>
                     )}
                   </div>
                 </div>
@@ -2511,7 +2530,7 @@ export function ChatStream({
                                   <span
                                     key={`${action}-${i}`}
                                     data-testid="compaction-action-chip"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-500"
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
                                   >
                                     {COMPACTION_ACTION_LABELS[action] ?? action}
                                   </span>
@@ -2519,7 +2538,7 @@ export function ChatStream({
                                 {overflow > 0 && (
                                   <span
                                     data-testid="compaction-action-overflow"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-500"
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
                                   >
                                     +{overflow} more
                                   </span>
@@ -2645,6 +2664,7 @@ export function ChatStream({
                             hasContent={Boolean(m.content && m.content.trim())}
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                             durationMs={m.thinkingDurationMs ?? m.durationMs}
+                            phaseTimings={m.phaseTimings}
                           />
                         )}
                       </div>
@@ -2700,11 +2720,11 @@ export function ChatStream({
                                       <span>Sandbox</span>
                                     </span>
                                   )}
-                                  <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                  <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
                                   <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">{human.title}</span>
                                   {human.duration && (
                                     <>
-                                      <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                      <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
                                       <span className="text-slate-500 dark:text-zinc-400 shrink-0">{human.duration}</span>
                                     </>
                                   )}
@@ -3198,7 +3218,7 @@ export function ChatStream({
                     return (
                       <div
                         data-testid="served-by-note"
-                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5"
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-400 pt-0.5"
                       >
                         <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
                         <span>{note}</span>

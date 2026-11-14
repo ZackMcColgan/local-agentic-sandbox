@@ -28,7 +28,7 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
               return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
             }
             if (p === ">" || p === "/>") {
-              return <span key={pIdx} className="text-slate-500 dark:text-zinc-500 font-semibold">{p}</span>;
+              return <span key={pIdx} className="text-slate-500 dark:text-zinc-400 font-semibold">{p}</span>;
             }
             return <span key={pIdx}>{p}</span>;
           })}
@@ -75,7 +75,7 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
         tokens.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>);
       } else if (match[3]) {
         // Comment
-        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-500 italic">{match[3]}</span>);
+        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-400 italic">{match[3]}</span>);
       }
       lastIndex = keywordRegex.lastIndex;
     }
@@ -277,7 +277,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
               }`}
             >
               {showLineNumbers && (
-                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
                   {lines.map((_, i) => (
                     <div key={i}>{i + 1}</div>
                   ))}
@@ -325,7 +325,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
           {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
           <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{langDisplay === "text" ? "plain text" : langDisplay}</span>
           {isLong && (
-            <span className="text-[10px] text-slate-500 dark:text-zinc-500">
+            <span className="text-[10px] text-slate-500 dark:text-zinc-400">
               ({lines.length} lines)
             </span>
           )}
@@ -379,7 +379,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
           }`}
         >
           {showLineNumbers && (
-            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
               {lines.map((_, i) => (
                 <div key={i}>{i + 1}</div>
               ))}

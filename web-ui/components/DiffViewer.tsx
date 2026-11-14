@@ -54,9 +54,9 @@ export function DiffViewer({
           className="flex items-center gap-2 text-left group"
         >
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
           )}
           <GitBranch className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200">
@@ -117,7 +117,7 @@ export function DiffViewer({
           {/* Modified Files Pills */}
           {modifiedFiles.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-              <span className="text-slate-400 dark:text-zinc-500">Files:</span>
+              <span className="text-slate-400 dark:text-zinc-400">Files:</span>
               {modifiedFiles.map((file, idx) => (
                 <span
                   key={idx}

@@ -820,9 +820,72 @@ export class ThreadStore {
     );
   }
 
+  private summaryCache = new Map<string, { mtimeMs: number; summary: ThreadSummary }>();
+
   async listThreadSummaries(query?: string): Promise<ThreadSummary[]> {
-    const threads = await this.listThreads();
     const q = query?.trim().toLowerCase() || "";
+    if (!q && fs.existsSync(this.threadsDir)) {
+      const files = (await fs.promises.readdir(this.threadsDir)).filter(
+        (f) => f.endsWith(".json") && !f.startsWith(".")
+      );
+      const summaries: ThreadSummary[] = [];
+      const seen = new Set<string>();
+      for (const file of files) {
+        seen.add(file);
+        const fullPath = path.join(this.threadsDir, file);
+        let stat: fs.Stats;
+        try {
+          stat = await fs.promises.stat(fullPath);
+        } catch {
+          continue;
+        }
+        const cached = this.summaryCache.get(file);
+        if (cached && cached.mtimeMs === stat.mtimeMs) {
+          summaries.push(cached.summary);
+          continue;
+        }
+        try {
+          const raw = await fs.promises.readFile(fullPath, "utf8");
+          const t = JSON.parse(raw) as Thread;
+          const msgs = Array.isArray(t.messages) ? t.messages : [];
+          const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
+          const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
+          const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
+          const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
+          const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
+          const title =
+            t.title && t.title !== "New session"
+              ? t.title
+              : firstUserMsg
+                ? deriveThreadTitle(firstUserMsg.content)
+                : t.title || "New session";
+          const summary: ThreadSummary = {
+            id: t.id,
+            title,
+            status: t.status,
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+            model: t.model,
+            reasoningEffort: t.reasoningEffort,
+            taskId: t.taskId,
+            messageCount: msgs.length,
+            lastMessagePreview,
+            hasDiffs,
+          };
+          this.summaryCache.set(file, { mtimeMs: stat.mtimeMs, summary });
+          summaries.push(summary);
+        } catch {
+          // ignore malformed thread file
+        }
+      }
+      for (const key of this.summaryCache.keys()) {
+        if (!seen.has(key)) this.summaryCache.delete(key);
+      }
+      summaries.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+      return summaries;
+    }
+
+    const threads = await this.listThreads();
     const summaries: ThreadSummary[] = [];
 
     for (const t of threads) {

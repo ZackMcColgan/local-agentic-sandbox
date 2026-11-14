@@ -27,6 +27,13 @@ export interface ThinkingPhaseCardData {
   progressPercent?: number;
 }
 
+export interface TurnPhaseTimings {
+  contextPrepMs?: number;
+  thinkingMs?: number;
+  toolsMs?: number;
+  writingMs?: number;
+}
+
 interface ThinkingPanelProps {
   phases?: ThinkingPhaseCardData[];
   rawThought?: string;
@@ -38,6 +45,7 @@ interface ThinkingPanelProps {
   activeTool?: string | null;
   hasContent?: boolean;
   durationMs?: number;
+  phaseTimings?: TurnPhaseTimings;
 }
 
 export function ThinkingPanel({
@@ -49,7 +57,8 @@ export function ThinkingPanel({
   streamStatus = null,
   activeTool = null,
   hasContent = false,
-  durationMs
+  durationMs,
+  phaseTimings
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -162,7 +171,10 @@ export function ThinkingPanel({
                 : "bg-emerald-500"
             }`}
           />
-          <span className="text-[13px] font-bold text-slate-800 dark:text-zinc-100 truncate">
+          <span
+            data-testid="thinking-panel-title"
+            className="text-[13px] font-bold text-slate-800 dark:text-zinc-100 shrink-0 whitespace-nowrap"
+          >
             {headerTitle}
           </span>
           {isStreaming && streamStartMs !== null && (
@@ -193,10 +205,11 @@ export function ThinkingPanel({
           {isStreaming && turnPhaseLabel && (
             <span
               data-testid="turn-status-slot"
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+              title={turnPhaseLabel}
             >
               <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="truncate">{turnPhaseLabel}</span>
+              <span className="hidden sm:inline truncate">{turnPhaseLabel}</span>
             </span>
           )}
         </div>
@@ -214,6 +227,32 @@ export function ThinkingPanel({
       {/* Expanded Body */}
       {isExpanded && (
         <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-black/40">
+          {phaseTimings &&
+            (phaseTimings.contextPrepMs || phaseTimings.thinkingMs || phaseTimings.toolsMs || phaseTimings.writingMs) && (
+              <div
+                data-testid="phase-timings-breakdown"
+                className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400"
+              >
+                {[
+                  { label: "Context prep", ms: phaseTimings.contextPrepMs },
+                  { label: "Thinking", ms: phaseTimings.thinkingMs },
+                  { label: "Tools", ms: phaseTimings.toolsMs },
+                  { label: "Writing", ms: phaseTimings.writingMs },
+                ]
+                  .filter((p): p is { label: string; ms: number } => typeof p.ms === "number" && p.ms > 0)
+                  .map((p) => (
+                    <span
+                      key={p.label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800"
+                    >
+                      <span>{p.label}</span>
+                      <span className="text-slate-800 dark:text-zinc-200 font-semibold">
+                        {p.ms < 1000 ? "<1s" : formatElapsedDuration(Math.round(p.ms / 1000))}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            )}
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
@@ -239,7 +278,7 @@ export function ThinkingPanel({
                     </h4>
                   </div>
 
-                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-500 shrink-0">
+                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-400 shrink-0">
                     <span>{phaseItem.timestamp}</span>
                     {phaseItem.timeAgo && <span> • {phaseItem.timeAgo}</span>}
                   </div>

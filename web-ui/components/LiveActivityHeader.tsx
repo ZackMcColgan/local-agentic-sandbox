@@ -73,7 +73,7 @@ export function LiveActivityHeader({
           {phaseTool && (
             <span
               data-testid="live-activity-tool"
-              className="font-mono font-normal text-xs text-slate-400 dark:text-zinc-500"
+              className="font-mono font-normal text-xs text-slate-400 dark:text-zinc-400"
             >
               {" — "}
               {phaseTool}

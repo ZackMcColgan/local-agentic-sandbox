@@ -35,7 +35,9 @@ export function sanitizeMessagesForStorage(messages: ChatMessage[]): ChatMessage
       isImage: att.isImage
     })),
     modelUsed: msg.modelUsed,
-    durationMs: msg.durationMs
+    durationMs: msg.durationMs,
+    thinkingDurationMs: msg.thinkingDurationMs,
+    phaseTimings: msg.phaseTimings
   }));
 }
 

@@ -195,7 +195,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
         {/* Spans List */}
         <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
           {spans.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-500">
+            <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-400">
               No OpenTelemetry spans recorded yet. Trigger a query or command in chat to stream live distributed spans.
             </div>
           ) : (
