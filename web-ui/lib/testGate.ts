@@ -54,9 +54,10 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("ThreadsSidebar.tsx") ||
       p.includes("ChatStream.tsx") ||
       p.includes("ArtifactCanvas.tsx") ||
+      p.includes("ArtifactRenderers.tsx") ||
       p.includes("SvgViewer.tsx") ||
       p.includes("app/page.tsx"),
-    tests: ["tests/lane-c-ui-polish.test.ts"]
+    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts"]
   },
   // kind-gateway assets & launcher scripts
   {

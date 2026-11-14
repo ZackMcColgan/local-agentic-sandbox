@@ -3056,7 +3056,7 @@ export function ChatStream({
                   {(() => {
                     if (isUser) return null;
 
-                    const fileDiffs: Array<{
+                    type TurnDiffEntry = {
                       path: string;
                       diff: string;
                       diffFull?: string;
@@ -3065,16 +3065,31 @@ export function ChatStream({
                       truncated?: boolean;
                       totalDiffLines?: number;
                       omittedLines?: number;
-                    }> = Array.isArray(m.diffs) && m.diffs.length > 0
-                      ? m.diffs
-                      : extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
-                          path: d.path,
-                          diff: d.diffPreview,
-                          diffFull: d.diffFull,
-                          addedLines: d.addedLines,
-                          removedLines: d.removedLines,
-                          truncated: d.diffPreview.includes("more lines")
-                        }));
+                    };
+                    const normalizeDiffPath = (p: string) =>
+                      p.replace(/\\/g, "/").replace(/^\.\//, "");
+                    const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
+                      path: d.path,
+                      diff: d.diffPreview,
+                      diffFull: d.diffFull,
+                      addedLines: d.addedLines,
+                      removedLines: d.removedLines,
+                      truncated: d.diffPreview.includes("more lines")
+                    }));
+                    const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs) ? m.diffs : [];
+                    const mergedMap = new Map<string, TurnDiffEntry>();
+                    for (const d of traceDiffs) {
+                      mergedMap.set(normalizeDiffPath(d.path), d);
+                    }
+                    for (const d of serverDiffs) {
+                      const key = normalizeDiffPath(d.path);
+                      const existing = mergedMap.get(key);
+                      const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
+                      if (!existing || isUnified) {
+                        mergedMap.set(key, d);
+                      }
+                    }
+                    const fileDiffs = Array.from(mergedMap.values());
 
                     if (fileDiffs.length === 0) return null;
 

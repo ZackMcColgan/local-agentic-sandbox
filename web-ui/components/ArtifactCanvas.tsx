@@ -55,7 +55,22 @@ export function buildDiffFiles(
       });
     }
   }
-  return files;
+
+  const normalizePath = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const isUnified = (f: CanvasDiffFile) =>
+    f.removedLines > 0 || /^@@\s+-\d+/m.test(f.diff);
+
+  const byPath = new Map<string, CanvasDiffFile>();
+  for (const f of files) {
+    const key = normalizePath(f.path);
+    const existing = byPath.get(key);
+    if (!existing) {
+      byPath.set(key, f);
+    } else if (!isUnified(existing) && isUnified(f)) {
+      byPath.set(key, f);
+    }
+  }
+  return Array.from(byPath.values());
 }
 
 /**
