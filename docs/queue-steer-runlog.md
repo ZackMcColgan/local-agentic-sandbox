@@ -807,3 +807,4 @@ dda41ba runlog: PR #98 Lane B merged, deploy S1 rollback v-bfacc10-fresh
 e9865c0 runlog: PR #98 Lane B deploy S2 build+import v-e9865c0-fresh done (docker cp into node silently failed; imported via stdin ctr import 3.5s)
 bd360fa runlog: PR #98 Lane B deployed v-e9865c0-fresh, S4 verified; rollback v-bfacc10-fresh; prod == develop in code
 26f862a runlog: PR #99 Lane C merged, deploy S1 rollback v-e9865c0-fresh 
+7dca06c runlog: PR #99 Lane C deploy S2 build+import v-7dca06c-fresh done (docker build OK, stdin ctr import OK; deploy99.log not captured due to redirect escaping, verified via docker images + crictl) 
