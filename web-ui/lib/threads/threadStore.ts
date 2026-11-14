@@ -881,7 +881,7 @@ export class ThreadStore {
       for (const key of this.summaryCache.keys()) {
         if (!seen.has(key)) this.summaryCache.delete(key);
       }
-      summaries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      summaries.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
       return summaries;
     }
 
