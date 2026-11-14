@@ -219,7 +219,6 @@ export interface ThreadSummary {
   model?: string;
   reasoningEffort?: Thread["reasoningEffort"];
   taskId?: string;
-  workspaceDir?: string;
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;
@@ -874,7 +873,6 @@ export class ThreadStore {
         model: t.model,
         reasoningEffort: t.reasoningEffort,
         taskId: t.taskId,
-        workspaceDir: t.workspaceDir,
         messageCount: msgs.length,
         lastMessagePreview,
         hasDiffs,

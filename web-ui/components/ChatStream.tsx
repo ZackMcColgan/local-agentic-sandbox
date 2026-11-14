@@ -117,6 +117,7 @@ export interface ChatMessage {
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
   roundPromptTokens?: number[];
+  outputTokens?: number;
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
 }
