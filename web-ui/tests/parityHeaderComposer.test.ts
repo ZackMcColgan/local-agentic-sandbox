@@ -37,7 +37,7 @@ describe("parity PR1 — meter track geometry (board: 128px phone / 240px deskto
   it("track is 128px at all phone widths and 240px on desktop, no 40px tier", () => {
     const track = segment('data-testid="context-meter-track"', 400);
     assert.ok(track.includes("w-[128px]"), "track 128px on phones");
-    assert.ok(track.includes("lg:w-[240px]"), "track 240px on desktop");
+    assert.ok(track.includes("@lg/chat:w-[240px]"), "track 240px on desktop");
     assert.ok(!track.includes("w-[40px]"), "the 40px narrow tier is removed");
   });
 

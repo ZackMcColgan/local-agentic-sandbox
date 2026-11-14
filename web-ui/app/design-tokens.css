@@ -274,8 +274,8 @@ code, pre, .mono {
 
 .rail-btn {
   width: 68px;
-  min-height: 52px;
-  padding: 6px 4px;
+  min-height: 56px;
+  padding: 6px 6px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
@@ -298,7 +298,9 @@ code, pre, .mono {
   line-height: 1.1;
   letter-spacing: -0.01em;
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 64px;
+  overflow-wrap: break-word;
 }
 
 .rail-btn:hover {

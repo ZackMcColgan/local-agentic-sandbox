@@ -381,6 +381,7 @@ export function ChatStream({
   });
   const [pendingSteers, setPendingSteers] = useState<string[]>([]);
   const [isSubmittingSteer, setIsSubmittingSteer] = useState(false);
+  const [modelPillForm, setModelPillForm] = useState<"A" | "B">("A");
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -842,6 +843,14 @@ export function ChatStream({
     }
     scrollRef.current?.scrollIntoView({ behavior });
   };
+
+  const tailMessage = messages[messages.length - 1];
+  const lastMsg = tailMessage;
+  useEffect(() => {
+    if (!isUserScrolledUp && isFollowPinnedRef.current && (isLoading || lastMsg?.role === "assistant")) {
+      scrollToBottom("auto");
+    }
+  }, [lastMsg?.content, isLoading, isUserScrolledUp]);
 
   useEffect(() => {
     if (!isFollowPinnedRef.current || isUserScrolledUp) {
@@ -1933,7 +1942,7 @@ export function ChatStream({
       }`}
     >
     <CanvasProvider scrollElRef={chatContainerRef}>
-    <div className="flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
+    <div className="@container/chat flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
       {/* Hidden File Input */}
       <input
         ref={fileInputRef}
@@ -2026,7 +2035,7 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
-      <header className="sticky top-0 z-30 px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
+      <header className="sticky top-0 z-30 h-12 px-2 sm:px-4 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
@@ -2170,7 +2179,7 @@ export function ChatStream({
                 >
                   {formatContextK(displayContextTokens)}
                 </span>{" "}
-                <span className="text-slate-400 dark:text-zinc-500">
+                <span className="text-slate-500 dark:text-zinc-400">
                   / {Math.round(contextStats.budgetTokens / 1000)}K
                 </span>
               </span>
@@ -2181,7 +2190,7 @@ export function ChatStream({
                 the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
                 className={`h-full rounded-full transition-all ${
@@ -2234,23 +2243,43 @@ export function ChatStream({
             </button>
           )}
 
-          {/* Model Chip Button: opens ModelBottomSheet on tap */}
-          <button
-            type="button"
-            onClick={onOpenModelSheet}
-            className="min-h-[44px] min-w-[44px] justify-center flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-            title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
-            aria-label={`Configure model: currently ${shortModelLabel}`}
-          >
-            <span className="inline-block max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
-          </button>
+          {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onOpenModelSheet}
+              className={`min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap ${
+                modelPillForm === "A"
+                  ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
+                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-[#34d399] hover:bg-emerald-500/15"
+              }`}
+              title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
+              aria-label={`Configure model: currently ${shortModelLabel}`}
+            >
+              {modelPillForm === "A" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+              )}
+              <span className="whitespace-nowrap">{shortModelLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-testid="model-pill-form-toggle"
+              onClick={() => setModelPillForm((prev) => (prev === "A" ? "B" : "A"))}
+              className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-black text-[10px] font-mono font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors"
+              title={`Model pill form: ${modelPillForm} (click to preview Form ${modelPillForm === "A" ? "B" : "A"})`}
+              aria-label={`Switch model pill form (currently ${modelPillForm})`}
+            >
+              {modelPillForm}
+            </button>
+          </div>
 
           {/* New Session Button - desktop only */}
           {onNewThread && (
             <button
               type="button"
               onClick={onNewThread}
-              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              className="hidden @md/chat:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="Start new session"
               aria-label="Start new session"
             >
@@ -2259,7 +2288,7 @@ export function ChatStream({
           )}
 
           {/* Overflow Menu Button - desktop only */}
-          <div className="hidden md:block relative">
+          <div className="hidden @md/chat:block relative">
             <button
               type="button"
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}
@@ -2346,7 +2375,7 @@ export function ChatStream({
         data-scroll-container="true"
         className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-black relative"
       >
-        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-8">
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">

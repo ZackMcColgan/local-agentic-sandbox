@@ -189,7 +189,7 @@ describe("uir-0 — header diet in ChatStream", () => {
   it("context meter track is widened with the 85K redline tick", () => {
     assert.ok(src.includes('data-testid="context-meter-track"'), "meter track testid present");
     assert.ok(src.includes("w-[128px]"), "mobile track widened to 128px");
-    assert.ok(src.includes("lg:w-[240px]"), "desktop track widened to 240px");
+    assert.ok(src.includes("@lg/chat:w-[240px]"), "desktop track widened to 240px");
     assert.ok(src.includes('data-testid="context-meter-tick"'), "redline tick testid present");
     assert.ok(src.includes("left-[85%]"), "tick sits at the 85% compaction trigger");
   });

@@ -32,7 +32,7 @@ function between(src: string, startMarker: string, endMarker: string): string {
 
 describe("parity PR4 — canvas pane chrome (board: bg-1 bar, muted mono filename, bg-2/bg-3 tabs)", () => {
   it("pane header sits on the board's bg-1 surface", () => {
-    const header = segment(canvas, '<div className="flex items-center gap-2 px-2.5', 300);
+    const header = segment(canvas, '<div className="flex items-center gap-2 h-12 px-2.5', 300);
     assert.ok(header.includes("dark:bg-[#121215]"), "board canvas bar bg is #121215 (bg-1)");
   });
 
