@@ -205,7 +205,7 @@ describe("parity PR4 — UI-021 remainder (completed-turn trace surfaces to the 
     assert.ok(payload.includes("dark:text-zinc-300"), "section labels lift to zinc-300");
     const empty = around(executionTrace, "No Tool Executions Yet", 500, 200);
     assert.ok(empty.includes("dark:text-zinc-100"), "empty-state title renders near-white");
-    assert.ok(empty.includes("dark:text-zinc-500"), "empty-state icon lifts to zinc-500");
+    assert.ok(empty.includes("dark:text-zinc-400"), "empty-state icon lifts to zinc-400 (UI-050 text floor)");
   });
 
   it("TraceWaterfall panels sit on bg-1 with lifted stat labels", () => {

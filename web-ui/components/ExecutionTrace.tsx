@@ -37,7 +37,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
   if (!traces || traces.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] p-6 text-center shadow-sm">
-        <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-500 mx-auto mb-2 opacity-50" />
+        <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-400 mx-auto mb-2 opacity-50" />
         <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-100">No Tool Executions Yet</h4>
         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
           When the autonomous agent invokes tools inside the sandboxed container, execution logs and security boundary proofs will appear here.
@@ -89,9 +89,9 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               >
                 <div className="flex items-center gap-2.5">
                   {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-500" />
+                    <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-500" />
+                    <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400" />
                   )}
                   {isSuccess ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />

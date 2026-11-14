@@ -469,7 +469,7 @@ export function SvgViewer({
           {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
         </span>
         {activeTab === "preview" && (
-          <span className="hidden sm:inline text-slate-400 dark:text-zinc-500 shrink-0">
+          <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
             Click +/- or zoom buttons to inspect details
           </span>
         )}

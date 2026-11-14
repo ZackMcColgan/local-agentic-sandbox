@@ -334,7 +334,7 @@ export function NavigationDrawer({
         <div className="pt-4 pb-1 px-3 flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider shrink-0">
           <span>Recents</span>
           {threads.length > 0 && (
-            <span className="text-[11px] font-mono text-slate-400 dark:text-zinc-500 font-normal">
+            <span className="text-[11px] font-mono text-slate-400 dark:text-zinc-400 font-normal">
               {threads.length}
             </span>
           )}
@@ -348,7 +348,7 @@ export function NavigationDrawer({
               ))}
             </div>
           ) : threads.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-slate-400 dark:text-zinc-500">
+            <div className="px-3 py-6 text-center text-xs text-slate-400 dark:text-zinc-400">
               No recent sessions
             </div>
           ) : (
@@ -399,7 +399,7 @@ export function NavigationDrawer({
                       </span>
                     )}
                     {timeLabel && (
-                      <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">
+                      <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-mono">
                         {timeLabel}
                       </span>
                     )}
@@ -458,7 +458,7 @@ export function NavigationDrawer({
           </button>
 
           {/* Footer info */}
-          <div className="pt-2 pb-1 px-3 text-[11px] text-slate-400 dark:text-zinc-500 font-mono">
+          <div className="pt-2 pb-1 px-3 text-[11px] text-slate-400 dark:text-zinc-400 font-mono">
             Local Agentic Sandbox v1.0.0
           </div>
         </div>

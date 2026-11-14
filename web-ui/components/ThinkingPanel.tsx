@@ -243,7 +243,7 @@ export function ThinkingPanel({
                     </h4>
                   </div>
 
-                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-500 shrink-0">
+                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-400 shrink-0">
                     <span>{phaseItem.timestamp}</span>
                     {phaseItem.timeAgo && <span> • {phaseItem.timeAgo}</span>}
                   </div>

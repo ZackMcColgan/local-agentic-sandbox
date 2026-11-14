@@ -58,6 +58,25 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("SettingsView.tsx") ||
       p.includes("ProjectsView.tsx") ||
       p.includes("BuildsView.tsx") ||
+      p.includes("NavigationDrawer.tsx") ||
+      p.includes("DiffViewer.tsx") ||
+      p.includes("ExecutionTrace.tsx") ||
+      p.includes("LiveActivityHeader.tsx") ||
+      p.includes("MorningReportView.tsx") ||
+      p.includes("darkTextFloor.test.ts"),
+    tests: ["tests/darkTextFloor.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("design-tokens.css") ||
+      p.includes("globals.css") ||
+      p.includes("ThreadsSidebar.tsx") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("ArtifactCanvas.tsx") ||
+      p.includes("ArtifactRenderers.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("ProjectsView.tsx") ||
+      p.includes("BuildsView.tsx") ||
       p.includes("SkillsView.tsx") ||
       p.includes("selfDeploy.ts") ||
       p.includes("ModelBottomSheet.tsx") ||

@@ -369,27 +369,27 @@ export function SettingsView({
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Engine</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Engine</div>
               <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
                 <span className={`h-2 w-2 rounded-full ${engineDotClass}`} />
                 <span>{engineStatusLabel}</span>
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Host</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Host</div>
               <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
                 <span className={`h-2 w-2 rounded-full ${hostDotClass}`} />
                 <span>{hostStatusLabel}</span>
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Model</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Model</div>
               <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={stripModel}>
                 {stripModel}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Last deploy</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Last deploy</div>
               <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={latestDeployLabel}>
                 {latestDeployLabel}
               </div>
@@ -498,13 +498,13 @@ export function SettingsView({
             {/* Model & VRAM Specs */}
             <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-zinc-850 p-3 rounded-2xl border border-slate-100 dark:border-zinc-800">
               <div>
-                <span className="text-slate-400 dark:text-zinc-500 block">Model</span>
+                <span className="text-slate-400 dark:text-zinc-400 block">Model</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
                   {engineData.model || DEFAULT_PRIMARY_MODEL}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 dark:text-zinc-500 block">VRAM Usage</span>
+                <span className="text-slate-400 dark:text-zinc-400 block">VRAM Usage</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
                   {engineData.status === "running" ? "~16,384 MB (Allocated)" : "0 MB (Reclaimed)"}
                 </span>
@@ -526,7 +526,7 @@ export function SettingsView({
                 onClick={() => handleEngineAction("start")}
                 className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   engineData.status === "running"
-                    ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
+                    ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
                     : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
                 }`}
                 title="Start llama-server"
@@ -542,7 +542,7 @@ export function SettingsView({
                 onClick={() => handleEngineAction("stop")}
                 className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   engineData.status === "stopped"
-                    ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
+                    ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
                     : "bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                 }`}
                 title="Stop llama-server to reclaim VRAM"
@@ -583,7 +583,7 @@ export function SettingsView({
               </div>
             </div>
 
-            <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-500" />
+            <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-400" />
           </div>
           </div>
         </div>
@@ -852,7 +852,7 @@ export function SettingsView({
                   <Terminal className="h-3.5 w-3.5 text-slate-500" />
                   <span>Recent Unattended Git Activity</span>
                 </div>
-                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-normal">
+                <span className="text-[11px] text-slate-400 dark:text-zinc-400 font-normal">
                   {hostSettings.runnerAvailable ? "Audit log" : "Historical log (runner currently offline)"}
                 </span>
               </div>
@@ -915,7 +915,7 @@ export function SettingsView({
               ) : (
                 <div
                   data-testid="host-git-empty-activity"
-                  className="text-xs text-slate-400 dark:text-zinc-500 italic p-3 text-center bg-slate-50 dark:bg-zinc-850/40 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800"
+                  className="text-xs text-slate-400 dark:text-zinc-400 italic p-3 text-center bg-slate-50 dark:bg-zinc-850/40 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800"
                 >
                   No unattended git operations recorded yet.
                 </div>
@@ -1026,7 +1026,7 @@ export function SettingsView({
                   onClick={handleTestNotification}
                   className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
                     notifTesting || !notifStatus.configured || !notifStatus.enabled
-                      ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500"
+                      ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
                       : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
                   }`}
                 >

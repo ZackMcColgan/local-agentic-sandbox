@@ -615,7 +615,7 @@ export function ProjectsView({
                 <span className="text-base font-bold text-slate-900 dark:text-zinc-100">
                   {activeProject.name}
                 </span>
-                <span className="text-xs font-mono text-slate-400 dark:text-zinc-500">
+                <span className="text-xs font-mono text-slate-400 dark:text-zinc-400">
                   ({activeProject.base_branch})
                 </span>
               </div>
@@ -755,7 +755,7 @@ export function ProjectsView({
                       )}
                     </div>
                   ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-500">
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-400">
                       <Eye className="h-8 w-8 mb-2 opacity-50" />
                       <p className="text-xs">Select any file from the repository tree to preview its content.</p>
                     </div>
@@ -936,7 +936,7 @@ export function ProjectsView({
                     <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
                       No modified files found.
                     </p>
-                    <p className="text-xs text-slate-400 dark:text-zinc-500">
+                    <p className="text-xs text-slate-400 dark:text-zinc-400">
                       Run an overnight autonomous task or checkout a task branch to review diffs.
                     </p>
                   </div>
@@ -1053,7 +1053,7 @@ export function ProjectsView({
                       type="button"
                       disabled={reviewFinalized}
                       onClick={handleFinalizeReview}
-                      className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-900 dark:bg-zinc-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-900 dark:bg-zinc-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-zinc-400 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                       <span>{reviewFinalized ? "Review Finalized" : "Finalize Review"}</span>

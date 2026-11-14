@@ -2386,7 +2386,7 @@ export function ChatStream({
         <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 border border-slate-200/80 dark:border-zinc-800">
+            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
               <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
@@ -2450,7 +2450,7 @@ export function ChatStream({
                       <UserMessageContent content={m.content} />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-500">
+                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-400">
                     <button
                       type="button"
                       data-testid="copy-user-message-btn"
@@ -2511,7 +2511,7 @@ export function ChatStream({
                                   <span
                                     key={`${action}-${i}`}
                                     data-testid="compaction-action-chip"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-500"
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
                                   >
                                     {COMPACTION_ACTION_LABELS[action] ?? action}
                                   </span>
@@ -2519,7 +2519,7 @@ export function ChatStream({
                                 {overflow > 0 && (
                                   <span
                                     data-testid="compaction-action-overflow"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-500"
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
                                   >
                                     +{overflow} more
                                   </span>
@@ -2700,11 +2700,11 @@ export function ChatStream({
                                       <span>Sandbox</span>
                                     </span>
                                   )}
-                                  <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                  <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
                                   <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">{human.title}</span>
                                   {human.duration && (
                                     <>
-                                      <span className="text-slate-400 dark:text-zinc-600 shrink-0">•</span>
+                                      <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
                                       <span className="text-slate-500 dark:text-zinc-400 shrink-0">{human.duration}</span>
                                     </>
                                   )}
@@ -3198,7 +3198,7 @@ export function ChatStream({
                     return (
                       <div
                         data-testid="served-by-note"
-                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 pt-0.5"
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-400 pt-0.5"
                       >
                         <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
                         <span>{note}</span>

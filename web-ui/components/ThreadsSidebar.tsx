@@ -270,7 +270,7 @@ export function ThreadsSidebar({
         </div>
       )}
 
-      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-400 dark:text-zinc-500">
+      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-400 dark:text-zinc-400">
         RECENTS
       </div>
 
@@ -283,7 +283,7 @@ export function ThreadsSidebar({
             ))}
           </div>
         ) : filteredThreads.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-500">
+          <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-400">
             {searchQuery ? "No matching sessions" : "No sessions yet. Tap + to start one."}
           </div>
         ) : (
@@ -408,7 +408,7 @@ export function ThreadsSidebar({
                   {/* Subtext matching Mockup: "• 12 Oct • 2:34 PM • 3 participants • Active" */}
                   <div
                     className={`mt-2 font-mono text-[12.3px] flex items-center flex-wrap gap-x-1.5 gap-y-1 ${
-                      isRunning ? "text-slate-600 dark:text-[#34d399]" : "text-slate-500 dark:text-zinc-500"
+                      isRunning ? "text-slate-600 dark:text-[#34d399]" : "text-slate-500 dark:text-zinc-400"
                     }`}
                   >
                     <span>{timeFormatted || "Today"}</span>

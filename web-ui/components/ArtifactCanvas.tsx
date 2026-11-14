@@ -141,7 +141,7 @@ export function CanvasDiffCard({
         <span className="font-mono text-[12.5px] text-slate-900 dark:text-zinc-100">
           {totals.fileCount} {totals.fileCount === 1 ? "file" : "files"} changed
         </span>
-        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-500">
+        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
           <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
           <span className="text-rose-600 dark:text-rose-400">−{totals.removedLines}</span>
         </span>
@@ -200,7 +200,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
     <div className="min-w-max font-mono text-[11px] leading-[1.8] lg:text-[12.3px] lg:leading-[1.75]">
       {rows.map((row, idx) => {
         let rowClass = "text-slate-700 dark:text-zinc-100";
-        let signClass = "text-slate-400 dark:text-zinc-500";
+        let signClass = "text-slate-400 dark:text-zinc-400";
         let sign = " ";
         if (row.kind === "add") {
           rowClass = "bg-emerald-500/10 dark:bg-[rgba(16,185,129,0.13)] text-emerald-900 dark:text-zinc-100";
@@ -213,7 +213,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
         } else if (row.kind === "hunk") {
           rowClass = "bg-sky-500/10 dark:bg-[rgba(56,189,248,0.07)] text-sky-700 dark:text-[#7dd3fc] font-semibold";
         } else if (row.kind === "meta") {
-          rowClass = "text-slate-400 dark:text-zinc-500";
+          rowClass = "text-slate-400 dark:text-zinc-400";
         }
         const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
         return (
@@ -279,7 +279,7 @@ function CanvasDiffView({
         <div className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-y-auto py-2 px-2 gap-1">
           <div
             data-testid="canvas-diff-rail-header"
-            className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-mono tracking-[0.14em] text-slate-500 dark:text-zinc-500"
+            className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-mono tracking-[0.14em] text-slate-500 dark:text-zinc-400"
           >
             {totals.fileCount} {totals.fileCount === 1 ? "FILE" : "FILES"} ·{" "}
             <span className="text-emerald-600 dark:text-emerald-400">+{totals.addedLines}</span>{" "}
@@ -323,7 +323,7 @@ function CanvasDiffView({
         </div>
       </div>
 
-      <div className="lg:hidden px-3 py-2 text-[11.5px] leading-relaxed text-slate-500 dark:text-zinc-500 border-t border-slate-100 dark:border-zinc-800 shrink-0">
+      <div className="lg:hidden px-3 py-2 text-[11.5px] leading-relaxed text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800 shrink-0">
         Code lines never wrap — swipe sideways inside the diff. Every hunk is here; nothing is cut to fit the phone.
       </div>
     </div>
@@ -355,7 +355,7 @@ function CanvasFileView({
     return (
       <div className="flex-1 min-h-0 overflow-auto bg-slate-50 dark:bg-[#121215]">
         <div className="flex p-3.5 text-xs font-mono leading-relaxed min-w-max">
-          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-right text-[11px] font-mono leading-5">
+          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
             {lines.map((_, i) => (
               <div key={i}>{i + 1}</div>
             ))}
