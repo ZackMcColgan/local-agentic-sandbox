@@ -875,6 +875,7 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
+    /(?:^|\/)temp-/.test(normalizedPath) ||
     normalizedPath.includes(".agent") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
