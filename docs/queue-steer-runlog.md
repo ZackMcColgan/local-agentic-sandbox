@@ -817,3 +817,4 @@ runlog: PR #101 Lane E merged 3820f7b, deploy S1 rollback v-e057ad7b-fresh
 3820f7b runlog: PR #101 Lane E deployed v-3820f7b-fresh, S4 verified  
 runlog: PR #102 fix-pass merged, deploy S1 rollback v-3820f7b-fresh 
 runlog: PR #102 fix-pass deploy S2 build+import v-c6ee06c-fresh done (WMI bat died after build, import via stdin ctr 5.0s) 
+runlog: PR #102 fix-pass deployed v-c6ee06c-fresh, S4 verified; rollback v-3820f7b-fresh; prod == develop in code 
