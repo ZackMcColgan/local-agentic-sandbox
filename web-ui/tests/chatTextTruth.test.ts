@@ -22,10 +22,14 @@ function renderAssistantContent(content: string): string {
 
 describe("Lane A Item 2: Assistant markdown standalone numbered answer", () => {
   it("preserves the written number for a standalone leading numbered answer instead of renumbering to 1", () => {
-    const html = renderAssistantContent("42.");
+    const html = renderAssistantContent("42. The answer");
     assert.ok(
-      html.includes('start="42"') || !html.includes("<ol"),
-      `Expected standalone '42.' to preserve number 42, got: ${html.slice(0, 500)}`
+      html.includes('start="42"'),
+      `Expected standalone '42. The answer' to preserve start="42", got: ${html.slice(0, 500)}`
+    );
+    assert.ok(
+      html.includes("The answer"),
+      `Expected rendered item text 'The answer', got: ${html.slice(0, 500)}`
     );
   });
 
@@ -58,6 +62,10 @@ describe("Lane A Item 3: User message bubble line breaks", () => {
     assert.ok(
       html.includes("whitespace-pre-line") || html.includes("<br"),
       `Expected user message bubble to preserve single line breaks, got: ${html.slice(0, 500)}`
+    );
+    assert.ok(
+      html.includes("First line\nSecond line"),
+      `Expected rendered <p> markup to contain literal "First line\\nSecond line", got: ${html.slice(0, 500)}`
     );
   });
 });
