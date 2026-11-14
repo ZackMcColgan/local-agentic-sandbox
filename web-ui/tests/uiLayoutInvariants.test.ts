@@ -19,3 +19,13 @@ describe("E9: Non-chat view container widths (UI-044)", () => {
     }
   });
 });
+
+describe("E10: App icon / favicon 404 elimination (UI-045)", () => {
+  it("web-ui/app/icon.svg exists and web-ui/app/layout.tsx configures icons in metadata", () => {
+    const iconPath = path.join(WEB_UI, "app", "icon.svg");
+    assert.ok(fs.existsSync(iconPath), "Expected web-ui/app/icon.svg to exist");
+    const layoutContent = fs.readFileSync(path.join(WEB_UI, "app", "layout.tsx"), "utf8");
+    assert.ok(layoutContent.includes("icons:"), "Expected metadata.icons in app/layout.tsx");
+    assert.ok(layoutContent.includes("/icon.svg"), "Expected /icon.svg in app/layout.tsx");
+  });
+});

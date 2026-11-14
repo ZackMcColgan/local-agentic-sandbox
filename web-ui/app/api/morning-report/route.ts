@@ -20,7 +20,7 @@ export async function GET() {
     // Link threadId onto tasks if thread.taskId matches taskId
     for (const task of tasks) {
       if (!task.threadId) {
-        const matchedThread = threads.find((t: Thread) => t.taskId === task.taskId);
+        const matchedThread = threads.find((t) => t.taskId === task.taskId);
         if (matchedThread) {
           task.threadId = matchedThread.id;
         }
