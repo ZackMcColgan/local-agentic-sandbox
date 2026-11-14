@@ -46,6 +46,18 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  // Lane C UI polish (header, canvas & desktop top bar)
+  {
+    match: (p) =>
+      p.includes("design-tokens.css") ||
+      p.includes("globals.css") ||
+      p.includes("ThreadsSidebar.tsx") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("ArtifactCanvas.tsx") ||
+      p.includes("SvgViewer.tsx") ||
+      p.includes("app/page.tsx"),
+    tests: ["tests/lane-c-ui-polish.test.ts"]
+  },
   // kind-gateway assets & launcher scripts
   {
     match: (p) => p.includes("kind-gateway") || p.includes("scripts/kind-gateway"),
