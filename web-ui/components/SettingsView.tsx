@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
+import { formatModelDisplayLabel } from "../lib/chatUtils";
+const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export interface DeployHistoryItem {
   deployId: string;
@@ -36,11 +38,11 @@ export interface SettingsViewProps {
 export function SettingsView({
   onBack,
   onClose,
-  selectedModel = "swift-15-27b-mtp",
+  selectedModel = DEFAULT_PRIMARY_MODEL,
   defaultModel,
   models,
   onDefaultModelChange,
-  reasoningEffort = "medium",
+  reasoningEffort = "low",
   onReasoningEffortChange,
   onOpenModelSheet,
   theme: propsTheme,
@@ -55,7 +57,7 @@ export function SettingsView({
   const [engineData, setEngineData] = useState<any>({
     status: "running",
     reachable: true,
-    model: "swift-15-27b-mtp",
+    model: DEFAULT_PRIMARY_MODEL,
     vram_mb: 16384
   });
   const [engineLoading, setEngineLoading] = useState(false);
@@ -327,11 +329,7 @@ export function SettingsView({
     }
   };
 
-  const getShortModelName = (modelId: string) => {
-    if (modelId.includes("qwen3.8")) return "qwen3.8";
-    if (modelId.includes("gemma4")) return "gemma4";
-    return modelId.split(":")[0];
-  };
+  const getShortModelName = (modelId: string) => formatModelDisplayLabel(modelId);
 
   const getReasoningLabel = (effort: "low" | "medium" | "xhigh") => {
     if (effort === "low") return "Fast";
@@ -502,7 +500,7 @@ export function SettingsView({
               <div>
                 <span className="text-slate-400 dark:text-zinc-500 block">Model</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.model || "swift-15-27b-mtp"}
+                  {engineData.model || DEFAULT_PRIMARY_MODEL}
                 </span>
               </div>
               <div>

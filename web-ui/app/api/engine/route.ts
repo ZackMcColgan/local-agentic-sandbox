@@ -76,7 +76,7 @@ export async function GET() {
       status: "stopped",
       reachable: false,
       error: `Supervisor offline: ${err.message}`,
-      model: "swift-15-27b-mtp",
+      model: "qwen3.8-flash-next-gyro-gyro-s",
       vram_mb: 16384,
       uptime_s: 0
     });

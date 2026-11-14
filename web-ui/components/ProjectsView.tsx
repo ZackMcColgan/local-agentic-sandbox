@@ -805,7 +805,7 @@ export function ProjectsView({
 
                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
                     <div className="text-[11px] text-slate-400">
-                      Target branch: <code className="font-mono">{activeProject.base_branch}</code> · Engine: <code className="font-mono">Swift 1.5</code>
+                      Target branch: <code className="font-mono">{activeProject.base_branch}</code> · Engine: <code className="font-mono">Flash-Next</code>
                     </div>
 
                     <div className="flex items-center gap-2">
