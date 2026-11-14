@@ -80,4 +80,12 @@ describe("Lane C UI Polish", () => {
     assert.match(svgViewer, /!embeddedInCanvas/, "SvgViewer must conditionally suppress inner header/footer when embeddedInCanvas is true");
     assert.match(artifactCanvas, /embeddedInCanvas=\{true\}/, "ArtifactCanvas must pass embeddedInCanvas={true} to SvgViewer");
   });
+
+  it("C6 (UI-031): .chat-track has pb-16 sm:pb-20 clearance and autoscroll triggers on tail assistant content / isLoading", () => {
+    const chatStream = readWebUiFile("components/ChatStream.tsx");
+
+    assert.match(chatStream, /className="chat-track[^"]*\bpb-16 sm:pb-20\b/, ".chat-track must have pb-16 sm:pb-20 bottom clearance");
+    assert.match(chatStream, /lastMsg\?\.content/, "Autoscroll effect must depend on tail message content");
+    assert.match(chatStream, /!isUserScrolledUp/, "Autoscroll must respect !isUserScrolledUp");
+  });
 });
