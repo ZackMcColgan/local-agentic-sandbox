@@ -820,9 +820,12 @@ export class ThreadStore {
     );
   }
 
-  async listThreadSummaries(): Promise<ThreadSummary[]> {
+  async listThreadSummaries(query?: string): Promise<ThreadSummary[]> {
     const threads = await this.listThreads();
-    return threads.map((t) => {
+    const q = query?.trim().toLowerCase() || "";
+    const summaries: ThreadSummary[] = [];
+
+    for (const t of threads) {
       const msgs = Array.isArray(t.messages) ? t.messages : [];
       const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
       const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
@@ -836,7 +839,33 @@ export class ThreadStore {
             ? deriveThreadTitle(firstUserMsg.content)
             : t.title || "New session";
 
-      return {
+      let matchSnippet: string | undefined;
+      if (q) {
+        const titleMatches = title.toLowerCase().includes(q);
+        let bodyMatchContent: string | undefined;
+        let matchIdx = -1;
+        for (const m of msgs) {
+          if (typeof m.content === "string") {
+            const idx = m.content.toLowerCase().indexOf(q);
+            if (idx !== -1) {
+              bodyMatchContent = m.content;
+              matchIdx = idx;
+              break;
+            }
+          }
+        }
+        if (!titleMatches && matchIdx === -1) {
+          continue;
+        }
+        if (bodyMatchContent && matchIdx !== -1) {
+          const start = Math.max(0, matchIdx - 32);
+          const end = Math.min(bodyMatchContent.length, matchIdx + q.length + 48);
+          const slice = bodyMatchContent.slice(start, end).replace(/\s+/g, " ").trim();
+          matchSnippet = `${start > 0 ? "…" : ""}${slice}${end < bodyMatchContent.length ? "…" : ""}`;
+        }
+      }
+
+      summaries.push({
         id: t.id,
         title,
         status: t.status,
@@ -849,8 +878,11 @@ export class ThreadStore {
         messageCount: msgs.length,
         lastMessagePreview,
         hasDiffs,
-      };
-    });
+        ...(matchSnippet ? { matchSnippet } : {}),
+      });
+    }
+
+    return summaries;
   }
 
   async getThread(threadId: string): Promise<Thread | null> {

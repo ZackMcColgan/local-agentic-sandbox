@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const q = url.searchParams.get("q")?.trim() || undefined;
     const threads = full
       ? await threadStore.listThreads()
-      : await threadStore.listThreadSummaries();
+      : await threadStore.listThreadSummaries(q);
     return NextResponse.json({ threads });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

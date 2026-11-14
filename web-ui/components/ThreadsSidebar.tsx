@@ -383,6 +383,11 @@ export function ThreadsSidebar({
                     >
                       {thread.title || "New session"}
                     </h2>
+                    {(thread as any).matchSnippet && (
+                      <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                        {(thread as any).matchSnippet}
+                      </p>
+                    )}
 
                     {onDeleteThread && (
                       <button

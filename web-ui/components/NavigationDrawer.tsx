@@ -393,6 +393,11 @@ export function NavigationDrawer({
                     title={thread.title}
                   >
                     <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{thread.title || "Untitled session"}</span>
+                    {(thread as any).matchSnippet && (
+                      <span className="text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                        {(thread as any).matchSnippet}
+                      </span>
+                    )}
                     {timeLabel && (
                       <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">
                         {timeLabel}
