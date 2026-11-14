@@ -279,7 +279,7 @@ function UserMessageContent({ content }: { content: string }) {
           </code>
         ),
         p: ({ children }: any) => (
-          <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
+          <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-blue-950 dark:text-sky-100">{children}</p>
         )
       }}
     >

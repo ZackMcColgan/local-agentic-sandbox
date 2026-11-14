@@ -39,3 +39,26 @@ describe("Lane A Item 2: Assistant markdown standalone numbered answer", () => {
     assert.ok(html.includes("Third item") && html.includes("Fourth item"));
   });
 });
+
+describe("Lane A Item 3: User message bubble line breaks", () => {
+  it("preserves single line breaks in a multi-line user message bubble", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatStream, {
+        messages: [
+          {
+            id: "u-1",
+            role: "user",
+            content: "First line\nSecond line\nThird line",
+            createdAt: new Date().toISOString()
+          }
+        ],
+        isLoading: false
+      } as any)
+    );
+    assert.ok(
+      html.includes("whitespace-pre-line") || html.includes("<br"),
+      `Expected user message bubble to preserve single line breaks, got: ${html.slice(0, 500)}`
+    );
+  });
+});
+
