@@ -64,8 +64,9 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("LiveActivityHeader.tsx") ||
       p.includes("MorningReportView.tsx") ||
       p.includes("darkTextFloor.test.ts") ||
-      p.includes("overlayMutualExclusion.test.ts"),
-    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts"],
+      p.includes("overlayMutualExclusion.test.ts") ||
+      p.includes("timestampFormat.test.ts"),
+    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts"],
   },
   {
     match: (p) =>

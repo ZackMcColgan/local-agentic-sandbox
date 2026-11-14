@@ -62,7 +62,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
@@ -2498,14 +2498,7 @@ export function ChatStream({
                       )}
                     </button>
                     {m.timestamp && (
-                      <span>
-                        {(() => {
-                          const d = new Date(m.timestamp);
-                          return isNaN(d.getTime())
-                            ? m.timestamp
-                            : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-                        })()}
-                      </span>
+                      <span>{formatMessageTimestamp(m.timestamp)}</span>
                     )}
                   </div>
                 </div>
