@@ -805,3 +805,4 @@ bfacc10 runlog: PR #97 Lane A deploy S2 build+import v-bfacc10-fresh done (Next.
 c789208 runlog: PR #97 Lane A deployed v-bfacc10-fresh, S4 verified; rollback v-aaecd8e-fresh; prod == develop in code  
 dda41ba runlog: PR #98 Lane B merged, deploy S1 rollback v-bfacc10-fresh
 e9865c0 runlog: PR #98 Lane B deploy S2 build+import v-e9865c0-fresh done (docker cp into node silently failed; imported via stdin ctr import 3.5s)
+bd360fa runlog: PR #98 Lane B deployed v-e9865c0-fresh, S4 verified; rollback v-bfacc10-fresh; prod == develop in code
