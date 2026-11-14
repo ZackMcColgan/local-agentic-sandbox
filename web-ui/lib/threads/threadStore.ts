@@ -1007,6 +1007,20 @@ export class ThreadStore {
         ...thread.messages[existingIdx],
         ...cleanMessage
       };
+    } else if (
+      message.role === "assistant" &&
+      thread.messages.length > 0 &&
+      thread.messages[thread.messages.length - 1].role === "assistant" &&
+      !(thread.messages[thread.messages.length - 1].content || "").trim()
+    ) {
+      const cleanMessage = Object.fromEntries(
+        Object.entries(message).filter(([_, v]) => v !== undefined)
+      ) as Partial<ThreadMessage>;
+      const tailIdx = thread.messages.length - 1;
+      thread.messages[tailIdx] = {
+        ...thread.messages[tailIdx],
+        ...cleanMessage,
+      };
     } else {
       thread.messages.push(message);
     }
