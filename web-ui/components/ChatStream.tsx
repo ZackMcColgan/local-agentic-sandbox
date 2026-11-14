@@ -1926,15 +1926,7 @@ export function ChatStream({
     ? "Gemma-4"
     : modelSafe.split(":")[0];
 
-  // Deduplicate consecutive identical user messages in UI stream
-  const deduplicatedMessages = messages.filter((m, i) => {
-    if (i === 0) return true;
-    const prev = messages[i - 1];
-    if (m.role === "user" && prev.role === "user" && m.content === prev.content) {
-      return false;
-    }
-    return true;
-  });
+  const deduplicatedMessages = deduplicateStreamMessages(messages);
 
   // Anchor for the reconciled detached-turn notification: the last assistant message,
   // not the literal tail, so a steer bubble appended after reconciliation does not hide it.
@@ -3781,4 +3773,32 @@ export function ChatStream({
     </CanvasProvider>
     </div>
   );
+}
+
+export function deduplicateStreamMessages<T extends { role: string; content: string; traces?: any[] }>(messages: T[]): T[] {
+  const out: T[] = [];
+  for (const m of messages) {
+    const prev = out[out.length - 1];
+    if (prev && m.role === "user" && prev.role === "user" && m.content === prev.content) {
+      continue;
+    }
+    if (prev && m.role === "assistant" && prev.role === "assistant") {
+      if (m.content === prev.content) {
+        continue;
+      }
+      if (prev.content.trim() && m.content.trim()) {
+        const mergedTraces =
+          prev.traces || m.traces ? [...(prev.traces || []), ...(m.traces || [])] : undefined;
+        out[out.length - 1] = {
+          ...prev,
+          ...m,
+          ...(mergedTraces ? { traces: mergedTraces } : {}),
+          content: `${prev.content}\n\n${m.content}`,
+        };
+        continue;
+      }
+    }
+    out.push(m);
+  }
+  return out;
 }
