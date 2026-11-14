@@ -12,7 +12,7 @@ describe("B3: Search match context (matchSnippet)", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "thread-search-test-"));
     try {
       const store = new ThreadStore(tmpDir);
-      const thread = store.createThread("General chat", "swift-15-27b-mtp");
+      const thread = store.createThread({ title: "General chat", model: "swift-15-27b-mtp" });
       thread.messages = [
         {
           id: "m1",

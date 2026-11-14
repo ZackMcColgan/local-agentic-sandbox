@@ -8,7 +8,7 @@ import { ProjectsView } from "../components/ProjectsView";
 describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
   it("SettingsView displays 'Flash-Next' and 'Low' by default", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView, {
+      React.createElement(SettingsView as any, {
         theme: "dark",
         onThemeChange: () => {},
         onResetOnboarding: () => {},
@@ -21,7 +21,7 @@ describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
 
   it("ProjectsView displays 'Engine: Flash-Next' instead of 'Swift 1.5'", () => {
     const html = renderToStaticMarkup(
-      React.createElement(ProjectsView, {})
+      React.createElement(ProjectsView as any, {})
     );
     assert.equal(html.includes("Swift 1.5"), false, "Expected no stale 'Swift 1.5' in ProjectsView");
   });
@@ -30,7 +30,7 @@ describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
 describe("E7: Settings view nits (UI-043)", () => {
   it("Self-Deploy section contains href='#settings-danger-zone' matching id='settings-danger-zone'", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView, {
+      React.createElement(SettingsView as any, {
         theme: "dark",
         onThemeChange: () => {},
         onResetOnboarding: () => {},

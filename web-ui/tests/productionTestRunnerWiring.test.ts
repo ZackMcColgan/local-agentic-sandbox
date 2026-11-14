@@ -5,8 +5,7 @@ import os from "os";
 import path from "path";
 
 import {
-  createProductionStepExecutor,
-  Supervisor
+  createProductionStepExecutor
 } from "../lib/subagents/supervisor";
 import {
   formatTestFailureForBuilder,
@@ -42,7 +41,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
             assertion: "output.txt must exist",
             command: 'node -e "console.log(\'test-ok\')"'
           }
-        ]
+        ],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       const mockBuilder = {
@@ -76,8 +77,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       // Call without options.testRunner
       const executor = createProductionStepExecutor({
         workerPool: mockPool as any,
-        repoRoot: tmpDir,
-        maxIterationsPerMilestone: 1
+        repoRoot: tmpDir
       });
 
       const outcome = await executor(mockMilestone, 1);
@@ -113,7 +113,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
             assertion: "Must pass strict assertion",
             command: 'node -e "process.exit(1)"'
           }
-        ]
+        ],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       let criticReceivedFeedback: string[] = [];
@@ -143,8 +145,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
       const executor = createProductionStepExecutor({
         workerPool: mockPool as any,
-        repoRoot: tmpDir,
-        maxIterationsPerMilestone: 1
+        repoRoot: tmpDir
       });
 
       const outcome = await executor(mockMilestone, 1);

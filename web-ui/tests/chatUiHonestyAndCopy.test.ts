@@ -135,7 +135,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream, {
+      React.createElement(ChatStream as any, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -175,7 +175,7 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream, {
+      React.createElement(ChatStream as any, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -210,7 +210,7 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream, {
+      React.createElement(ChatStream as any, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -240,7 +240,7 @@ describe("Part 3 — User Message Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream, {
+      React.createElement(ChatStream as any, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",

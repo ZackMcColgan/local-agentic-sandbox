@@ -252,8 +252,8 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
       const plan = await generatePlanSpec({
         goal: "Create a modern weather SVG card with temperature indicator",
         scope: "SCRIPT",
-        generate: mockGenerate
-      });
+        generate: mockGenerate as any
+      } as any);
 
       assert.ok(plan.milestones.length > 0);
       assert.ok(

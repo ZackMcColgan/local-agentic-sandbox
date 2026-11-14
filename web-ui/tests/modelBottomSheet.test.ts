@@ -23,7 +23,7 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
       new Response(JSON.stringify({ status: "running" }), { status: 200 })) as any;
 
     let closed = false;
-    const container = dom.window.document.getElementById("root")!;
+    const container = dom.window.document.getElementById("root")! as unknown as HTMLElement;
     const root = createRoot(container);
 
     try {
@@ -68,7 +68,7 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
       return new Response(JSON.stringify({ status: "running" }), { status: 200 });
     }) as any;
 
-    const container = dom.window.document.getElementById("root")!;
+    const container = dom.window.document.getElementById("root")! as unknown as HTMLElement;
     const root = createRoot(container);
 
     try {

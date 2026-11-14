@@ -17,8 +17,8 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     globalThis.window = win as any;
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container as any);
     root = createRoot(container);
   });
 

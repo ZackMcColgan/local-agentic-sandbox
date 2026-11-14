@@ -464,7 +464,7 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
       assert.equal(healthy, true, "checkHostRunnerHealth must return true on 200 ok");
       assert.equal(lastTimeoutMs, 1500, "checkHostRunnerHealth must use 1500ms timeout");
       assert.equal(lastMethod, "GET", "checkHostRunnerHealth must use GET");
-      assert.ok(lastUrl?.endsWith("/health"), "checkHostRunnerHealth must target /health");
+      assert.ok(String(lastUrl ?? "").endsWith("/health"), "checkHostRunnerHealth must target /health");
 
       // Case 2: HTTP 500 error
       global.fetch = (async () => ({

@@ -12,14 +12,12 @@ describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "thread-summaries-cache-"));
     store = new ThreadStore(tmpDir);
-    await store.createThread({
+    const t = await store.createThread({
       title: "Cached summary test",
       model: "test-model",
-      messages: [
-        { id: "u1", role: "user", content: "Hello world", timestamp: new Date().toISOString() },
-        { id: "a1", role: "assistant", content: "Hi there!", timestamp: new Date().toISOString() },
-      ],
     });
+    store.addMessage(t.id, { id: "u1", role: "user", content: "Hello world", timestamp: new Date().toISOString() });
+    store.addMessage(t.id, { id: "a1", role: "assistant", content: "Hi there!", timestamp: new Date().toISOString() });
   });
 
   afterEach(() => {
@@ -57,13 +55,13 @@ describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies
     const older = await store.createThread({
       title: "Older thread",
       model: "test-model",
-      messages: [{ id: "u1", role: "user", content: "old", timestamp: "2026-01-01T00:00:00.000Z" }],
     });
+    store.addMessage(older.id, { id: "u1", role: "user", content: "old", timestamp: "2026-01-01T00:00:00.000Z" });
     const newer = await store.createThread({
       title: "Newer thread",
       model: "test-model",
-      messages: [{ id: "u2", role: "user", content: "new", timestamp: "2026-01-02T00:00:00.000Z" }],
     });
+    store.addMessage(newer.id, { id: "u2", role: "user", content: "new", timestamp: "2026-01-02T00:00:00.000Z" });
 
     // Manually set distinct updatedAt timestamps in the thread files
     for (const [t, ts] of [
@@ -110,9 +108,8 @@ describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies
     const runningThread = await store.createThread({
       title: "Running thread",
       model: "test-model",
-      status: "running",
-      messages: [{ id: "u1", role: "user", content: "run", timestamp: new Date().toISOString() }],
     });
+    store.addMessage(runningThread.id, { id: "u1", role: "user", content: "run", timestamp: new Date().toISOString() });
 
     activeExecutionSet.add(runningThread.id);
     try {

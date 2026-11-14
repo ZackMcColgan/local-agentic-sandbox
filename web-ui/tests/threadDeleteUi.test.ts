@@ -11,6 +11,9 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     {
       id: "thread-abc-1",
       title: "Alpha Research Session",
+      status: "completed",
+      model: "test-model",
+      reasoningEffort: "medium",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messages: [{ id: "m1", role: "user", content: "hello", timestamp: new Date().toISOString() }]
@@ -18,6 +21,9 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     {
       id: "thread-abc-2",
       title: "Beta Bug Fixing",
+      status: "completed",
+      model: "test-model",
+      reasoningEffort: "medium",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messages: []

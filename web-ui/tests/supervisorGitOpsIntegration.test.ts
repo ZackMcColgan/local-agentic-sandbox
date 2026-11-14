@@ -321,6 +321,9 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
 
       const html = renderToString(
         React.createElement(ChatStream, {
+          onTracesUpdate: () => {},
+          activeModel: "test-model",
+          reasoningEffort: "medium" as const,
           messages: [],
           onSendMessage: async () => {},
           defaultComposerMode: "build"

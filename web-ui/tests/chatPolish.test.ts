@@ -500,6 +500,7 @@ Use \`run_command\` for shell actions.
         React.createElement(ChatStream, {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          reasoningEffort: "medium" as const,
           messages: [
             {
               id: "m-match",
@@ -517,6 +518,7 @@ Use \`run_command\` for shell actions.
         React.createElement(ChatStream, {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          reasoningEffort: "medium" as const,
           messages: [
             {
               id: "m-diverged",
@@ -544,6 +546,7 @@ Use \`run_command\` for shell actions.
         React.createElement(ChatStream, {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8-flash-next-gyro-gyro-s",
+          reasoningEffort: "medium" as const,
           messages: []
         })
       );

@@ -17,8 +17,8 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
     globalThis.CustomEvent = win.CustomEvent as any;
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container as any);
     root = createRoot(container);
   });
 
@@ -33,7 +33,7 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
     const longTitle = "Very Long Session Title That Should Never Be Truncated In The Action Sheet Header";
     act(() => {
       root.render(
-        React.createElement(NavigationDrawer, {
+        React.createElement(NavigationDrawer as any, {
           isOpen: true,
           onClose: () => {},
           activeTab: "chat",

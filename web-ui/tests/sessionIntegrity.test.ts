@@ -5,7 +5,7 @@ import path from "node:path";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ThreadStore, Thread, activeExecutionSet } from "../lib/threads/threadStore";
+import { ThreadStore, Thread, ThreadMessage, activeExecutionSet } from "../lib/threads/threadStore";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ChatStream } from "../components/ChatStream";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";

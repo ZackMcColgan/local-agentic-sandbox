@@ -404,7 +404,11 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           }
         ],
         journal: [],
-        artifacts: [],
+        toolchain: "node:22",
+        branchName: "feat/test",
+        checkpoints: [],
+        ambiguityFlags: [],
+        updatedAt: new Date().toISOString(),
         status: "active"
       };
 

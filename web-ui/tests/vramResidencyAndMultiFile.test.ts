@@ -295,7 +295,10 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
           title: "Generate widget",
           description: "Write code",
           status: "in_progress",
-          plannedFiles: ["widget.ts"]
+          plannedFiles: ["widget.ts"],
+          acceptanceCriteria: [],
+          builderIterations: 0,
+          criticRounds: 0
         };
 
         await builder.executeMilestoneWork(m, { repoRoot: tmpDir });
@@ -328,7 +331,10 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         title: "Multi-file milestone",
         description: "Create multiple files",
         status: "in_progress",
-        plannedFiles: ["lib/a.ts", "lib/b.ts", "lib/c.ts"]
+        plannedFiles: ["lib/a.ts", "lib/b.ts", "lib/c.ts"],
+        acceptanceCriteria: [],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       assert.equal(typeof (builder as any).resolveTargets, "function", "BuilderWorker must expose resolveTargets");
@@ -355,7 +361,10 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         title: "Multi-file feature",
         description: "Generate multi-file modules",
         status: "in_progress",
-        plannedFiles: ["lib/core.ts", "lib/utils.ts"]
+        plannedFiles: ["lib/core.ts", "lib/utils.ts"],
+        acceptanceCriteria: [],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       const result = await builder.executeMilestoneWork(m, { repoRoot: tmpDir });

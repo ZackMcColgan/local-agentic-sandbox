@@ -57,6 +57,8 @@ describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
 
     const html = renderToString(
       React.createElement(ChatStream, {
+        onTracesUpdate: () => {},
+        reasoningEffort: "medium" as const,
         onOpenProjects: () => {
           openedProjects = true;
         },

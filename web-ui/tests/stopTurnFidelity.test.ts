@@ -16,7 +16,7 @@ describe("UI-028c: POST /api/threads/[id] { action: 'stop' } aborts turn and pre
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "stop-turn-fidelity-"));
     process.env.THREADS_DIR = tmpDir;
     const store = new ThreadStore(tmpDir);
-    const thread = store.createThread("Stop fidelity test");
+    const thread = store.createThread({ title: "Stop fidelity test" });
     store.addMessage(thread.id, {
       id: "u1",
       role: "user",

@@ -126,8 +126,12 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
       status: "active",
       milestones: [],
       journal: [],
-      toolchain: "readonly",
-      allowedWorkspaces: [],
+      toolchain: "node:22",
+      branchName: "feat/test",
+      currentMilestoneIndex: 0,
+      checkpoints: [],
+      ambiguityFlags: [],
+      updatedAt: new Date().toISOString(),
       startedAt: new Date().toISOString()
     };
 
@@ -164,8 +168,12 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
       status: "active",
       milestones: [],
       journal: [],
-      toolchain: "readonly",
-      allowedWorkspaces: [],
+      toolchain: "node:22",
+      branchName: "feat/test",
+      currentMilestoneIndex: 0,
+      checkpoints: [],
+      ambiguityFlags: [],
+      updatedAt: new Date().toISOString(),
       startedAt: new Date().toISOString()
     };
 

@@ -224,7 +224,7 @@ describe("UI-023/UI-024 — rendered UI", () => {
     }));
     await renderTree(
       React.createElement(
-        CanvasProvider,
+        CanvasProvider as any,
         { scrollElRef: scrollRef },
         React.createElement(CanvasDiffCard, { diffs }),
         React.createElement(ArtifactCanvasPane)

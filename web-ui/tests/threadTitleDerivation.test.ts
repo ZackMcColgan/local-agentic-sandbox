@@ -124,7 +124,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
         id: "msg-1",
         role: "user",
         content: `${longFirstLine}\n\nSecond paragraph with extra details.`,
-        createdAt: new Date().toISOString()
+        timestamp: new Date().toISOString()
       });
       const loaded = await store.getThread(thread.id);
       assert.equal(loaded?.title, longFirstLine);
@@ -144,7 +144,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
           id: "msg-1",
           role: "user",
           content: longFirstLine,
-          createdAt: new Date().toISOString()
+          timestamp: new Date().toISOString()
         }
       ];
       fs.writeFileSync(filePath, JSON.stringify(raw, null, 2));
