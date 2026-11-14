@@ -33,6 +33,7 @@ export interface TestGateOutcome {
   testsRan: string[];
   changedFiles: string[];
   uncoveredFiles: string[];
+  stages?: string[];
   error?: string;
   output?: string;
 }
@@ -805,6 +806,35 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
     tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
+  },
+  // Charter modules (P0.1)
+  {
+    match: (p) => p.includes("lib/liveStatus"),
+    tests: ["tests/liveStatus.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/executionSummary"),
+    tests: ["tests/executionSummary.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/modelEval"),
+    tests: ["tests/modelEval.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/boardStore"),
+    tests: ["tests/boardStore.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/dispatcher"),
+    tests: ["tests/dispatcher.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/flowMonitor"),
+    tests: ["tests/flowMonitor.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/reviewerGate"),
+    tests: ["tests/reviewerGate.test.ts"]
   }
 ];
 
@@ -830,7 +860,6 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
     normalizedPath.includes(".agent") ||
-    normalizedPath.includes("temp-") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
     normalizedPath.includes("test-results") ||
@@ -1046,7 +1075,8 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       budgetSeconds,
       testsRan: resolved.tests,
       changedFiles: changed,
-      uncoveredFiles: []
+      uncoveredFiles: [],
+      stages: ["tsc --noEmit", "tests"]
     };
   }
 
@@ -1080,6 +1110,25 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   delete childEnv.NODE_TEST_CONTEXT;
   if (!childEnv.FORCE_MOCK) childEnv.FORCE_MOCK = "1";
   if (!childEnv.FAST_GRAPH_TEST) childEnv.FAST_GRAPH_TEST = "1";
+
+  // 0. Run TypeScript typecheck (tsc --noEmit) for web-ui
+  try {
+    const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+    const tscOut = execSync("npx tsc --noEmit", {
+      cwd: webUiCwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: childEnv,
+      timeout: remainingTime
+    });
+    if (tscOut) testOutput += tscOut;
+  } catch (err: any) {
+    const stdout = err.stdout ? err.stdout.toString() : "";
+    const stderr = err.stderr ? err.stderr.toString() : "";
+    testOutput += `${stdout}\n${stderr}`;
+    failedCount += 1;
+    runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
+  }
 
   // 1. Run web-ui tests if any mapped
   if (webUiTestsToRun.length > 0) {

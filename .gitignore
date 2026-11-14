@@ -63,3 +63,5 @@ web-ui/temp-test-*
 
 # Settings Memory store (runtime state on this machine; never committed)
 operator-memory.json
+
+web-ui/temp-*
