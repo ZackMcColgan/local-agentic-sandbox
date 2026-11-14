@@ -75,7 +75,7 @@ describe("Settings Memory — SettingsView Memory card", () => {
       textarea.value = "new standing fact";
       textarea.dispatchEvent(new win.Event("input"));
     });
-    assert.ok(container.innerHTML.includes("15 / 2000"), "live counter reflects typed length");
+    assert.ok(container.innerHTML.includes("17 / 2000"), "live counter reflects typed length");
 
     const saveBtn = container.querySelector('[data-testid="settings-memory-save-btn"]') as any;
     await act(async () => {

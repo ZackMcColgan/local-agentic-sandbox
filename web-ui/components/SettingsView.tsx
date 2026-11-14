@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
+import { formatModelDisplayLabel } from "../lib/chatUtils";
+const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export interface DeployHistoryItem {
   deployId: string;
@@ -36,11 +38,11 @@ export interface SettingsViewProps {
 export function SettingsView({
   onBack,
   onClose,
-  selectedModel = "swift-15-27b-mtp",
+  selectedModel = DEFAULT_PRIMARY_MODEL,
   defaultModel,
   models,
   onDefaultModelChange,
-  reasoningEffort = "medium",
+  reasoningEffort = "low",
   onReasoningEffortChange,
   onOpenModelSheet,
   theme: propsTheme,
@@ -55,7 +57,7 @@ export function SettingsView({
   const [engineData, setEngineData] = useState<any>({
     status: "running",
     reachable: true,
-    model: "swift-15-27b-mtp",
+    model: DEFAULT_PRIMARY_MODEL,
     vram_mb: 16384
   });
   const [engineLoading, setEngineLoading] = useState(false);
@@ -327,11 +329,7 @@ export function SettingsView({
     }
   };
 
-  const getShortModelName = (modelId: string) => {
-    if (modelId.includes("qwen3.8")) return "qwen3.8";
-    if (modelId.includes("gemma4")) return "gemma4";
-    return modelId.split(":")[0];
-  };
+  const getShortModelName = (modelId: string) => formatModelDisplayLabel(modelId);
 
   const getReasoningLabel = (effort: "low" | "medium" | "xhigh") => {
     if (effort === "low") return "Fast";
@@ -347,7 +345,7 @@ export function SettingsView({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
-      <div className="max-w-xl mx-auto w-full p-4 sm:p-6 space-y-6">
+      <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header Card: "< Settings" matching Mockup media_1791044464169.webp */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center gap-3">
@@ -366,7 +364,7 @@ export function SettingsView({
 
         {/* Live Status Strip: pinned engine / host / model / prod summary */}
         <div
-          className="sticky -top-4 sm:-top-6 z-20 bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
+          className="sticky top-0 z-20 bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
           data-testid="settings-live-status-strip"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -472,7 +470,7 @@ export function SettingsView({
                   <span>Standalone llama.cpp</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Vulkan backend on AMD Radeon RX 9070 XT. Stop engine to reclaim 16GB VRAM.
+                  Vulkan backend on AMD Radeon RX 9070 XT.
                 </p>
               </div>
 
@@ -502,7 +500,7 @@ export function SettingsView({
               <div>
                 <span className="text-slate-400 dark:text-zinc-500 block">Model</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.model || "swift-15-27b-mtp"}
+                  {engineData.model || DEFAULT_PRIMARY_MODEL}
                 </span>
               </div>
               <div>
@@ -603,9 +601,23 @@ export function SettingsView({
                   <span>Self-deploy status</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  {isSelfDeployActive
-                    ? "Self-deploy is ON. Its kill switch lives in the Danger Zone at the bottom of Settings."
-                    : "Self-deploy is OFF (kill switch engaged). Its kill switch lives in the Danger Zone at the bottom of Settings."}
+                  {isSelfDeployActive ? (
+                    <>
+                      Self-deploy is ON. Its kill switch lives in the{" "}
+                      <a href="#settings-danger-zone" className="underline hover:text-emerald-600 dark:hover:text-emerald-400">
+                        Danger Zone
+                      </a>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Self-deploy is OFF (kill switch engaged). Its kill switch lives in the{" "}
+                      <a href="#settings-danger-zone" className="underline hover:text-emerald-600 dark:hover:text-emerald-400">
+                        Danger Zone
+                      </a>
+                      .
+                    </>
+                  )}
                 </p>
               </div>
               <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${isSelfDeployActive ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"}`}>
@@ -841,7 +853,7 @@ export function SettingsView({
                   <span>Recent Unattended Git Activity</span>
                 </div>
                 <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-normal">
-                  Audit log
+                  {hostSettings.runnerAvailable ? "Audit log" : "Historical log (runner currently offline)"}
                 </span>
               </div>
 
@@ -1085,7 +1097,7 @@ export function SettingsView({
                 data-testid="settings-memory-counter"
                 className={memoryText.length > 2000 ? "text-xs font-mono text-rose-600 dark:text-rose-400" : "text-xs font-mono text-slate-500 dark:text-zinc-400"}
               >
-                {memoryText.replace(/\s/g, "").length} / 2000
+                {memoryText.length} / 2000
               </div>
               <button
                 data-testid="settings-memory-save-btn"
@@ -1106,7 +1118,7 @@ export function SettingsView({
         </div>
 
         {/* Danger Zone: destructive controls only, separated at the bottom */}
-        <div data-testid="settings-zone-danger">
+        <div id="settings-danger-zone" data-testid="settings-zone-danger">
           <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-400 mb-3 px-1">
             Danger Zone
           </h2>

@@ -46,6 +46,7 @@ export function BuildsView({
   }, [tasks]);
 
   const displayedTasks = tasks && tasks.length > 0 ? tasks : internalTasks;
+  const pipelineTask = activeTask || displayedTasks[0] || null;
   const toolchains = [
     { name: "Node.js 22", tag: "node:22", status: "Active", desc: "TypeScript & Web UI toolchain" },
     { name: "Python 3.11", tag: "python:3.11", status: "Ready", desc: "Scientific & LangGraph engine" },
@@ -55,7 +56,7 @@ export function BuildsView({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
-      <div className="max-w-3xl mx-auto w-full p-4 sm:p-6 space-y-6">
+      <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
         {/* Top Header matching M3 */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
@@ -135,14 +136,14 @@ export function BuildsView({
                   <Rocket className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   <span>Self-Deploy Pipeline (SelfDeployPipeline)</span>
                 </span>
-                {activeTask?.testSummary ? (
+                {pipelineTask?.testSummary ? (
                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    activeTask.testSummary.failed === 0
+                    pipelineTask.testSummary.failed === 0
                       ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                       : "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                   }`}>
-                    {activeTask.testSummary.failed === 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                    <span>{activeTask.testSummary.failed === 0 ? "Gate Passed" : "Gate Failed"}</span>
+                    {pipelineTask.testSummary.failed === 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                    <span>{pipelineTask.testSummary.failed === 0 ? "Gate Passed" : "Gate Failed"}</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
@@ -151,9 +152,9 @@ export function BuildsView({
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                {activeTask ? (
+                {pipelineTask ? (
                   <span>
-                    Branch <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">{activeTask.branchName || "feat/task"}</code> ({activeTask.status}) · Ready for 1-Click Merge &amp; Rollout
+                    Branch <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">{pipelineTask.branchName || "feat/task"}</code> ({pipelineTask.status}) · Ready for 1-Click Merge &amp; Rollout
                   </span>
                 ) : (
                   <span>No active branch undergoing deployment.</span>

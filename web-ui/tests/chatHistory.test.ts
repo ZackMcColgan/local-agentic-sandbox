@@ -219,3 +219,45 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
     }
   });
 });
+
+import { deduplicateStreamMessages } from "../components/ChatStream";
+
+describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
+  it("merges two consecutive differing non-empty assistant messages into one display item", () => {
+    const msgs = [
+      { id: "u1", role: "user", content: "hi", timestamp: 1 },
+      { id: "a1", role: "assistant", content: "First part.", timestamp: 2 },
+      { id: "a2", role: "assistant", content: "Second part.", timestamp: 3 },
+    ] as any[];
+
+    const result = deduplicateStreamMessages(msgs);
+    assert.equal(result.length, 2);
+    assert.equal(result[1].role, "assistant");
+    assert.ok(result[1].content.includes("First part."));
+    assert.ok(result[1].content.includes("Second part."));
+  });
+
+  it("does not merge two consecutive assistant messages when combined traces exceed 3", () => {
+    const msgs = [
+      {
+        id: "a1",
+        role: "assistant",
+        content: "First part.",
+        traces: [{ name: "t1" }, { name: "t2" }],
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        content: "Second part.",
+        traces: [{ name: "t3" }, { name: "t4" }],
+      },
+    ] as any[];
+
+    const result = deduplicateStreamMessages(msgs);
+    assert.equal(result.length, 2);
+    assert.deepEqual(
+      result.flatMap((m) => m.traces || []).map((t) => t.name),
+      ["t1", "t2", "t3", "t4"],
+    );
+  });
+});

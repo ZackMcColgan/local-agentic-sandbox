@@ -209,6 +209,7 @@ export function SkillsView({
         )}
 
         {/* Section 2: Active Promoted Skills (.agent/skills) */}
+        {(pending.length > 0 || active.length > 0) && (
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -242,6 +243,7 @@ export function SkillsView({
             </div>
           )}
         </section>
+        )}
 
         {/* Section 3: SQLite Flywheel Reusable Patterns */}
         {flywheel.length > 0 && (

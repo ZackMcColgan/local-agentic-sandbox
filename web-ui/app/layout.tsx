@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   description: "Autonomous code generation, execution, and supply-chain verification inside zero-trust container sandboxes with local LLM and MCP.",
   keywords: ["AI Agent", "Sandboxed Execution", "MCP", "llama.cpp", "Local LLM", "Model Context Protocol", "Zero-Trust", "Docker Sandbox"],
   authors: [{ name: "Zack McColgan" }],
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
 };
 
 export const dynamic = "force-dynamic";

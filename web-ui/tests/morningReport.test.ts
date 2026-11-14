@@ -588,3 +588,112 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
 });
 
 
+
+import { summarizeTaskFailureReason } from "../lib/subagents/morningReport";
+
+describe("E5: Morning Report cleanup (UI-036)", () => {
+  it("summarizeTaskFailureReason condenses raw git status dumps", () => {
+    const raw =
+      "Milestone verification failed: git status --porcelain returned:\n" +
+      " M web-ui/components/ChatStream.tsx\n" +
+      " M web-ui/components/SettingsView.tsx\n" +
+      "?? web-ui/tmp.txt\n" +
+      "A".repeat(200);
+    const res = summarizeTaskFailureReason(raw);
+    assert.ok(res.summary.length <= 160, "Expected concise summary");
+    assert.equal(res.summary.includes("git status --porcelain"), false);
+    assert.ok(res.details && res.details.includes("ChatStream.tsx"), "Expected raw text in details");
+  });
+
+  it("renders raw git-status dump as one-sentence summary with collapsed details", async () => {
+    const React = (await import("react")).default;
+    const { renderToString } = await import("react-dom/server");
+    const { Window } = await import("happy-dom");
+    const { MorningReportView } = await import("../components/MorningReportView.js");
+
+    const rawDump =
+      "Milestone verification failed: git status --porcelain returned:\n" +
+      " M web-ui/components/ChatStream.tsx\n" +
+      "?? web-ui/tmp.txt";
+
+    const overnightReport: OvernightMorningReport = {
+      generatedAt: "2026-11-14T08:00:00.000Z",
+      windowStart: "2026-11-13T20:00:00.000Z",
+      windowEnd: "2026-11-14T08:00:00.000Z",
+      totalRuns: 1,
+      completedCount: 0,
+      parkedCount: 0,
+      failedCount: 1,
+      activeCount: 0,
+      totalTestsPassed: 0,
+      totalTestsFailed: 1,
+      tasks: [
+        {
+          taskId: "task-e5-fail",
+          goal: "Verify E5 failure humanizer",
+          status: "failed",
+          branch: "feat/e5",
+          gitHeadSha: "abc1234",
+          startedAt: "2026-11-14T01:00:00.000Z",
+          completedAt: "2026-11-14T01:05:00.000Z",
+          durationSeconds: 300,
+          durationFormatted: "5m",
+          artifacts: [],
+          errorSummary: rawDump,
+          milestones: [],
+          ambiguityFlags: [],
+          testsPassed: 0,
+          testsFailed: 1
+        }
+      ],
+      artifactsProduced: [],
+      attentionItems: [],
+      summaryMarkdown: ""
+    };
+
+    const html = renderToString(
+      React.createElement(MorningReportView, {
+        overnightReport
+      })
+    );
+
+    const window = new Window();
+    window.document.body.innerHTML = html;
+
+    const details = window.document.querySelector("details");
+    assert.ok(details, "Expected a <details> element for raw failure details");
+    assert.equal(details.hasAttribute("open"), false, "Expected <details> to be collapsed by default");
+    assert.ok(
+      details.textContent?.includes("git status --porcelain"),
+      "Expected raw git status dump inside <details>"
+    );
+    assert.ok(
+      html.includes("Uncommitted workspace changes or dirty working tree blocked milestone verification."),
+      "Expected human-readable summary in rendered output"
+    );
+  });
+
+  it("MorningReportView.tsx does not import runtime values from fs-dependent morningReport.ts", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const viewSource = fs.readFileSync(
+      path.resolve(process.cwd(), "components/MorningReportView.tsx"),
+      "utf-8"
+    );
+    const importMatch = viewSource.match(
+      /import\s+(type\s+)?\{([^}]*)\}\s+from\s+["']@\/lib\/subagents\/morningReport["']/
+    );
+    if (importMatch && !importMatch[1]) {
+      const specifiers = importMatch[2]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const runtimeSpecifiers = specifiers.filter((s) => !s.startsWith("type "));
+      assert.deepEqual(
+        runtimeSpecifiers,
+        [],
+        `Expected only type imports from @/lib/subagents/morningReport in client component MorningReportView.tsx, found runtime imports: ${runtimeSpecifiers.join(", ")}`
+      );
+    }
+  });
+});

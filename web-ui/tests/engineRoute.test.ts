@@ -62,7 +62,7 @@ describe("Engine Control Route (/api/engine)", () => {
       assert.equal(json.status, "stopped");
       assert.equal(json.reachable, false);
       assert.ok(json.error.includes("Supervisor offline"));
-      assert.equal(json.model, "swift-15-27b-mtp");
+      assert.equal(json.model, "qwen3.8-flash-next-gyro-gyro-s");
     });
   });
 

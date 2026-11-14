@@ -68,7 +68,13 @@ export default function Home() {
     }
     return DEFAULT_PRIMARY_MODEL;
   });
-  const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">("medium");
+  const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "xhigh">(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("las.reasoningEffort");
+      if (saved === "low" || saved === "medium" || saved === "xhigh") return saved;
+    }
+    return "low";
+  });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
   const [securityPosture, setSecurityPosture] = useState<any>(undefined);

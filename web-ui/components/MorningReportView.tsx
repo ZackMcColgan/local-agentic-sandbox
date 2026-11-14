@@ -20,6 +20,7 @@ import {
   FolderGit2,
   Layers
 } from "lucide-react";
+import { summarizeTaskFailureReason } from "@/lib/subagents/failureSummary";
 import type {
   MorningReport,
   OvernightMorningReport,
@@ -449,7 +450,7 @@ export function MorningReportView({
                           {statusDisplayLabel(item.status)}
                         </span>
                         <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{item.goal}</span>
-                        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-500">({item.taskId})</span>
+                        <span className="sr-only">({item.taskId})</span>
                       </div>
                       {item.threadUrl && (
                         <a
@@ -739,7 +740,7 @@ export function MorningReportView({
                               </span>
                             )}
                             <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                              ({t.taskId})
+                              {/* taskId hidden from primary title row; shown in Details */}
                             </span>
                           </div>
 
@@ -780,17 +781,33 @@ export function MorningReportView({
                           </div>
                         </div>
 
-                        {(t.parkedReason || t.errorSummary) && (
-                          <div
-                            className={`p-2.5 rounded-lg text-xs font-mono ${
-                              isStalled
-                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50"
-                                : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
-                            }`}
-                          >
-                            {t.parkedReason || t.errorSummary}
-                          </div>
-                        )}
+                        {(t.parkedReason || t.errorSummary) && (() => {
+                          const rawText = t.parkedReason || t.errorSummary || "";
+                          const summarized = t.errorDetails
+                            ? { summary: rawText, details: t.errorDetails }
+                            : summarizeTaskFailureReason(rawText);
+                          return (
+                            <div
+                              className={`p-2.5 rounded-lg text-xs font-mono ${
+                                isStalled
+                                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50"
+                                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
+                              }`}
+                            >
+                              <div>{summarized.summary}</div>
+                              {summarized.details && (
+                                <details className="mt-1.5">
+                                  <summary className="cursor-pointer text-[11px] font-sans font-medium opacity-80 hover:opacity-100">
+                                    Show raw details
+                                  </summary>
+                                  <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] opacity-90">
+                                    {summarized.details}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {isExpanded && t.milestones && t.milestones.length > 0 && (
                           <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">

@@ -54,9 +54,19 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("ThreadsSidebar.tsx") ||
       p.includes("ChatStream.tsx") ||
       p.includes("ArtifactCanvas.tsx") ||
+      p.includes("ArtifactRenderers.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("ProjectsView.tsx") ||
+      p.includes("BuildsView.tsx") ||
+      p.includes("SkillsView.tsx") ||
+      p.includes("selfDeploy.ts") ||
+      p.includes("ModelBottomSheet.tsx") ||
+      p.includes("api/engine/route.ts") ||
       p.includes("SvgViewer.tsx") ||
+      p.includes("app/icon.svg") ||
+      p.includes("app/layout.tsx") ||
       p.includes("app/page.tsx"),
-    tests: ["tests/lane-c-ui-polish.test.ts"]
+    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts", "tests/settingsView.test.ts", "tests/modelBottomSheet.test.ts", "tests/buildsView.test.ts", "tests/skillsView.test.ts", "tests/uiLayoutInvariants.test.ts"]
   },
   // kind-gateway assets & launcher scripts
   {
@@ -501,7 +511,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts", "tests/plannerScope.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/morningReport"),
+    match: (p) => p.includes("lib/subagents/morningReport") || p.includes("lib/subagents/failureSummary"),
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/buildPushHonesty.test.ts"]
   },
   {
