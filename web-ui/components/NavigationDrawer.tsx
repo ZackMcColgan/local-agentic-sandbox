@@ -64,6 +64,26 @@ export function NavigationDrawer({
     }, 0);
   };
 
+  useEffect(() => {
+    const handleOverlayOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ source?: string }>).detail;
+      if (detail?.source !== "session-action-sheet") {
+        setActionSheetThread(null);
+      }
+    };
+    window.addEventListener("ui:overlay-open", handleOverlayOpen);
+    return () => window.removeEventListener("ui:overlay-open", handleOverlayOpen);
+  }, []);
+
+  useEffect(() => {
+    if (actionSheetThread && typeof window !== "undefined") {
+      const Evt = window.CustomEvent ?? globalThis.CustomEvent;
+      if (Evt) {
+        window.dispatchEvent(new Evt("ui:overlay-open", { detail: { source: "session-action-sheet" } }));
+      }
+    }
+  }, [actionSheetThread]);
+
   // Close drawer, action sheet, or confirm dialog on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -468,7 +488,7 @@ export function NavigationDrawer({
       {actionSheetThread && (
         <div
           data-testid="thread-action-sheet"
-          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
           onClick={() => {
             setActionSheetThread(null);
             lastActiveElementRef.current?.focus();
@@ -478,8 +498,8 @@ export function NavigationDrawer({
             className="w-full sm:max-w-md bg-white dark:bg-zinc-900 border-t sm:border border-slate-200 dark:border-zinc-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 space-y-4 animate-in slide-in-from-bottom duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate pr-2">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 break-words leading-snug pr-2">
                 {actionSheetThread.title || "Session Options"}
               </h3>
               <button

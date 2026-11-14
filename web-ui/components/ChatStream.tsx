@@ -431,6 +431,17 @@ export function ChatStream({
   const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
+  useEffect(() => {
+    const handleOverlayOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ source?: string }>).detail;
+      if (detail?.source !== "header-overflow") {
+        setShowOverflowMenu(false);
+      }
+    };
+    window.addEventListener("ui:overlay-open", handleOverlayOpen);
+    return () => window.removeEventListener("ui:overlay-open", handleOverlayOpen);
+  }, []);
+
   // Host Mode & Approvals state
   const [hostAccess, setHostAccess] = useState<boolean>(threadHostAccess ?? true);
   const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
@@ -2299,7 +2310,16 @@ export function ChatStream({
           <div className="hidden @md/chat:block relative">
             <button
               type="button"
-              onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+              onClick={() => {
+                const next = !showOverflowMenu;
+                if (next && typeof window !== "undefined") {
+                  const Evt = window.CustomEvent ?? globalThis.CustomEvent;
+                  if (Evt) {
+                    window.dispatchEvent(new Evt("ui:overlay-open", { detail: { source: "header-overflow" } }));
+                  }
+                }
+                setShowOverflowMenu(next);
+              }}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="More options"
               aria-label="More options"
