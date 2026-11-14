@@ -196,6 +196,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/thread-list-summaries.test.ts",
       "tests/thread-list-loading-and-selection.test.ts",
       "tests/thread-search-snippet.test.ts",
+      "tests/live-meter-done-parity.test.ts",
       "tests/buildLaunchVisibility.test.ts",
       "tests/supervisorGitOpsIntegration.test.ts",
       // UI-008: readable thread-list titles derived at record-create time
@@ -407,6 +408,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/thread-list-summaries.test.ts",
       "tests/thread-list-loading-and-selection.test.ts",
       "tests/thread-search-snippet.test.ts",
+      "tests/live-meter-done-parity.test.ts",
       "tests/chatWebResearchCap.test.ts"
     ]
   },

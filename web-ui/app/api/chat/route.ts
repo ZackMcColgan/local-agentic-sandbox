@@ -2136,6 +2136,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         await sendEvent({
           type: "done",
           status: turnStatus,
+          roundPromptTokens,
+          outputTokens: finalOutputTokens,
           isIncomplete: turnStatus === "incomplete" ? true : undefined,
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           diffs: turnDiffs.length > 0 ? turnDiffs : undefined,

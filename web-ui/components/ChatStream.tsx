@@ -1296,6 +1296,8 @@ export function ChatStream({
                 tokensBeforeCompaction: finalTokensBefore,
                 tokensAfterCompaction: finalTokensAfter,
                 compactionActions: event.compactionActions || msg.compactionActions,
+                roundPromptTokens: Array.isArray(event.roundPromptTokens) ? event.roundPromptTokens : msg.roundPromptTokens,
+                outputTokens: typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
                 status: finalStatus
               }))
             );
