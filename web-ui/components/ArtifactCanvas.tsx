@@ -218,7 +218,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
         const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
         return (
           <div key={idx} data-testid="canvas-diff-row" className={`flex whitespace-pre ${rowClass}`}>
-            <span className="w-[34px] shrink-0 text-right pr-2 select-none text-[#52525b]">
+            <span className="w-[34px] shrink-0 text-right pr-2 select-none text-slate-400 dark:text-zinc-400">
               {lineNo ?? ""}
             </span>
             <span className={`w-4 shrink-0 select-none text-center ${signClass}`}>{sign}</span>

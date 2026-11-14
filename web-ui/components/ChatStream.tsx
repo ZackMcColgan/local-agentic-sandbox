@@ -3675,7 +3675,7 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
           />
 
           {/* Bottom Deck: Controls Bar */}

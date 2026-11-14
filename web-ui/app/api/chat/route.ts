@@ -2133,12 +2133,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
             thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
-          phaseTimings: {
-            contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
-            thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
-            toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
-            writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
-          },
             phaseTimings: {
               contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
               thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
