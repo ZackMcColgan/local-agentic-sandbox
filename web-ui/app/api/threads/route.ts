@@ -103,7 +103,6 @@ export async function POST(req: Request) {
           threadStore.saveThread(thread);
         } else {
           thread = threadStore.createThread({
-            title: goal.slice(0, 36),
             model: effectiveModel,
             reasoningEffort: body.reasoningEffort || "medium",
             initialPrompt: goal,
@@ -115,7 +114,6 @@ export async function POST(req: Request) {
         }
       } else {
         thread = threadStore.createThread({
-          title: goal.slice(0, 36),
           model: effectiveModel,
           reasoningEffort: body.reasoningEffort || "medium",
           initialPrompt: goal,

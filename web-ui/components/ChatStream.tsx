@@ -1537,7 +1537,7 @@ export function ChatStream({
     if (action === "enqueue") {
       let currentActiveThreadId = activeThreadIdRef.current || activeThreadState || threadId;
       if (!currentActiveThreadId && onEnsureThread) {
-        currentActiveThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+        currentActiveThreadId = (await onEnsureThread(prompt)) || undefined;
         if (currentActiveThreadId) {
           activeThreadIdRef.current = currentActiveThreadId;
           setActiveThreadId(currentActiveThreadId);
@@ -1701,7 +1701,7 @@ export function ChatStream({
 
     let activeThreadId = activeThreadIdRef.current || activeThreadState || threadId;
     if (!activeThreadId && onEnsureThread) {
-      activeThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+      activeThreadId = (await onEnsureThread(prompt)) || undefined;
       if (activeThreadId) {
         activeThreadIdRef.current = activeThreadId;
         setActiveThreadId(activeThreadId);

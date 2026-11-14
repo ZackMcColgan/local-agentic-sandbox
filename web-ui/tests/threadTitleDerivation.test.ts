@@ -152,6 +152,18 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       const loaded = await store.getThread(thread.id);
       assert.equal(loaded?.title, longFirstLine);
     });
+
+    it("task thread created from 'JOB — <long goal>' ends up with full first-line title after getThread, not a 36-char chop", async () => {
+      const longGoal = "audit the entire authentication and session lifecycle end to end";
+      const prompt = `JOB — ${longGoal}\n\nExtra details on line two.`;
+      const thread = store.createThread({
+        initialPrompt: prompt,
+        taskId: "task-job-1"
+      });
+      const loaded = await store.getThread(thread.id);
+      assert.equal(loaded?.title, longGoal);
+      assert.ok((loaded?.title.length ?? 0) > 36, "title should not be chopped to 36 chars");
+    });
   });
 });
 
