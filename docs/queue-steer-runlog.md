@@ -819,3 +819,4 @@ runlog: PR #102 fix-pass merged, deploy S1 rollback v-3820f7b-fresh
 runlog: PR #102 fix-pass deploy S2 build+import v-c6ee06c-fresh done (WMI bat died after build, import via stdin ctr 5.0s) 
 runlog: PR #102 fix-pass deployed v-c6ee06c-fresh, S4 verified; rollback v-3820f7b-fresh; prod == develop in code 
 2026-11-14 17:36 CT self-update S1 rollback target v-c6ee06c-fresh drift c3b7b00d 3 runlog-only commits CI run 43586095872 all-four-green  
+2026-11-14 17:47 CT self-update DONE prod c6ee06c to 5ae9ef8 v-5ae9ef8-fresh S4 verified rollout success pod web-ui-776d8c499f-t57gl 1/1 Running 0 restarts gateway 200 threads 200 rollback was v-c6ee06c-fresh  
