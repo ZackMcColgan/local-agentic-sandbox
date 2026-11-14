@@ -59,4 +59,28 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     assert.match(text, /Thought/);
     assert.doesNotMatch(text, /\bThinking\b/);
   });
+
+  it("UI-042: expanding a '1 step' ThinkingPanel never renders an empty list when rawThought is non-empty", () => {
+    act(() => {
+      root.render(
+        React.createElement(ThinkingPanel, {
+          rawThought: "<tool_call>{\"name\":\"ls\"}</tool_call>",
+          isStreaming: false,
+          durationMs: 2000,
+        })
+      );
+    });
+
+    const toggleBtn = container.querySelector("button[aria-expanded]");
+    assert.ok(toggleBtn, "Toggle button should exist");
+    act(() => {
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+    });
+
+    const text = container.textContent ?? "";
+    assert.match(text, /1 step/);
+    const listItems = container.querySelectorAll("[data-testid^='phase-card-']");
+    assert.ok(listItems.length >= 1, `Expected at least 1 rendered step item, got ${listItems.length}`);
+    assert.match(listItems[0].textContent ?? "", /Formulated response\./);
+  });
 });

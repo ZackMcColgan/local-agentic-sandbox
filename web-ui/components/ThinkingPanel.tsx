@@ -103,13 +103,18 @@ export function ThinkingPanel({
     if (phases && phases.length > 0) return phases;
 
     if (rawThought && rawThought.trim()) {
+      const cleanedNarrative = rawThought
+        .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/```[\s\S]*?```/g, " ")
+        .trim() || "Formulated response.";
       return [
         {
           phase: "planning",
           title: isStreaming ? "Reasoning in progress" : "Reasoning summary",
           timestamp: formattedTime,
           timeAgo: "Now",
-          narrative: rawThought.trim(),
+          narrative: cleanedNarrative,
           status: isStreaming ? "in_progress" : "complete"
         }
       ];

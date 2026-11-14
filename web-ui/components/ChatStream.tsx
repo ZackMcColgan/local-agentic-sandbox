@@ -109,6 +109,7 @@ export interface ChatMessage {
   modelUsed?: string;
   selectedModel?: string;
   durationMs?: number;
+  thinkingDurationMs?: number;
   taskId?: string;
   isStopped?: boolean;
   isStreaming?: boolean;
