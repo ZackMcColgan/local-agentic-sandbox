@@ -2773,8 +2773,8 @@ export function ChatStream({
                               {children}
                             </ul>
                           ),
-                          ol: ({ children }: any) => (
-                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
+                          ol: ({ children, start }: any) => (
+                            <ol start={start} className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ol>
                           ),
