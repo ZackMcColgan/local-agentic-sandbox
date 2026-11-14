@@ -672,4 +672,28 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
       "Expected human-readable summary in rendered output"
     );
   });
+
+  it("MorningReportView.tsx does not import runtime values from fs-dependent morningReport.ts", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const viewSource = fs.readFileSync(
+      path.resolve(process.cwd(), "components/MorningReportView.tsx"),
+      "utf-8"
+    );
+    const importMatch = viewSource.match(
+      /import\s+(type\s+)?\{([^}]*)\}\s+from\s+["']@\/lib\/subagents\/morningReport["']/
+    );
+    if (importMatch && !importMatch[1]) {
+      const specifiers = importMatch[2]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const runtimeSpecifiers = specifiers.filter((s) => !s.startsWith("type "));
+      assert.deepEqual(
+        runtimeSpecifiers,
+        [],
+        `Expected only type imports from @/lib/subagents/morningReport in client component MorningReportView.tsx, found runtime imports: ${runtimeSpecifiers.join(", ")}`
+      );
+    }
+  });
 });

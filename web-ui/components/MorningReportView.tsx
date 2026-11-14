@@ -20,10 +20,10 @@ import {
   FolderGit2,
   Layers
 } from "lucide-react";
-import {
-  summarizeTaskFailureReason,
-  type MorningReport,
-  type OvernightMorningReport,
+import { summarizeTaskFailureReason } from "@/lib/subagents/failureSummary";
+import type {
+  MorningReport,
+  OvernightMorningReport,
   MorningReportArtifact,
   OvernightTaskEntry,
   MorningReportMilestone

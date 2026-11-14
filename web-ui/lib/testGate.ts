@@ -511,7 +511,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts", "tests/plannerScope.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/morningReport"),
+    match: (p) => p.includes("lib/subagents/morningReport") || p.includes("lib/subagents/failureSummary"),
     tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/buildPushHonesty.test.ts"]
   },
   {
