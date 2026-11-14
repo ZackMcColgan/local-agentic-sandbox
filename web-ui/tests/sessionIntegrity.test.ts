@@ -315,13 +315,13 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       assert.ok(reloaded);
       assert.equal(
         reloaded?.title,
-        "What is the status of the OTEL waterfall",
+        "What is the status of the OTEL waterfall spans?",
         "Thread with 'New thread' title must be retroactively updated from first user message"
       );
 
       // Verify persisted on disk
       const rawOnDisk = JSON.parse(fs.readFileSync(store.getFilePath(thread.id), "utf8"));
-      assert.equal(rawOnDisk.title, "What is the status of the OTEL waterfall");
+      assert.equal(rawOnDisk.title, "What is the status of the OTEL waterfall spans?");
     });
   });
 
@@ -352,7 +352,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       const afterUser = await store.getThread(thread.id);
       assert.ok(afterUser);
       assert.equal(afterUser.messages.length, 1);
-      assert.equal(afterUser.title, "Explain the kubernetes rollout strategy ");
+      assert.equal(afterUser.title, "Explain the kubernetes rollout strategy for web-ui");
 
       // Simulate assistant reply added via addMessage
       const assistantMsg: ThreadMessage = {

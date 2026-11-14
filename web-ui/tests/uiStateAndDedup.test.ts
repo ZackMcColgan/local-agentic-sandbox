@@ -347,8 +347,8 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
       store.reconcileThread(thread);
       assert.equal(
         thread.title,
-        "Create a complete weather dashboard application ",
-        "Must auto-title to first 48 characters of prompt"
+        "Create a complete weather dashboard application in React with Tailwind CSS",
+        "Must auto-title to full first line of prompt"
       );
     });
 
