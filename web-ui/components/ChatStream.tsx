@@ -1934,7 +1934,7 @@ export function ChatStream({
       }`}
     >
     <CanvasProvider scrollElRef={chatContainerRef}>
-    <div className="flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
+    <div className="@container/chat flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
       {/* Hidden File Input */}
       <input
         ref={fileInputRef}
@@ -2182,7 +2182,7 @@ export function ChatStream({
                 the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] lg:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
                 className={`h-full rounded-full transition-all ${
@@ -2271,7 +2271,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onNewThread}
-              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+              className="hidden @md/chat:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
               title="Start new session"
               aria-label="Start new session"
             >
@@ -2280,7 +2280,7 @@ export function ChatStream({
           )}
 
           {/* Overflow Menu Button - desktop only */}
-          <div className="hidden md:block relative">
+          <div className="hidden @md/chat:block relative">
             <button
               type="button"
               onClick={() => setShowOverflowMenu(!showOverflowMenu)}

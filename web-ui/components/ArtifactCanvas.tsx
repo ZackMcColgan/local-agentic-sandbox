@@ -500,7 +500,7 @@ export function ArtifactCanvasPane() {
     <section
       data-testid="canvas-pane"
       aria-label={`Canvas: ${title}`}
-      className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-black lg:relative lg:inset-auto lg:z-auto lg:w-[min(880px,58%)] lg:shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-zinc-800 lg:h-full"
+      className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-black lg:relative lg:inset-auto lg:z-auto lg:w-[min(760px,50%)] lg:shrink-0 lg:border-l lg:border-slate-200 lg:dark:border-zinc-800 lg:h-full"
     >
       {/* Header */}
       <div className="flex items-center gap-2 h-12 px-2.5 sm:px-3.5 border-b border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-[#121215] shrink-0">

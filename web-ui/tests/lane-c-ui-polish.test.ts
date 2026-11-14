@@ -60,4 +60,14 @@ describe("Lane C UI Polish", () => {
     assert.match(chatStream, /#34d399/, "Form B must include #34d399 semibold label");
     assert.doesNotMatch(chatStream, /max-w-\[88px\] xl:max-w-\[110px\] truncate/, "Model pill label must not truncate on desktop");
   });
+
+  it("C4 (UI-029 part 1): chat column declares @container/chat, header uses container queries, and split canvas pane is capped at min(760px,50%)", () => {
+    const chatStream = readWebUiFile("components/ChatStream.tsx");
+    const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");
+
+    assert.match(chatStream, /@container\/chat/, "Chat column must declare @container/chat");
+    assert.match(chatStream, /@lg\/chat:w-\[240px\]/, "Context meter track must use @lg/chat:w-[240px] container query");
+    assert.match(artifactCanvas, /lg:w-\[min\(760px,50%\)\]/, "ArtifactCanvas split pane must be capped at lg:w-[min(760px,50%)]");
+    assert.doesNotMatch(artifactCanvas, /lg:w-\[min\(880px,58%\)\]/, "Old 880px/58% split canvas width must be replaced");
+  });
 });
