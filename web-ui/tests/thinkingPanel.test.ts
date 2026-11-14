@@ -83,4 +83,43 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     assert.ok(listItems.length >= 1, `Expected at least 1 rendered step item, got ${listItems.length}`);
     assert.match(listItems[0].textContent ?? "", /Formulated response\./);
   });
+
+  it("UI-049: at phone width (390px) header title never truncates and phase pill yields on small screens", () => {
+    win.innerWidth = 390;
+    act(() => {
+      root.render(
+        React.createElement(ThinkingPanel, {
+          rawThought: "Step 1: inspect.",
+          isStreaming: true,
+          streamStatus: "Thinking",
+          durationMs: 12000,
+        })
+      );
+    });
+
+    const titleEl = container.querySelector("[data-testid='thinking-panel-title']");
+    assert.ok(titleEl, "Header title element should have data-testid='thinking-panel-title'");
+    assert.equal(titleEl!.textContent, "Thinking");
+    assert.ok(
+      !titleEl!.className.includes("truncate"),
+      `Header title must not have 'truncate' class, got: ${titleEl!.className}`
+    );
+    assert.ok(
+      titleEl!.className.includes("shrink-0"),
+      `Header title must have 'shrink-0' so it is not squeezed on 390px, got: ${titleEl!.className}`
+    );
+
+    const badge = container.querySelector("[data-testid='streaming-badge']");
+    assert.ok(badge, "Step badge should be rendered");
+
+    const phaseSlot = container.querySelector("[data-testid='turn-status-slot']");
+    if (phaseSlot) {
+      const labelSpan = phaseSlot.querySelector("span");
+      assert.ok(labelSpan, "Phase pill label span should exist");
+      assert.ok(
+        labelSpan!.className.includes("hidden") && labelSpan!.className.includes("sm:inline"),
+        `Phase pill label must yield on small screens (hidden sm:inline), got: ${labelSpan!.className}`
+      );
+    }
+  });
 });
