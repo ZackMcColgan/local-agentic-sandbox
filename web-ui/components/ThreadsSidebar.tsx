@@ -30,6 +30,7 @@ interface ThreadsSidebarProps {
   onOpenDrawer?: () => void;
   onCollapse?: () => void;
   hideDock?: boolean;
+  isLoadingThreads?: boolean;
 }
 
 export function ThreadsSidebar({
@@ -42,7 +43,8 @@ export function ThreadsSidebar({
   onNavigate,
   onOpenDrawer,
   onCollapse,
-  hideDock = false
+  hideDock = false,
+  isLoadingThreads = false
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -285,7 +287,13 @@ export function ThreadsSidebar({
 
       {/* Elevated Cards Session List matching Mockup media_1791044464191.webp */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]" role="list" aria-label="Sessions list">
-        {filteredThreads.length === 0 ? (
+        {isLoadingThreads && filteredThreads.length === 0 ? (
+          <div className="space-y-3" aria-label="Loading sessions">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-16 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800" />
+            ))}
+          </div>
+        ) : filteredThreads.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-500">
             {searchQuery ? "No matching sessions" : "No sessions yet. Tap + to start one."}
           </div>
@@ -309,7 +317,7 @@ export function ThreadsSidebar({
               if (rawStatus === "active") return "Active";
               if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
               if (rawStatus === "failed") return "Failed";
-              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0)) return "Completed";
+              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0) || ((thread as any).messageCount ?? 0) > 0) return "Completed";
               return "New";
             })();
             const isRunning = statusLabel === "Running" || statusLabel === "Active";
@@ -375,6 +383,11 @@ export function ThreadsSidebar({
                     >
                       {thread.title || "New session"}
                     </h2>
+                    {(thread as any).matchSnippet && (
+                      <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                        {(thread as any).matchSnippet}
+                      </p>
+                    )}
 
                     {onDeleteThread && (
                       <button
