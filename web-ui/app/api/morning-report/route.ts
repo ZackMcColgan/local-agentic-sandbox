@@ -15,7 +15,7 @@ const threadStore = new ThreadStore();
 export async function GET() {
   try {
     const tasks = await supervisor.listAllTasks();
-    const threads = await threadStore.listThreads();
+    const threads = await threadStore.listThreadSummaries();
 
     // Link threadId onto tasks if thread.taskId matches taskId
     for (const task of tasks) {

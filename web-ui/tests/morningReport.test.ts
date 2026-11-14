@@ -588,3 +588,20 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
 });
 
 
+
+import { summarizeTaskFailureReason } from "../lib/subagents/morningReport";
+
+describe("E5: Morning Report cleanup (UI-036)", () => {
+  it("summarizeTaskFailureReason condenses raw git status dumps", () => {
+    const raw =
+      "Milestone verification failed: git status --porcelain returned:\n" +
+      " M web-ui/components/ChatStream.tsx\n" +
+      " M web-ui/components/SettingsView.tsx\n" +
+      "?? web-ui/tmp.txt\n" +
+      "A".repeat(200);
+    const res = summarizeTaskFailureReason(raw);
+    assert.ok(res.summary.length <= 160, "Expected concise summary");
+    assert.equal(res.summary.includes("git status --porcelain"), false);
+    assert.ok(res.details && res.details.includes("ChatStream.tsx"), "Expected raw text in details");
+  });
+});

@@ -449,7 +449,7 @@ export function MorningReportView({
                           {statusDisplayLabel(item.status)}
                         </span>
                         <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{item.goal}</span>
-                        <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-500">({item.taskId})</span>
+                        <span className="sr-only">({item.taskId})</span>
                       </div>
                       {item.threadUrl && (
                         <a
@@ -739,7 +739,7 @@ export function MorningReportView({
                               </span>
                             )}
                             <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                              ({t.taskId})
+                              {/* taskId hidden from primary title row; shown in Details */}
                             </span>
                           </div>
 
