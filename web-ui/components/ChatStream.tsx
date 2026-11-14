@@ -1036,7 +1036,8 @@ export function ChatStream({
     try {
       const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "compact" })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1314,6 +1315,8 @@ export function ChatStream({
                       durationMs,
                       thinkingDurationMs: event.thinkingDurationMs,
                       phaseTimings: event.phaseTimings,
+                      roundPromptTokens: event.roundPromptTokens,
+                      outputTokens: event.outputTokens,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
                       tokensBeforeCompaction: finalTokensBefore,
@@ -1472,6 +1475,7 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
+      setLiveTurnTraces([]);
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
     }
@@ -1901,6 +1905,7 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
+      setLiveTurnTraces([]);
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
 

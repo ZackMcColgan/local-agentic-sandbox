@@ -826,7 +826,18 @@ export class ThreadStore {
     );
   }
 
-  private summaryCache = new Map<string, { mtimeMs: number; summary: ThreadSummary }>();
+  private get summaryCache(): Map<string, { mtimeMs: number; summary: ThreadSummary }> {
+    const g = globalThis as unknown as { __lasSummaryCache?: Map<string, Map<string, { mtimeMs: number; summary: ThreadSummary }>> };
+    if (!g.__lasSummaryCache) {
+      g.__lasSummaryCache = new Map();
+    }
+    let cache = g.__lasSummaryCache.get(this.threadsDir);
+    if (!cache) {
+      cache = new Map();
+      g.__lasSummaryCache.set(this.threadsDir, cache);
+    }
+    return cache;
+  }
   private summaryIndexLoaded = false;
 
   private get summaryIndexPath(): string {
@@ -882,7 +893,7 @@ export class ThreadStore {
       await this.ensureSeeded();
       await this.loadSummaryIndex();
       const files = (await fs.promises.readdir(this.threadsDir)).filter(
-        (f) => f.endsWith(".json") && !f.startsWith(".") && f !== ".summaries-index.json"
+        (f) => f.endsWith(".json") && !f.startsWith(".") && f !== ".summaries-index.json" && !f.endsWith(".steer.json")
       );
       const summaries: ThreadSummary[] = [];
       const seen = new Set<string>();

@@ -839,6 +839,10 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("config/models") || p.includes("lib/chatUtils") || p.includes("lib/subagents/llmClient"),
     tests: ["tests/p02ModelEffort.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/threads/threadStore"),
+    tests: ["tests/p03DataLoss.test.ts"]
   }
 ];
 
