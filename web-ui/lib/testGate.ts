@@ -151,6 +151,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
     tests: [
+      "tests/thinkingPanel.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
       "tests/chatStreaming.test.ts",
@@ -345,6 +346,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/globals.css") ||
       p.includes("app/design-tokens.css"),
     tests: [
+      "tests/thinkingPanel.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
       "tests/threadsLaunchTask.test.ts",
       "tests/unifiedUi.test.ts",

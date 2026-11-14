@@ -93,6 +93,7 @@ export interface ThreadMessage {
   diffs?: TurnFileDiff[];
   modelUsed?: string;
   durationMs?: number;
+  thinkingDurationMs?: number;
   timestamp: string;
   taskId?: string;
   isStopped?: boolean;

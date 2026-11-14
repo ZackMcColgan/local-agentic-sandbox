@@ -2636,6 +2636,7 @@ export function ChatStream({
                             streamStatus={isStreamingThis ? streamStatus : null}
                             hasContent={Boolean(m.content && m.content.trim())}
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
+                            durationMs={m.thinkingDurationMs ?? m.durationMs}
                           />
                         )}
                       </div>
