@@ -97,6 +97,18 @@ export interface CodeBlockProps {
   filename?: string;
 }
 
+function extractSvgFilename(code: string): string {
+  const titleMatch = code.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const ariaMatch = code.match(/aria-label=["']([^"']+)["']/i);
+  const raw = (titleMatch?.[1] || ariaMatch?.[1] || "").trim();
+  if (!raw) return "diagram.svg";
+  const slug = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `${slug}.svg` : "diagram.svg";
+}
+
 export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -105,7 +117,14 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
 
   const isSvg = isSvgCode(code, language);
   const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
-  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "bash");
+  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "text");
+  const resolvedFilename =
+    filename ||
+    (isSvg
+      ? extractSvgFilename(code)
+      : isHtml
+        ? "index.html"
+        : `snippet.${langDisplay === "text" ? "txt" : langDisplay || "txt"}`);
   const lines = code.split("\n");
   const showLineNumbers = lines.length >= 3;
   const isLong = lines.length > 20;
@@ -117,8 +136,8 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   const canvasArtifact: CanvasArtifact | null = canvas?.enabled
     ? {
         kind: "file",
-        id: `file:${filename || `snippet.${langDisplay}`}`,
-        filename: filename || `snippet.${langDisplay}`,
+        id: `file:${resolvedFilename}`,
+        filename: resolvedFilename,
         language: langDisplay,
         code,
       }
@@ -163,7 +182,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   };
 
   const handleDownload = () => {
-    const dlName = filename || (isHtml ? "index.html" : `snippet.${langDisplay || "txt"}`);
+    const dlName = resolvedFilename;
     const mime = isHtml ? "text/html" : inferAttachmentMimeType(dlName);
     const blob = new Blob([code], { type: `${mime};charset=utf-8` });
     const blobUrl = URL.createObjectURL(blob);
@@ -304,7 +323,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
       <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
         <div className="flex items-center gap-2">
           {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
-          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{langDisplay}</span>
+          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{langDisplay === "text" ? "plain text" : langDisplay}</span>
           {isLong && (
             <span className="text-[10px] text-slate-500 dark:text-zinc-500">
               ({lines.length} lines)
