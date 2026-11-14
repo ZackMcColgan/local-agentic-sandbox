@@ -847,6 +847,10 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
     tests: ["tests/p04VisualGuard.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/page.tsx") || p.includes("components/SettingsView"),
+    tests: ["tests/p05StrayUi.test.ts"]
   }
 ];
 

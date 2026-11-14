@@ -745,7 +745,7 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
+    <div className={`app-shell h-[100dvh] bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isLoadingThreads={isLoadingThreads}
@@ -1290,6 +1290,21 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-bottom-nav md:hidden" aria-label="Mobile Navigation">
+        {(["chat", "projects", "builds", "skills", "settings"] as const).map((view) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => handleNavigate(view)}
+            aria-label={view}
+            className={`mobile-nav-item ${activeNavView === view ? "active" : ""}`}
+          >
+            <span className="capitalize text-[11px] font-medium">{view}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

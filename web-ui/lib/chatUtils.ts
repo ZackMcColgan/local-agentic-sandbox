@@ -25,6 +25,15 @@ export function resolveEffectiveReasoningEffort(
   return requestedEffort || profile?.defaultReasoningEffort || "low";
 }
 
+export function joinNarrationChunks(existing: string, incoming: string): string {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+  if (/\s$/.test(existing) || /^\s/.test(incoming)) {
+    return `${existing}${incoming}`;
+  }
+  return `${existing} ${incoming}`;
+}
+
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
 
 /**
