@@ -142,7 +142,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatFilePaging.test.ts",
       "tests/hostGitSafetyBattery.test.ts",
       "tests/unattendedGitOps.test.ts",
-      "tests/unattendedGitToolAdmission.test.ts"
+      "tests/unattendedGitToolAdmission.test.ts",
+      "tests/hostAsyncJobs.test.ts"
     ]
   },
   // Progressive tool registry (patch tool registration)
