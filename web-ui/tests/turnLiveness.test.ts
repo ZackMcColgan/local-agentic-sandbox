@@ -208,7 +208,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     assert.match(html, /data-testid="thread-liveness-t-ui-alive"[^>]*>.*Alive/, "alive streaming row must render an Alive badge");
     assert.match(html, /data-testid="thread-liveness-t-ui-stalled"[^>]*>.*Stalled/, "stale streaming row must render a Stalled badge");
     assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*19 chars/, "alive row must render real in-flight char count");
-    assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*1 traces/, "alive row must render real trace count");
+    assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*1 total traces/, "alive row must render real trace count");
     assert.doesNotMatch(html, /thread-liveness-t-ui-done/, "settled rows must not carry a liveness badge");
     // Board parity (PR #94): completed rows carry the FINAL-DESIGN DONE chip
     // instead of the old plain-text "Completed" label.
