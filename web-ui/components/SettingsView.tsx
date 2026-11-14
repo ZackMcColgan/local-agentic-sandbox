@@ -839,7 +839,7 @@ export function SettingsView({
                   <span>Recent Unattended Git Activity</span>
                 </div>
                 <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-normal">
-                  Audit log
+                  {hostSettings.runnerAvailable ? "Audit log" : "Historical log (runner currently offline)"}
                 </span>
               </div>
 
