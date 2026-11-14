@@ -81,7 +81,8 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
 
     // Swift-1.5-Qwen3.8-27B-IQ3_XS support (Bug regression: case-insensitive check + profile definition)
     assert.equal(isReasoningEffortSupported("Swift-1.5-Qwen3.8-27B-IQ3_XS"), true);
-    assert.equal(resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS"), "medium");
+    // LOW-effort ruling Nov 11: defaultReasoningEffort is "low"
+    assert.equal(resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS"), "low");
     const profile = getModelProfile("Swift-1.5-Qwen3.8-27B-IQ3_XS");
     assert.ok(profile, "Profile must exist for Swift-1.5-Qwen3.8-27B-IQ3_XS");
     assert.equal(profile?.supportsReasoningEffort, true);
