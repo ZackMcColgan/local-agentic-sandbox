@@ -454,6 +454,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // reference. Declared with the other turn state so both persist paths carry it.
     const turnReadDedups: ReadDedupMeta[] = [];
     let accumulatedThoughts: string[] = [];
+    const turnStartMs = Date.now();
+    let thinkingEndMs: number | null = null;
 
     let lastFinishReason: string | undefined = undefined;
     let turnOutputTokens: number | undefined = undefined;
@@ -466,9 +468,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
         const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
 
+        const abortMarker = explicitStopped || turnAbortController.signal.aborted
+          ? "*[Stopped by user]*"
+          : "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
         const abortContent = accumulatedStreamedTokens.trim()
-          ? `${accumulatedStreamedTokens}\n\n⚠️ [Turn incomplete: Stream aborted or disconnected.]`
-          : `⚠️ [Turn incomplete: Stream aborted or disconnected.]`;
+          ? `${accumulatedStreamedTokens}\n\n${abortMarker}`
+          : abortMarker;
 
         const finalOutputTokens = turnOutputTokens ?? (accumulatedStreamedTokens ? estimateTokens(accumulatedStreamedTokens) : 0);
 
@@ -484,6 +489,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           selectedModel: requestedModel || activeModel,
           timestamp: new Date().toISOString(),
           status: "incomplete" as const,
+          isStopped: explicitStopped || turnAbortController.signal.aborted ? true : undefined,
           finish_reason: lastFinishReason || "abort",
           outputTokens: finalOutputTokens,
           // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
@@ -1178,6 +1184,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
           if (roundThinking.trim()) {
             accumulatedThoughts.push(roundThinking.trim());
+            thinkingEndMs = Date.now();
           }
 
           if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
@@ -2108,6 +2115,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
+            thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
             finish_reason: lastFinishReason || "stop",
             roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
             outputTokens: finalOutputTokens,
@@ -2143,6 +2151,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           content: cleanedContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+          thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
           traces,
           model: activeModel,
           mode,

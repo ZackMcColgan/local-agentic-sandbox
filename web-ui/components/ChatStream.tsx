@@ -109,6 +109,7 @@ export interface ChatMessage {
   modelUsed?: string;
   selectedModel?: string;
   durationMs?: number;
+  thinkingDurationMs?: number;
   taskId?: string;
   isStopped?: boolean;
   isStreaming?: boolean;
@@ -977,18 +978,33 @@ export function ChatStream({
         setIsStoppingTask(false);
       }
     }
+    const effectiveThreadId = activeThreadId || threadId;
+    if (effectiveThreadId) {
+      fetch(`/api/threads/${effectiveThreadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" })
+      }).catch((err) => console.error("Failed to stop server turn:", err));
+    }
     setIsLoading(false);
     setStreamStatus(null);
     setMessages((prev) => {
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
       if (last.role === "assistant") {
+        const existing = last.content || "";
+        const nextContent = existing.includes("*[Stopped by user]*")
+          ? existing
+          : existing
+            ? `${existing}\n\n*[Stopped by user]*`
+            : "*[Stopped by user]*";
         return [
           ...prev.slice(0, -1),
           {
             ...last,
             isStopped: true,
-            content: last.content ? `${last.content}\n\n*[Stopped by user]*` : "*[Stopped by user]*"
+            isStreaming: false,
+            content: nextContent
           }
         ];
       }
@@ -2636,6 +2652,7 @@ export function ChatStream({
                             streamStatus={isStreamingThis ? streamStatus : null}
                             hasContent={Boolean(m.content && m.content.trim())}
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
+                            durationMs={m.thinkingDurationMs ?? m.durationMs}
                           />
                         )}
                       </div>

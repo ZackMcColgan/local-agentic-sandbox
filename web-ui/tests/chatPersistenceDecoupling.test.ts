@@ -356,8 +356,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         assert.equal(asstMsg.role, "assistant");
         assert.equal(asstMsg.status, "incomplete");
         assert.ok(
-          asstMsg.content.includes("⚠️ [Turn incomplete:"),
-          "Must contain honest incomplete warning banner"
+          asstMsg.content.includes("*[Stopped by user]*"),
+          "Must contain stopped marker"
         );
       } finally {
         abortMockServer.close();
@@ -584,7 +584,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         const asst = finalThread.messages.find((m) => m.id === "a-stop-1");
         assert.ok(asst);
         assert.equal(asst.status, "incomplete", `Expected incomplete, got ${asst.status} with content: ${JSON.stringify(asst.content)}`);
-        assert.ok(asst.content.includes("⚠️ [Turn incomplete:"));
+        assert.ok(asst.content.includes("*[Stopped by user]*"));
         assert.ok(asst.content.includes("Starting long process..."), "Partial streamed tokens must be preserved on Stop");
       } finally {
         if (prevEngine !== undefined) process.env.LLM_ENGINE = prevEngine; else delete process.env.LLM_ENGINE;

@@ -37,6 +37,7 @@ interface ThinkingPanelProps {
   streamStatus?: string | null;
   activeTool?: string | null;
   hasContent?: boolean;
+  durationMs?: number;
 }
 
 export function ThinkingPanel({
@@ -47,7 +48,8 @@ export function ThinkingPanel({
   className = "",
   streamStatus = null,
   activeTool = null,
-  hasContent = false
+  hasContent = false,
+  durationMs
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -58,11 +60,17 @@ export function ThinkingPanel({
   // "Thought for …". Panels mounted after the fact have no measured
   // duration and never fabricate one.
   const streamStartRef = useRef<number | null>(null);
-  const [thoughtDurationMs, setThoughtDurationMs] = useState<number | null>(null);
+  const [thoughtDurationMs, setThoughtDurationMs] = useState<number | null>(durationMs ?? null);
   const [headerNowMs, setHeaderNowMs] = useState<number>(() => Date.now());
   if (isStreaming && streamStartRef.current === null) {
     streamStartRef.current = Date.now();
   }
+
+  useEffect(() => {
+    if (durationMs != null) {
+      setThoughtDurationMs(durationMs);
+    }
+  }, [durationMs]);
 
   useEffect(() => {
     if (!isStreaming) return;
@@ -95,13 +103,18 @@ export function ThinkingPanel({
     if (phases && phases.length > 0) return phases;
 
     if (rawThought && rawThought.trim()) {
+      const cleanedNarrative = rawThought
+        .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/```[\s\S]*?```/g, " ")
+        .trim() || "Formulated response.";
       return [
         {
           phase: "planning",
           title: isStreaming ? "Reasoning in progress" : "Reasoning summary",
           timestamp: formattedTime,
           timeAgo: "Now",
-          narrative: rawThought.trim(),
+          narrative: cleanedNarrative,
           status: isStreaming ? "in_progress" : "complete"
         }
       ];
@@ -121,8 +134,12 @@ export function ThinkingPanel({
   });
 
   const streamStartMs = streamStartRef.current;
-  const headerTitle =
-    !isStreaming && thoughtDurationMs != null ? formatThoughtLabel(thoughtDurationMs) : "Thinking";
+  const effectiveDurationMs = thoughtDurationMs ?? durationMs ?? null;
+  const headerTitle = isStreaming
+    ? "Thinking"
+    : effectiveDurationMs != null && effectiveDurationMs > 0
+      ? `Thought for ${formatElapsedDuration(Math.max(1, Math.floor(effectiveDurationMs / 1000)))}`
+      : "Thought";
 
   return (
     <div
@@ -166,7 +183,7 @@ export function ThinkingPanel({
                 </>
               ) : (
                 <>
-                  <span className="hidden sm:inline">Thought process · </span>
+                  <span>Thought process · </span>
                   {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
                 </>
               )}

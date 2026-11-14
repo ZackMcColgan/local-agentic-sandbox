@@ -195,6 +195,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       for (let i = updatedThread.messages.length - 1; i >= 0; i--) {
         if (updatedThread.messages[i].role === "assistant") {
           updatedThread.messages[i].isStopped = true;
+          const existingContent = updatedThread.messages[i].content || "";
+          if (!existingContent.includes("*[Stopped by user]*")) {
+            updatedThread.messages[i].content = existingContent.trim()
+              ? `${existingContent.trimEnd()}\n\n*[Stopped by user]*`
+              : "*[Stopped by user]*";
+          }
           if (!updatedThread.messages[i].status || updatedThread.messages[i].status === "streaming") {
             updatedThread.messages[i].status = "incomplete";
           }
