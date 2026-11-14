@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ThreadStore } from "../lib/threads/threadStore";
+import { ThreadStore, activeExecutionSet } from "../lib/threads/threadStore";
 
 describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies", () => {
   let tmpDir: string;
@@ -51,5 +51,81 @@ describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies
     } finally {
       (fs.promises as any).readFile = origReadFile;
     }
+  });
+
+  it("FP1(a): sorts threads with different ISO updatedAt timestamps newest-first", async () => {
+    const older = await store.createThread({
+      title: "Older thread",
+      model: "test-model",
+      messages: [{ id: "u1", role: "user", content: "old", timestamp: "2026-01-01T00:00:00.000Z" }],
+    });
+    const newer = await store.createThread({
+      title: "Newer thread",
+      model: "test-model",
+      messages: [{ id: "u2", role: "user", content: "new", timestamp: "2026-01-02T00:00:00.000Z" }],
+    });
+
+    // Manually set distinct updatedAt timestamps in the thread files
+    for (const [t, ts] of [
+      [older, "2026-01-01T10:00:00.000Z"],
+      [newer, "2026-01-02T10:00:00.000Z"],
+    ] as const) {
+      const fp = path.join(tmpDir, `${t.id}.json`);
+      const data = JSON.parse(fs.readFileSync(fp, "utf8"));
+      data.updatedAt = ts;
+      fs.writeFileSync(fp, JSON.stringify(data));
+    }
+
+    const list = await store.listThreadSummaries();
+    const titles = list.map((s) => s.title);
+    assert.ok(titles.indexOf("Newer thread") < titles.indexOf("Older thread"), `Expected Newer before Older, got ${titles.join(", ")}`);
+  });
+
+  it("FP1(b): a fresh ThreadStore instance serves listThreadSummaries from .summaries-index.json with 0 full thread reads", async () => {
+    const first = await store.listThreadSummaries();
+    assert.equal(first.length, 1);
+    assert.ok(fs.existsSync(path.join(tmpDir, ".summaries-index.json")), "Expected .summaries-index.json to be created");
+
+    const freshStore = new ThreadStore(tmpDir);
+    let threadFileReads = 0;
+    const origReadFile = fs.promises.readFile;
+    (fs.promises as any).readFile = async (p: any, ...args: any[]) => {
+      const s = String(p);
+      if (s.endsWith(".json") && !s.endsWith(".summaries-index.json") && !s.includes(".summaries-cache")) {
+        threadFileReads++;
+      }
+      return origReadFile.call(fs.promises, p, ...args);
+    };
+
+    try {
+      const second = await freshStore.listThreadSummaries();
+      assert.deepEqual(second, first);
+      assert.equal(threadFileReads, 0, `Expected 0 full thread reads on fresh store, got ${threadFileReads}`);
+    } finally {
+      (fs.promises as any).readFile = origReadFile;
+    }
+  });
+
+  it("FP1(c): cached path still reconciles live status when activeExecutionSet changes without file mtime changing", async () => {
+    const runningThread = await store.createThread({
+      title: "Running thread",
+      model: "test-model",
+      status: "running",
+      messages: [{ id: "u1", role: "user", content: "run", timestamp: new Date().toISOString() }],
+    });
+
+    activeExecutionSet.add(runningThread.id);
+    try {
+      const first = await store.listThreadSummaries();
+      const found1 = first.find((s) => s.id === runningThread.id);
+      assert.equal(found1?.status, "running");
+    } finally {
+      activeExecutionSet.delete(runningThread.id);
+    }
+
+    // Now activeExecutionSet no longer has runningThread.id, and file mtime did NOT change.
+    const second = await store.listThreadSummaries();
+    const found2 = second.find((s) => s.id === runningThread.id);
+    assert.notEqual(found2?.status, "running", "Expected cached summary to reconcile status when execution is no longer active");
   });
 });
