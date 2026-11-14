@@ -2266,7 +2266,7 @@ export function ChatStream({
               type="button"
               data-testid="model-pill-form-toggle"
               onClick={() => setModelPillForm((prev) => (prev === "A" ? "B" : "A"))}
-              className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-[10px] font-mono font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors"
+              className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-black text-[10px] font-mono font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors"
               title={`Model pill form: ${modelPillForm} (click to preview Form ${modelPillForm === "A" ? "B" : "A"})`}
               aria-label={`Switch model pill form (currently ${modelPillForm})`}
             >
