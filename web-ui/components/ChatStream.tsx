@@ -381,6 +381,7 @@ export function ChatStream({
   });
   const [pendingSteers, setPendingSteers] = useState<string[]>([]);
   const [isSubmittingSteer, setIsSubmittingSteer] = useState(false);
+  const [modelPillForm, setModelPillForm] = useState<"A" | "B">("A");
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
@@ -2170,7 +2171,7 @@ export function ChatStream({
                 >
                   {formatContextK(displayContextTokens)}
                 </span>{" "}
-                <span className="text-slate-400 dark:text-zinc-500">
+                <span className="text-slate-500 dark:text-zinc-400">
                   / {Math.round(contextStats.budgetTokens / 1000)}K
                 </span>
               </span>
@@ -2234,16 +2235,36 @@ export function ChatStream({
             </button>
           )}
 
-          {/* Model Chip Button: opens ModelBottomSheet on tap */}
-          <button
-            type="button"
-            onClick={onOpenModelSheet}
-            className="min-h-[44px] min-w-[44px] justify-center flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-            title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
-            aria-label={`Configure model: currently ${shortModelLabel}`}
-          >
-            <span className="inline-block max-w-[88px] xl:max-w-[110px] truncate">{shortModelLabel}</span>
-          </button>
+          {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onOpenModelSheet}
+              className={`min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap ${
+                modelPillForm === "A"
+                  ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
+                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-[#34d399] hover:bg-emerald-500/15"
+              }`}
+              title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
+              aria-label={`Configure model: currently ${shortModelLabel}`}
+            >
+              {modelPillForm === "A" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+              )}
+              <span className="whitespace-nowrap">{shortModelLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-testid="model-pill-form-toggle"
+              onClick={() => setModelPillForm((prev) => (prev === "A" ? "B" : "A"))}
+              className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-[10px] font-mono font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors"
+              title={`Model pill form: ${modelPillForm} (click to preview Form ${modelPillForm === "A" ? "B" : "A"})`}
+              aria-label={`Switch model pill form (currently ${modelPillForm})`}
+            >
+              {modelPillForm}
+            </button>
+          </div>
 
           {/* New Session Button - desktop only */}
           {onNewThread && (

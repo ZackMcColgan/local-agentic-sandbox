@@ -46,4 +46,18 @@ describe("Lane C UI Polish", () => {
     // Mobile back button remains functional in page.tsx
     assert.match(pageTsx, /aria-label="Back to chat"/, "Mobile Back to chat button must remain in page.tsx");
   });
+
+  it("C3 (UI-048): model pill renders full label without truncation, supports Form A/B toggle (default A), and meter denominator uses readable contrast", () => {
+    const chatStream = readWebUiFile("components/ChatStream.tsx");
+
+    // Meter denominator contrast
+    assert.match(chatStream, /text-slate-500 dark:text-zinc-400/, "Token meter denominator must use text-slate-500 dark:text-zinc-400");
+
+    // Model pill Form A / Form B toggle, defaulted to A
+    assert.match(chatStream, /useState<"A" \| "B">\("A"\)/, "Model pill form toggle must default to Form A");
+    assert.match(chatStream, /data-testid="model-pill-form-toggle"/, "Model pill form toggle button must exist");
+    assert.match(chatStream, /#f4f4f5/, "Form A must include #f4f4f5 semibold label");
+    assert.match(chatStream, /#34d399/, "Form B must include #34d399 semibold label");
+    assert.doesNotMatch(chatStream, /max-w-\[88px\] xl:max-w-\[110px\] truncate/, "Model pill label must not truncate on desktop");
+  });
 });
