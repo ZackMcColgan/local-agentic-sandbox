@@ -68,11 +68,50 @@ function computeSha256() {
   return hash.digest("hex");
 }
 
-if (process.argv.includes("--get-digest")) {
+function swapBinary(srcExePath, targetExePath) {
+  const dir = path.dirname(targetExePath);
+  const base = path.basename(targetExePath);
+  const suffix = `${process.pid}.${Date.now()}`;
+  const tempPath = path.join(dir, `${base}.tmp.${suffix}`);
+  const oldPath = path.join(dir, `${base}.old.${suffix}`);
+
+  // Best-effort cleanup of any stale .old.* files from previous builds
+  try {
+    for (const entry of fs.readdirSync(dir)) {
+      if (entry.startsWith(`${base}.old.`) || entry.startsWith(`${base}.tmp.`)) {
+        try {
+          fs.unlinkSync(path.join(dir, entry));
+        } catch {
+          // Still locked by an older running process; ignore
+        }
+      }
+    }
+  } catch {
+    // Ignore directory scan errors
+  }
+
+  fs.copyFileSync(srcExePath, tempPath);
+  if (fs.existsSync(targetExePath)) {
+    fs.renameSync(targetExePath, oldPath);
+  }
+  fs.renameSync(tempPath, targetExePath);
+
+  if (fs.existsSync(oldPath)) {
+    try {
+      fs.unlinkSync(oldPath);
+    } catch {
+      // Running daemon still holds the old image; it will be cleaned up on a future build
+    }
+  }
+}
+
+if (require.main === module && process.argv.includes("--get-digest")) {
   const digest = computeSha256();
   process.stdout.write(digest);
   process.exit(0);
 }
+
+function main() {
 
 console.log("==========================================================");
 console.log("  Building Host Runner SEA Binary (TypeScript / Node 22)  ");
@@ -169,9 +208,9 @@ execSync(postjectCmd, {
   stdio: "inherit"
 });
 
-// 6. Copy compiled binary to C:\AI\ai-control\bin\host-runner.exe
+// 6. Copy compiled binary to C:\AI\ai-control\bin\host-runner.exe via rename-then-swap
 console.log(`[5/6] Deploying executable to ${aiControlBinExe}...`);
-fs.copyFileSync(localExePath, aiControlBinExe);
+swapBinary(localExePath, aiControlBinExe);
 fs.writeFileSync(
   path.join(aiControlBinDir, "manifest.json"),
   JSON.stringify(manifestData, null, 2) + "\n",
@@ -197,3 +236,10 @@ console.log("==========================================================");
 console.log("  BUILD SUCCESS: Host Runner SEA compiled & deployed!");
 console.log(`  Binary: ${aiControlBinExe} (${(fs.statSync(aiControlBinExe).size / (1024 * 1024)).toFixed(2)} MB)`);
 console.log("==========================================================");
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = { computeSha256, swapBinary };
