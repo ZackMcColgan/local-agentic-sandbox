@@ -843,6 +843,10 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("lib/threads/threadStore"),
     tests: ["tests/p03DataLoss.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
+    tests: ["tests/p04VisualGuard.test.ts"]
   }
 ];
 
