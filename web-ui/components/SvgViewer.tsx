@@ -28,6 +28,7 @@ export interface SvgViewerProps {
   title?: string;
   initialTab?: "preview" | "code";
   allowFullscreen?: boolean;
+  embeddedInCanvas?: boolean;
   className?: string;
 }
 
@@ -39,6 +40,7 @@ export function SvgViewer({
   title = "SVG Vector Graphic",
   initialTab = "preview",
   allowFullscreen = true,
+  embeddedInCanvas = false,
   className = ""
 }: SvgViewerProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "code">(initialTab);
@@ -170,6 +172,7 @@ export function SvgViewer({
       }`}
     >
       {/* 1. Header Toolbar */}
+      {!embeddedInCanvas && (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
         {/* Left: Title & Metadata Badge */}
         <div className="flex items-center gap-2 min-w-0">
@@ -356,9 +359,54 @@ export function SvgViewer({
           )}
         </div>
       </div>
+      )}
 
       {/* 2. Main Content Viewport */}
       <div className="relative flex-1 min-h-[220px] max-h-[500px] overflow-auto flex flex-col items-center justify-center">
+        {embeddedInCanvas && activeTab === "preview" && (
+          <div
+            data-testid="svg-embedded-floating-pill"
+            className="absolute top-3 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-slate-200 dark:border-zinc-700 shadow-sm text-[11px]"
+          >
+            {(["white", "dark", "grid"] as BgMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setBgMode(mode)}
+                className={`px-1.5 py-0.5 rounded-full capitalize font-medium transition-colors ${
+                  bgMode === mode
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                }`}
+                title={`Background: ${mode}`}
+              >
+                {mode}
+              </button>
+            ))}
+            <span className="h-3 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.25, +(z - 0.25).toFixed(2)))}
+              className="p-0.5 rounded text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              title="Zoom out"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <span className="font-mono text-[10px] text-slate-700 dark:text-zinc-300 min-w-[34px] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))}
+              className="p-0.5 rounded text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              title="Zoom in"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="py-12 flex flex-col items-center gap-2 text-slate-500 dark:text-zinc-400">
             <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
@@ -415,6 +463,7 @@ export function SvgViewer({
       </div>
 
       {/* 3. Footer Bar */}
+      {!embeddedInCanvas && (
       <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
         <span className="font-mono truncate">
           {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
@@ -425,6 +474,7 @@ export function SvgViewer({
           </span>
         )}
       </div>
+      )}
 
     </div>
   );

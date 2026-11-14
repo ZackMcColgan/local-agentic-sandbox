@@ -70,4 +70,14 @@ describe("Lane C UI Polish", () => {
     assert.match(artifactCanvas, /lg:w-\[min\(760px,50%\)\]/, "ArtifactCanvas split pane must be capped at lg:w-[min(760px,50%)]");
     assert.doesNotMatch(artifactCanvas, /lg:w-\[min\(880px,58%\)\]/, "Old 880px/58% split canvas width must be replaced");
   });
+
+  it("C5 (UI-029 part 2): SvgViewer supports embeddedInCanvas prop and ArtifactCanvas passes embeddedInCanvas={true}", () => {
+    const svgViewer = readWebUiFile("components/SvgViewer.tsx");
+    const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");
+
+    assert.match(svgViewer, /embeddedInCanvas\?:\s*boolean/, "SvgViewerProps must declare embeddedInCanvas?: boolean");
+    assert.match(svgViewer, /embeddedInCanvas\s*=\s*false/, "SvgViewer must default embeddedInCanvas = false");
+    assert.match(svgViewer, /!embeddedInCanvas/, "SvgViewer must conditionally suppress inner header/footer when embeddedInCanvas is true");
+    assert.match(artifactCanvas, /embeddedInCanvas=\{true\}/, "ArtifactCanvas must pass embeddedInCanvas={true} to SvgViewer");
+  });
 });

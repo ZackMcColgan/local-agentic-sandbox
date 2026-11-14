@@ -363,6 +363,7 @@ function CanvasFileView({
           title={artifact.filename}
           initialTab="preview"
           allowFullscreen={false}
+          embeddedInCanvas={true}
         />
       ) : (
         <iframe
