@@ -66,6 +66,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("darkTextFloor.test.ts") ||
       p.includes("overlayMutualExclusion.test.ts") ||
       p.includes("timestampFormat.test.ts") ||
+      p.includes("chatUtils.ts") ||
       p.includes("telegramErrorDismiss.test.ts") ||
       p.includes("titleTruncationResiduals.test.ts") ||
       p.includes("SvgViewer.tsx") ||

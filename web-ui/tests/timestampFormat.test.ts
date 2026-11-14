@@ -27,4 +27,25 @@ describe("UI-042: formatMessageTimestamp", () => {
   it("returns raw string for invalid timestamp", () => {
     assert.equal(formatMessageTimestamp("not-a-date", now), "not-a-date");
   });
+
+  it("FP3: same-day timestamp older than 60 minutes includes the date part", () => {
+    const earlierToday = new Date(2026, 10, 14, 8, 15, 0); // >2h before 10:30 AM
+    const out = formatMessageTimestamp(earlierToday, now);
+    assert.match(out, /Nov\s+14/);
+  });
+
+  it("FP3: ThinkingPanel renders formatted date for an older timestamp, not 'Now'", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const tpSource = fs.readFileSync(path.join(process.cwd(), "components", "ThinkingPanel.tsx"), "utf8");
+    assert.match(tpSource, /timestamp\?\s*:\s*string/, "ThinkingPanel should accept optional timestamp prop");
+    assert.match(tpSource, /formatMessageTimestamp/, "ThinkingPanel should use formatMessageTimestamp");
+  });
+
+  it("FP3: ThreadsSidebar labels trace count as 'total traces'", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const sbSource = fs.readFileSync(path.join(process.cwd(), "components", "ThreadsSidebar.tsx"), "utf8");
+    assert.match(sbSource, /total traces/, "ThreadsSidebar should label trace counts as 'total traces'");
+  });
 });

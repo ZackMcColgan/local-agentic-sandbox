@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
-import { formatElapsedDuration } from "../lib/chatUtils";
+import { formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
 import { formatThoughtLabel } from "../lib/liveActivity";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
@@ -46,6 +46,7 @@ interface ThinkingPanelProps {
   hasContent?: boolean;
   durationMs?: number;
   phaseTimings?: TurnPhaseTimings;
+  timestamp?: string;
 }
 
 export function ThinkingPanel({
@@ -58,7 +59,8 @@ export function ThinkingPanel({
   activeTool = null,
   hasContent = false,
   durationMs,
-  phaseTimings
+  phaseTimings,
+  timestamp
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -106,7 +108,9 @@ export function ThinkingPanel({
     setIsExpanded((prev) => !prev);
   };
 
-  const formattedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const formattedTime = timestamp
+    ? formatMessageTimestamp(timestamp)
+    : new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   const effectivePhases: ThinkingPhaseCardData[] = (() => {
     if (phases && phases.length > 0) return phases;
@@ -122,7 +126,7 @@ export function ThinkingPanel({
           phase: "planning",
           title: isStreaming ? "Reasoning in progress" : "Reasoning summary",
           timestamp: formattedTime,
-          timeAgo: "Now",
+          timeAgo: timestamp ? undefined : "Now",
           narrative: cleanedNarrative,
           status: isStreaming ? "in_progress" : "complete"
         }

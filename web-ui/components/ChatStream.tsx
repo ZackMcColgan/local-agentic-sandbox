@@ -2669,6 +2669,7 @@ export function ChatStream({
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                             durationMs={m.thinkingDurationMs ?? m.durationMs}
                             phaseTimings={m.phaseTimings}
+                            timestamp={m.timestamp}
                           />
                         )}
                       </div>
