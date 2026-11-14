@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
-import { formatModelDisplayLabel } from "../lib/chatUtils";
+import { formatModelDisplayLabel, formatMessageTimestamp } from "../lib/chatUtils";
 const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export interface DeployHistoryItem {
@@ -1041,23 +1041,45 @@ export function SettingsView({
                 )}
               </div>
 
-              {notifStatus.lastResult && (
+              {notifStatus.lastResult &&
+                (notifStatus.lastResult.ok ||
+                  `${notifStatus.lastResult.at}|${notifStatus.lastResult.errorSummary || ""}` !==
+                    (typeof window !== "undefined"
+                      ? window.localStorage?.getItem("telegram_last_error_dismissed_v1")
+                      : null)) && (
                 <div
                   data-testid="notifications-last-result"
-                  className="text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
+                  className="flex items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
                 >
-                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                    {notifStatus.lastResult.ok
-                      ? "Sent"
-                      : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
-                  </span>{" "}
-                  · {notifStatus.lastResult.event} ·{" "}
-                  {new Date(notifStatus.lastResult.at).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit"
-                  })}
-                  {notifStatus.lastResult.messageId !== undefined && (
-                    <span> (msg #{notifStatus.lastResult.messageId})</span>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                      {notifStatus.lastResult.ok
+                        ? "Sent"
+                        : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
+                    </span>{" "}
+                    · {notifStatus.lastResult.event} ·{" "}
+                    {formatMessageTimestamp(notifStatus.lastResult.at)}
+                    {notifStatus.lastResult.messageId !== undefined && (
+                      <span> (msg #{notifStatus.lastResult.messageId})</span>
+                    )}
+                  </div>
+                  {!notifStatus.lastResult.ok && (
+                    <button
+                      type="button"
+                      data-testid="dismiss-telegram-error-btn"
+                      onClick={() => {
+                        const key = `${notifStatus.lastResult!.at}|${notifStatus.lastResult!.errorSummary || ""}`;
+                        try {
+                          window.localStorage?.setItem("telegram_last_error_dismissed_v1", key);
+                        } catch {
+                          // ignore storage errors
+                        }
+                        setNotifStatus((prev) => (prev ? { ...prev } : prev));
+                      }}
+                      className="shrink-0 px-2 py-0.5 rounded-lg text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Dismiss
+                    </button>
                   )}
                 </div>
               )}
