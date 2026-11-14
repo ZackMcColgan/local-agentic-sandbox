@@ -802,3 +802,4 @@ PR #96 (UI-023/UI-024 chat diff collapse + canvas full diff) merged f9e97e2, dep
 2026-11-13 10:54 CT - self-update DONE prod aaecd8e; S4 verified, gateway 200, threads 200; rollback was v-f9e97e2-fresh.  
 5db2f10 runlog: PR #97 Lane A merged, deploy S1 rollback v-aaecd8e-fresh  
 bfacc10 runlog: PR #97 Lane A deploy S2 build+import v-bfacc10-fresh done (Next.js build 192s, ctr import 2.2s)  
+c789208 runlog: PR #97 Lane A deployed v-bfacc10-fresh, S4 verified; rollback v-aaecd8e-fresh; prod == develop in code  
