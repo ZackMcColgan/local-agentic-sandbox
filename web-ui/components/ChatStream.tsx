@@ -2248,7 +2248,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onOpenModelSheet}
-              className={`min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap ${
                 modelPillForm === "A"
                   ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
                   : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-[#34d399] hover:bg-emerald-500/15"
