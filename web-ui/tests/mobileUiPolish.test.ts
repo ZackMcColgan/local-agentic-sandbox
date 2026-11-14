@@ -56,10 +56,10 @@ test("ChatStream.tsx implements 390px mobile header, trace collapsing, error car
   const filePath = path.resolve(__dirname, "../components/ChatStream.tsx");
   const content = fs.readFileSync(filePath, "utf-8");
 
-  // Top header: threadTitle is hidden on mobile (<768px) to prevent squishing
+  // Top header: threadTitle is hidden on mobile & narrow viewports (<2xl:) to prevent squishing
   assert.ok(
-    content.includes("hidden md:block") && content.includes("threadTitle"),
-    "ChatStream top header must hide thread title on mobile (< md:)"
+    content.includes("hidden 2xl:block") && content.includes("threadTitle"),
+    "ChatStream top header must hide thread title on mobile (< 2xl:)"
   );
 
   // Header buttons have responsive labels
