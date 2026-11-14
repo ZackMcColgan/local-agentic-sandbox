@@ -66,8 +66,10 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("darkTextFloor.test.ts") ||
       p.includes("overlayMutualExclusion.test.ts") ||
       p.includes("timestampFormat.test.ts") ||
-      p.includes("telegramErrorDismiss.test.ts"),
-    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts"],
+      p.includes("telegramErrorDismiss.test.ts") ||
+      p.includes("titleTruncationResiduals.test.ts") ||
+      p.includes("SvgViewer.tsx"),
+    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts", "tests/titleTruncationResiduals.test.ts"],
   },
   {
     match: (p) =>

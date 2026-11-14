@@ -824,7 +824,7 @@ export function MorningReportView({
                                     <span className="font-mono font-semibold text-[10px] text-indigo-600 dark:text-indigo-400 mr-1.5">
                                       {m.id}
                                     </span>
-                                    <span className="text-slate-800 dark:text-zinc-200 truncate">{m.title}</span>
+                                    <span className="text-slate-800 dark:text-zinc-200 line-clamp-2" title={m.title}>{m.title}</span>
                                   </div>
                                   {m.commitSha && (
                                     <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-400 shrink-0">
