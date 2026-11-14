@@ -210,6 +210,22 @@ export interface ThreadCompactionBoundary {
   tokensAfter: number;
 }
 
+export interface ThreadSummary {
+  id: string;
+  title: string;
+  status: Thread["status"];
+  createdAt: string;
+  updatedAt: string;
+  model?: string;
+  reasoningEffort?: Thread["reasoningEffort"];
+  taskId?: string;
+  workspaceDir?: string;
+  messageCount: number;
+  lastMessagePreview: string;
+  hasDiffs: boolean;
+  matchSnippet?: string;
+}
+
 export interface Thread {
   id: string;
   title: string;
@@ -804,14 +820,48 @@ export class ThreadStore {
     );
   }
 
+  async listThreadSummaries(): Promise<ThreadSummary[]> {
+    const threads = await this.listThreads();
+    return threads.map((t) => {
+      const msgs = Array.isArray(t.messages) ? t.messages : [];
+      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
+      const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
+      const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
+      const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
+      const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
+      const title =
+        t.title && t.title !== "New session"
+          ? t.title
+          : firstUserMsg
+            ? deriveThreadTitle(firstUserMsg.content)
+            : t.title || "New session";
+
+      return {
+        id: t.id,
+        title,
+        status: t.status,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+        model: t.model,
+        reasoningEffort: t.reasoningEffort,
+        taskId: t.taskId,
+        workspaceDir: t.workspaceDir,
+        messageCount: msgs.length,
+        lastMessagePreview,
+        hasDiffs,
+      };
+    });
+  }
+
   async getThread(threadId: string): Promise<Thread | null> {
-    const filePath = this.getFilePath(threadId);
+    let filePath = this.getFilePath(threadId);
     if (!fs.existsSync(filePath)) {
-      // Check if threadId starts with or corresponds to a taskId
-      const all = await this.listThreads();
-      const match = all.find((t) => t.id === threadId || t.taskId === threadId || t.id === `thread-${threadId}`);
-      if (match) return match;
-      return null;
+      const prefixedPath = this.getFilePath(`thread-${threadId}`);
+      if (fs.existsSync(prefixedPath)) {
+        filePath = prefixedPath;
+      } else {
+        return null;
+      }
     }
 
     try {

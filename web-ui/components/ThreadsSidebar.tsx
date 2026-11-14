@@ -309,7 +309,7 @@ export function ThreadsSidebar({
               if (rawStatus === "active") return "Active";
               if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
               if (rawStatus === "failed") return "Failed";
-              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0)) return "Completed";
+              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0) || ((thread as any).messageCount ?? 0) > 0) return "Completed";
               return "New";
             })();
             const isRunning = statusLabel === "Running" || statusLabel === "Active";

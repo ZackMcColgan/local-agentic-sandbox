@@ -12,7 +12,12 @@ const supervisor = new OvernightSupervisor();
 
 export async function GET(req: Request) {
   try {
-    const threads = await threadStore.listThreads();
+    const url = new URL(req.url);
+    const full = url.searchParams.get("full") === "1";
+    const q = url.searchParams.get("q")?.trim() || undefined;
+    const threads = full
+      ? await threadStore.listThreads()
+      : await threadStore.listThreadSummaries();
     return NextResponse.json({ threads });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
