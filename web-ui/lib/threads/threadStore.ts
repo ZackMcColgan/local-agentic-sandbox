@@ -94,6 +94,12 @@ export interface ThreadMessage {
   modelUsed?: string;
   durationMs?: number;
   thinkingDurationMs?: number;
+  phaseTimings?: {
+    contextPrepMs?: number;
+    thinkingMs?: number;
+    toolsMs?: number;
+    writingMs?: number;
+  };
   timestamp: string;
   taskId?: string;
   isStopped?: boolean;

@@ -456,6 +456,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     let accumulatedThoughts: string[] = [];
     const turnStartMs = Date.now();
     let thinkingEndMs: number | null = null;
+    let firstLlmRequestMs: number | null = null;
+    let thinkingMsAcc = 0;
+    let lastThinkingChunkMs: number | null = null;
+    let writingMsAcc = 0;
+    let lastWritingChunkMs: number | null = null;
 
     let lastFinishReason: string | undefined = undefined;
     let turnOutputTokens: number | undefined = undefined;
@@ -1134,6 +1139,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 roundPromptTokens.push(chunk.prompt_eval_count);
               }
               if (chunk.message?.thinking) {
+                const nowMs = Date.now();
+                if (firstLlmRequestMs === null) firstLlmRequestMs = nowMs;
+                if (lastThinkingChunkMs !== null) {
+                  thinkingMsAcc += Math.max(0, nowMs - lastThinkingChunkMs);
+                }
+                lastThinkingChunkMs = nowMs;
                 roundThinking += chunk.message.thinking;
                 armRoundDeadline();
                 const currentCumulativeThought = accumulatedThoughts.length > 0
@@ -1143,6 +1154,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 await sendEvent({ type: "thought", thought: currentCumulativeThought });
               }
               if (chunk.message?.content) {
+                const nowMs = Date.now();
+                if (firstLlmRequestMs === null) firstLlmRequestMs = nowMs;
+                if (lastWritingChunkMs !== null) {
+                  writingMsAcc += Math.max(0, nowMs - lastWritingChunkMs);
+                }
+                lastWritingChunkMs = nowMs;
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
                 accumulatedStreamedTokens += textChunk;
@@ -2116,6 +2133,18 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
             thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
+          phaseTimings: {
+            contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
+            thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
+            toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
+            writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
+          },
+            phaseTimings: {
+              contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
+              thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
+              toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
+              writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
+            },
             finish_reason: lastFinishReason || "stop",
             roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
             outputTokens: finalOutputTokens,
@@ -2152,6 +2181,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           content: cleanedContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
           thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
+          phaseTimings: {
+            contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
+            thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
+            toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
+            writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
+          },
           traces,
           model: activeModel,
           mode,

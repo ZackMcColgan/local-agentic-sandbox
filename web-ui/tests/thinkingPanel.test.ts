@@ -170,4 +170,48 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     assert.match(text, /Tools/i);
     assert.match(text, /Writing/i);
   });
+
+  it("FP2: ThreadStore round-trips phaseTimings and thinkingDurationMs intact", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { ThreadStore } = await import("../lib/threads/threadStore");
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fp2-phase-timings-"));
+    try {
+      const store = new ThreadStore(tmpDir);
+      const thread = await store.createThread({ title: "FP2 test", model: "test-model" });
+      const phaseTimings = {
+        contextPrepMs: 120,
+        thinkingMs: 850,
+        toolsMs: 430,
+        writingMs: 600,
+      };
+      const durationMs = 2000;
+      await store.addMessage(thread.id, {
+        id: "msg-fp2-1",
+        role: "assistant",
+        content: "Done",
+        timestamp: new Date().toISOString(),
+        durationMs,
+        thinkingDurationMs: 850,
+        phaseTimings,
+      });
+
+      const loaded = await store.getThread(thread.id);
+      assert.ok(loaded, "Expected thread to be loaded");
+      const msg = loaded.messages.find((m) => m.id === "msg-fp2-1");
+      assert.ok(msg, "Expected assistant message to be persisted");
+      assert.equal(msg.thinkingDurationMs, 850);
+      assert.deepEqual(msg.phaseTimings, phaseTimings);
+      const sum =
+        (msg.phaseTimings?.contextPrepMs ?? 0) +
+        (msg.phaseTimings?.thinkingMs ?? 0) +
+        (msg.phaseTimings?.toolsMs ?? 0) +
+        (msg.phaseTimings?.writingMs ?? 0);
+      assert.ok(Math.abs(sum - durationMs) <= 100, `Expected phase sum ${sum} near durationMs ${durationMs}`);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
