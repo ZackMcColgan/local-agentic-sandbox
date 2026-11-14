@@ -30,6 +30,7 @@ interface NavigationDrawerProps {
   selectedThreadId?: string | null;
   onSelectThread?: (threadId: string) => void;
   onDeleteThread?: (threadId: string) => void;
+  isLoadingThreads?: boolean;
 }
 
 export function NavigationDrawer({
@@ -42,7 +43,8 @@ export function NavigationDrawer({
   threads = [],
   selectedThreadId,
   onSelectThread,
-  onDeleteThread
+  onDeleteThread,
+  isLoadingThreads = false
 }: NavigationDrawerProps) {
   const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
   const [confirmDeleteThread, setConfirmDeleteThread] = useState<Thread | null>(null);
@@ -339,7 +341,13 @@ export function NavigationDrawer({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto space-y-1 px-1 py-1">
-          {threads.length === 0 ? (
+          {isLoadingThreads && threads.length === 0 ? (
+            <div className="space-y-2 px-1 py-1" aria-label="Loading sessions">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-12 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800" />
+              ))}
+            </div>
+          ) : threads.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-slate-400 dark:text-zinc-500">
               No recent sessions
             </div>

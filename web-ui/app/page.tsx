@@ -45,6 +45,7 @@ import {
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(true);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<TaskManifest | null>(null);
   const [tasks, setTasks] = useState<TaskManifest[]>([]);
@@ -330,7 +331,7 @@ export default function Home() {
               const active = data.threads.find((t: Thread) => t.status === "active" || t.status === "running");
               if (active) {
                 setSelectedThreadId(active.id);
-              } else if (!isMobile && data.threads[0]) {
+              } else if (data.threads[0]) {
                 setSelectedThreadId(data.threads[0].id);
               }
             }
@@ -339,6 +340,8 @@ export default function Home() {
       }
     } catch (err) {
       console.warn("Failed to fetch threads:", err);
+    } finally {
+      setIsLoadingThreads(false);
     }
   };
 
@@ -739,6 +742,7 @@ export default function Home() {
     <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
+        isLoadingThreads={isLoadingThreads}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         activeView={activeNavView}
@@ -873,6 +877,7 @@ export default function Home() {
               aria-label="Sessions Panel"
             >
               <ThreadsSidebar
+                isLoadingThreads={isLoadingThreads}
                 threads={threads}
                 selectedThreadId={selectedThreadId}
                 activeNavView={activeNavView}
