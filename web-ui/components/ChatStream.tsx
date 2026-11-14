@@ -1440,6 +1440,7 @@ export function ChatStream({
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
+      setLiveTurnTraces([]);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Approval continuation aborted by user");
@@ -1475,7 +1476,6 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
-      setLiveTurnTraces([]);
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
     }
@@ -1905,7 +1905,9 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
-      setLiveTurnTraces([]);
+      if (turnEndedNormally) {
+        setLiveTurnTraces([]);
+      }
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
 
