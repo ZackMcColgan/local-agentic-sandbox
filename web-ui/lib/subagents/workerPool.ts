@@ -36,10 +36,13 @@ export interface WorkerPoolOptions {
 }
 
 export interface WorkerJob<T = any> {
+  id?: string;
   role: WorkerRole;
-  taskId: string;
+  taskId?: string;
   abortSignal?: AbortSignal;
-  taskFn: (signal: AbortSignal) => Promise<T>;
+  worktreeRepoRoot?: string;
+  onTerminalState?: (state: "completed" | "aborted" | "failed") => void;
+  taskFn: (signal: AbortSignal, worktreePath?: string) => Promise<T>;
 }
 
 export interface CriticReview {
@@ -1246,8 +1249,52 @@ ${outcome.lesson}
   }
 }
 
+export class Semaphore {
+  private permits: number;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(maxConcurrency: number) {
+    this.permits = Math.max(1, maxConcurrency);
+  }
+
+  async acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      throw new Error("Worker execution aborted before acquiring concurrency slot");
+    }
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        const idx = this.queue.indexOf(grant);
+        if (idx !== -1) this.queue.splice(idx, 1);
+        reject(new Error("Worker execution aborted while waiting for concurrency slot"));
+      };
+      const grant = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.queue.push(grant);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits++;
+    }
+  }
+}
+
+export const singleFlightSemaphore = new Semaphore(1);
+
 export class WorkerPool {
   private readonly maxConcurrency: number;
+  private readonly semaphore: Semaphore;
   private readonly modelRoster: ModelRosterConfig;
   readonly generate?: GenerateFn;
   readonly residencyPlan?: ResidencyPlan;
@@ -1256,6 +1303,7 @@ export class WorkerPool {
 
   constructor(options?: WorkerPoolOptions) {
     this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : (process.env.LLM_ENGINE === "strata" ? 1 : 2));
+    this.semaphore = new Semaphore(this.maxConcurrency);
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
     this.generate = options?.generate;
     this.residencyPlan = options?.residencyPlan;
@@ -1293,14 +1341,25 @@ export class WorkerPool {
 
   async executeJob<T>(job: WorkerJob<T>): Promise<T> {
     if (job.abortSignal?.aborted) {
+      job.onTerminalState?.("aborted");
       throw new Error("Worker execution aborted before start");
     }
 
+    await this.semaphore.acquire(job.abortSignal);
+
     const abortController = new AbortController();
+    let settled = false;
+    const emitTerminal = (state: "completed" | "aborted" | "failed") => {
+      if (settled) return;
+      settled = true;
+      job.onTerminalState?.(state);
+    };
+
+    const onParentAbort = () => {
+      abortController.abort();
+    };
     if (job.abortSignal) {
-      job.abortSignal.addEventListener("abort", () => {
-        abortController.abort();
-      });
+      job.abortSignal.addEventListener("abort", onParentAbort, { once: true });
     }
 
     let cleanupTracking: () => void = () => {};
@@ -1309,11 +1368,81 @@ export class WorkerPool {
     });
     this.activeJobs.add(trackingPromise);
 
+    let worktreePath: string | undefined;
+    if (job.worktreeRepoRoot) {
+      const os = await import("node:os");
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const { execFileSync } = await import("node:child_process");
+      const wtDir = fs.mkdtempSync(path.join(os.default.tmpdir(), "wp-wt-"));
+      try {
+        execFileSync("git", ["worktree", "add", "--detach", wtDir, "HEAD"], {
+          cwd: job.worktreeRepoRoot,
+          stdio: "ignore"
+        });
+        worktreePath = wtDir;
+      } catch (err) {
+        fs.rmSync(wtDir, { recursive: true, force: true });
+        this.activeJobs.delete(trackingPromise);
+        cleanupTracking();
+        this.semaphore.release();
+        emitTerminal("failed");
+        throw err;
+      }
+    }
+
     try {
-      return await job.taskFn(abortController.signal);
+      const abortPromise = new Promise<never>((_, reject) => {
+        if (abortController.signal.aborted) {
+          emitTerminal("aborted");
+          reject(new Error("Worker execution aborted"));
+          return;
+        }
+        abortController.signal.addEventListener(
+          "abort",
+          () => {
+            emitTerminal("aborted");
+            reject(new Error("Worker execution aborted"));
+          },
+          { once: true }
+        );
+      });
+
+      const taskPromise = job.taskFn(abortController.signal, worktreePath).then(
+        (res) => {
+          emitTerminal("completed");
+          return res;
+        },
+        (err) => {
+          emitTerminal(abortController.signal.aborted ? "aborted" : "failed");
+          throw err;
+        }
+      );
+
+      return await Promise.race([taskPromise, abortPromise]);
     } finally {
+      if (job.abortSignal) {
+        job.abortSignal.removeEventListener("abort", onParentAbort);
+      }
+      if (worktreePath && job.worktreeRepoRoot) {
+        try {
+          const { execFileSync } = await import("node:child_process");
+          execFileSync("git", ["worktree", "remove", "--force", worktreePath], {
+            cwd: job.worktreeRepoRoot,
+            stdio: "ignore"
+          });
+        } catch {
+          try {
+            const fs = await import("node:fs");
+            fs.rmSync(worktreePath, { recursive: true, force: true });
+          } catch {
+            // Best-effort cleanup
+          }
+        }
+      }
       this.activeJobs.delete(trackingPromise);
       cleanupTracking();
+      this.semaphore.release();
     }
   }
 }
