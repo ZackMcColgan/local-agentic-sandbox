@@ -236,4 +236,28 @@ describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
     assert.ok(result[1].content.includes("First part."));
     assert.ok(result[1].content.includes("Second part."));
   });
+
+  it("does not merge two consecutive assistant messages when combined traces exceed 3", () => {
+    const msgs = [
+      {
+        id: "a1",
+        role: "assistant",
+        content: "First part.",
+        traces: [{ name: "t1" }, { name: "t2" }],
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        content: "Second part.",
+        traces: [{ name: "t3" }, { name: "t4" }],
+      },
+    ] as any[];
+
+    const result = deduplicateStreamMessages(msgs);
+    assert.equal(result.length, 2);
+    assert.deepEqual(
+      result.flatMap((m) => m.traces || []).map((t) => t.name),
+      ["t1", "t2", "t3", "t4"],
+    );
+  });
 });

@@ -3786,7 +3786,7 @@ export function deduplicateStreamMessages<T extends { role: string; content: str
       if (m.content === prev.content) {
         continue;
       }
-      if (prev.content.trim() && m.content.trim()) {
+      if (prev.content.trim() && m.content.trim() && (prev.traces?.length || 0) + (m.traces?.length || 0) <= 3) {
         const mergedTraces =
           prev.traces || m.traces ? [...(prev.traces || []), ...(m.traces || [])] : undefined;
         out[out.length - 1] = {
