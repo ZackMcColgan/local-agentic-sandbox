@@ -773,10 +773,29 @@ export default function Home() {
               localStorage.setItem("preferred_model", m);
             }
           } catch {}
+          if (selectedThreadId) {
+            fetch(`/api/threads/${selectedThreadId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "setModel", model: m, reasoningEffort })
+            }).catch(() => {});
+          }
         }}
         reasoningEffort={reasoningEffort}
         onReasoningChange={(e) => {
           setReasoningEffort(e);
+          try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("las.reasoningEffort", e);
+            }
+          } catch {}
+          if (selectedThreadId) {
+            fetch(`/api/threads/${selectedThreadId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "setModel", model: selectedModel, reasoningEffort: e })
+            }).catch(() => {});
+          }
         }}
         installedModels={installedModels}
       />

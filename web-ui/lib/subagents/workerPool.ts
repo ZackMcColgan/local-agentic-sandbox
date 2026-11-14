@@ -3,6 +3,7 @@ import path from "path";
 import { execSync, execFileSync } from "child_process";
 import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAssertionResult, TestSnapshot, RevertResult, TestCounts } from "./types";
 import ts from "typescript";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 export type { TestSnapshot, RevertResult } from "./types";
 import {
   createLlmGenerate,
@@ -557,7 +558,7 @@ export class BuilderWorker {
           };
     const repoRoot = options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
-    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || DEFAULT_PRIMARY_MODEL;
     const criticFeedback = options?.criticFeedback || [];
     const targets = options?.targetFile ? [options.targetFile] : this.resolveTargets(milestone);
 
@@ -925,7 +926,7 @@ export class CriticWorker {
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "swift-15-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
 
     // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
     // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
@@ -1320,11 +1321,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
-    builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
-    critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
-    explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
-    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp"
+    planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL
   };
 }
 

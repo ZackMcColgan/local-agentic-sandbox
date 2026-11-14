@@ -8,6 +8,7 @@ import path from "path";
 import { TaskManifest, TaskStatus, Milestone } from "./types";
 import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } from "./supervisor";
 import { WorkerPool } from "./workerPool";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 
 export type ScheduleId = string;
 
@@ -366,7 +367,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
           createProductionStepExecutor({
             workerPool: options?.workerPool || this.workerPool,
             repoRoot: this.workspaceDir,
-            model: process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp",
+            model: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
             scope: manifest.scope
           });
 

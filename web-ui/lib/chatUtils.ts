@@ -22,7 +22,7 @@ export function resolveEffectiveReasoningEffort(
     return undefined;
   }
   const profile = getModelProfile(modelToUse);
-  return requestedEffort || profile?.defaultReasoningEffort || "medium";
+  return requestedEffort || profile?.defaultReasoningEffort || "low";
 }
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
