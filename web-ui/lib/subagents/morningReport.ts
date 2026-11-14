@@ -48,6 +48,7 @@ export interface OvernightTaskEntry {
   artifacts: MorningReportArtifact[];
   parkedReason?: string;
   errorSummary?: string;
+  errorDetails?: string;
   milestones: MorningReportMilestone[];
   ambiguityFlags: AmbiguityFlag[];
   testsPassed: number;
@@ -224,6 +225,7 @@ function resolveTaskOutcome(task: TaskManifest): {
   status: OvernightTaskEntry["status"];
   parkedReason?: string;
   errorSummary?: string;
+  errorDetails?: string;
 } {
   if (task.status === "completed") {
     return { status: "completed" };
@@ -243,14 +245,15 @@ function resolveTaskOutcome(task: TaskManifest): {
     const journalErr = [...(task.journal || [])]
       .reverse()
       .find((j) => /crash|error|fail/i.test(j.message))?.message;
-    const errorSummary =
+    const rawError =
       task.errorSummary ||
       failedM?.criticCritique ||
       failedM?.criticNotes?.[0] ||
       journalErr ||
       task.parkedReason ||
       "Execution failed during milestone verification.";
-    return { status: "failed", errorSummary };
+    const { summary, details } = summarizeTaskFailureReason(rawError);
+    return { status: "failed", errorSummary: summary, errorDetails: details };
   }
 
   if (task.status === "stopped" || task.status === "cancelled") {
@@ -384,6 +387,7 @@ export function generateOvernightMorningReport(
       artifacts,
       parkedReason: outcome.parkedReason,
       errorSummary: outcome.errorSummary,
+      errorDetails: outcome.errorDetails,
       milestones,
       ambiguityFlags: task.ambiguityFlags || [],
       testsPassed,

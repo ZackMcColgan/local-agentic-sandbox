@@ -54,9 +54,14 @@ export interface SelfDeployPipelineOptions {
   commandRunner?: CommandRunner;
   healthChecker?: HealthChecker;
   healthCheckUrl?: string;
+  runlogPath?: string;
 }
 
 let inMemoryDeployHistory: SelfDeployRecord[] = [];
+
+export function clearInMemoryDeployHistoryForTest(): void {
+  inMemoryDeployHistory = [];
+}
 
 export function getGlobalSelfDeployHistory(): SelfDeployRecord[] {
   return [...inMemoryDeployHistory];
@@ -83,6 +88,7 @@ export class SelfDeployPipeline {
   private commandRunner: CommandRunner;
   private healthChecker: HealthChecker;
   private explicitHealthCheckUrl?: string;
+  private runlogPath: string;
 
   constructor(options: SelfDeployPipelineOptions = {}) {
     this.enabled = options.enabled ?? isSelfDeployKillSwitchEnabled();
@@ -91,6 +97,7 @@ export class SelfDeployPipeline {
     this.repoRoot =
       options.repoRoot ||
       path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
+    this.runlogPath = options.runlogPath || path.join(this.repoRoot, "docs", "queue-steer-runlog.md");
 
     this.commandRunner =
       options.commandRunner ??
@@ -160,7 +167,45 @@ export class SelfDeployPipeline {
     } catch {
       // Non-fatal, fallback to in-memory history
     }
-    return [...inMemoryDeployHistory];
+    if (inMemoryDeployHistory.length > 0) {
+      return [...inMemoryDeployHistory];
+    }
+    const runlogFallback = this.readLatestDeployFromRunlog();
+    return runlogFallback ? [runlogFallback] : [];
+  }
+
+  private readLatestDeployFromRunlog(): SelfDeployRecord | null {
+    try {
+      if (!fs.existsSync(this.runlogPath)) return null;
+      const content = fs.readFileSync(this.runlogPath, "utf-8");
+      const lines = content.split(/\r?\n/);
+      let latest: SelfDeployRecord | null = null;
+      for (const line of lines) {
+        const doneMatch = line.match(/\bDONE\s+prod\s+([0-9a-f]{7,40})\b/i);
+        const rollbackMatch = !doneMatch ? line.match(/\brollback\b.*?\b([0-9a-f]{7,40})\b/i) : null;
+        const match = doneMatch || rollbackMatch;
+        if (!match) continue;
+        const isRollback = Boolean(rollbackMatch);
+        const tsMatch = line.match(/\b(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\b/);
+        latest = {
+          deployId: "runlog-latest",
+          timestamp: tsMatch ? tsMatch[1] : new Date(0).toISOString(),
+          branchName: "main",
+          previousSha: "",
+          newSha: match[1],
+          status: isRollback ? "rolled_back" : "deployed",
+          rollbackStatus: isRollback ? "rolled_back" : "none",
+          healthCheckResult: {
+            status: isRollback ? 503 : 200,
+            ok: !isRollback
+          },
+          timeline: []
+        };
+      }
+      return latest;
+    } catch {
+      return null;
+    }
   }
 
   public async executeDeploy(

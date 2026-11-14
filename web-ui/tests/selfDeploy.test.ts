@@ -12,7 +12,8 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     const dbPath = path.join(tmpDir, "runs.db");
 
     try {
-      const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } = await import("../lib/deploy/selfDeploy.js");
+      clearInMemoryDeployHistoryForTest();
       const { RunLedger } = await import("../lib/ledger/runLedger.js");
 
       const ledger = new RunLedger(dbPath);
@@ -350,5 +351,49 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     assert.ok(html.includes("Kill switch"), "Must mention kill switch");
     assert.ok(html.includes("ROLLED BACK"), "Must show LOUD rollback alert in deploy history");
     assert.ok(html.includes("HTTP 503 CrashLoopBackOff"), "Must render failure error message");
+  });
+
+  it("getDeployHistory falls back to docs/queue-steer-runlog.md when SQLite and memory stores are empty", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "self-deploy-runlog-"));
+    const dbPath = path.join(tmpDir, "runs.db");
+    const runlogPath = path.join(tmpDir, "queue-steer-runlog.md");
+    fs.writeFileSync(
+      runlogPath,
+      [
+        "# Queue Steer Runlog",
+        "- 2026-11-12T10:00:00Z | DONE prod 1111aaaa | initial deploy",
+        "- 2026-11-13T21:00:00Z | DONE prod abc1234def | Lane D deploy",
+        ""
+      ].join("\n"),
+      "utf-8"
+    );
+
+    try {
+      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } = await import("../lib/deploy/selfDeploy.js");
+      clearInMemoryDeployHistoryForTest();
+      const { RunLedger } = await import("../lib/ledger/runLedger.js");
+      const ledger = new RunLedger(dbPath);
+
+      const pipeline = new SelfDeployPipeline({
+        enabled: true,
+        ledger,
+        runlogPath
+      } as any);
+
+      const history = pipeline.getDeployHistory();
+      assert.equal(history.length, 1, "Expected 1 fallback deploy record from runlog");
+      assert.equal(history[0].newSha, "abc1234def");
+      assert.equal(history[0].status, "deployed");
+      assert.equal(history[0].branchName, "main");
+      assert.equal(history[0].timestamp, "2026-11-13T21:00:00Z");
+
+      ledger.close();
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignored on Windows EBUSY
+      }
+    }
   });
 });
