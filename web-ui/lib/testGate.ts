@@ -58,12 +58,13 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("SettingsView.tsx") ||
       p.includes("ProjectsView.tsx") ||
       p.includes("BuildsView.tsx") ||
+      p.includes("SkillsView.tsx") ||
       p.includes("selfDeploy.ts") ||
       p.includes("ModelBottomSheet.tsx") ||
       p.includes("api/engine/route.ts") ||
       p.includes("SvgViewer.tsx") ||
       p.includes("app/page.tsx"),
-    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts", "tests/settingsView.test.ts", "tests/modelBottomSheet.test.ts", "tests/buildsView.test.ts"]
+    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts", "tests/settingsView.test.ts", "tests/modelBottomSheet.test.ts", "tests/buildsView.test.ts", "tests/skillsView.test.ts"]
   },
   // kind-gateway assets & launcher scripts
   {
