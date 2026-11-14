@@ -1297,7 +1297,7 @@ export default function Home() {
           <button
             key={view}
             type="button"
-            onClick={() => handleNavigate(view)}
+            onClick={() => handleNavigate(view as any)}
             aria-label={view}
             className={`mobile-nav-item ${activeNavView === view ? "active" : ""}`}
           >
