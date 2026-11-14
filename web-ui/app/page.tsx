@@ -957,7 +957,7 @@ export default function Home() {
               aria-label="Workspace Panel"
             >
               {/* Inspector Header */}
-              <div className="inspector-header px-4 py-3 bg-slate-50 dark:bg-black border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
+              <div className="inspector-header h-12 px-4 bg-white dark:bg-black border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -980,14 +980,6 @@ export default function Home() {
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsWorkspaceOpen(false)}
-                  className="panel-toggle-btn text-xs font-semibold px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
-                  title="Collapse Workspace Panel"
-                >
-                  Hide »
-                </button>
               </div>
 
               {/* Inspector Tabs */}

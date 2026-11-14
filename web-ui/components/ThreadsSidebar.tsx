@@ -173,7 +173,7 @@ export function ThreadsSidebar({
   return (
     <aside className="w-full flex flex-col h-full bg-white dark:bg-[#121215] border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
       {/* Top Header matching Mockup media_1791044464191.webp */}
-      <div className="p-4 bg-white dark:bg-[#121215] border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
+      <div className="h-12 px-4 bg-white dark:bg-[#121215] border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           {onOpenDrawer && (
             <button
@@ -192,17 +192,6 @@ export function ThreadsSidebar({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {onCollapse && (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
-              title="Collapse Sessions Panel"
-            >
-              « Hide
-            </button>
-          )}
-
           {/* Search Toggle Button */}
           <button
             type="button"

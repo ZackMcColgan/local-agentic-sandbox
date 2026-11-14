@@ -2026,7 +2026,7 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
-      <header className="sticky top-0 z-30 px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
+      <header className="sticky top-0 z-30 h-12 px-2 sm:px-4 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
