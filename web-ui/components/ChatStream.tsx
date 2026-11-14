@@ -279,7 +279,7 @@ function UserMessageContent({ content }: { content: string }) {
           </code>
         ),
         p: ({ children }: any) => (
-          <p className="mb-1 last:mb-0 leading-relaxed text-blue-950 dark:text-sky-100">{children}</p>
+          <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-blue-950 dark:text-sky-100">{children}</p>
         )
       }}
     >
@@ -1537,7 +1537,7 @@ export function ChatStream({
     if (action === "enqueue") {
       let currentActiveThreadId = activeThreadIdRef.current || activeThreadState || threadId;
       if (!currentActiveThreadId && onEnsureThread) {
-        currentActiveThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+        currentActiveThreadId = (await onEnsureThread(prompt)) || undefined;
         if (currentActiveThreadId) {
           activeThreadIdRef.current = currentActiveThreadId;
           setActiveThreadId(currentActiveThreadId);
@@ -1701,7 +1701,7 @@ export function ChatStream({
 
     let activeThreadId = activeThreadIdRef.current || activeThreadState || threadId;
     if (!activeThreadId && onEnsureThread) {
-      activeThreadId = (await onEnsureThread(prompt.slice(0, 40))) || undefined;
+      activeThreadId = (await onEnsureThread(prompt)) || undefined;
       if (activeThreadId) {
         activeThreadIdRef.current = activeThreadId;
         setActiveThreadId(activeThreadId);
@@ -2773,8 +2773,8 @@ export function ChatStream({
                               {children}
                             </ul>
                           ),
-                          ol: ({ children }: any) => (
-                            <ol className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
+                          ol: ({ children, start }: any) => (
+                            <ol start={start} className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                               {children}
                             </ol>
                           ),
