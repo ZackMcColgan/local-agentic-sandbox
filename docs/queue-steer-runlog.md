@@ -830,3 +830,4 @@ async-host-jobs fix-cycle defect (b): async tests spawn real host_run_powershell
 async-host-jobs fix-cycle: Windows gate PASSED 8/0 in 11.8s (npm run test:gate via bridge, never full npm run test). Both fixes pushed to feature/async-host-jobs; PR #104 re-triggered by push. Daemon bounce still owner-gated, not in this job.
 async-host-jobs deploy S1: rollback target v-5ae9ef8-fresh banked (prod image before PR #104 deploy, merge 50a0442).
 async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 restarts, image v-426e96f-fresh, gateway 200, /api/threads 200 (80 threads, history intact, asynchost Completed). prod == develop 426e96f. PR #104 DONE. Daemon bounce still owner-gated - message Zack.
+2026-11-15 10:56 CT self-update S1: rollback target v-426e96f-fresh, develop head 6ea1eef (runlog-only drift, CI all-four-green run 43671344122)  
