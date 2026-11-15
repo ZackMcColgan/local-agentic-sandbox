@@ -857,3 +857,9 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 - .gitignore: tmp-test-* and .worktrees/ are runtime scratch, never committed (was polluting gate changed-file detection).
 - Tests: jobQueueRoute.test.ts extended - route wiring audit (singleton queue, repoRoot, queue_position emission) + AC3 awaited settled handles; ChatStream queue-position guard marked it.skip (deferred to step 4 UI wiring). jobQueueRoute + jobQueueIsolation: 9 pass / 0 fail / 1 skip. chatPersistenceDecoupling: 13 pass / 0 fail.
 - Gate: npm run test:gate via bridge; result recorded below (34 suites mapped by chat-route rules; serialized turns lengthen the run).
+
+## job-queue-isolation - CI micro-fix: drop .ts import extensions (2026-11-15, builder turn, worktree jobqueue-wt)
+- Root cause of CI failure on heads deac667 (runs 43734445789 + 43736129681): Next.js build typecheck rejected .ts-ending import specifiers ("An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled") at web-ui/lib/chatTurnGate.ts:1:37.
+- Fix (commit 9be0916, pushed to origin/feature/job-queue-isolation; PR #105 stays open, no new PR): removed the .ts extension from all 8 import specifiers in the branch's changed files - web-ui/lib/chatTurnGate.ts (./jobQueue, ./worktree), web-ui/tests/jobQueueIsolation.test.ts (../lib/jobQueue, ../lib/worktree, ../lib/chatStatus), web-ui/tests/jobQueueRoute.test.ts (../lib/jobQueue, ../lib/chatTurnGate, ../lib/chatStatus). Grep over web-ui/lib, web-ui/tests, web-ui/app confirms zero remaining .ts"-ending import specifiers; no other file or line touched.
+- BUILD EVIDENCE: npm run build in web-ui -> exit 0, full Next build completed (typecheck passed, no error surfaced after the fix).
+- GATE EVIDENCE: npm run test:gate via bridge -> PASSED, 9 pass / 0 fail / 1 skip (ChatStream queue-position guard, deferred to step 4) in 2.5s (<90s budget). Full npm run test NOT run per house rule.
