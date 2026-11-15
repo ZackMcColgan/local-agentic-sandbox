@@ -30,7 +30,8 @@ import {
   computeModelOptions,
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
-  parseThinkingAndContent
+  parseThinkingAndContent,
+  joinNarrationChunks
 } from "@/lib/chatUtils";
 import {
   fitContextWindow,
@@ -890,6 +891,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // Text carried across a length-truncated auto-continue: the final answer
         // must contain EVERY produced half, never just the last round.
         let carriedLengthContent = "";
+        let carriedToolRoundProse = "";
         // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
         // rolled up onto the assistant message and the thread record.
         const roundPromptTokens: number[] = [];
@@ -1338,7 +1340,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 // truncated rounds plus this one, never just the last round.
                 currentAssistantMessage = {
                   role: "assistant",
-                  content: carriedLengthContent + fullRoundContent
+                  content: joinNarrationChunks(carriedLengthContent, fullRoundContent)
                 };
                 accumulatedStreamedTokens += TURN_TRUNCATION_MARKER;
                 streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
@@ -1354,7 +1356,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 content: LENGTH_CONTINUATION_DIRECTIVE
               });
               // Bank this half so the final answer keeps every produced part.
-              carriedLengthContent += fullRoundContent;
+              carriedLengthContent = joinNarrationChunks(carriedLengthContent, fullRoundContent);
               await sendEvent({
                 type: "status",
                 status: "Generation hit the per-message size limit: continue exactly where you stopped."
@@ -1373,11 +1375,15 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (carriedLengthContent) {
               currentAssistantMessage = {
                 ...currentAssistantMessage,
-                content: carriedLengthContent + fullRoundContent
+                content: joinNarrationChunks(carriedLengthContent, fullRoundContent)
               };
               carriedLengthContent = "";
             }
             break;
+          }
+
+          if (fullRoundContent.trim()) {
+            carriedToolRoundProse = joinNarrationChunks(carriedToolRoundProse, fullRoundContent.trim());
           }
 
           if (accumulatedThoughts.length > 0) {
@@ -2014,6 +2020,17 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
         // SYNTHESIS-RETRY: honest end-of-turn stamp for a failed synthesis (retry exhausted).
         const EMPTY_SYNTHESIS_STAMP = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.] Work persisted above; the summary failed. The thread is resumable — resume this thread to continue.`;
+        if (carriedToolRoundProse.trim()) {
+          const currentText = currentAssistantMessage.content || "";
+          if (!currentText.includes(carriedToolRoundProse.trim())) {
+            currentAssistantMessage = {
+              ...currentAssistantMessage,
+              content: currentText.trim()
+                ? `${carriedToolRoundProse.trim()}\n\n${currentText}`
+                : carriedToolRoundProse.trim()
+            };
+          }
+        }
         // Clean residual tool tags
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
         let turnStatus: "completed" | "incomplete" | undefined = undefined;
