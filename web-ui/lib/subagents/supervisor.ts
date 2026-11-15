@@ -1543,8 +1543,8 @@ export class OvernightSupervisor {
         if (priorHandoff) {
           task.journal.push({
             timestamp: new Date().toISOString(),
-            agent: "supervisor",
-            action: `Resumed with handoff from ${priorHandoff.milestoneId}`
+            role: "supervisor",
+            message: `Resumed with handoff from ${priorHandoff.nextMilestone || priorHandoff.jobId}`
           });
         }
         let milestoneCompleted = false;
@@ -1665,11 +1665,11 @@ export class OvernightSupervisor {
 
       if (milestoneCompleted) {
         writeMilestoneHandoff(handoffPath, {
-          taskId: task.taskId,
-          milestoneId: milestone.id,
-          completedAt: milestone.completedAt || new Date().toISOString(),
+          jobId: task.taskId,
+          completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
+          nextMilestone: task.milestones[mIdx + 1]?.id ?? null,
           summary: milestone.title,
-          modifiedFiles: milestone.modifiedFiles || []
+          updatedAt: milestone.completedAt || new Date().toISOString()
         });
         task.currentMilestoneIndex = mIdx + 1;
         this.saveCheckpoint(task, milestone.commitSha);
@@ -1709,16 +1709,15 @@ export class OvernightSupervisor {
 
     if (task.currentMilestoneIndex >= task.milestones.length) {
       const finishVerification = verifyJobCompletion({
-        taskId: task.taskId,
-        repoRoot: options?.repoRoot || process.cwd(),
-        milestones: task.milestones
+        workspaceRoot: process.cwd(),
+        gatePassed: task.milestones.every((m) => m.status === "completed")
       });
       if (!finishVerification.ok) {
         task.status = "failed";
         task.journal.push({
           timestamp: new Date().toISOString(),
-          agent: "supervisor",
-          action: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
+          role: "supervisor",
+          message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
         });
       } else {
         task.status = "completed";
@@ -1768,8 +1767,8 @@ export class OvernightSupervisor {
           });
 
           const prePr = evaluatePrePrGate({
-            flowChecksPassed: task.milestones.every((m) => m.status === "completed") && (task.testResults?.failed ?? 0) === 0,
-            reviewerApproved: task.milestones.every((m) => m.criticApproved !== false),
+            flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
+            reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
             gatePassed: true
           });
           if (!prePr.ready) {

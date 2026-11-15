@@ -331,8 +331,8 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
     const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator || generatePlanSpec;
     const planSpec = await planGen({
-      goal: sched.taskDescription,
-      workspaceRoot: this.workspaceDir
+      taskId: runId,
+      goal: sched.taskDescription
     });
     const manifest: TaskManifest = {
       taskId: planSpec.taskId || `task-${Date.now()}`,
