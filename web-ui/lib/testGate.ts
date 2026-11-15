@@ -138,6 +138,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostRunnerScript.test.ts",
       "tests/hostDaemon.test.ts",
       "tests/hostLifecycleUnit.test.ts",
+      "tests/hostAsyncJobs.test.ts",
       "tests/lifecycleGuard.test.ts",
       "tests/chatFilePaging.test.ts",
       "tests/hostGitSafetyBattery.test.ts",
