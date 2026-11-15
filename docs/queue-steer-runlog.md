@@ -846,4 +846,4 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 - ACCEPTANCE EVIDENCE (for PR body): AC1 sequential (order start:A,end:A,start:B,end:B), AC2 worktree isolation (job B tree = base f.txt, no job-A uncommitted files), AC3 queue position (waiting job position 1 while first runs; UI phase reducer renders "Queued (position N)"). Validated in /tmp mirror (5 tests, 0 fail) + this host gate run (312/0).
 - PR opened into develop from feature/job-queue-isolation (number recorded below). No merge, no deploy in this job — driver owns those.
 - OPEN FOLLOW-UP (not this turn's brief scope): chat route serialization via JobQueue + ChatStream queue-position wiring; owner phone acceptance is the final UI gate.
-- PR: #TBD
+- PR: #105 (https://github.com/ZackMcColgan/local-agentic-sandbox/pull/105) — opened into develop from feature/job-queue-isolation head a8fba38. No merge, no deploy in this job.
