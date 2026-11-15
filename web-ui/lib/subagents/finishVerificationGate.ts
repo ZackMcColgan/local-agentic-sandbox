@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface FinishVerificationInput {
   workspaceRoot: string;
@@ -30,7 +30,7 @@ export function verifyJobCompletion(input: FinishVerificationInput): FinishVerif
 
   if (input.baseCommit) {
     try {
-      const countStr = execSync(`git rev-list --count ${input.baseCommit}..HEAD`, {
+      const countStr = execFileSync("git", ["rev-list", "--count", `${input.baseCommit}..HEAD`], {
         cwd: input.workspaceRoot,
         encoding: "utf8",
       }).trim();

@@ -40,6 +40,7 @@ export {
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
+import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 import { WorkerGitOps } from "../git/workerGitOps";
@@ -1536,6 +1537,15 @@ export class OvernightSupervisor {
         const mIdx = task.currentMilestoneIndex;
         const milestone = task.milestones[mIdx];
         let attempt = 0;
+        const handoffPath = path.join(this.checkpointDirectory, `${task.taskId}.handoff.json`);
+        const priorHandoff = readMilestoneHandoff(handoffPath);
+        if (priorHandoff) {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            agent: "supervisor",
+            action: `Resumed with handoff from ${priorHandoff.milestoneId}`
+          });
+        }
         let milestoneCompleted = false;
 
         while (!milestoneCompleted && attempt < 3) {
@@ -1653,6 +1663,13 @@ export class OvernightSupervisor {
       }
 
       if (milestoneCompleted) {
+        writeMilestoneHandoff(handoffPath, {
+          taskId: task.taskId,
+          milestoneId: milestone.id,
+          completedAt: milestone.completedAt || new Date().toISOString(),
+          summary: milestone.title,
+          modifiedFiles: milestone.modifiedFiles || []
+        });
         task.currentMilestoneIndex = mIdx + 1;
         this.saveCheckpoint(task, milestone.commitSha);
       } else {
@@ -1690,7 +1707,21 @@ export class OvernightSupervisor {
     }
 
     if (task.currentMilestoneIndex >= task.milestones.length) {
-      task.status = "completed";
+      const finishVerification = verifyJobCompletion({
+        taskId: task.taskId,
+        repoRoot: options?.repoRoot || process.cwd(),
+        milestones: task.milestones
+      });
+      if (!finishVerification.ok) {
+        task.status = "failed";
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          agent: "supervisor",
+          action: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
+        });
+      } else {
+        task.status = "completed";
+      }
       task.completedAt = new Date().toISOString();
 
       if (shouldRunGitOps) {
