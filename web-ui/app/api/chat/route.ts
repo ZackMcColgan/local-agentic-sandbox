@@ -119,6 +119,7 @@ const getBrowserMcpUrl = () => process.env.BROWSER_MCP_URL || "http://browser-mc
 // time (FIFO); additional turns queue visibly instead of contending for the
 // engine slot. Module-level singleton: one queue per web-ui process.
 const chatJobQueue = new JobQueue();
+let chatTurnWorktreeSeq = 0;
 
 // job-queue-isolation: host checkout root for per-job worktrees. Same
 // convention as the self-deploy pipeline (web-ui may run with cwd at web-ui
@@ -573,32 +574,43 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
         return;
       }
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       try {
         // job-queue-isolation: await the write itself (no 500ms timeout race).
         // A slow reader is backpressure, not a dead client: the drain on client
         // disconnect and writer.abort on real write errors keep the serialized
         // queue moving, so a queued turn is never misclassified as abandoned.
+        const writePromise = writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        writePromise.catch(() => {});
         await Promise.race([
-          writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 2000)),
-          new Promise((_, reject) => req.signal.addEventListener("abort", () => reject(new Error("client aborted"))))
+          writePromise,
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("writer timeout")), 2000);
+          }),
+          new Promise((_, reject) => {
+            onAbort = () => reject(new Error("client aborted"));
+            req.signal.addEventListener("abort", onAbort, { once: true });
+          }),
         ]);
       } catch (err: any) {
         clearInterval(heartbeatInterval);
-        if (req.signal.aborted) {
-          clientDisconnected = true;
-        } else if (err.message === "writer timeout") {
+        clientDisconnected = true;
+        if (!req.signal.aborted && err?.message === "writer timeout") {
           // Idle reader (client stopped consuming): abort the writable so the
           // readable errors out and later writes skip instantly instead of
           // waiting the timeout again each event.
           startReadableDrain();
-          try { writer.abort(err); } catch {}
+          try { writer.abort(err).catch(() => {}); } catch {}
         }
         console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}: ${formatSseWriterError(err)}. Turn continuing detached server-side.`);
         // job-queue-isolation: the client is gone; abort the writable so any
         // pending write/close resolves instead of backpressuring forever on an
         // unread (locked) readable — which would stall the serialized queue.
-        try { writer.abort(err); } catch {}
+        try { writer.abort(err).catch(() => {}); } catch {}
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        if (onAbort !== undefined) req.signal.removeEventListener("abort", onAbort);
       }
     };
 
@@ -619,7 +631,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // queue (one turn executes at a time, FIFO) and run it against its OWN git
     // worktree of the host checkout. A turn arriving while one is running
     // queues visibly (queue_position event) instead of contending for the slot.
-    serializeTurn(chatJobQueue, { id: assistantMessageId, threadId: activeThreadId || clientSessionId, prompt: userPrompt }, {
+    serializeTurn(chatJobQueue, { id: `${assistantMessageId}-${process.pid}-${++chatTurnWorktreeSeq}`, threadId: activeThreadId || clientSessionId, prompt: userPrompt }, {
       repoRoot: resolveJobRepoRoot(),
       onQueued: (position) => {
         sendEvent({ type: "status", status: `Queued (position ${position})`, queue_position: position });
@@ -2334,15 +2346,24 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           if (clientDisconnected) {
             // Client gone: abort the stream outright so the serialized queue
             // tail settles even if the readable is locked by an abandoned reader.
-            writer.abort(new Error("client disconnected"));
+            try { writer.abort(new Error("client disconnected")).catch(() => {}); } catch {}
           } else {
-            await Promise.race([
-              writer.close(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("writer close timeout")), 1000))
-            ]);
+            const closePromise = writer.close();
+            closePromise.catch(() => {});
+            let closeTimeoutId: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                closePromise,
+                new Promise((_, reject) => {
+                  closeTimeoutId = setTimeout(() => reject(new Error("writer close timeout")), 1000);
+                })
+              ]);
+            } finally {
+              if (closeTimeoutId !== undefined) clearTimeout(closeTimeoutId);
+            }
           }
         } catch {
-          try { writer.abort(new Error("stream abandoned")); } catch {}
+          try { writer.abort(new Error("stream abandoned")).catch(() => {}); } catch {}
         }
       }
     }
