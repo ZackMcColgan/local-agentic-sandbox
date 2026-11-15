@@ -72,8 +72,6 @@ export class JobStore {
     if (changed) this.persist();
   }
 
-  private killFns = new Map<string, () => void>();
-
   registerKill(id: string, kill: () => void): void {
     this.killFns.set(id, kill);
   }
