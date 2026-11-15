@@ -80,6 +80,86 @@ describe("queue position surfaces for UI (AC3)", () => {
     releaseA();
     await b.settled;
   });
+
+  it("executes overlapping turns with distinct per-turn runTurn closures so queued SSE writers close", async () => {
+    const queue = new JobQueue();
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((r) => { releaseA = r; });
+    const executedA: string[] = [];
+    const executedB: string[] = [];
+    let turnAFinalized = false;
+
+    const a = serializeTurn(
+      queue,
+      { id: "A", threadId: "t1", prompt: "a" },
+      {
+        runTurn: async (job) => {
+          // Mimic chat route post-abort early exit once Turn A has finalized
+          if (turnAFinalized) return;
+          executedA.push(job.id);
+          await gateA;
+          turnAFinalized = true;
+        },
+      },
+    );
+
+    // Let Turn A start and pause on gateA before Turn B enqueues
+    await new Promise((r) => setTimeout(r, 15));
+
+    const streamB = new TransformStream<Uint8Array, Uint8Array>();
+    const writerB = streamB.writable.getWriter();
+    const readerB = streamB.readable.getReader();
+
+    const b = serializeTurn(
+      queue,
+      { id: "B", threadId: "t2", prompt: "b" },
+      {
+        runTurn: async (job) => {
+          executedB.push(job.id);
+          await writerB.write(new TextEncoder().encode("data: ok\n\n"));
+          await writerB.close();
+        },
+      },
+    );
+
+    releaseA();
+    const firstChunk = await Promise.race([
+      readerB.read(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("reader.read timed out after 2000ms")), 2000)),
+    ]);
+    const eofChunk = await Promise.race([
+      readerB.read(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("reader EOF timed out after 2000ms")), 2000)),
+    ]);
+    await Promise.all([a.settled, b.settled]);
+
+    assert.equal(firstChunk.done, false);
+    assert.equal(eofChunk.done, true);
+    assert.deepEqual(executedA, ["A"]);
+    assert.deepEqual(executedB, ["B"]);
+  });
+
+  it("still executes runTurn with null worktree if repoRoot worktree setup fails", async () => {
+    const nonGitRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nongit-"));
+    try {
+      const queue = new JobQueue();
+      const observed: Array<{ id: string; worktree: unknown }> = [];
+      const turn = serializeTurn(
+        queue,
+        { id: "bad-wt", threadId: "t1", prompt: "x" },
+        {
+          repoRoot: nonGitRoot,
+          runTurn: async (job, worktree) => {
+            observed.push({ id: job.id, worktree });
+          },
+        },
+      );
+      await turn.settled;
+      assert.deepEqual(observed, [{ id: "bad-wt", worktree: null }]);
+    } finally {
+      fs.rmSync(nonGitRoot, { recursive: true, force: true });
+    }
+  });
 });
 describe("wiring is live, not dead code (audit guard)", () => {
   it("chat route imports and calls serializeTurn", () => {

@@ -51,11 +51,22 @@ export function serializeTurn(
   if (queuePosition > 0) opts.onQueued?.(queuePosition);
 
   const settled = queue.drain(async (j) => {
-    const worktree = opts.repoRoot ? createJobWorktree(opts.repoRoot, j.id) : null;
+    let worktree: WorktreeHandle | null = null;
+    if (opts.repoRoot) {
+      try {
+        worktree = createJobWorktree(opts.repoRoot, j.id);
+      } catch {
+        worktree = null;
+      }
+    }
     try {
       await opts.runTurn(j, worktree);
     } finally {
-      if (worktree && opts.repoRoot) removeJobWorktree(opts.repoRoot, worktree);
+      if (worktree && opts.repoRoot) {
+        try {
+          removeJobWorktree(opts.repoRoot, worktree);
+        } catch {}
+      }
     }
   });
 
