@@ -3,6 +3,7 @@ import { cleanResidualToolTags } from "./toolParser";
 export const TURN_PHASE_PREPARING = "Preparing context & tools" as const;
 export const TURN_PHASE_REASONING = "Reasoning" as const;
 export const TURN_PHASE_WRITING = "Writing answer" as const;
+export const TURN_PHASE_QUEUED = (position: number) => `Queued (position ${position})` as const;
 
 export interface TurnStatusInput {
   isStreaming: boolean;
@@ -10,6 +11,7 @@ export interface TurnStatusInput {
   activeTool?: string | null;
   hasThought?: boolean;
   hasContent?: boolean;
+  queuePosition?: number | null;
 }
 
 /**
@@ -22,6 +24,8 @@ export interface TurnStatusInput {
  */
 export function resolveTurnStatusPhase(input: TurnStatusInput): string | null {
   if (!input.isStreaming) return null;
+
+  if (input.queuePosition && input.queuePosition > 0) return TURN_PHASE_QUEUED(input.queuePosition);
 
   if (input.activeTool && input.activeTool.trim()) {
     return `Running ${input.activeTool.trim()}`;

@@ -46,6 +46,11 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  // job-queue-isolation: single-slot queue + per-job worktrees
+  {
+    match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
+    tests: ["tests/jobQueueIsolation.test.ts"]
+  },
   // Lane C UI polish (header, canvas & desktop top bar)
   {
     match: (p) =>

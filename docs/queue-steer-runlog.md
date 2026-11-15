@@ -830,3 +830,11 @@ async-host-jobs fix-cycle defect (b): async tests spawn real host_run_powershell
 async-host-jobs fix-cycle: Windows gate PASSED 8/0 in 11.8s (npm run test:gate via bridge, never full npm run test). Both fixes pushed to feature/async-host-jobs; PR #104 re-triggered by push. Daemon bounce still owner-gated, not in this job.
 async-host-jobs deploy S1: rollback target v-5ae9ef8-fresh banked (prod image before PR #104 deploy, merge 50a0442).
 async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 restarts, image v-426e96f-fresh, gateway 200, /api/threads 200 (80 threads, history intact, asynchost Completed). prod == develop 426e96f. PR #104 DONE. Daemon bounce still owner-gated - message Zack.
+
+## job-queue-isolation — step 1 banked by driver (2026-11-15 ~00:55 CT)
+
+- Sandy turn thread-1794712424550-jobqueue ended COMPLETED 21:41 CT Nov 14 with BLOCKED verbatim: host tools withheld (host runner daemon version/digest mismatch — run AI-ON.ps1), sandbox mirror READ_ONLY (EACCES on workspace_write_file, git index.lock denied). Model ran on swift-15-27b-mtp/medium, not the briefed Gyro-S/LOW. 37 rounds, 811,613 prompt tokens.
+- Turn validated the full deliverable in a /tmp mirror (node --test --experimental-strip-types): AC1 sequential, AC2 worktree isolation, AC3 queue position — 5 tests, 0 fail — and pasted the complete code in its final message.
+- Driver landed Parts 1-6 via SSH onto branch feature/job-queue-isolation (from develop 6ea1eef): lib/jobQueue.ts, lib/worktree.ts, tests/jobQueueIsolation.test.ts, chatStatus.ts patch, testGate.ts mapping rule. Two driver deviations from the turn's pasted code: (a) createJobWorktree now passes -b so the returned job/<id> branch actually exists (turn's version left branch unused/detached); (b) test callbacks typed (job: QueuedJob) so next build typecheck stays clean under strict mode.
+- Gate: run on host via SSH before commit; result in the commit message.
+- SCOPE NOTE: this banks the queue + isolation MECHANISM (libs + tests). Route/UI wiring (chat route serializes via JobQueue; ChatStream shows queue position) is still open — needs a working host daemon (AI-ON.ps1, owner action) for a follow-up Sandy turn, or driver wiring. No PR opened for the unwired slice; item stays working.
