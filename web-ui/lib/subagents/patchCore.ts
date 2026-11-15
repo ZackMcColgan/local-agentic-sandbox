@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
+import ts from "typescript";
 
 export interface PatchItem {
   search: string;
@@ -46,6 +47,7 @@ export async function workspacePatchFile(
   }
 
   let content = await fs.readFile(safePath, "utf8");
+  const isCrlf = content.includes("\r\n");
   let appliedCount = 0;
 
   for (let i = 0; i < patches.length; i++) {
@@ -54,14 +56,40 @@ export async function workspacePatchFile(
       throw new Error(`Patch at index ${i} must provide 'search' and 'replace' strings`);
     }
 
-    if (!content.includes(patch.search)) {
+    let searchStr = patch.search;
+    let replaceStr = patch.replace;
+    if (!content.includes(searchStr) && isCrlf) {
+      const crlfSearch = searchStr.replace(/\r?\n/g, "\r\n");
+      if (content.includes(crlfSearch)) {
+        searchStr = crlfSearch;
+        replaceStr = replaceStr.replace(/\r?\n/g, "\r\n");
+      }
+    }
+
+    const idx = content.indexOf(searchStr);
+    if (idx === -1) {
       throw new Error(
         `Target text not found in ${relativePath}: ${JSON.stringify(patch.search.slice(0, 100))}`
       );
     }
 
-    content = content.replace(patch.search, patch.replace);
+    content = content.slice(0, idx) + replaceStr + content.slice(idx + searchStr.length);
     appliedCount++;
+  }
+
+  const ext = path.extname(safePath).toLowerCase();
+  if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
+    const scriptKind =
+      ext === ".tsx" ? ts.ScriptKind.TSX :
+      ext === ".jsx" ? ts.ScriptKind.JSX :
+      ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
+      ts.ScriptKind.TS;
+    const sf = ts.createSourceFile(safePath, content, ts.ScriptTarget.Latest, true, scriptKind);
+    const diags = (sf as any).parseDiagnostics as ts.Diagnostic[] | undefined;
+    if (diags && diags.length > 0) {
+      const msg = ts.flattenDiagnosticMessageText(diags[0].messageText, "\n");
+      throw new Error(`AST syntax gate rejected patch for ${relativePath}: ${msg}`);
+    }
   }
 
   await fs.writeFile(safePath, content, "utf8");
