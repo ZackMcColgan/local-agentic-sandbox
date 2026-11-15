@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { TaskManifest, TaskStatus, Milestone } from "./types";
 import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } from "./supervisor";
+import { generatePlanSpec, type PlanSpec, type PlanSpecInput } from "./planner";
 import { WorkerPool } from "./workerPool";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 
@@ -328,23 +329,23 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
     logStream(`Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`);
 
-    const manifest: TaskManifest = {
-      taskId: `task-${Date.now()}`,
+    const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator || generatePlanSpec;
+    const planSpec = await planGen({
       goal: sched.taskDescription,
-      toolchain: "node:22",
+      workspaceRoot: this.workspaceDir
+    });
+    const manifest: TaskManifest = {
+      taskId: planSpec.taskId || `task-${Date.now()}`,
+      goal: planSpec.goal || sched.taskDescription,
+      toolchain: planSpec.toolchain || "node:22",
       branchName: sanitizeScheduleBranchName(sched.id),
       status: "active",
-      milestones: [
-        {
-          id: "M1",
-          title: `Scheduled: ${sched.taskDescription.slice(0, 40)}`,
-          description: sched.taskDescription,
-          acceptanceCriteria: [{ id: "AC-1", assertion: "Complete task objective" }],
-          status: "pending",
-          builderIterations: 0,
-          criticRounds: 0
-        }
-      ],
+      milestones: planSpec.milestones.map((m) => ({
+        ...m,
+        status: m.status || "pending",
+        builderIterations: m.builderIterations ?? 0,
+        criticRounds: m.criticRounds ?? 0
+      })),
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
