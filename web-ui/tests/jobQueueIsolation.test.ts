@@ -59,3 +59,38 @@ describe("AC2 worktree isolation", () => {
     removeJobWorktree(root, hA); removeJobWorktree(root, hB);
   });
 });
+
+describe("distinct executor per queued job", () => {
+  it("invokes queued job B's own executor rather than reusing job A's executor", async () => {
+    const q = new JobQueue();
+    const seenByA: string[] = [];
+    const seenByB: string[] = [];
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((r) => { releaseA = r; });
+
+    q.enqueue({ id: "A", threadId: "t1", prompt: "a" });
+    const drainA = q.drain(async (job) => {
+      seenByA.push(job.id);
+      await gateA;
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    let resolveB!: () => void;
+    const doneB = new Promise<void>((r) => { resolveB = r; });
+
+    q.enqueue({ id: "B", threadId: "t2", prompt: "b" });
+    const drainB = q.drain(async (job) => {
+      seenByB.push(job.id);
+      resolveB();
+    });
+
+    releaseA();
+    await Promise.race([
+      Promise.all([drainA, drainB, doneB]),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("queued job B executor did not run within 1000ms")), 1000)),
+    ]);
+
+    assert.deepEqual(seenByA, ["A"]);
+    assert.deepEqual(seenByB, ["B"]);
+  });
+});
