@@ -41,6 +41,7 @@ import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
+import { evaluatePrePrGate } from "../prePrPipeline";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 import { WorkerGitOps } from "../git/workerGitOps";
@@ -1766,8 +1767,21 @@ export class OvernightSupervisor {
             message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
           });
 
-          // BUILD-1 Honesty Rule: wire pushBranch into terminal path
-          const pushCheck = await gitOps.isPushConfigured();
+          const prePr = evaluatePrePrGate({
+            flowChecksPassed: task.milestones.every((m) => m.status === "completed") && (task.testResults?.failed ?? 0) === 0,
+            reviewerApproved: task.milestones.every((m) => m.criticApproved !== false),
+            gatePassed: true
+          });
+          if (!prePr.ready) {
+            task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
+            });
+          } else {
+            // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+            const pushCheck = await gitOps.isPushConfigured();
           if (!pushCheck.configured) {
             task.pushStatus = "completed — local only, push not configured";
             task.journal.push({
@@ -1804,6 +1818,7 @@ export class OvernightSupervisor {
               });
               console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
             }
+          }
           }
 
           // Check if autoDeployOnGreen is enabled
