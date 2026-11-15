@@ -865,6 +865,7 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 - GATE EVIDENCE: npm run test:gate via bridge -> PASSED, 9 pass / 0 fail / 1 skip (ChatStream queue-position guard, deferred to step 4) in 2.5s (<90s budget). Full npm run test NOT run per house rule.
 2026-11-15 10:56 CT self-update S1: rollback target v-426e96f-fresh, develop head 6ea1eef (runlog-only drift, CI all-four-green run 43671344122)  
 2026-11-15 11:14 CT self-update S4 VERIFIED: pod web-ui-64b8ff9646-9jzmd 1/1 Running 0 restarts, image v-5e98c6f-fresh, gateway 200, /api/threads 200 (83 threads, history intact). prod == develop 5e98c6f.  
+2026-11-15 12:09 CT driver: PR #105 CI run 43737566475 cancelled after 25m55s (all 4 jobs cancelled, cause unknown, not a code failure); stale run 43737454888 (head 9be09165) stuck 73m+ in Unit Tests, cancelled by driver. Merge conflict (runlog only) resolved in jobqueue-wt, merge commit 5d9942f pushed; PR MERGEABLE, fresh CI run 43745058048 in progress.  
 
 ## job-queue-isolation - CI hang fix: bound git worktree spawns (2026-11-15, driver via SSH, worktree jobqueue-wt)
 - Root cause of CI hang on head 3996ad8 (run 43737566475, cancelled after 25m51s): Execute Full Test Suite stream went silent 24 min from 16:50:42Z. web-ui/lib/worktree.ts git() used execFileSync with NO timeout; git worktree add waits on index/worktree locks with no timeout of its own, and parallel test files driving serializeTurn create/remove per-job worktrees in the same repo root - a lock convoy that never returns.
