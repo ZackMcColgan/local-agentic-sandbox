@@ -1,4 +1,5 @@
 import path from "path";
+import crypto from "crypto";
 
 export function confinePathToRoot(rootDir: string, userPath: string): string {
   const rootResolved = path.resolve(rootDir);
@@ -34,5 +35,8 @@ export function isSafePublicUrl(rawUrl: string): boolean {
 
 export function verifyLanBridgeAuth(expectedToken: string, authHeader?: string): boolean {
   if (!expectedToken || !authHeader) return false;
-  return authHeader === `Bearer ${expectedToken}`;
+  const expected = Buffer.from(`Bearer ${expectedToken}`, "utf8");
+  const actual = Buffer.from(authHeader, "utf8");
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(expected, actual);
 }

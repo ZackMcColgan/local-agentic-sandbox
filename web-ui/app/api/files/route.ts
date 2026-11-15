@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { resolveThreadsDir } from "@/lib/threads/threadStore";
+import { confinePathToRoot } from "@/lib/securityHardening";
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -98,7 +99,12 @@ export async function GET(request: NextRequest) {
     // Check if target is a directory across candidate roots (directory listing is forbidden)
     for (const root of candidateRoots) {
       if (!fs.existsSync(root)) continue;
-      const candidatesToCheck = [path.resolve(root, cleanPath)];
+      const candidatesToCheck: string[] = [];
+      try {
+        candidatesToCheck.push(confinePathToRoot(root, cleanPath));
+      } catch {
+        return NextResponse.json({ error: "Access denied: path escapes root" }, { status: 403 });
+      }
       if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
         candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
       }
