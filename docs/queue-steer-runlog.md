@@ -823,3 +823,4 @@ runlog: PR #102 fix-pass deployed v-c6ee06c-fresh, S4 verified; rollback v-3820f
 async-host-jobs: branch feature/async-host-jobs from develop; tests-first hostAsyncJobs.test.ts (8 cases) written failing (no /execute-async route)
 async-host-jobs: impl host-bridge/jobStore.ts (JobStore, spool offset reads, 60-min timeout, orphan+shutdown interrupt stamping) + server.ts routes /execute-async /jobs/:id /jobs/:id/output; classifier+approvals unchanged at START; sync /execute stays
 async-host-jobs: EBUSY fix scripts/build-host-runner.js rename-then-swap swapFileIntoPlace; manifest.json digest regenerated; gate PASSED 146/0 with changed files; SEA build deployed exe via rename-then-swap; daemon bounce pending owner approval
+async-host-jobs: PR #104 opened into develop (commits 64761f0, 6d2b366); local gate PASSED 146/0; CI run 43663572876 in progress at handoff; daemon bounce pending owner approval
