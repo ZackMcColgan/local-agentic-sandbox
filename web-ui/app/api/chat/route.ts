@@ -87,6 +87,8 @@ import {
   getHostStateDirective,
   generateHostFileDiff
 } from "@/lib/hostMode";
+import { JobQueue } from "@/lib/jobQueue";
+import { serializeTurn } from "@/lib/chatTurnGate";
 import { getHostSettings } from "@/lib/hostSettings";
 import { notify } from "@/lib/notifications";
 import {
@@ -112,6 +114,19 @@ import { formatSseWriterError } from "@/lib/turnReconciliation";
 const getLlmBaseUrl = () => process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const getMcpUrl = () => process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 const getBrowserMcpUrl = () => process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
+
+// job-queue-isolation: single in-app slot — chat job turns execute one at a
+// time (FIFO); additional turns queue visibly instead of contending for the
+// engine slot. Module-level singleton: one queue per web-ui process.
+const chatJobQueue = new JobQueue();
+let chatTurnWorktreeSeq = 0;
+
+// job-queue-isolation: host checkout root for per-job worktrees. Same
+// convention as the self-deploy pipeline (web-ui may run with cwd at web-ui
+// or repo root); HOST_REPO_ROOT overrides explicitly.
+const resolveJobRepoRoot = () =>
+  process.env.HOST_REPO_ROOT ||
+  path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
 const DEFAULT_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 const ADVERTISED_TOOLS = new Set([
   "search_web",
@@ -438,6 +453,28 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
 
+    // job-queue-isolation: consume the readable side so pending writer.write /
+    // writer.close resolve even when the client abandoned the stream. Without
+    // this, an unread TransformStream backpressures forever and the serialized
+    // chat job queue stalls (queue tail never settles).
+    let readableDrainStarted = false;
+    const startReadableDrain = () => {
+      if (readableDrainStarted) return;
+      readableDrainStarted = true;
+      (async () => {
+        try {
+          // If the readable is already locked (a live client reader), that
+          // reader consumes the stream; nothing to drain here.
+          if (stream.readable.locked) return;
+          const drainReader = stream.readable.getReader();
+          while (true) {
+            const { done } = await drainReader.read();
+            if (done) break;
+          }
+        } catch {}
+      })().catch(() => {});
+    };
+
     let accumulatedStreamedTokens = "";
     let assistantPersisted = false;
     const turnCreatedFiles: string[] = [];
@@ -512,6 +549,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     }
 
     turnAbortController.signal.addEventListener("abort", () => {
+      
       explicitStopped = true;
       persistAssistantOnAbort();
     });
@@ -520,7 +558,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       if (!clientDisconnected) {
         clientDisconnected = true;
         clearInterval(heartbeatInterval);
+        
         console.log(`[ChatRoute] Client SSE connection disconnected for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`);
+        // job-queue-isolation: drain the unread readable so pending SSE writes
+        // and writer.close() resolve. The client is gone, so consuming the
+        // stream here is safe; without this, an abandoned stream deadlocks
+        // the serialized job queue forever (queue tail never settles).
+        startReadableDrain();
       }
     };
     req.signal.addEventListener("abort", cleanupClientSignal);
@@ -530,15 +574,43 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         clearInterval(heartbeatInterval);
         return;
       }
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       try {
+        // job-queue-isolation: await the write itself (no 500ms timeout race).
+        // A slow reader is backpressure, not a dead client: the drain on client
+        // disconnect and writer.abort on real write errors keep the serialized
+        // queue moving, so a queued turn is never misclassified as abandoned.
+        const writePromise = writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        writePromise.catch(() => {});
         await Promise.race([
-          writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 500))
+          writePromise,
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("writer timeout")), 2000);
+          }),
+          new Promise((_, reject) => {
+            onAbort = () => reject(new Error("client aborted"));
+            req.signal.addEventListener("abort", onAbort, { once: true });
+          }),
         ]);
       } catch (err: any) {
         clearInterval(heartbeatInterval);
         clientDisconnected = true;
+        if (!req.signal.aborted && err?.message === "writer timeout") {
+          // Idle reader (client stopped consuming): abort the writable so the
+          // readable errors out and later writes skip instantly instead of
+          // waiting the timeout again each event.
+          startReadableDrain();
+          try { writer.abort(err).catch(() => {}); } catch {}
+        }
         console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}: ${formatSseWriterError(err)}. Turn continuing detached server-side.`);
+        // job-queue-isolation: the client is gone; abort the writable so any
+        // pending write/close resolves instead of backpressuring forever on an
+        // unread (locked) readable — which would stall the serialized queue.
+        try { writer.abort(err).catch(() => {}); } catch {}
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        if (onAbort !== undefined) req.signal.removeEventListener("abort", onAbort);
       }
     };
 
@@ -555,8 +627,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       heartbeatInterval.unref();
     }
 
-    // Run async orchestrator pipeline in background feeding SSE stream
-    (async () => {
+    // job-queue-isolation: serialize this job turn through the single in-app
+    // queue (one turn executes at a time, FIFO) and run it against its OWN git
+    // worktree of the host checkout. A turn arriving while one is running
+    // queues visibly (queue_position event) instead of contending for the slot.
+    serializeTurn(chatJobQueue, { id: `${assistantMessageId}-${process.pid}-${++chatTurnWorktreeSeq}`, threadId: activeThreadId || clientSessionId, prompt: userPrompt }, {
+      repoRoot: resolveJobRepoRoot(),
+      onQueued: (position) => {
+        sendEvent({ type: "status", status: `Queued (position ${position})`, queue_position: position });
+      },
+      runTurn: async (_job, _worktree) => {
       let oracleSnippet = "";
       let oracleCitations: string[] = [];
 
@@ -631,6 +711,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         }
 
         // 4. Host Mode Tools (if host access enabled AND runner is healthy)
+        
         if (activeThreadId && !threadData) {
           try {
             threadData = await threadStore.getThread(activeThreadId);
@@ -649,6 +730,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           threadData?.taskId
         );
         const hostStatus = await determineHostRunnerState(threadHostAccess);
+        
         const includeHostTools = !isProhibitedContext && shouldAdvertiseHostTools(threadHostAccess, hostStatus.runnerState);
 
         const hostTools = includeHostTools
@@ -727,7 +809,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             }
           }
         );
-        let turnCompacted = prep.compactedThisTurn;
+        
+let turnCompacted = prep.compactedThisTurn;
         let turnTokensBefore = prep.tokensBeforeCompaction;
         let turnTokensAfter = prep.tokensAfterCompaction;
         let turnCompactionActions: string[] | undefined = undefined;
@@ -855,7 +938,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           }
         });
 
-        let currentAssistantMessage: any = { role: "assistant", content: "" };
+        
+let currentAssistantMessage: any = { role: "assistant", content: "" };
         let round = 0;
         // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
         // TOOL_ROUND_BACKSTOP is only the runaway guard.
@@ -901,8 +985,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // Survives compaction (its own entries map), and the full result of the
         // first read stays recoverable in the thread trace record.
         const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
+        
 
         while (true) {
+          
           if (turnAbortController.signal.aborted) break;
           console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
 
@@ -2252,11 +2338,36 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             await session.client.close();
           } catch {}
         }
+        // job-queue-isolation: drain the readable before close so a client that
+        // abandoned the stream (no req.signal abort) cannot leave writer.close()
+        // blocked on unread chunks — which would stall the serialized job queue.
+        startReadableDrain();
         try {
-          await writer.close();
-        } catch {}
+          if (clientDisconnected) {
+            // Client gone: abort the stream outright so the serialized queue
+            // tail settles even if the readable is locked by an abandoned reader.
+            try { writer.abort(new Error("client disconnected")).catch(() => {}); } catch {}
+          } else {
+            const closePromise = writer.close();
+            closePromise.catch(() => {});
+            let closeTimeoutId: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                closePromise,
+                new Promise((_, reject) => {
+                  closeTimeoutId = setTimeout(() => reject(new Error("writer close timeout")), 1000);
+                })
+              ]);
+            } finally {
+              if (closeTimeoutId !== undefined) clearTimeout(closeTimeoutId);
+            }
+          }
+        } catch {
+          try { writer.abort(new Error("stream abandoned")).catch(() => {}); } catch {}
+        }
       }
-    })();
+    }
+  });
 
     return new Response(stream.readable, {
       headers: {

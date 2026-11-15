@@ -55,6 +55,12 @@ temp-*
 temp-test-*
 web-ui/temp-*
 web-ui/temp-test-*
+tmp-test-*
+web-ui/tmp-test-*
+
+# Per-job worktrees created at runtime by the job queue (job-queue-isolation);
+# runtime state on this machine, never committed.
+.worktrees/
 
 # Dynamic Agent Workspace
 /workspace/
