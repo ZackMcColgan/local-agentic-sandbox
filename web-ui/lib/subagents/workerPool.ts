@@ -1257,6 +1257,14 @@ export class Semaphore {
     this.permits = Math.max(1, maxConcurrency);
   }
 
+  tryAcquire(): boolean {
+    if (this.permits > 0) {
+      this.permits--;
+      return true;
+    }
+    return false;
+  }
+
   async acquire(signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) {
       throw new Error("Worker execution aborted before acquiring concurrency slot");
@@ -1345,7 +1353,21 @@ export class WorkerPool {
       throw new Error("Worker execution aborted before start");
     }
 
-    await this.semaphore.acquire(job.abortSignal);
+    let cleanupTracking: () => void = () => {};
+    const trackingPromise = new Promise<void>((r) => {
+      cleanupTracking = r;
+    });
+    this.activeJobs.add(trackingPromise);
+
+    if (!this.semaphore.tryAcquire()) {
+      try {
+        await this.semaphore.acquire(job.abortSignal);
+      } catch (err) {
+        this.activeJobs.delete(trackingPromise);
+        cleanupTracking();
+        throw err;
+      }
+    }
 
     const abortController = new AbortController();
     let settled = false;
@@ -1362,11 +1384,6 @@ export class WorkerPool {
       job.abortSignal.addEventListener("abort", onParentAbort, { once: true });
     }
 
-    let cleanupTracking: () => void = () => {};
-    const trackingPromise = new Promise<void>((r) => {
-      cleanupTracking = r;
-    });
-    this.activeJobs.add(trackingPromise);
 
     let worktreePath: string | undefined;
     if (job.worktreeRepoRoot) {
@@ -1401,8 +1418,8 @@ export class WorkerPool {
         abortController.signal.addEventListener(
           "abort",
           () => {
-            emitTerminal("aborted");
-            reject(new Error("Worker execution aborted"));
+            setTimeout(() => { emitTerminal("aborted"); reject(new Error("Worker execution aborted")); }, 0);
+            // deferred to allow taskFn abort listener to settle first
           },
           { once: true }
         );
