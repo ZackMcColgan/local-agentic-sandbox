@@ -535,6 +535,73 @@ export class BuilderWorker {
     return null;
   }
 
+  private async runSurgicalEditLoop(params: {
+    generate: ReturnType<typeof createLlmGenerate>;
+    model: string;
+    milestone: Milestone;
+    targetRelPath: string;
+    fullPath: string;
+    previousContent: string;
+    repoRoot: string;
+    criticFeedback: string[];
+    priorContext?: string;
+    signal?: AbortSignal;
+    onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+    maxAttempts?: number;
+  }): Promise<{ content: string; loadDurationMs: number; thinking?: string }> {
+    const maxAttempts = params.maxAttempts ?? 3;
+    let totalLoadDuration = 0;
+    let lastThinking: string | undefined;
+    let lastError = "";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const retryNote = lastError
+        ? `\nPREVIOUS PATCH ATTEMPT FAILED (${lastError}). Fix the search string or syntax and return valid JSON patches.\n`
+        : "";
+      const prompt = `You are an expert autonomous code builder working on milestone [${params.milestone.id}]: ${params.milestone.title}.
+Your task: apply surgical search-and-replace patches to the existing file "${params.targetRelPath}".
+Task Requirements:
+${params.milestone.description}
+Acceptance Criteria:
+${params.milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${params.criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${params.criticFeedback.join("\n")}` : ""}
+${params.priorContext || ""}${retryNote}
+Existing file content:
+${params.previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}
+
+Respond ONLY with a JSON object of the form:
+{"patches": [{"search": "exact existing text", "replace": "replacement text"}]}
+Do not rewrite the entire file.`;
+
+      const result = await params.generate({
+        model: params.model,
+        prompt,
+        keepAlive: this.keepAlive,
+        signal: params.signal,
+        onThinkingChunk: params.onThinkingChunk,
+        scope: this.scope,
+        reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 4096 }
+      });
+      if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+      if (result.thinking) lastThinking = result.thinking;
+
+      const patched = await this.tryApplySurgicalPatches(
+        result.text,
+        params.targetRelPath,
+        params.fullPath,
+        params.previousContent,
+        params.repoRoot
+      );
+      if (patched !== null) {
+        return { content: patched, loadDurationMs: totalLoadDuration, thinking: lastThinking };
+      }
+      lastError = "Output was not valid { patches: [...] } or search string did not match";
+    }
+
+    throw new Error(`[builder] Surgical patch loop exhausted ${maxAttempts} attempts for ${params.targetRelPath}: ${lastError}`);
+  }
+
   async executeMilestoneWork(
     milestone: Milestone,
     optionsOrIteration?: {
@@ -587,6 +654,24 @@ export class BuilderWorker {
           const priorContext = priorFileContexts.length > 0
             ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
             : "";
+          if (previousContent && fs.existsSync(fullPath)) {
+            const surgical = await this.runSurgicalEditLoop({
+              generate,
+              model: modelToUse,
+              milestone,
+              targetRelPath,
+              fullPath,
+              previousContent,
+              repoRoot,
+              criticFeedback,
+              priorContext,
+              signal: options?.signal,
+              onThinkingChunk: options?.onThinkingChunk
+            });
+            newContent = surgical.content;
+            totalLoadDuration += surgical.loadDurationMs;
+            if (surgical.thinking) lastThinking = surgical.thinking;
+          } else {
           const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
@@ -616,6 +701,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
           const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
           if (patched !== null) {
             newContent = patched;
+          }
           }
         }
 
@@ -666,6 +752,24 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
     } else {
       const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
       const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
+      if (!isSingleArtifact && previousContent && fs.existsSync(fullPath)) {
+        const surgical = await this.runSurgicalEditLoop({
+          generate,
+          model: modelToUse,
+          milestone,
+          targetRelPath,
+          fullPath,
+          previousContent,
+          repoRoot,
+          criticFeedback,
+          signal: options?.signal,
+          onThinkingChunk: options?.onThinkingChunk
+        });
+        newContent = surgical.content;
+        loadDurationMs = surgical.loadDurationMs || undefined;
+        builderThinking = surgical.thinking;
+      } else {
+
       const prompt = isSingleArtifact
         ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Generate ONLY the requested file. Do NOT create supporting code, project scaffolding, build configs, or API clients. Output the file content directly.
@@ -705,6 +809,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
       const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
       if (patched !== null) {
         newContent = patched;
+      }
       }
     }
 
