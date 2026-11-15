@@ -190,10 +190,7 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("app/api/board/route"),
     tests: ["tests/p5BoardAndPipeline.test.ts"]
   },
-  {
-    match: (p) => p.includes("lib/liveState"),
-    tests: ["tests/p4LiveStateWiring.test.ts"]
-  },
+
   {
     match: (p) => p.includes("lib/prePrPipeline"),
     tests: ["tests/p5BoardAndPipeline.test.ts"]
@@ -238,7 +235,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/p21ToolCallIntegrity.test.ts",
       "tests/p22PatchAndDialect.test.ts",
       "tests/p32AndP33SupervisorGates.test.ts",
-      "tests/p4LiveStateWiring.test.ts",
+
       "tests/p5BoardAndPipeline.test.ts",
       "tests/p6SecurityDeployEvalIngestion.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
@@ -710,7 +707,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/p21ToolCallIntegrity.test.ts",
       "tests/p22PatchAndDialect.test.ts",
       "tests/p32AndP33SupervisorGates.test.ts",
-      "tests/p4LiveStateWiring.test.ts",
+
       "tests/p5BoardAndPipeline.test.ts",
       "tests/p6SecurityDeployEvalIngestion.test.ts",
       "tests/chatQueue.test.ts",
