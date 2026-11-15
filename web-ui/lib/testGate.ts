@@ -51,6 +51,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
     tests: ["tests/jobQueueIsolation.test.ts"]
   },
+  {
+    // job-queue-isolation wiring: route serialization seam + route-level proof
+    match: (p) => p.includes("lib/chatTurnGate") || p.includes("app/api/chat/route"),
+    tests: ["tests/jobQueueRoute.test.ts"]
+  },
   // Lane C UI polish (header, canvas & desktop top bar)
   {
     match: (p) =>
