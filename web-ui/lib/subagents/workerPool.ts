@@ -553,6 +553,7 @@ export class BuilderWorker {
     let totalLoadDuration = 0;
     let lastThinking: string | undefined;
     let lastError = "";
+    let lastText = "";
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const retryNote = lastError
@@ -585,6 +586,7 @@ Do not rewrite the entire file.`;
       });
       if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
       if (result.thinking) lastThinking = result.thinking;
+      lastText = result.text || "";
 
       const patched = await this.tryApplySurgicalPatches(
         result.text,
@@ -597,6 +599,14 @@ Do not rewrite the entire file.`;
         return { content: patched, loadDurationMs: totalLoadDuration, thinking: lastThinking };
       }
       lastError = "Output was not valid { patches: [...] } or search string did not match";
+    }
+
+    const fenceMatch = lastText.match(/```(?:[a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/);
+    const fallbackContent = fenceMatch && fenceMatch[1].trim().length > 0 ? fenceMatch[1] : lastText;
+    if (fallbackContent.trim().length > 0) {
+      fs.mkdirSync(path.dirname(params.fullPath), { recursive: true });
+      fs.writeFileSync(params.fullPath, fallbackContent, "utf8");
+      return { content: fallbackContent, loadDurationMs: totalLoadDuration, thinking: lastThinking };
     }
 
     throw new Error(`[builder] Surgical patch loop exhausted ${maxAttempts} attempts for ${params.targetRelPath}: ${lastError}`);

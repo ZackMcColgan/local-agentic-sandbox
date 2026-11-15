@@ -697,6 +697,7 @@ export interface StepExecutorResult {
   criticRounds?: number;
   builderModel?: string;
   targetFile?: string;
+  modifiedFiles?: string[];
   deliverableContent?: string;
   thinking?: string;
   reason?: string;
@@ -711,6 +712,7 @@ export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
   gitOps?: WorkerGitOps;
   gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  repoRoot?: string;
   signal?: AbortSignal;
 }
 
@@ -1578,6 +1580,7 @@ export class OvernightSupervisor {
               milestone.status = "completed";
               if (res.gitSha) milestone.commitSha = res.gitSha;
               if (res.diff) milestone.diffSummary = res.diff;
+              if (res.modifiedFiles) milestone.modifiedFiles = res.modifiedFiles;
               if (res.builderIterations !== undefined) milestone.builderIterations = res.builderIterations;
               if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
               if (res.builderModel) milestone.builderModel = res.builderModel;
@@ -1708,8 +1711,10 @@ export class OvernightSupervisor {
     }
 
     if (task.currentMilestoneIndex >= task.milestones.length) {
+      const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
       const finishVerification = verifyJobCompletion({
-        workspaceRoot: process.cwd(),
+        workspaceRoot: options?.repoRoot || process.cwd(),
+        expectedArtifacts,
         gatePassed: task.milestones.every((m) => m.status === "completed")
       });
       if (!finishVerification.ok) {
@@ -1717,6 +1722,7 @@ export class OvernightSupervisor {
         task.journal.push({
           timestamp: new Date().toISOString(),
           role: "supervisor",
+          action: "Finish verification gate blocked completion",
           message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
         });
       } else {

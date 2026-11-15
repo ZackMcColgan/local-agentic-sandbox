@@ -67,7 +67,7 @@ describe("P3.2 / P3.3: Supervisor finishVerificationGate & milestoneHandoff wiri
 
       // Now verify that finishVerificationGate.ts does not interpolate baseCommit into execSync
       const gateSrc = fs.readFileSync(
-        path.resolve(process.cwd(), "web-ui/lib/subagents/finishVerificationGate.ts"),
+        path.resolve(__dirname, "../lib/subagents/finishVerificationGate.ts"),
         "utf8"
       );
       assert.ok(!gateSrc.includes("execSync(`git rev-list"), "Must not interpolate baseCommit into execSync shell string");

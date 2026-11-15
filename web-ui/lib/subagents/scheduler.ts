@@ -329,11 +329,38 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
     logStream(`Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`);
 
-    const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator || generatePlanSpec;
-    const planSpec = await planGen({
-      taskId: runId,
-      goal: sched.taskDescription
-    });
+    const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator;
+    let planSpec: PlanSpec;
+    if (planGen) {
+      planSpec = await planGen({
+        taskId: runId,
+        goal: sched.taskDescription
+      });
+    } else if (options?.stepExecutor || options?.workerPool) {
+      planSpec = {
+        taskId: runId,
+        goal: sched.taskDescription,
+        toolchain: "node:22",
+        complexity: "SIMPLE_SCRIPT",
+        toMarkdown: () => sched.taskDescription,
+        milestones: [
+          {
+            id: "M1",
+            title: "Execute scheduled task",
+            description: sched.taskDescription,
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0,
+            acceptanceCriteria: []
+          }
+        ]
+      };
+    } else {
+      planSpec = await generatePlanSpec({
+        taskId: runId,
+        goal: sched.taskDescription
+      });
+    }
     const manifest: TaskManifest = {
       taskId: planSpec.taskId || `task-${Date.now()}`,
       goal: planSpec.goal || sched.taskDescription,

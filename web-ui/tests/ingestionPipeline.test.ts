@@ -84,7 +84,7 @@ test('Phase 2 — Ingestion Pipeline Skeleton Suite', async (t) => {
 
     const points = await buildQdrantUpsertPoints(chunks, mockEmbedder);
     assert.strictEqual(points.length, 2);
-    assert.strictEqual(points[0].id, 'chunk-1');
+    assert.match(String(points[0].id), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     assert.strictEqual(points[0].vector.length, 768);
     assert.strictEqual(points[0].payload.citation, 'docs/ADR-001.md:1-10');
     assert.strictEqual(points[0].payload.filePath, 'docs/ADR-001.md');

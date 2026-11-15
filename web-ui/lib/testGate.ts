@@ -47,6 +47,34 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  {
+    match: (p) => p.includes("workerPool.ts") || p.includes("builderSurgicalLoop.test.ts"),
+    tests: ["tests/builderSurgicalLoop.test.ts"],
+  },
+  {
+    match: (p) => p.includes("BuildsView.tsx") || p.includes("buildsViewBoard.test.ts"),
+    tests: ["tests/buildsViewBoard.test.ts"],
+  },
+  {
+    match: (p) => p.includes("dialectGuard") || p.includes("dialectGuardWiring.test.ts"),
+    tests: ["tests/dialectGuardWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("ingestion") || p.includes("ingestionQdrantIds.test.ts"),
+    tests: ["tests/ingestionQdrantIds.test.ts"],
+  },
+  {
+    match: (p) => p.includes("supervisor.ts") || p.includes("p3FinishAndHandoffWiring.test.ts"),
+    tests: ["tests/p3FinishAndHandoffWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("scheduler.ts") || p.includes("schedulerPlanner.test.ts"),
+    tests: ["tests/schedulerPlanner.test.ts"],
+  },
+  {
+    match: (p) => p.includes("security") || p.includes("securityHardeningWiring.test.ts"),
+    tests: ["tests/securityHardeningWiring.test.ts"],
+  },
   // Lane C UI polish (header, canvas & desktop top bar)
   {
     match: (p) =>

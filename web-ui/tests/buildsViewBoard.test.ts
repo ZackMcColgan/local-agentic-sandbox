@@ -8,7 +8,7 @@ import { BuildsView } from "../components/BuildsView";
 
 describe("UI-051: BuildsView consumes /api/board", () => {
   it("production BuildsView component fetches /api/board", () => {
-    const src = fs.readFileSync(path.resolve(process.cwd(), "web-ui/components/BuildsView.tsx"), "utf8");
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/BuildsView.tsx"), "utf8");
     assert.ok(src.includes('fetch("/api/board")'), "BuildsView.tsx must fetch /api/board");
     assert.ok(!src.includes('fetch("/api/tasks")'), "BuildsView.tsx must not fetch /api/tasks");
   });
