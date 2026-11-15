@@ -282,15 +282,10 @@ export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; fun
     }
 
     const toolParameters: Record<string, any> = { type: "object" };
-    if (schema?.properties) {
-      toolParameters.properties = schema.properties;
-    } else if (name === "search_web") {
-      toolParameters.properties = { query: { type: "string" } };
-    }
-    if (Array.isArray(schema?.required)) {
-      toolParameters.required = schema.required;
-    } else if (name === "search_web") {
+    if (name === "search_web") {
       toolParameters.required = ["query"];
+    } else if (!KNOWN_ONE_LINERS[name] && Array.isArray(schema?.required) && schema.required.length > 0) {
+      toolParameters.required = schema.required;
     }
 
     layer1.push({
