@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { execFileSync } from "child_process";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path";
-import { JobQueue, submitJob, type QueuedJob } from "../lib/jobQueue.ts";
-import { createJobWorktree, removeJobWorktree } from "../lib/worktree.ts";
-import { resolveTurnStatusPhase } from "../lib/chatStatus.ts";
+import { JobQueue, submitJob, type QueuedJob } from "../lib/jobQueue";
+import { createJobWorktree, removeJobWorktree } from "../lib/worktree";
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
 
 describe("AC1 sequential execution", () => {
   it("second job starts only after first finishes", async () => {

@@ -4,9 +4,9 @@ import { execFileSync } from "child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { JobQueue } from "../lib/jobQueue.ts";
-import { serializeTurn } from "../lib/chatTurnGate.ts";
-import { resolveTurnStatusPhase } from "../lib/chatStatus.ts";
+import { JobQueue } from "../lib/jobQueue";
+import { serializeTurn } from "../lib/chatTurnGate";
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
 
 function makeRepo(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "route-wt-"));

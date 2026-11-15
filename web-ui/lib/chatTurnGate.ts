@@ -1,5 +1,5 @@
-import { JobQueue, QueuedJob } from "./jobQueue.ts";
-import { createJobWorktree, removeJobWorktree, WorktreeHandle } from "./worktree.ts";
+import { JobQueue, QueuedJob } from "./jobQueue";
+import { createJobWorktree, removeJobWorktree, WorktreeHandle } from "./worktree";
 
 export interface TurnGateRequest {
   id: string;
