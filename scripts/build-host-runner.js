@@ -68,6 +68,30 @@ function computeSha256() {
   return hash.digest("hex");
 }
 
+// Rename-then-swap: the deployed exe is locked while the daemon runs, so a
+// copyFileSync over it fails EBUSY. Windows permits renaming a running exe,
+// so move the locked target aside first, then copy the fresh build into place.
+function swapFileIntoPlace(srcPath, destPath) {
+  if (fs.existsSync(destPath)) {
+    const stalePath = destPath + ".old";
+    try {
+      if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { force: true });
+      fs.renameSync(destPath, stalePath);
+    } catch (err) {
+      // Rename failed (locked harder than expected): fall back to direct copy.
+      console.warn(`      Rename-aside failed (${err.code}); falling back to direct copy.`);
+      fs.copyFileSync(srcPath, destPath);
+      return;
+    }
+  }
+  fs.copyFileSync(srcPath, destPath);
+  // Best-effort cleanup of the stale copy; a running process may still hold it.
+  const stalePath = destPath + ".old";
+  try {
+    if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { force: true });
+  } catch {}
+}
+
 if (process.argv.includes("--get-digest")) {
   const digest = computeSha256();
   process.stdout.write(digest);
@@ -169,9 +193,9 @@ execSync(postjectCmd, {
   stdio: "inherit"
 });
 
-// 6. Copy compiled binary to C:\AI\ai-control\bin\host-runner.exe
+// 6. Swap compiled binary into C:\AI\ai-control\bin\host-runner.exe
 console.log(`[5/6] Deploying executable to ${aiControlBinExe}...`);
-fs.copyFileSync(localExePath, aiControlBinExe);
+swapFileIntoPlace(localExePath, aiControlBinExe);
 fs.writeFileSync(
   path.join(aiControlBinDir, "manifest.json"),
   JSON.stringify(manifestData, null, 2) + "\n",

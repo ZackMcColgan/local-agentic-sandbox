@@ -6,6 +6,7 @@ import { spawn, execSync } from "child_process";
 import { isDestructiveHostAction } from "./classifier";
 import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
+import { JobStore, runAsyncJob, resolveAsyncTimeoutSeconds } from "./jobStore";
 import {
   executeGitVerb,
   resolveDefaultGitOpsLogPath,
@@ -21,6 +22,7 @@ export interface HostServerOptions {
   allowUnattendedGit?: boolean;
   gitRepoAllowlist?: Record<string, string>;
   gitOpsLogPath?: string;
+  jobsDir?: string;
 }
 
 const MAX_OUTPUT_CHARS = 65536;
@@ -86,6 +88,11 @@ export function createHostServer(options: HostServerOptions = {}) {
     gitOpsLogPath: options.gitOpsLogPath || fileConfig.gitOpsLogPath || resolveDefaultGitOpsLogPath()
   };
 
+  // Async host jobs: daemon-owned execution independent of HTTP request lifetime.
+  const jobStore = new JobStore(
+    options.jobsDir || process.env.HOST_RUNNER_JOBS_DIR || path.resolve(__dirname, "jobs")
+  );
+
   const server = http.createServer(async (req, res) => {
     // Zero CORS headers - NEVER set Access-Control-Allow-* headers.
 
@@ -101,7 +108,10 @@ export function createHostServer(options: HostServerOptions = {}) {
       "127.0.0.1",
       "localhost"
     ];
-    if (!allowedHosts.includes(hostHeader)) {
+    // Loopback-only hosts with any bound port (supports ephemeral port 0 for tests).
+    const loopbackAnyPort =
+      /^(host-runner-service|host\.docker\.internal|127\.0\.0\.1|localhost)(:\d+)?$/.test(hostHeader);
+    if (!allowedHosts.includes(hostHeader) && !loopbackAnyPort) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Bad Request: Invalid Host header" }));
       return;
@@ -280,6 +290,174 @@ export function createHostServer(options: HostServerOptions = {}) {
       return;
     }
 
+    // 5. POST /execute-async route: start a daemon-owned job, return job id immediately.
+    if (req.method === "POST" && url.pathname === "/execute-async") {
+      const authHeader = req.headers["x-host-runner-secret"];
+      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+
+      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
+
+      req.on("data", (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_BODY_BYTES) {
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Payload too large" }));
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+
+      req.on("end", async () => {
+        let body: any;
+        try {
+          const rawText = Buffer.concat(chunks).toString("utf8");
+          body = JSON.parse(rawText);
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid JSON body" }));
+          return;
+        }
+
+        const tool = body.tool;
+        const toolArgs = body.args || {};
+
+        // Destructive classification + approvals UNCHANGED, applied at START
+        // before the job runs. No execution happens without approval.
+        const classification = isDestructiveHostAction(tool, toolArgs);
+        if (classification.isDestructive) {
+          const rawApproval = req.headers["x-host-approval-id"];
+          const approvalId = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
+
+          if (!approvalId || typeof approvalId !== "string" || !approvalId.trim()) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
+                reason: classification.reason
+              })
+            );
+            return;
+          }
+
+          pruneOldApprovals();
+          if (consumedApprovals.has(approvalId)) {
+            res.writeHead(409, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: `Approval ID already consumed: ${approvalId}`,
+                approvalId
+              })
+            );
+            return;
+          }
+
+          consumedApprovals.set(approvalId, Date.now());
+        }
+
+        const timeoutMs = resolveAsyncTimeoutSeconds(toolArgs) * 1000;
+        const rec = jobStore.create(tool, toolArgs, timeoutMs);
+
+        // Fire-and-forget: the daemon owns execution independent of this request.
+        // The job must never write to this HTTP response (it is already ended).
+        const jobResponse: http.ServerResponse = {
+          writeHead: () => jobResponse,
+          end: () => jobResponse,
+          writableEnded: true
+        } as unknown as http.ServerResponse;
+        runAsyncJob(
+          jobStore,
+          rec,
+          (t, a) => handleToolExecution(t, a, jobResponse, body.capability, gitConfig, body.mergeGrant)
+        ).catch(() => {});
+
+        res.writeHead(202, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ jobId: rec.id, status: rec.status }));
+      });
+
+      return;
+    }
+
+    // 6. GET /jobs/:id route: pollable status.
+    if (req.method === "GET" && /^\/jobs\/[A-Za-z0-9-]+$/.test(url.pathname)) {
+      const authHeader = req.headers["x-host-runner-secret"];
+      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+
+      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const jobId = url.pathname.split("/")[2];
+      const rec = jobStore.get(jobId);
+      if (!rec) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `Job not found: ${jobId}` }));
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        jobId: rec.id,
+        tool: rec.tool,
+        status: rec.status,
+        createdAt: rec.createdAt,
+        startedAt: rec.startedAt,
+        finishedAt: rec.finishedAt,
+        exitCode: rec.exitCode,
+        timedOut: rec.timedOut,
+        error: rec.error,
+        timeoutMs: rec.timeoutMs
+      }));
+      return;
+    }
+
+    // 7. GET /jobs/:id/output route: spool offset reads (page through output).
+    if (req.method === "GET" && /^\/jobs\/[A-Za-z0-9-]+\/output$/.test(url.pathname)) {
+      const authHeader = req.headers["x-host-runner-secret"];
+      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+
+      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const parts = url.pathname.split("/");
+      const jobId = parts[2];
+      const rec = jobStore.get(jobId);
+      if (!rec) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `Job not found: ${jobId}` }));
+        return;
+      }
+
+      const stream = url.searchParams.get("stream") === "stderr" ? "stderr" : "stdout";
+      const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
+      const limit = Math.max(1, parseInt(url.searchParams.get("limit") || "65536", 10) || 65536);
+      const slice = jobStore.readSpool(jobId, stream, offset, limit);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        jobId,
+        stream,
+        chunk: slice.chunk,
+        nextOffset: slice.nextOffset,
+        totalLength: slice.totalLength,
+        status: rec.status
+      }));
+      return;
+    }
+
     // 404 for unknown endpoints
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not Found" }));
@@ -297,6 +475,7 @@ export function createHostServer(options: HostServerOptions = {}) {
       }),
     stop: () =>
       new Promise<void>((resolve) => {
+        jobStore.interruptActive();
         server.close(() => resolve());
       })
   };
