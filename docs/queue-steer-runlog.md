@@ -838,3 +838,12 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 - Driver landed Parts 1-6 via SSH onto branch feature/job-queue-isolation (from develop 6ea1eef): lib/jobQueue.ts, lib/worktree.ts, tests/jobQueueIsolation.test.ts, chatStatus.ts patch, testGate.ts mapping rule. Two driver deviations from the turn's pasted code: (a) createJobWorktree now passes -b so the returned job/<id> branch actually exists (turn's version left branch unused/detached); (b) test callbacks typed (job: QueuedJob) so next build typecheck stays clean under strict mode.
 - Gate: run on host via SSH before commit; result in the commit message.
 - SCOPE NOTE: this banks the queue + isolation MECHANISM (libs + tests). Route/UI wiring (chat route serializes via JobQueue; ChatStream shows queue position) is still open — needs a working host daemon (AI-ON.ps1, owner action) for a follow-up Sandy turn, or driver wiring. No PR opened for the unwired slice; item stays working.
+
+## job-queue-isolation — gate green + PR opened (2026-11-15, resume turn)
+- Owner gate CLEARED: AI-ON.ps1 bounce landed, /api/host/status runnerAvailable true, runnerState READY, sha 402124d6e737... (driver-verified 03:11 CT Nov 15). Host tools restored.
+- Verified on disk before acting: feature/job-queue-isolation @ 196127d, clean tree, tracking origin. Parts 1-6 NOT re-landed.
+- GATE: npm run test:gate via bridge on branch head 196127d -> PASSED 312 pass / 0 fail / 0 skipped in 15.6s (<90s budget). jobQueueIsolation.test.ts included in the run (testGate mapping rule from step 1). No test or gate pass/fail logic touched.
+- ACCEPTANCE EVIDENCE (for PR body): AC1 sequential (order start:A,end:A,start:B,end:B), AC2 worktree isolation (job B tree = base f.txt, no job-A uncommitted files), AC3 queue position (waiting job position 1 while first runs; UI phase reducer renders "Queued (position N)"). Validated in /tmp mirror (5 tests, 0 fail) + this host gate run (312/0).
+- PR opened into develop from feature/job-queue-isolation (number recorded below). No merge, no deploy in this job — driver owns those.
+- OPEN FOLLOW-UP (not this turn's brief scope): chat route serialization via JobQueue + ChatStream queue-position wiring; owner phone acceptance is the final UI gate.
+- PR: #TBD
