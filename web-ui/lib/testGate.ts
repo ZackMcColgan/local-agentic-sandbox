@@ -218,6 +218,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/p21ToolCallIntegrity.test.ts",
       "tests/p22PatchAndDialect.test.ts",
       "tests/p32AndP33SupervisorGates.test.ts",
+      "tests/p4LiveStateWiring.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
@@ -687,6 +688,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/p21ToolCallIntegrity.test.ts",
       "tests/p22PatchAndDialect.test.ts",
       "tests/p32AndP33SupervisorGates.test.ts",
+      "tests/p4LiveStateWiring.test.ts",
       "tests/chatQueue.test.ts",
       "tests/punchlistUiFixes.test.ts",
       "tests/uiStateAndDedup.test.ts"
