@@ -51,8 +51,8 @@ describe("P3.2 / P3.3: Supervisor finishVerificationGate & milestoneHandoff wiri
       const result = await supervisor.executeTaskWithRecovery(task, {
         stepExecutor: async (_t, m) => ({
           status: "completed",
-          diff: `diff for ${m.id}`,
-          modifiedFiles: [`${m.id}.ts`]
+          diff: `diff for ${m}`,
+          modifiedFiles: [`${m}.ts`]
         }),
         repoRoot: tmpDir
       });

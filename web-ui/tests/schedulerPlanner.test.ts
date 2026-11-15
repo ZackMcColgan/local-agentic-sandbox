@@ -14,7 +14,9 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
         id: "sched-1",
         cronExpression: "0 2 * * *",
         taskDescription: "Audit and refactor auth module",
-        enabled: true
+        enabled: true,
+        createdAt: new Date().toISOString(),
+        nextRun: new Date().toISOString()
       };
       scheduler.saveSchedules([sched]);
 
@@ -50,7 +52,7 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
             ]
           } as any;
         },
-        runner: async (m) => ({ ...m, status: "completed" })
+        runner: async (m: Record<string, unknown>) => ({ ...m, status: "completed" })
       } as any);
 
       assert.strictEqual(plannerCalled, true, "Planner must be called by executeScheduledRun");

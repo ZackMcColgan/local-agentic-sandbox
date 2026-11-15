@@ -6,6 +6,7 @@ import os from "node:os";
 import http from "node:http";
 import { buildLayer1Tools } from "../lib/progressiveTools";
 import { parseToolCallsFromText } from "../lib/toolParser";
+import { NextRequest } from "next/server";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
@@ -145,7 +146,7 @@ describe("P2.1: Tool-call integrity", () => {
 
       const store = new ThreadStore(tmpThreadsDir);
       const thread = await store.createThread({ title: "malformed json test" });
-      const req = new Request("http://localhost/api/chat", {
+      const req = new NextRequest("http://localhost/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ threadId: thread.id, messages: [{ role: "user", content: "Search" }] }),
@@ -193,7 +194,7 @@ describe("P2.1: Tool-call integrity", () => {
 
       const store = new ThreadStore(tmpThreadsDir);
       const thread = await store.createThread({ title: "parallel tools test" });
-      const req = new Request("http://localhost/api/chat", {
+      const req = new NextRequest("http://localhost/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ threadId: thread.id, messages: [{ role: "user", content: "Run both" }] }),

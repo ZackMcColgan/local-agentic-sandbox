@@ -16,6 +16,9 @@ describe("UI-051: BuildsView consumes /api/board", () => {
   it("renders board task rows when provided thread-backed tasks", () => {
     const html = renderToStaticMarkup(
       React.createElement(BuildsView, {
+        onOpenDrawer: () => {},
+        activeTask: null,
+        onSelectThread: () => {},
         tasks: [
           {
             taskId: "thread-board-1",

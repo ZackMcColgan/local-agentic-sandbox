@@ -38,7 +38,8 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
           return {
             text: JSON.stringify({
               patches: [{ search: "  return 1;", replace: "  return 42;" }]
-            })
+            }),
+            model: "mock-model"
           };
         }
       });

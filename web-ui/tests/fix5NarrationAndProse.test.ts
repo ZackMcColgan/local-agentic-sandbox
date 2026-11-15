@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
+import { NextRequest } from "next/server";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
@@ -97,7 +98,7 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
     const store = new ThreadStore(tmpThreadsDir);
     const thread = await store.createThread({ title: "UI-010 test" });
 
-    const req = new Request("http://localhost/api/chat", {
+    const req = new NextRequest("http://localhost/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -163,7 +164,7 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
     const store = new ThreadStore(tmpThreadsDir);
     const thread = await store.createThread({ title: "B-1 test" });
 
-    const req = new Request("http://localhost/api/chat", {
+    const req = new NextRequest("http://localhost/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
