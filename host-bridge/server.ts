@@ -1,11 +1,9 @@
 import http from "http";
 import fs from "fs";
-import os from "os";
 import path from "path";
 import crypto from "crypto";
 import { spawn, execSync } from "child_process";
 import { isDestructiveHostAction } from "./classifier";
-import { AsyncJobManager } from "./asyncJobs";
 import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
 import {
@@ -23,7 +21,6 @@ export interface HostServerOptions {
   allowUnattendedGit?: boolean;
   gitRepoAllowlist?: Record<string, string>;
   gitOpsLogPath?: string;
-  jobsDir?: string;
 }
 
 const MAX_OUTPUT_CHARS = 65536;
@@ -54,9 +51,6 @@ export function createHostServer(options: HostServerOptions = {}) {
 
   // Dual-layer approval consumption tracking: approvalId -> timestamp
   const consumedApprovals = new Map<string, number>();
-  const jobManager = new AsyncJobManager(
-    options.jobsDir || path.join(os.tmpdir(), "host-runner-jobs")
-  );
 
   // Prune consumed approvals older than 1 hour periodically
   function pruneOldApprovals() {
@@ -185,125 +179,6 @@ export function createHostServer(options: HostServerOptions = {}) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ logs }));
       return;
-    }
-
-    // 3c. Async job routes (/jobs/start, /jobs/:id/status, /jobs/:id/output, /jobs/:id/cancel)
-    if (url.pathname === "/jobs/start" && req.method === "POST") {
-      const authHeader = req.headers["x-host-runner-secret"];
-      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Unauthorized" }));
-        return;
-      }
-
-      const chunks: Buffer[] = [];
-      let totalBytes = 0;
-      const MAX_BODY_BYTES = 5 * 1024 * 1024;
-      req.on("data", (chunk: Buffer) => {
-        totalBytes += chunk.length;
-        if (totalBytes > MAX_BODY_BYTES) {
-          res.writeHead(413, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Payload too large" }));
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      req.on("end", () => {
-        let body: any;
-        try {
-          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        } catch {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid JSON body" }));
-          return;
-        }
-
-        const tool = body.tool;
-        const toolArgs = body.args || {};
-        const timeoutMs = typeof body.timeoutMs === "number" && body.timeoutMs > 0 ? body.timeoutMs : 3_600_000;
-
-        const classification = isDestructiveHostAction(tool, toolArgs);
-        if (classification.isDestructive) {
-          const rawApproval = req.headers["x-host-approval-id"];
-          const approvalId = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
-          if (!approvalId || typeof approvalId !== "string" || !approvalId.trim()) {
-            res.writeHead(403, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
-                reason: classification.reason
-              })
-            );
-            return;
-          }
-          if (consumedApprovals.has(approvalId)) {
-            res.writeHead(409, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: `Approval ID already consumed: ${approvalId}`, approvalId }));
-            return;
-          }
-          consumedApprovals.set(approvalId, Date.now());
-        }
-
-        try {
-          const meta = jobManager.startJob(tool, toolArgs, timeoutMs);
-          res.writeHead(202, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(meta));
-        } catch (err: any) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: err?.message || "Failed to start async job" }));
-        }
-      });
-      return;
-    }
-
-    const jobRouteMatch = url.pathname.match(/^\/jobs\/([^/]+)\/(status|output|cancel)$/);
-    if (jobRouteMatch) {
-      const authHeader = req.headers["x-host-runner-secret"];
-      const secretStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-      if (!constantTimeSecretEquals(secretStr, sharedSecret)) {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Unauthorized" }));
-        return;
-      }
-
-      const [, jobId, action] = jobRouteMatch;
-      if (action === "status" && req.method === "GET") {
-        const meta = jobManager.getStatus(jobId);
-        if (!meta) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Job not found" }));
-          return;
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(meta));
-        return;
-      }
-      if (action === "output" && req.method === "GET") {
-        const offset = parseInt(url.searchParams.get("offset") || "0", 10) || 0;
-        const limit = parseInt(url.searchParams.get("limit") || "65536", 10) || 65536;
-        const out = jobManager.getOutput(jobId, offset, limit);
-        if (!out) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Job not found" }));
-          return;
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(out));
-        return;
-      }
-      if (action === "cancel" && req.method === "POST") {
-        const meta = jobManager.cancelJob(jobId);
-        if (!meta) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Job not found" }));
-          return;
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(meta));
-        return;
-      }
     }
 
     // 4. POST /execute route
