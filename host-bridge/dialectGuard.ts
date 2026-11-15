@@ -3,6 +3,7 @@ export type TargetShell = "powershell" | "cmd" | "bash";
 export interface DialectCheckResult {
   ok: boolean;
   reason?: string;
+  noRules?: boolean;
 }
 
 const POWERSHELL_FORBIDDEN: Array<{ pattern: RegExp; hint: string }> = [
@@ -34,6 +35,8 @@ export function checkCommandDialect(command: string, shell: TargetShell): Dialec
         return { ok: false, reason: `Shell dialect mismatch (target: bash): ${rule.hint}` };
       }
     }
+  } else if (shell === "cmd") {
+    return { ok: true, noRules: true, reason: "No dialect rules configured for cmd shell." };
   }
   return { ok: true };
 }

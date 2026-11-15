@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { spawn, execSync } from "child_process";
+import { checkCommandDialect } from "./dialectGuard";
 import { isDestructiveHostAction } from "./classifier";
 import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
@@ -481,7 +482,7 @@ export function createHostServer(options: HostServerOptions = {}) {
   };
 }
 
-async function handleToolExecution(
+export async function handleToolExecution(
   tool: string,
   args: any,
   res: http.ServerResponse,
@@ -503,6 +504,10 @@ async function handleToolExecution(
 
   if (tool === "host_run_powershell") {
     const command = String(args?.command || "");
+    const dialect = checkCommandDialect(command, "powershell");
+    if (!dialect.ok) {
+      return { success: false, error: dialect.reason };
+    }
     let timeoutSeconds = 120;
     if (typeof args?.timeoutSeconds === "number" && !isNaN(args.timeoutSeconds)) {
       timeoutSeconds = Math.max(1, Math.min(600, Math.floor(args.timeoutSeconds)));
