@@ -836,3 +836,4 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 2026-11-15 12:31 CT self-update S1: rollback target v-5e98c6f-fresh, develop head 8126ce5 (runlog-only drift, CI all-four-green run 43745227108)  
 2026-11-15 12:35 CT self-update S4 VERIFIED: pod web-ui-75866b495b-fzs2h 1/1 Running 0 restarts, image v-6160c6d-fresh, gateway 200, /api/threads 200 (84 threads, history intact). prod == develop 6160c6d. RACE NOTE: a concurrent driver tick deployed v-8126ce5-fresh mid-run (its set-image landed after this run S3); re-set to v-6160c6d-fresh and verified.  
 2026-11-15 12:50 CT self-update S1: rollback target v-6160c6d-fresh, develop head 59ddf18 (runlog-only drift, CI all-four-green run 43747556444)  
+2026-11-15 12:53 CT self-update S4 VERIFIED: pod web-ui-85fd9c988b-jn2dq 1/1 Running 0 restarts, image v-17d07b9-fresh, gateway 200, /api/threads 200 (84 threads, history intact). prod == develop 17d07b9.  
