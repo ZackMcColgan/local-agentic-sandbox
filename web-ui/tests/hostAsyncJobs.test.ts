@@ -7,6 +7,10 @@ import { createHostServer } from "../../host-bridge/server";
 
 const TEST_SECRET = "async-jobs-test-secret-0123456789abcdef";
 
+// PowerShell is only available on Windows; CI runs ubuntu-24.04 where
+// powershell.exe does not exist and spawn hangs indefinitely.
+const POWERSHELL_AVAILABLE = process.platform === "win32";
+
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return {
     "x-host-runner-secret": TEST_SECRET,
@@ -64,7 +68,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
   });
 
-  test("start returns a job id immediately while the command still runs", async () => {
+  test("start returns a job id immediately while the command still runs", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     try {
       const t0 = Date.now();
@@ -91,7 +95,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     }
   });
 
-  test("spool offset reads return the right slices", async () => {
+  test("spool offset reads return the right slices", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     try {
       const { body } = await startJob(base, "host_run_powershell", { command: "Write-Output '0123456789'" });
@@ -119,7 +123,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     }
   });
 
-  test("status polling transitions pending/running to done", async () => {
+  test("status polling transitions pending/running to done", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     try {
       const { body } = await startJob(base, "host_run_powershell", { command: "Start-Sleep -Seconds 2; Write-Output 'ok'" });
@@ -136,7 +140,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     }
   });
 
-  test("job-level timeout kills and stamps a hung job (60-minute class)", async () => {
+  test("job-level timeout kills and stamps a hung job (60-minute class)", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     try {
       // 60-minute class: the async path accepts timeouts up to 3600s.
@@ -154,7 +158,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     }
   });
 
-  test("a job orphaned by a daemon restart reads as interrupted", async () => {
+  test("a job orphaned by a daemon restart reads as interrupted", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     const { body } = await startJob(base, "host_run_powershell", { command: "Start-Sleep -Seconds 30", timeoutSeconds: 300 });
     await pollUntil(base, body.jobId, (b) => b.status === "running");
@@ -173,7 +177,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
     }
   });
 
-  test("the synchronous path still completes a short command inline", async () => {
+  test("the synchronous path still completes a short command inline", { skip: !POWERSHELL_AVAILABLE }, async () => {
     const { srv, base } = await startServer(jobsDir);
     try {
       const res = await fetch(`${base}/execute`, {
