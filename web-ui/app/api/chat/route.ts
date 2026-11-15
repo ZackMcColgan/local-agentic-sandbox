@@ -580,13 +580,19 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         // queue moving, so a queued turn is never misclassified as abandoned.
         await Promise.race([
           writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 10000)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("writer timeout")), 2000)),
           new Promise((_, reject) => req.signal.addEventListener("abort", () => reject(new Error("client aborted"))))
         ]);
       } catch (err: any) {
         clearInterval(heartbeatInterval);
         if (req.signal.aborted) {
           clientDisconnected = true;
+        } else if (err.message === "writer timeout") {
+          // Idle reader (client stopped consuming): abort the writable so the
+          // readable errors out and later writes skip instantly instead of
+          // waiting the timeout again each event.
+          startReadableDrain();
+          try { writer.abort(err); } catch {}
         }
         console.log(`[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}: ${formatSseWriterError(err)}. Turn continuing detached server-side.`);
         // job-queue-isolation: the client is gone; abort the writable so any
