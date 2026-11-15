@@ -92,6 +92,9 @@ function swapFileIntoPlace(srcPath, destPath) {
   } catch {}
 }
 
+module.exports = { swapBinary: swapFileIntoPlace };
+
+if (require.main === module) {
 if (process.argv.includes("--get-digest")) {
   const digest = computeSha256();
   process.stdout.write(digest);
@@ -218,6 +221,5 @@ try {
 }
 
 console.log("==========================================================");
-console.log("  BUILD SUCCESS: Host Runner SEA compiled & deployed!");
-console.log(`  Binary: ${aiControlBinExe} (${(fs.statSync(aiControlBinExe).size / (1024 * 1024)).toFixed(2)} MB)`);
 console.log("==========================================================");
+}
