@@ -186,6 +186,26 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
+  {
+    match: (p) => p.includes("app/api/board/route"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/liveState"),
+    tests: ["tests/p4LiveStateWiring.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/prePrPipeline"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/securityHardening") || p.includes("lib/selfDeployMachinery"),
+    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/finishVerificationGate"),
+    tests: ["tests/p32AndP33SupervisorGates.test.ts"]
+  },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
     match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
