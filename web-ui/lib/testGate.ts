@@ -215,6 +215,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/incompleteStatusAffordance.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
@@ -681,6 +682,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatLiveVisibility.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
       "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
       "tests/chatQueue.test.ts",
       "tests/punchlistUiFixes.test.ts",
       "tests/uiStateAndDedup.test.ts"

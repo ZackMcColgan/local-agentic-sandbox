@@ -1407,16 +1407,32 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             if (turnAbortController.signal.aborted) break;
             const toolName = toolCall.function.name;
             let toolArgs: Record<string, any> = {};
+            let malformedArgsError: string | null = null;
             if (typeof toolCall.function.arguments === "string") {
               try {
                 toolArgs = toolCall.function.arguments.trim()
                   ? JSON.parse(toolCall.function.arguments)
                   : {};
-              } catch {
-                toolArgs = {};
+              } catch (parseErr: any) {
+                malformedArgsError = `Malformed JSON arguments for tool '${toolName}': ${parseErr?.message || "Invalid JSON"}`;
               }
             } else if (toolCall.function.arguments && typeof toolCall.function.arguments === "object") {
               toolArgs = { ...toolCall.function.arguments };
+            }
+
+            if (malformedArgsError) {
+              const errPayload = JSON.stringify({ error: malformedArgsError });
+              await sendEvent({
+                type: "trace",
+                trace: { tool: toolName, args: { raw: toolCall.function.arguments }, result: errPayload, isError: true }
+              });
+              conversationMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id || `${toolName}_err`,
+                name: toolName,
+                content: errPayload
+              });
+              continue;
             }
 
             if (toolName === "search_web") {
