@@ -847,3 +847,13 @@ async-host-jobs deploy S4 VERIFIED: pod web-ui-9f88bb9b-5sbzd 1/1 Running 0 rest
 - PR opened into develop from feature/job-queue-isolation (number recorded below). No merge, no deploy in this job — driver owns those.
 - OPEN FOLLOW-UP (not this turn's brief scope): chat route serialization via JobQueue + ChatStream queue-position wiring; owner phone acceptance is the final UI gate.
 - PR: #105 (https://github.com/ZackMcColgan/local-agentic-sandbox/pull/105) — opened into develop from feature/job-queue-isolation head a8fba38. No merge, no deploy in this job.
+
+## job-queue-isolation - step 3 wiring (2026-11-15, builder turn, worktree jobqueue-wt)
+- Commit 1458431 on feature/job-queue-isolation (after db3a177), pushed to origin. PR #105 exists; no merge/deploy here.
+- Wiring: web-ui/app/api/chat/route.ts POST now runs the turn body through serializeTurn(chatJobQueue, ...) - module-level singleton JobQueue, one turn at a time FIFO, per-job git worktree via createJobWorktree(resolveJobRepoRoot(), assistantMessageId); queued turns emit {type:"status", status:"Queued (position N)", queue_position:N} via onQueued. POST returns the SSE Response immediately; the queue gates the turn body, not the response.
+- chatTurnGate.ts: queuePosition corrected to jobs-ahead semantics (running => idx+1, pre-drain => idx) so a second turn reports position 1, matching AC3.
+- Deadlock fixes found by gate suites (chatPersistenceDecoupling + chatThinkingPreservation): an abandoned SSE stream (client reader gone without req.signal abort) backpressured writer.write/close forever, stalling the serialized queue tail. Route now drains the readable on client disconnect, aborts the writer on write failure, and on client-disconnected finish aborts instead of close. sendEvent timeout raised 500ms -> 10s and only marks clientDisconnected when req.signal actually aborted (slow reader = backpressure, not dead client).
+- worktree.ts: job/<id> branches are ephemeral scratch - createJobWorktree force-removes leftover worktree + deletes stale branch before add; removeJobWorktree deletes the branch too. Fixes reused-id failures ("branch already exists") seen in gate runs.
+- .gitignore: tmp-test-* and .worktrees/ are runtime scratch, never committed (was polluting gate changed-file detection).
+- Tests: jobQueueRoute.test.ts extended - route wiring audit (singleton queue, repoRoot, queue_position emission) + AC3 awaited settled handles; ChatStream queue-position guard marked it.skip (deferred to step 4 UI wiring). jobQueueRoute + jobQueueIsolation: 9 pass / 0 fail / 1 skip. chatPersistenceDecoupling: 13 pass / 0 fail.
+- Gate: npm run test:gate via bridge; result recorded below (34 suites mapped by chat-route rules; serialized turns lengthen the run).
