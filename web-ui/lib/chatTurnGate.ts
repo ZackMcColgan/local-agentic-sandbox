@@ -1,5 +1,5 @@
-import { JobQueue, QueuedJob } from "./jobQueue";
-import { createJobWorktree, removeJobWorktree, WorktreeHandle } from "./worktree";
+import { JobQueue, QueuedJob } from "./jobQueue.ts";
+import { createJobWorktree, removeJobWorktree, WorktreeHandle } from "./worktree.ts";
 
 export interface TurnGateRequest {
   id: string;
@@ -42,8 +42,12 @@ export function serializeTurn(
   // something is ahead of it (a running turn, or another pending turn).
   const snap = queue.snapshot();
   const idx = snap.queued.findIndex((q) => q.id === req.id);
-  const queued = snap.running !== null || snap.queued.length > 1;
-  const queuePosition = queued ? idx + 1 : 0;
+  // Position = number of turns ahead of this one. drain() starts asynchronously,
+  // so a turn enqueued before any drain began is still in pending: the jobs
+  // ahead of it are its pending index. Once a turn is running, pending jobs
+  // are 1-based behind that running turn.
+  const queued = snap.running !== null || idx > 0;
+  const queuePosition = queued ? (snap.running !== null ? idx + 1 : idx) : 0;
   if (queuePosition > 0) opts.onQueued?.(queuePosition);
 
   const settled = queue.drain(async (j) => {
