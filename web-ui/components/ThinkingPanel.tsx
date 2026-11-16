@@ -166,7 +166,7 @@ export function ThinkingPanel({
         className="w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 text-left group transition-colors hover:bg-slate-100/70 dark:hover:bg-zinc-855/60 focus:outline-none"
         aria-expanded={isExpanded}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
           <span
             aria-hidden="true"
             className={`h-2 w-2 rounded-full shrink-0 ${
@@ -199,7 +199,7 @@ export function ThinkingPanel({
                 </>
               ) : (
                 <>
-                  <span>Thought process · </span>
+                  <span className="hidden sm:inline">Thought process · </span>
                   {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
                 </>
               )}
@@ -273,7 +273,7 @@ export function ThinkingPanel({
               >
                 {/* Card Title & Meta */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                     <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 flex items-center justify-center shrink-0">
                       <Icon className="h-3.5 w-3.5 stroke-[2.2]" />
                     </div>
