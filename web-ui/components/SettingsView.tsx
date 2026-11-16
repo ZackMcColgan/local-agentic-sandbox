@@ -385,7 +385,7 @@ export function SettingsView({
 
         {/* Live Status Strip: pinned engine / host / model / prod summary */}
         <div
-          className="sticky top-0 z-20 bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
+          className="bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
           data-testid="settings-live-status-strip"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1107,12 +1107,21 @@ export function SettingsView({
                     <span className="font-semibold text-slate-800 dark:text-zinc-200">
                       {notifStatus.lastResult.ok
                         ? "Sent"
-                        : `Failed (${notifStatus.lastResult.errorSummary || "error"})`}
+                        : "Last notification failed"}
                     </span>{" "}
-                    · {notifStatus.lastResult.event} ·{" "}
-                    {formatMessageTimestamp(notifStatus.lastResult.at)}
+                    · {formatMessageTimestamp(notifStatus.lastResult.at)}
                     {notifStatus.lastResult.messageId !== undefined && (
                       <span> (msg #{notifStatus.lastResult.messageId})</span>
+                    )}
+                    {!notifStatus.lastResult.ok && notifStatus.lastResult.errorSummary && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[11px] text-zinc-400 hover:text-zinc-200">
+                          Details
+                        </summary>
+                        <div className="mt-1 font-mono text-[10.5px] text-zinc-400 break-all">
+                          {notifStatus.lastResult.event}: {notifStatus.lastResult.errorSummary}
+                        </div>
+                      </details>
                     )}
                   </div>
                   {!notifStatus.lastResult.ok && (
@@ -1128,7 +1137,7 @@ export function SettingsView({
                         }
                         setNotifStatus((prev) => (prev ? { ...prev } : prev));
                       }}
-                      className="shrink-0 px-2 py-0.5 rounded-lg text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+                      className="shrink-0 min-h-[44px] px-3 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
                     >
                       Dismiss
                     </button>
@@ -1192,6 +1201,31 @@ export function SettingsView({
         </div>
 
         {/* Danger Zone: destructive controls only, separated at the bottom */}
+        {/* Traces & Security Door (UI-080) */}
+        <div id="settings-traces-security" data-testid="settings-zone-traces">
+          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
+            Traces &amp; Security
+          </h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
+                OpenTelemetry Traces
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                Inspect live spans and execution waterfalls in Jaeger.
+              </p>
+            </div>
+            <a
+              href="/jaeger/"
+              target="_blank"
+              rel="noreferrer"
+              className="min-h-[44px] inline-flex items-center px-3.5 py-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-colors shrink-0"
+            >
+              Open Jaeger UI →
+            </a>
+          </div>
+        </div>
+
         <div id="settings-danger-zone" data-testid="settings-zone-danger">
           <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-400 mb-3 px-1">
             Danger Zone
@@ -1202,7 +1236,7 @@ export function SettingsView({
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Kill switch (SELF_DEPLOY_ENABLED)</span>
+                  <span>Disable self-deploy</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                   When OFF, self-deploy is completely disabled. Default is OFF.

@@ -1073,7 +1073,7 @@ export function ProjectsView({
               aria-modal="true"
               aria-label="Add Project"
               data-testid="add-project-modal"
-              className="bg-white dark:bg-zinc-900 rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-xl w-full max-h-[92vh] flex flex-col space-y-4 animate-in zoom-in-95 duration-150 overflow-hidden"
+              className="bg-white dark:bg-zinc-900 rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-zinc-800 max-w-xl w-full max-h-[85dvh] flex flex-col space-y-4 animate-in zoom-in-95 duration-150 overflow-hidden"
             >
               {/* Header */}
               <div className="flex items-center justify-between shrink-0">
@@ -1205,7 +1205,7 @@ export function ProjectsView({
                                       branch: {item.defaultBranch}
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                                    <span className="text-[10px] text-zinc-400 font-semibold">
                                       non-git folder
                                     </span>
                                   )}

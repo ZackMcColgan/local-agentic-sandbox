@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -449,13 +450,13 @@ export function MorningReportView({
                         >
                           {statusDisplayLabel(item.status)}
                         </span>
-                        <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{item.goal}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{deriveThreadDisplayTitle(item.goal)}</span>
                         <span className="sr-only">({item.taskId})</span>
                       </div>
                       {item.threadUrl && (
                         <a
                           href={item.threadUrl}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-bold transition-colors"
+                          className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-bold transition-colors"
                         >
                           <span>Open Session</span>
                           <ExternalLink className="h-3 w-3" />
