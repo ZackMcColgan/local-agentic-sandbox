@@ -110,8 +110,11 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("titleTruncationResiduals.test.ts") ||
       p.includes("SvgViewer.tsx") ||
       p.includes("threadSummariesCache.test.ts") ||
-      p.includes("threadStore.ts"),
-    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts", "tests/titleTruncationResiduals.test.ts", "tests/threadSummariesCache.test.ts"],
+      p.includes("threadStore.ts") ||
+      p.includes("hostRunnerDisconnectPresentation.test.ts") ||
+      p.includes("narrationChunkSeparator.test.ts") ||
+      p.includes("threadInitialSelection.test.ts"),
+    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts", "tests/titleTruncationResiduals.test.ts", "tests/threadSummariesCache.test.ts", "tests/hostRunnerDisconnectPresentation.test.ts", "tests/narrationChunkSeparator.test.ts", "tests/threadInitialSelection.test.ts"],
   },
   {
     match: (p) =>
