@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import type { BoardItem, BoardStatus } from "@/lib/board/boardStore";
 import { BoardAddSheet } from "./BoardAddSheet";
 
@@ -28,7 +28,7 @@ export function BoardView({
   const [activeColIndex, setActiveColIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [expandedBriefIds, setExpandedBriefIds] = useState<Record<string, boolean>>({});
 
   const filteredItems = useMemo(() => {
@@ -200,13 +200,22 @@ export function BoardView({
   return (
     <div
       className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-black text-zinc-100"
-      onTouchStart={(e) => setTouchStartX(e.touches[0]?.clientX ?? null)}
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        touchStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+      }}
       onTouchEnd={(e) => {
-        if (touchStartX === null) return;
-        const dx = (e.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
-        if (dx < -50) handleNextCol();
-        if (dx > 50) handlePrevCol();
-        setTouchStartX(null);
+        const start = touchStartRef.current;
+        touchStartRef.current = null;
+        if (!start) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) {
+          if (dx < 0) handleNextCol();
+          else handlePrevCol();
+        }
       }}
     >
       {/* Header */}
@@ -294,7 +303,7 @@ export function BoardView({
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24">
+        <div className="flex-1 overflow-y-auto touch-pan-y overscroll-contain px-4 pt-3 pb-24">
           {byStatus[activeCol.status].map(renderCard)}
           {activeCol.status === "working" && (
             <div className="mt-3.5 rounded-[14px] border-[1.5px] border-dashed border-[#26262b] p-4 text-center text-[12.5px] leading-relaxed text-zinc-400">
@@ -335,7 +344,7 @@ export function BoardView({
                   {colItems.length}
                 </span>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto touch-pan-y overscroll-contain pr-1">
                 {colItems.length === 0 ? (
                   <div className="rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-5 text-center text-[12.5px] text-zinc-400">
                     No items

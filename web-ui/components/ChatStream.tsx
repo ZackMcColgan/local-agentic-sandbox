@@ -66,6 +66,7 @@ import {
   extractCodeDeliverablesFromMessage
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
+import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../lib/toolCallIntegrity";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp, displayRepoPath, displayBasename } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
@@ -2090,7 +2091,7 @@ export function ChatStream({
       )}
 
       {/* Top Bar matching Mockup 01 & Gemini Mobile Navigation Pattern */}
-      <header className="sticky top-0 z-30 h-12 px-2 sm:px-4 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
+      <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
@@ -2816,7 +2817,11 @@ export function ChatStream({
                   {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
                   {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (() => {
                     const hostDisconnect = classifyHostRunnerDisconnect(m.content);
-                    const renderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
+                    const rawRenderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
+                    const renderedContent =
+                      m.role === "assistant" && isMarkupOnlyToolCall(rawRenderedContent)
+                        ? TURN_TOOL_MARKUP_MARKER
+                        : rawRenderedContent;
                     return (
                     <>
                       {hostDisconnect.kind !== "none" && (
@@ -3589,11 +3594,11 @@ export function ChatStream({
         
         {/* CHAT-STEER: Pending Steer indicator above composer */}
         {pendingSteers.length > 0 && (
-          <div data-testid="chat-steer-pending-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-sky-100 dark:border-sky-950/60 max-w-[840px] mx-auto overflow-x-auto scrollbar-none">
+          <div data-testid="chat-steer-pending-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-sky-100 dark:border-sky-950/60 max-w-[840px] mx-auto">
             <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
               <span>Steer pending ({pendingSteers.length}):</span>
             </span>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
               {pendingSteers.map((st, idx) => (
                 <div
                   key={idx}
@@ -3606,19 +3611,39 @@ export function ChatStream({
                   <span className="text-[9px] text-sky-600 dark:text-sky-400 italic shrink-0">
                     (lands at next step)
                   </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove steer item ${idx + 1}`}
+                    onClick={() => {
+                      setPendingSteers((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    className="p-0.5 rounded-full hover:bg-sky-200 dark:hover:bg-sky-800 text-sky-600 dark:text-sky-400 hover:text-sky-950 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
               ))}
             </div>
+            <button
+              type="button"
+              data-testid="chat-steer-clear-all"
+              onClick={() => {
+                setPendingSteers([]);
+              }}
+              className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
+            >
+              Clear all
+            </button>
           </div>
         )}
 
         {/* CHAT-QUEUE: Queue Chips above composer with per-item × and clear all */}
         {queueItems.length > 0 && (
-          <div data-testid="chat-queue-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto overflow-x-auto scrollbar-none">
+          <div data-testid="chat-queue-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
             <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
               <span>Queue ({queueItems.length}):</span>
             </span>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
               {queueItems.map((item, idx) => (
                 <div
                   key={item.id}

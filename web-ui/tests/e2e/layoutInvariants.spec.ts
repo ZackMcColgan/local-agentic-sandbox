@@ -99,6 +99,29 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await expect(page).toHaveScreenshot("projects-modal.png");
   });
 
+  test("UI-084: chat header bar contains all children at 412px phone viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 915 });
+    await page.goto("/");
+    const header = page.locator("header").first();
+    await expect(header).toBeVisible();
+    const headerBox = await header.boundingBox();
+    expect(headerBox).not.toBeNull();
+    if (!headerBox) return;
+    expect(headerBox.height).toBeGreaterThanOrEqual(56);
+
+    const children = header.locator(":scope > *");
+    const count = await children.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const box = await children.nth(i).boundingBox();
+      if (!box) continue;
+      expect(box.y).toBeGreaterThanOrEqual(headerBox.y - 0.5);
+      expect(box.y + box.height).toBeLessThanOrEqual(headerBox.y + headerBox.height + 0.5);
+      expect(box.x).toBeGreaterThanOrEqual(headerBox.x - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 0.5);
+    }
+  });
+
   test("Skills View — layout invariants and baseline", async ({ page, isMobile }) => {
     await page.goto("/");
     if (isMobile) {
