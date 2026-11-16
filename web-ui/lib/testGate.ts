@@ -334,6 +334,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/threads/threadStore"),
     tests: ["tests/zombieStreamingCap.test.ts"]
   },
+  {
+    match: (p) => p.includes("lib/finishVerification") || p.includes("components/CompletionVerificationBadge"),
+    tests: ["tests/finishVerification.test.ts"]
+  },
   // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
   // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
   {
