@@ -13,7 +13,10 @@ describe("B2: Loading state + initial selection parity", () => {
       !pageSrc.includes("else if (!isMobile && data.threads[0])"),
       "page.tsx must not skip auto-selection on mobile"
     );
-    assert.ok(pageSrc.includes("data.threads[0]"), "page.tsx must auto-select data.threads[0]");
+    assert.ok(
+      pageSrc.includes("data.threads[0]") || pageSrc.includes("pickMostRecentlyActiveThread(data.threads)"),
+      "page.tsx must auto-select most recent thread"
+    );
   });
 
   it("ThreadsSidebar.tsx renders loading placeholders when isLoadingThreads is true instead of No sessions yet", () => {

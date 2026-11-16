@@ -11,6 +11,7 @@ import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
+import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
@@ -334,11 +335,9 @@ export default function Home() {
               const matched = data.threads.find((t: Thread) => t.id === explicitThread);
               if (matched) setSelectedThreadId(matched.id);
             } else {
-              const active = data.threads.find((t: Thread) => t.status === "active" || t.status === "running");
-              if (active) {
-                setSelectedThreadId(active.id);
-              } else if (data.threads[0]) {
-                setSelectedThreadId(data.threads[0].id);
+              const mostRecent = pickMostRecentlyActiveThread(data.threads);
+              if (mostRecent) {
+                setSelectedThreadId(mostRecent.id);
               }
             }
           }

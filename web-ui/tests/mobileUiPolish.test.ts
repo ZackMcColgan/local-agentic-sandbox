@@ -219,7 +219,9 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
   const chatStreamContent = fs.readFileSync(chatStreamPath, "utf-8");
 
   const tracesIndex = chatStreamContent.indexOf("formatHumanReadableTrace");
-  const markdownIndex = chatStreamContent.indexOf("wrapRawSvgInMarkdown(m.content)");
+  const markdownIndex = chatStreamContent.includes("wrapRawSvgInMarkdown(m.content)")
+    ? chatStreamContent.indexOf("wrapRawSvgInMarkdown(m.content)")
+    : chatStreamContent.indexOf("wrapRawSvgInMarkdown(renderedContent)");
   assert.ok(tracesIndex !== -1, "ChatStream must contain formatHumanReadableTrace for tool traces");
   assert.ok(markdownIndex !== -1, "ChatStream must contain wrapRawSvgInMarkdown(m.content)");
   assert.ok(
