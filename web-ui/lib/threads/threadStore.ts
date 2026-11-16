@@ -394,6 +394,7 @@ export function clearTurnActive(threadId: string): void {
 export class ThreadStore {
   private threadsDir: string;
   private supervisor: OvernightSupervisor;
+  private supervisorSweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(threadsDir?: string, supervisor?: OvernightSupervisor) {
     this.threadsDir = threadsDir || resolveThreadsDir();
@@ -405,6 +406,7 @@ export class ThreadStore {
     }
     try { fs.chmodSync(path.dirname(this.threadsDir), 0o770); } catch {}
     try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
+    this.startSupervisorSweep();
   }
 
   getFilePath(threadId: string): string {
@@ -650,43 +652,83 @@ export class ThreadStore {
    * running process state.
    */
   /**
+   * Starts a background interval that sweeps stalled threads and applies
+   * honest-end / bounded auto-resume dispositions. Unreffed so it never
+   * blocks process exit or test runners.
+   */
+  startSupervisorSweep(intervalMs = 60_000): void {
+    if (this.supervisorSweepTimer) return;
+    this.supervisorSweepTimer = setInterval(() => {
+      void this.sweepStalledThreads().catch(() => {
+        // Never crash the process from a background sweep
+      });
+    }, intervalMs);
+    if (typeof this.supervisorSweepTimer.unref === "function") {
+      this.supervisorSweepTimer.unref();
+    }
+  }
+
+  /**
+   * Stops the background supervisor sweep timer.
+   */
+  stopSupervisorSweep(): void {
+    if (this.supervisorSweepTimer) {
+      clearInterval(this.supervisorSweepTimer);
+      this.supervisorSweepTimer = null;
+    }
+  }
+
+  /**
+   * Explicit supervisor sweep: inspects all threads and applies honest-end /
+   * bounded auto-resume dispositions to stalled turns. Passive reads
+   * (`reconcileThread`) never flip a streaming turn to `stopped`.
+   */
+  async sweepStalledThreads(now: number = Date.now()): Promise<number> {
+    let acted = 0;
+    const threads = await this.listThreads();
+    for (const thread of threads) {
+      const outcome = superviseStalledThread(thread, {
+        now,
+        threadAdapter: {
+          saveThread: (t) => this.saveThread(t),
+          createFreshThread: (opts) =>
+            this.createThread({
+              title: opts.title,
+              taskId: opts.taskId,
+              resumedFromThreadId: opts.resumedFromThreadId,
+            }),
+          dispatchTurn: (threadId, prompt) => this.dispatchSupervisorTurn(threadId, prompt),
+        },
+        jobStore: {
+          hasBankedState: (jobId) => {
+            const runlogPath = path.join(this.threadsDir, "tasks", jobId, "runlog.md");
+            if (fs.existsSync(runlogPath)) return true;
+            try {
+              return fs.existsSync(this.supervisor.getCheckpointFilePath(jobId));
+            } catch {
+              return false;
+            }
+          },
+          getAutoResumeCount: () => thread.autoResumeCount ?? 0,
+          incrementAutoResumeCount: () => (thread.autoResumeCount ?? 0) + 1,
+          markNeedsAttention: () => {
+            thread.needsAttention = true;
+          },
+        },
+      });
+      if (outcome.action !== "not_stalled") {
+        acted += 1;
+      }
+    }
+    return acted;
+  }
+
+  /**
    * Reconciles a thread's status against live activeExecutionSet (S2)
    * and derives title from content if "New thread" (S4).
    */
   reconcileThread(thread: Thread): boolean {
     let changed = false;
-
-    const supervisorOutcome = superviseStalledThread(thread, {
-      threadAdapter: {
-        saveThread: (t) => this.saveThread(t),
-        createFreshThread: (opts) =>
-          this.createThread({
-            title: opts.title,
-            taskId: opts.taskId,
-            resumedFromThreadId: opts.resumedFromThreadId,
-          }),
-        dispatchTurn: (threadId, prompt) => this.dispatchSupervisorTurn(threadId, prompt),
-      },
-      jobStore: {
-        hasBankedState: (jobId) => {
-          const runlogPath = path.join(this.threadsDir, "tasks", jobId, "runlog.md");
-          if (fs.existsSync(runlogPath)) return true;
-          try {
-            return fs.existsSync(this.supervisor.getCheckpointFilePath(jobId));
-          } catch {
-            return false;
-          }
-        },
-        getAutoResumeCount: () => thread.autoResumeCount ?? 0,
-        incrementAutoResumeCount: () => (thread.autoResumeCount ?? 0) + 1,
-        markNeedsAttention: () => {
-          thread.needsAttention = true;
-        },
-      },
-    });
-    if (supervisorOutcome.action !== "not_stalled") {
-      return true;
-    }
 
     // qa-6: reap zombie live signals first. A leaked presence entry older
     // than the hard cap with a stale record is deleted so it cannot keep a

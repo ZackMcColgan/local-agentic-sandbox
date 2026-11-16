@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ThreadStore, type Thread } from "../lib/threads/threadStore";
+import { ThreadStore, markTurnActive, type Thread } from "../lib/threads/threadStore";
 import { MAX_AUTO_RESUMES, STALL_WINDOW_MS } from "../lib/threads/inAppSupervisor";
 
 function makeTempStore(): { dir: string; store: ThreadStore; cleanup: () => void } {
@@ -46,47 +46,49 @@ function makeStalledThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-describe("inAppSupervisor production wiring (ThreadStore.reconcileThread)", () => {
-  it("ends a stalled interactive streaming thread honestly via reconcileThread", () => {
+describe("inAppSupervisor production wiring (ThreadStore.sweepStalledThreads)", () => {
+  it("ends a stalled interactive streaming thread honestly via sweepStalledThreads", async () => {
     const { store, cleanup } = makeTempStore();
     try {
       const thread = makeStalledThread();
       store.saveThread(thread);
-      thread.updatedAt = thread.createdAt;
+      markTurnActive(thread.id);
 
-      const changed = store.reconcileThread(thread);
-      assert.equal(changed, true);
-      assert.equal(thread.status, "stopped");
-      assert.equal(thread.liveness, "stalled");
-      assert.match(thread.stalledReason || "", /Turn stalled:/);
-      const assistant = thread.messages.find((m) => m.role === "assistant");
+      const acted = await store.sweepStalledThreads(Date.now() + STALL_WINDOW_MS + 60_000);
+      assert.equal(acted, 1);
+      const updated = (await store.getThread(thread.id))!;
+      assert.equal(updated.status, "stopped");
+      assert.match(updated.stalledReason || "", /Turn stalled:/);
+      const assistant = updated.messages.find((m) => m.role === "assistant");
       assert.equal(assistant?.status, "incomplete");
       assert.equal(assistant?.isStopped, true);
       assert.match(assistant?.content || "", /Turn stalled:/);
     } finally {
+      store.stopSupervisorSweep();
       cleanup();
     }
   });
 
-  it("marks needsAttention when a stalled job thread has no banked state", () => {
+  it("marks needsAttention when a stalled job thread has no banked state", async () => {
     const { store, cleanup } = makeTempStore();
     try {
       const thread = makeStalledThread({ taskId: "job-no-banked" });
       store.saveThread(thread);
-      thread.updatedAt = thread.createdAt;
+      markTurnActive(thread.id);
 
-      const changed = store.reconcileThread(thread);
-      assert.equal(changed, true);
-      assert.equal(thread.status, "stopped");
-      assert.equal(thread.liveness, "stalled");
-      assert.equal(thread.needsAttention, true);
-      assert.equal(thread.resumedToThreadId, undefined);
+      const acted = await store.sweepStalledThreads(Date.now() + STALL_WINDOW_MS + 60_000);
+      assert.equal(acted, 1);
+      const updated = (await store.getThread(thread.id))!;
+      assert.equal(updated.status, "stopped");
+      assert.equal(updated.needsAttention, true);
+      assert.equal(updated.resumedToThreadId, undefined);
     } finally {
+      store.stopSupervisorSweep();
       cleanup();
     }
   });
 
-  it("marks needsAttention when a stalled job thread is at MAX_AUTO_RESUMES", () => {
+  it("marks needsAttention when a stalled job thread is at MAX_AUTO_RESUMES", async () => {
     const { dir, store, cleanup } = makeTempStore();
     try {
       const jobId = "job-at-cap";
@@ -100,19 +102,21 @@ describe("inAppSupervisor production wiring (ThreadStore.reconcileThread)", () =
         autoResumeCount: MAX_AUTO_RESUMES,
       });
       store.saveThread(thread);
-      thread.updatedAt = thread.createdAt;
+      markTurnActive(thread.id);
 
-      const changed = store.reconcileThread(thread);
-      assert.equal(changed, true);
-      assert.equal(thread.status, "stopped");
-      assert.equal(thread.needsAttention, true);
-      assert.equal(thread.resumedToThreadId, undefined);
+      const acted = await store.sweepStalledThreads(Date.now() + STALL_WINDOW_MS + 60_000);
+      assert.equal(acted, 1);
+      const updated = (await store.getThread(thread.id))!;
+      assert.equal(updated.status, "stopped");
+      assert.equal(updated.needsAttention, true);
+      assert.equal(updated.resumedToThreadId, undefined);
     } finally {
+      store.stopSupervisorSweep();
       cleanup();
     }
   });
 
-  it("auto-resumes a stalled job thread with banked state into a fresh thread", () => {
+  it("auto-resumes a stalled job thread with banked state into a fresh thread", async () => {
     const { dir, store, cleanup } = makeTempStore();
     try {
       const jobId = "job-with-banked";
@@ -127,18 +131,19 @@ describe("inAppSupervisor production wiring (ThreadStore.reconcileThread)", () =
 
       const thread = makeStalledThread({ taskId: jobId, autoResumeCount: 0 });
       store.saveThread(thread);
-      thread.updatedAt = thread.createdAt;
+      markTurnActive(thread.id);
 
-      const changed = store.reconcileThread(thread);
-      assert.equal(changed, true);
-      assert.equal(thread.status, "stopped");
-      assert.equal(thread.liveness, "stalled");
-      assert.equal(thread.autoResumeCount, 1);
-      assert.ok(thread.resumedToThreadId, "expected resumedToThreadId to be set");
+      const acted = await store.sweepStalledThreads(Date.now() + STALL_WINDOW_MS + 60_000);
+      assert.equal(acted, 1);
+      const updated = (await store.getThread(thread.id))!;
+      assert.equal(updated.status, "stopped");
+      assert.equal(updated.autoResumeCount, 1);
+      assert.ok(updated.resumedToThreadId, "expected resumedToThreadId to be set");
       assert.equal(dispatched.length, 1);
-      assert.equal(dispatched[0].threadId, thread.resumedToThreadId);
+      assert.equal(dispatched[0].threadId, updated.resumedToThreadId);
       assert.match(dispatched[0].prompt, /read the job runlog and `git log`/i);
     } finally {
+      store.stopSupervisorSweep();
       cleanup();
     }
   });
