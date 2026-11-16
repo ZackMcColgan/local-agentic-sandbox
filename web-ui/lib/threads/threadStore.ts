@@ -12,6 +12,7 @@ import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconom
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
+import { superviseStalledThread } from "./inAppSupervisor";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
@@ -251,6 +252,16 @@ export interface Thread {
   isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /** In-app supervisor: reason the turn was honestly ended after stalling. */
+  stalledReason?: string;
+  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
+  needsAttention?: boolean;
+  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
+  autoResumeCount?: number;
+  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
+  resumedFromThreadId?: string;
+  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
+  resumedToThreadId?: string;
   /**
    * TOKEN ECONOMICS (a): per-job rollup aggregated across the thread's turns
    * (rounds, prompt-token integral, output tokens, compaction count). Surfaced
@@ -383,6 +394,7 @@ export function clearTurnActive(threadId: string): void {
 export class ThreadStore {
   private threadsDir: string;
   private supervisor: OvernightSupervisor;
+  private supervisorSweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(threadsDir?: string, supervisor?: OvernightSupervisor) {
     this.threadsDir = threadsDir || resolveThreadsDir();
@@ -394,6 +406,7 @@ export class ThreadStore {
     }
     try { fs.chmodSync(path.dirname(this.threadsDir), 0o770); } catch {}
     try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
+    this.startSupervisorSweep();
   }
 
   getFilePath(threadId: string): string {
@@ -638,6 +651,78 @@ export class ThreadStore {
    * Loads all threads from disk and reconciles status honestly against the
    * running process state.
    */
+  /**
+   * Starts a background interval that sweeps stalled threads and applies
+   * honest-end / bounded auto-resume dispositions. Unreffed so it never
+   * blocks process exit or test runners.
+   */
+  startSupervisorSweep(intervalMs = 60_000): void {
+    if (this.supervisorSweepTimer) return;
+    this.supervisorSweepTimer = setInterval(() => {
+      void this.sweepStalledThreads().catch(() => {
+        // Never crash the process from a background sweep
+      });
+    }, intervalMs);
+    if (typeof this.supervisorSweepTimer.unref === "function") {
+      this.supervisorSweepTimer.unref();
+    }
+  }
+
+  /**
+   * Stops the background supervisor sweep timer.
+   */
+  stopSupervisorSweep(): void {
+    if (this.supervisorSweepTimer) {
+      clearInterval(this.supervisorSweepTimer);
+      this.supervisorSweepTimer = null;
+    }
+  }
+
+  /**
+   * Explicit supervisor sweep: inspects all threads and applies honest-end /
+   * bounded auto-resume dispositions to stalled turns. Passive reads
+   * (`reconcileThread`) never flip a streaming turn to `stopped`.
+   */
+  async sweepStalledThreads(now: number = Date.now()): Promise<number> {
+    let acted = 0;
+    const threads = await this.listThreads();
+    for (const thread of threads) {
+      const outcome = superviseStalledThread(thread, {
+        now,
+        threadAdapter: {
+          saveThread: (t) => this.saveThread(t),
+          createFreshThread: (opts) =>
+            this.createThread({
+              title: opts.title,
+              taskId: opts.taskId,
+              resumedFromThreadId: opts.resumedFromThreadId,
+            }),
+          dispatchTurn: (threadId, prompt) => this.dispatchSupervisorTurn(threadId, prompt),
+        },
+        jobStore: {
+          hasBankedState: (jobId) => {
+            const runlogPath = path.join(this.threadsDir, "tasks", jobId, "runlog.md");
+            if (fs.existsSync(runlogPath)) return true;
+            try {
+              return fs.existsSync(this.supervisor.getCheckpointFilePath(jobId));
+            } catch {
+              return false;
+            }
+          },
+          getAutoResumeCount: () => thread.autoResumeCount ?? 0,
+          incrementAutoResumeCount: () => (thread.autoResumeCount ?? 0) + 1,
+          markNeedsAttention: () => {
+            thread.needsAttention = true;
+          },
+        },
+      });
+      if (outcome.action !== "not_stalled") {
+        acted += 1;
+      }
+    }
+    return acted;
+  }
+
   /**
    * Reconciles a thread's status against live activeExecutionSet (S2)
    * and derives title from content if "New thread" (S4).
@@ -1044,6 +1129,25 @@ export class ThreadStore {
     }
   }
 
+  private supervisorDispatchTurn?: (threadId: string, prompt: string) => void;
+
+  setSupervisorDispatchTurn(fn: (threadId: string, prompt: string) => void): void {
+    this.supervisorDispatchTurn = fn;
+  }
+
+  private dispatchSupervisorTurn(threadId: string, prompt: string): void {
+    if (this.supervisorDispatchTurn) {
+      this.supervisorDispatchTurn(threadId, prompt);
+      return;
+    }
+    const port = process.env.PORT || "3000";
+    void fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threadId, message: prompt }),
+    }).catch(() => {});
+  }
+
   saveThread(thread: Thread): void {
     if (deletedThreadIds.has(thread.id)) {
       return;
@@ -1088,6 +1192,16 @@ export class ThreadStore {
     isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /** In-app supervisor: reason the turn was honestly ended after stalling. */
+  stalledReason?: string;
+  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
+  needsAttention?: boolean;
+  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
+  autoResumeCount?: number;
+  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
+  resumedFromThreadId?: string;
+  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
+  resumedToThreadId?: string;
     hostAccess?: boolean;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import {
   Menu,
   Plus,
@@ -419,6 +420,7 @@ export function ThreadsSidebar({
                     >
                       {statusChip.label}
                     </span>
+                    <SupervisorStatusBadge thread={thread} />
                     {livenessBadge && (
                       <span
                         data-testid={`thread-liveness-${thread.id}`}

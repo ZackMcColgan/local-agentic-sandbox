@@ -593,6 +593,21 @@ const MAPPING_RULES: MappingRule[] = [
     ]
   },
   {
+    match: (p) =>
+      p.includes("lib/threads/inAppSupervisor") ||
+      p.includes("inAppSupervisor.test.ts") ||
+      p.includes("inAppSupervisorWiring.test.ts"),
+    tests: ["tests/inAppSupervisor.test.ts", "tests/inAppSupervisorWiring.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("components/SupervisorStatusBadge") ||
+      p.includes("components/supervisorBadgeState") ||
+      p.includes("supervisorStatusBadge.test.ts") ||
+      p.includes("supervisorStatusBadgeWiring.test.ts"),
+    tests: ["tests/supervisorStatusBadge.test.ts", "tests/supervisorStatusBadgeWiring.test.ts"]
+  },
+  {
     match: (p) => p.includes("lib/subagents/workerPool"),
     tests: ["tests/workerPool.test.ts", "tests/workerPoolIsolation.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
   },

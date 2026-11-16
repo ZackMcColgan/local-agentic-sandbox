@@ -931,6 +931,11 @@ export default function Home() {
               reasoningEffort={reasoningEffort}
               threadId={currentThread?.id}
               threadTitle={currentThread?.title || "New session"}
+              supervisorState={currentThread ? {
+                needsAttention: currentThread.needsAttention,
+                stalledReason: currentThread.stalledReason,
+                autoResumeCount: currentThread.autoResumeCount,
+              } : undefined}
               threadStatus={currentThread?.status}
               threadScope={currentThread?.scope}
               threadHostAccess={currentThread?.hostAccess}
