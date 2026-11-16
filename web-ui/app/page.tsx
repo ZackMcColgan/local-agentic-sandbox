@@ -85,6 +85,7 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [boardItems, setBoardItems] = useState<BoardItem[]>([]);
+  const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
 
   useEffect(() => {
     if (activeNavView !== "board") return;
@@ -97,7 +98,6 @@ export default function Home() {
       })
       .catch(() => {});
   }, [activeNavView]);
-  const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
   const [deployHistory, setDeployHistory] = useState<any[]>([]);

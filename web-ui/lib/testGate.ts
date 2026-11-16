@@ -48,6 +48,16 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (p) =>
+      p.includes("lib/board/") ||
+      p.includes("app/api/board/") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("BoardAddSheet.tsx") ||
+      p.includes("boardStore.test.ts") ||
+      p.includes("boardUi.test.ts"),
+    tests: ["tests/boardStore.test.ts", "tests/boardUi.test.ts"],
+  },
+  {
     match: (f) => f.startsWith("eval/") || f.includes("evalPackGraders.test.ts"),
     tests: ["tests/evalPackGraders.test.ts"],
   },
