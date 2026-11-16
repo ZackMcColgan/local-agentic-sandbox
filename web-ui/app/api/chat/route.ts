@@ -1013,21 +1013,23 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         while (true) {
           
           if (turnAbortController.signal.aborted) break;
-          const chunkResult = await handleLiveTurnChunkBudget({
-            roundsUsed: round,
-            elapsedMs: Date.now() - turnStartMs,
-            budget: chunkBudget,
-            jobId: chunkJobId,
-            workspaceRoot: chunkWorkspaceRoot,
-            handoffPath: chunkHandoffPath,
-            runlogPath: chunkRunlogPath,
-            currentState: (carriedToolRoundProse || carriedLengthContent || `round ${round} completed`).slice(0, 500),
-            nextStep: `resume from round ${round}`,
-            openQuestions: [],
-          });
-          if (chunkResult.exceeded) {
-            honestEndMarker = chunkResult.marker;
-            break;
+          if (getHostSettings().jobChunkingEnabled) {
+            const chunkResult = await handleLiveTurnChunkBudget({
+              roundsUsed: round,
+              elapsedMs: Date.now() - turnStartMs,
+              budget: chunkBudget,
+              jobId: chunkJobId,
+              workspaceRoot: chunkWorkspaceRoot,
+              handoffPath: chunkHandoffPath,
+              runlogPath: chunkRunlogPath,
+              currentState: (carriedToolRoundProse || carriedLengthContent || `round ${round} completed`).slice(0, 500),
+              nextStep: `resume from round ${round}`,
+              openQuestions: [],
+            });
+            if (chunkResult.exceeded) {
+              honestEndMarker = chunkResult.marker;
+              break;
+            }
           }
           console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
 

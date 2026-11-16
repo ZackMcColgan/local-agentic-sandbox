@@ -182,6 +182,9 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/hostMode.test.ts",
       "tests/hostSettingsDefault.test.ts",
+      "tests/chunkingSettings.test.ts",
+      "tests/chunkingRouteGate.test.ts",
+      "tests/chunkingSettingsUi.test.ts",
       "tests/hostFourState.test.ts",
       "tests/patchTools.test.ts",
       "tests/hostRunnerScript.test.ts",
