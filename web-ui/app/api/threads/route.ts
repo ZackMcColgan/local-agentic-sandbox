@@ -7,6 +7,7 @@ import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagen
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import type { ChunkBudgetConfig } from "@/lib/jobChunking";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
@@ -43,6 +44,12 @@ export async function POST(req: Request) {
       const enableGitOps = body.enableGitOps !== false;
       const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
       const effectiveModel = body.model || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+      const chunkBudget: ChunkBudgetConfig | undefined =
+        body.chunkBudget && typeof body.chunkBudget === "object"
+          ? (body.chunkBudget as ChunkBudgetConfig)
+          : typeof body.maxRounds === "number"
+            ? { maxRounds: body.maxRounds }
+            : undefined;
 
       // Persist-first launch: create manifest with status "planning" and write checkpoint before planner runs
       const manifest: TaskManifest = {
@@ -82,6 +89,9 @@ export async function POST(req: Request) {
           thread.taskId = taskId;
           thread.scope = scope;
           thread.status = "active";
+          if (chunkBudget !== undefined) {
+            thread.chunkBudget = chunkBudget;
+          }
           const lastMsg = thread.messages[thread.messages.length - 1];
           const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === goal;
           if (!isDuplicate) {
@@ -115,7 +125,8 @@ export async function POST(req: Request) {
             attachments: body.attachments,
             taskId,
             scope,
-            hostAccess: false
+            hostAccess: false,
+            ...(chunkBudget !== undefined ? { chunkBudget } : {})
           });
         }
       } else {
@@ -126,7 +137,8 @@ export async function POST(req: Request) {
           attachments: body.attachments,
           taskId,
           scope,
-          hostAccess: false
+          hostAccess: false,
+          ...(chunkBudget !== undefined ? { chunkBudget } : {})
         });
         thread.messages.push({
           id: `msg-${Date.now()}-a`,
