@@ -49,6 +49,14 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("invariantNetA4.test.ts") ||
+      p.includes("NavigationDrawer.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("BoardView.tsx"),
+    tests: ["tests/invariantNetA4.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("invariantNetA3.test.ts") ||
       p.includes("toolCallIntegrity.ts"),
     tests: ["tests/invariantNetA3.test.ts"],
