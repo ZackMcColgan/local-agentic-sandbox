@@ -104,3 +104,20 @@ export function pickMostRecentlyActiveThread<
   }
   return best;
 }
+
+/**
+ * UI-010: Separate adjacent status/narration chunks with a newline when the
+ * existing text ends with sentence-ending punctuation and the next chunk
+ * starts with an uppercase letter, without splitting mid-word BPE tokens.
+ */
+export function appendNarrationChunk(existing: string, chunk: string): string {
+  if (!chunk) return existing;
+  if (!existing) return chunk;
+  if (existing.endsWith("\n") || chunk.startsWith("\n")) {
+    return existing + chunk;
+  }
+  if (/[.!?]["')\]]*$/.test(existing) && /^[A-Z]/.test(chunk)) {
+    return `${existing}\n${chunk}`;
+  }
+  return existing + chunk;
+}

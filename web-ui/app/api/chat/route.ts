@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { resolveThreadsDir, ThreadStore, deriveStoredThreadTitle, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
+import { appendNarrationChunk } from "@/lib/liveActivity";
 import {
   buildFileDeliverablesDirective,
   recordTurnOutputWrite,
@@ -1250,7 +1251,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
                 lastWritingChunkMs = nowMs;
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
-                accumulatedStreamedTokens += textChunk;
+                accumulatedStreamedTokens = appendNarrationChunk(accumulatedStreamedTokens, textChunk);
                 armRoundDeadline();
                 // TURN SIZE LIMIT: hard cap on total streamed content. A runaway
                 // round (e.g. a huge tool-call payload as one generation) is cut
@@ -2078,7 +2079,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
               }
               if (chunk.message?.content) {
                 passContent += chunk.message.content;
-                accumulatedStreamedTokens += chunk.message.content;
+                accumulatedStreamedTokens = appendNarrationChunk(accumulatedStreamedTokens, chunk.message.content);
                 const currentCumulativeThought = accumulatedThoughts.length > 0
                   ? (passThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}` : accumulatedThoughts.join("\n\n"))
                   : (passThinking || undefined);
