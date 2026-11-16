@@ -11,6 +11,7 @@ export async function GET() {
     return NextResponse.json({
       hostAccessEnabled: settings.hostAccessEnabled,
       allowUnattendedHostGit: settings.allowUnattendedHostGit,
+      jobChunkingEnabled: settings.jobChunkingEnabled,
       runnerAvailable: runnerStatus.runnerAvailable,
       runnerState: runnerStatus.runnerState,
       runnerReason: runnerStatus.reason,
@@ -32,17 +33,21 @@ export async function POST(req: Request) {
     if (typeof body.allowUnattendedHostGit === "boolean") {
       updates.allowUnattendedHostGit = body.allowUnattendedHostGit;
     }
+    if (typeof body.jobChunkingEnabled === "boolean") {
+      updates.jobChunkingEnabled = body.jobChunkingEnabled;
+    }
 
     if (Object.keys(updates).length > 0) {
       const next = setHostSettings(updates);
       return NextResponse.json({
         success: true,
         hostAccessEnabled: next.hostAccessEnabled,
-        allowUnattendedHostGit: next.allowUnattendedHostGit
+        allowUnattendedHostGit: next.allowUnattendedHostGit,
+        jobChunkingEnabled: next.jobChunkingEnabled
       });
     }
 
-    return NextResponse.json({ error: "Invalid payload: hostAccessEnabled or allowUnattendedHostGit boolean required" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid payload: hostAccessEnabled, allowUnattendedHostGit, or jobChunkingEnabled boolean required" }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

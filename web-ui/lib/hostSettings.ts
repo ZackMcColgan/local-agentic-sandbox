@@ -6,6 +6,7 @@ import { getHostRunnerBaseUrl } from "./hostMode";
 export interface HostSettings {
   hostAccessEnabled: boolean;
   allowUnattendedHostGit: boolean;
+  jobChunkingEnabled: boolean;
 }
 
 export function getHostSettingsFilePath(): string {
@@ -20,14 +21,16 @@ export function getHostSettings(): HostSettings {
       const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       return {
         hostAccessEnabled: typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
-        allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit)
+        allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit),
+        jobChunkingEnabled: typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true
       };
     }
   } catch {}
 
   return {
     hostAccessEnabled: true,
-    allowUnattendedHostGit: false
+    allowUnattendedHostGit: false,
+    jobChunkingEnabled: true
   };
 }
 
