@@ -56,3 +56,11 @@ describe("UI-053 & UI-054 — Jump to bottom pill does not occlude content & thr
     assert.ok(slice.includes("pb-6 sm:pb-8"), "chat-track has clean bottom clearance");
   });
 });
+
+describe("UI-055 — DiffViewer exposes a Canvas affordance on mobile and desktop", () => {
+  it("DiffViewer imports useCanvas and renders an Open in Canvas button", () => {
+    assert.ok(diffViewer.includes("useCanvas"), "DiffViewer should call useCanvas");
+    assert.ok(diffViewer.includes("openCanvas("), "DiffViewer should call canvas.openCanvas");
+    assert.ok(diffViewer.includes("Open in Canvas"), "DiffViewer should have an accessible Open in Canvas label/title");
+  });
+});

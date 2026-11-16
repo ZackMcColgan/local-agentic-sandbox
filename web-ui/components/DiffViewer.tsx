@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye } from "lucide-react";
+import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye, PanelRightOpen } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { useCanvas } from "./CanvasContext";
 
 interface DiffViewerProps {
   branch?: string;
@@ -28,6 +29,7 @@ export function DiffViewer({
 }: DiffViewerProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [showDiagram, setShowDiagram] = useState(false);
+  const canvas = useCanvas();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -85,6 +87,27 @@ export function DiffViewer({
             >
               <Eye className="h-3 w-3" />
               <span>Diagram</span>
+            </button>
+          )}
+
+          {canvas?.enabled && diff && (
+            <button
+              type="button"
+              onClick={() =>
+                canvas.openCanvas({
+                  kind: "file",
+                  id: `diff-${branch}`,
+                  filename: branch,
+                  language: "diff",
+                  code: diff,
+                })
+              }
+              className="flex items-center gap-1 min-h-[32px] sm:min-h-0 px-2 py-1 rounded text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-emerald-300/70 dark:border-emerald-700/50 transition-colors"
+              title="Open in Canvas"
+              aria-label="Open in Canvas"
+            >
+              <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden sm:inline">Canvas</span>
             </button>
           )}
 
