@@ -2430,7 +2430,7 @@ export function ChatStream({
         data-scroll-container="true"
         className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
       >
-        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-6 sm:pb-8">
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
