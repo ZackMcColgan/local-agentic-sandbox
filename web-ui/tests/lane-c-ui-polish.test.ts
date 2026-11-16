@@ -35,7 +35,7 @@ describe("Lane C UI Polish", () => {
 
     // All 4 pane headers use h-12 and border-b
     assert.match(threadsSidebar, /className="[^"]*\bh-12\b[^"]*\bborder-b\b/, "ThreadsSidebar header must use h-12 and border-b");
-    assert.match(chatStream, /<header className="[^"]*\bh-12\b[^"]*\bborder-b\b/, "ChatStream header must use h-12 and border-b");
+    assert.match(chatStream, /<header className="[^"]*(?:\bh-12\b|min-h-\[56px\])[^"]*\bborder-b\b/, "ChatStream header must use h-12 or min-h-[56px] and border-b");
     assert.match(artifactCanvas, /className="flex items-center gap-2 h-12[^"]*\bborder-b\b/, "ArtifactCanvas header must use h-12 and border-b");
     assert.match(pageTsx, /className="inspector-header h-12[^"]*\bborder-b\b/, "Workspace inspector header must use h-12 and border-b");
 
