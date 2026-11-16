@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
+import type { SupervisorBadgeInput } from "./supervisorBadgeState";
 import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
 import {
   Send,
@@ -156,6 +158,7 @@ interface ChatStreamProps {
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   threadId?: string;
   threadTitle?: string;
+  supervisorState?: SupervisorBadgeInput;
   threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   threadHostAccess?: boolean;
   onHostAccessChanged?: (enabled: boolean, updatedThread?: any) => void;
@@ -341,6 +344,7 @@ export function ChatStream({
   setMessages: propsSetMessages,
   threadId,
   threadTitle,
+  supervisorState,
   threadStatus,
   threadHostAccess,
   onHostAccessChanged,
@@ -2153,6 +2157,7 @@ export function ChatStream({
           >
             {threadTitle || "New session"}
           </h1>
+          {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 min-w-0">
