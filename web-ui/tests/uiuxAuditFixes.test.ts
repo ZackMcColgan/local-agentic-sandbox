@@ -92,7 +92,10 @@ function readComp(rel: string): string {
 
   const page = readComp("app/page.tsx");
   assert.ok(page.includes("setDraftComposerPrompt(draftPrompt)"), "UI-073: onAskAssistant must pass draftPrompt");
-  assert.ok(page.includes("setIsSidebarOpen(true)"), "UI-066: mobile Sessions tap must open sidebar");
+  assert.ok(
+    page.includes("setIsSidebarOpen(false)") && !page.includes("setIsSidebarOpen(true)"),
+    "UI-082: mobile Sessions nav must dismiss sidebar overlay"
+  );
 
   const sidebar = readComp("components/ThreadsSidebar.tsx");
   assert.ok(sidebar.includes("/api/threads?q="), "UI-040: ThreadsSidebar must query /api/threads?q=");
