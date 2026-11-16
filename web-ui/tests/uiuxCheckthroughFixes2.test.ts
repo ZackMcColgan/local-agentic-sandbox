@@ -86,3 +86,29 @@ describe("UI-083: board scrolling on mobile", () => {
     );
   });
 });
+
+describe("UI-085: drawer menu text contrast", () => {
+  it("uses dark:text-zinc-100 for nav item labels and dark:text-zinc-300 for nav icons", () => {
+    const src = readComponent("components/NavigationDrawer.tsx");
+    assert.ok(
+      !src.includes("dark:text-zinc-500"),
+      "NavigationDrawer should not contain dark:text-zinc-500"
+    );
+    assert.ok(
+      !src.includes("text-slate-700 dark:text-zinc-300 hover:bg-slate-100"),
+      "Nav item labels should be raised from dark:text-zinc-300 to dark:text-zinc-100"
+    );
+    assert.ok(
+      src.includes("text-slate-700 dark:text-zinc-100 hover:bg-slate-100"),
+      "Nav item labels should use dark:text-zinc-100"
+    );
+    assert.ok(
+      !src.includes("h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0"),
+      "Nav item icons should be raised from dark:text-zinc-400 to dark:text-zinc-300"
+    );
+    assert.ok(
+      src.includes("h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0"),
+      "Nav item icons should use dark:text-zinc-300"
+    );
+  });
+});

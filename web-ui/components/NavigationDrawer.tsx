@@ -269,7 +269,7 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "sessions" || activeView === "thread"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
             <List className="h-5 w-5 shrink-0" />
@@ -286,10 +286,10 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "builds"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <Hammer className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <Hammer className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Builds</span>
           </button>
 
@@ -303,10 +303,10 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "board"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <Columns3 className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <Columns3 className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Board</span>
           </button>
 
@@ -320,10 +320,10 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "projects"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <FolderGit2 className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <FolderGit2 className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Projects &amp; Folders</span>
           </button>
 
@@ -337,11 +337,11 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "skills"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
             <div className="flex items-center gap-3.5 min-w-0">
-              <Wrench className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+              <Wrench className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
               <span>Skills</span>
             </div>
             {pendingSkillsCount > 0 && (
@@ -361,10 +361,10 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "morning-report"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <FileText className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <FileText className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Morning report</span>
           </button>
         </nav>
@@ -489,10 +489,10 @@ export function NavigationDrawer({
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
               activeView === "settings"
                 ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <Settings className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <Settings className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Settings</span>
           </button>
 
