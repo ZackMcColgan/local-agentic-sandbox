@@ -49,6 +49,13 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("invariantNetB4.spec.ts") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("ChatStream.tsx"),
+    tests: ["tests/e2e/invariantNetB4.spec.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("invariantNetB3.spec.ts") ||
       p.includes("ChatStream.tsx"),
     tests: ["tests/e2e/invariantNetB3.spec.ts"],
