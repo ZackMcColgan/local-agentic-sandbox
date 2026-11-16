@@ -90,6 +90,7 @@ export function SettingsView({
   const [hostSettings, setHostSettingsState] = useState<{
     hostAccessEnabled: boolean;
     allowUnattendedHostGit: boolean;
+    jobChunkingEnabled: boolean;
     runnerAvailable: boolean;
     recentActivity: Array<{
       timestamp: string;
@@ -105,6 +106,7 @@ export function SettingsView({
   }>({
     hostAccessEnabled: true,
     allowUnattendedHostGit: false,
+    jobChunkingEnabled: true,
     runnerAvailable: false,
     recentActivity: []
   });
@@ -167,6 +169,24 @@ export function SettingsView({
       if (res.ok) {
         const json = await res.json();
         setHostSettingsState((prev) => ({ ...prev, hostAccessEnabled: json.hostAccessEnabled }));
+      }
+    } catch {
+      fetchHostSettings();
+    }
+  };
+
+  const handleToggleJobChunking = async () => {
+    const nextState = !hostSettings.jobChunkingEnabled;
+    setHostSettingsState((prev) => ({ ...prev, jobChunkingEnabled: nextState }));
+    try {
+      const res = await fetch("/api/settings/host", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobChunkingEnabled: nextState })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHostSettingsState((prev) => ({ ...prev, jobChunkingEnabled: json.jobChunkingEnabled }));
       }
     } catch {
       fetchHostSettings();
@@ -766,6 +786,37 @@ export function SettingsView({
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     hostSettings.hostAccessEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Job Chunking Toggle */}
+            <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <div>
+                <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                  Job chunking
+                </div>
+                <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
+                  When off, long jobs run in a single turn without banking checkpoints.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                data-testid="job-chunking-toggle-btn"
+                aria-checked={hostSettings.jobChunkingEnabled}
+                onClick={handleToggleJobChunking}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  hostSettings.jobChunkingEnabled
+                    ? "bg-emerald-600 dark:bg-emerald-500"
+                    : "bg-slate-300 dark:bg-zinc-700"
+                }`}
+                title="Toggle job chunking switch"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    hostSettings.jobChunkingEnabled ? "translate-x-6" : "translate-x-1"
                   }`}
                 />
               </button>
