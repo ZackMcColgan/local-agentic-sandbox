@@ -67,6 +67,8 @@ import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
 import { evaluateMarkupRound, evaluateZeroTraceTripwire } from "@/lib/toolCallIntegrity";
+import { verifyEvidenceLinkedSummary } from "@/lib/evidenceLinkedSummaries";
+import { buildVerificationAdapters } from "@/lib/subagents/supervisor";
 import { ReadDedupRegistry, type ReadDedupMeta } from "@/lib/readDedup";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -2273,6 +2275,19 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           tracesCount: traces.length,
         });
 
+        const evidenceResult = cleanedContent
+          ? await verifyEvidenceLinkedSummary(cleanedContent, buildVerificationAdapters(process.cwd()))
+          : { flagged: false, completionStamp: undefined, gaps: [] };
+
+        const finalCompletionStamp =
+          zeroTraceResult.completionStamp === "completed-unverified"
+            ? "completed-unverified"
+            : evidenceResult.completionStamp ?? zeroTraceResult.completionStamp;
+        const finalVerificationGaps = [
+          ...zeroTraceResult.gaps,
+          ...evidenceResult.gaps,
+        ];
+
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
             id: assistantMessageId,
@@ -2280,8 +2295,8 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             content: cleanedContent,
             thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
             traces: traces.length > 0 ? (traces as any) : undefined,
-            completionStamp: zeroTraceResult.completionStamp,
-            verificationGaps: zeroTraceResult.gaps.length > 0 ? zeroTraceResult.gaps : undefined,
+            completionStamp: finalCompletionStamp,
+            verificationGaps: finalVerificationGaps.length > 0 ? finalVerificationGaps : undefined,
             attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
             diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
             modelUsed: activeModel,
