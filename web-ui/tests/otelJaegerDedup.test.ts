@@ -84,6 +84,22 @@ describe("jaeger gateway route and base-path", () => {
     );
   });
 
+  it("nginx.conf location /jaeger/ preserves /jaeger prefix (no rewrite directive)", () => {
+    const raw = fs.readFileSync(nginxPath, "utf8");
+    const jaegerBlockMatch = raw.match(/location\s+\/jaeger\/\s*\{([\s\S]*?)\}/);
+    assert.ok(jaegerBlockMatch, "nginx.conf must contain a location /jaeger/ block");
+    assert.match(
+      jaegerBlockMatch[1],
+      /http:\/\/desktop-control-plane:30686/,
+      "location /jaeger/ must proxy to http://desktop-control-plane:30686"
+    );
+    assert.doesNotMatch(
+      jaegerBlockMatch[1],
+      /\brewrite\b/,
+      "location /jaeger/ must not strip /jaeger prefix with a rewrite directive"
+    );
+  });
+
   it("otel-collector container carries --query.base-path=/jaeger arg", () => {
     const raw = fs.readFileSync(obsPath, "utf8");
     assert.match(
