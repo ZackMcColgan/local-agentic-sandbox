@@ -347,6 +347,7 @@ export async function executeHostTool(
 ): Promise<any> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
+  let dialectGuard: { ruleIds: string[]; traceNotes: string[] } | undefined;
   if (tool === "host_run_powershell") {
     if (typeof args?.command === "string") {
       const lint = lintHostCommand(args.command);
@@ -362,6 +363,10 @@ export async function executeHostTool(
       }
       if (lint.rewritten) {
         args = { ...args, command: lint.command };
+        dialectGuard = {
+          ruleIds: lint.ruleIds,
+          traceNotes: lint.traceNotes,
+        };
       }
     }
     let timeoutSec = 120;
@@ -400,7 +405,11 @@ export async function executeHostTool(
     throw new Error(`Host runner returned HTTP ${res.status}`);
   }
 
-  return await res.json();
+  const result = await res.json();
+  if (dialectGuard) {
+    return { ...result, dialectGuard };
+  }
+  return result;
 }
 
 export const HOST_TOOLS_DEFINITIONS = [
