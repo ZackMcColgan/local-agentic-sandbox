@@ -20,6 +20,8 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     status: overrides.status ?? "active",
     createdAt: overrides.createdAt ?? new Date(now - 20 * 60_000).toISOString(),
     updatedAt: overrides.updatedAt ?? new Date(now - 15 * 60_000).toISOString(),
+    model: overrides.model ?? "gpt-5.4",
+    reasoningEffort: overrides.reasoningEffort ?? "medium",
     messages: overrides.messages ?? [
       {
         id: "msg-user-1",
@@ -59,6 +61,8 @@ function makeMemoryAdapters(initialThreads: Thread[], bankedJobs: Set<string> = 
         resumedFromThreadId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        model: "gpt-5.4",
+        reasoningEffort: "medium",
         messages: [],
       };
       threads.set(fresh.id, fresh);
