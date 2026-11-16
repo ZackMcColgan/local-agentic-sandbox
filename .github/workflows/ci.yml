@@ -7,6 +7,28 @@ on:
     branches: [ "main","develop" ]
 
 jobs:
+  typecheck:
+    name: Typecheck (full error report)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Typecheck web-ui
+        run: |
+          npx tsc --noEmit -p web-ui/tsconfig.json
+
   test-and-typecheck:
     name: Unit Tests & Static Analysis
     runs-on: ubuntu-24.04
