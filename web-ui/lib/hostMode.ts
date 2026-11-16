@@ -336,6 +336,8 @@ export function generateHostFileDiff(
   return null;
 }
 
+import { lintHostCommand } from "./commandDialectGuard";
+
 export async function executeHostTool(
   tool: string,
   args: any,
@@ -345,7 +347,28 @@ export async function executeHostTool(
 ): Promise<any> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
+  let dialectGuard: { ruleIds: string[]; traceNotes: string[] } | undefined;
   if (tool === "host_run_powershell") {
+    if (typeof args?.command === "string") {
+      const lint = lintHostCommand(args.command);
+      if (lint.rejected) {
+        return {
+          ok: false,
+          error: `Command rejected by dialect guard (${lint.ruleIds.join(", ")}): ${lint.hint}`,
+          dialectGuard: {
+            ruleIds: lint.ruleIds,
+            traceNotes: lint.traceNotes,
+          },
+        };
+      }
+      if (lint.rewritten) {
+        args = { ...args, command: lint.command };
+        dialectGuard = {
+          ruleIds: lint.ruleIds,
+          traceNotes: lint.traceNotes,
+        };
+      }
+    }
     let timeoutSec = 120;
     if (typeof args?.timeoutSeconds === "number" && !isNaN(args.timeoutSeconds)) {
       timeoutSec = Math.max(1, Math.min(600, Math.floor(args.timeoutSeconds)));
@@ -382,7 +405,11 @@ export async function executeHostTool(
     throw new Error(`Host runner returned HTTP ${res.status}`);
   }
 
-  return await res.json();
+  const result = await res.json();
+  if (dialectGuard) {
+    return { ...result, dialectGuard };
+  }
+  return result;
 }
 
 export const HOST_TOOLS_DEFINITIONS = [
