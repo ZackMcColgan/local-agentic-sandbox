@@ -187,7 +187,7 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ui041-"));
     try {
       const store = new ThreadStore(tmpDir);
-      const thread = store.createThread("UI-041 test");
+      const thread = store.createThread({ title: "UI-041 test" });
       store.addMessage(thread.id, {
         id: "u1",
         role: "user",

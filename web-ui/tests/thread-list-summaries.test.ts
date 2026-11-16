@@ -12,7 +12,7 @@ describe("B1: Lightweight thread summaries", () => {
     try {
       const store = new ThreadStore(tmpDir);
       const hugeText = "x".repeat(500 * 1024);
-      const thread = store.createThread("New session", "swift-15-27b-mtp");
+      const thread = store.createThread({ title: "New session", model: "swift-15-27b-mtp" });
       thread.messages = [
         {
           id: "m1",
@@ -24,7 +24,7 @@ describe("B1: Lightweight thread summaries", () => {
           id: "m2",
           role: "assistant",
           content: hugeText,
-          thoughts: hugeText,
+          thought: hugeText,
           traces: [{ id: "t1", type: "tool", name: "read_file", result: hugeText }] as any,
           diffs: [{ filePath: "a.ts", diff: "+foo" }] as any,
           timestamp: new Date().toISOString(),

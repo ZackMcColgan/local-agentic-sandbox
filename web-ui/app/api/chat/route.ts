@@ -30,7 +30,8 @@ import {
   computeModelOptions,
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
-  parseThinkingAndContent
+  parseThinkingAndContent,
+  joinNarrationChunks
 } from "@/lib/chatUtils";
 import {
   fitContextWindow,
@@ -493,6 +494,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     let accumulatedThoughts: string[] = [];
     const turnStartMs = Date.now();
     let thinkingEndMs: number | null = null;
+    let firstLlmRequestMs: number | null = null;
+    let thinkingMsAcc = 0;
+    let lastThinkingChunkMs: number | null = null;
+    let writingMsAcc = 0;
+    let lastWritingChunkMs: number | null = null;
 
     let lastFinishReason: string | undefined = undefined;
     let turnOutputTokens: number | undefined = undefined;
@@ -969,6 +975,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         // Text carried across a length-truncated auto-continue: the final answer
         // must contain EVERY produced half, never just the last round.
         let carriedLengthContent = "";
+        let carriedToolRoundProse = "";
         // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
         // rolled up onto the assistant message and the thread record.
         const roundPromptTokens: number[] = [];
@@ -1220,6 +1227,12 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
                 roundPromptTokens.push(chunk.prompt_eval_count);
               }
               if (chunk.message?.thinking) {
+                const nowMs = Date.now();
+                if (firstLlmRequestMs === null) firstLlmRequestMs = nowMs;
+                if (lastThinkingChunkMs !== null) {
+                  thinkingMsAcc += Math.max(0, nowMs - lastThinkingChunkMs);
+                }
+                lastThinkingChunkMs = nowMs;
                 roundThinking += chunk.message.thinking;
                 armRoundDeadline();
                 const currentCumulativeThought = accumulatedThoughts.length > 0
@@ -1229,6 +1242,12 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
                 await sendEvent({ type: "thought", thought: currentCumulativeThought });
               }
               if (chunk.message?.content) {
+                const nowMs = Date.now();
+                if (firstLlmRequestMs === null) firstLlmRequestMs = nowMs;
+                if (lastWritingChunkMs !== null) {
+                  writingMsAcc += Math.max(0, nowMs - lastWritingChunkMs);
+                }
+                lastWritingChunkMs = nowMs;
                 const textChunk = chunk.message.content;
                 fullRoundContent += textChunk;
                 accumulatedStreamedTokens += textChunk;
@@ -1407,7 +1426,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
                 // truncated rounds plus this one, never just the last round.
                 currentAssistantMessage = {
                   role: "assistant",
-                  content: carriedLengthContent + fullRoundContent
+                  content: joinNarrationChunks(carriedLengthContent, fullRoundContent)
                 };
                 accumulatedStreamedTokens += TURN_TRUNCATION_MARKER;
                 streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
@@ -1423,7 +1442,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
                 content: LENGTH_CONTINUATION_DIRECTIVE
               });
               // Bank this half so the final answer keeps every produced part.
-              carriedLengthContent += fullRoundContent;
+              carriedLengthContent = joinNarrationChunks(carriedLengthContent, fullRoundContent);
               await sendEvent({
                 type: "status",
                 status: "Generation hit the per-message size limit: continue exactly where you stopped."
@@ -1442,11 +1461,15 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             if (carriedLengthContent) {
               currentAssistantMessage = {
                 ...currentAssistantMessage,
-                content: carriedLengthContent + fullRoundContent
+                content: joinNarrationChunks(carriedLengthContent, fullRoundContent)
               };
               carriedLengthContent = "";
             }
             break;
+          }
+
+          if (fullRoundContent.trim()) {
+            carriedToolRoundProse = joinNarrationChunks(carriedToolRoundProse, fullRoundContent.trim());
           }
 
           if (accumulatedThoughts.length > 0) {
@@ -1470,16 +1493,32 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             if (turnAbortController.signal.aborted) break;
             const toolName = toolCall.function.name;
             let toolArgs: Record<string, any> = {};
+            let malformedArgsError: string | null = null;
             if (typeof toolCall.function.arguments === "string") {
               try {
                 toolArgs = toolCall.function.arguments.trim()
                   ? JSON.parse(toolCall.function.arguments)
                   : {};
-              } catch {
-                toolArgs = {};
+              } catch (parseErr: any) {
+                malformedArgsError = `Malformed JSON arguments for tool '${toolName}': ${parseErr?.message || "Invalid JSON"}`;
               }
             } else if (toolCall.function.arguments && typeof toolCall.function.arguments === "object") {
               toolArgs = { ...toolCall.function.arguments };
+            }
+
+            if (malformedArgsError) {
+              const errPayload = JSON.stringify({ error: malformedArgsError });
+              await sendEvent({
+                type: "trace",
+                trace: { tool: toolName, args: { raw: toolCall.function.arguments }, result: errPayload, isError: true }
+              });
+              conversationMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id || `${toolName}_err`,
+                name: toolName,
+                content: errPayload
+              });
+              continue;
             }
 
             if (toolName === "search_web") {
@@ -2083,6 +2122,17 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
 
         // SYNTHESIS-RETRY: honest end-of-turn stamp for a failed synthesis (retry exhausted).
         const EMPTY_SYNTHESIS_STAMP = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.] Work persisted above; the summary failed. The thread is resumable — resume this thread to continue.`;
+        if (carriedToolRoundProse.trim()) {
+          const currentText = currentAssistantMessage.content || "";
+          if (!currentText.includes(carriedToolRoundProse.trim())) {
+            currentAssistantMessage = {
+              ...currentAssistantMessage,
+              content: currentText.trim()
+                ? `${carriedToolRoundProse.trim()}\n\n${currentText}`
+                : carriedToolRoundProse.trim()
+            };
+          }
+        }
         // Clean residual tool tags
         let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
         let turnStatus: "completed" | "incomplete" | undefined = undefined;
@@ -2202,6 +2252,12 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             compactionActions: turnCompacted ? turnCompactionActions : undefined,
             status: turnStatus || ("completed" as const),
             thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
+            phaseTimings: {
+              contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
+              thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
+              toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
+              writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
+            },
             finish_reason: lastFinishReason || "stop",
             roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
             outputTokens: finalOutputTokens,
@@ -2238,6 +2294,12 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           content: cleanedContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
           thinkingDurationMs: thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
+          phaseTimings: {
+            contextPrepMs: firstLlmRequestMs !== null ? Math.max(0, firstLlmRequestMs - turnStartMs) : undefined,
+            thinkingMs: thinkingMsAcc > 0 ? thinkingMsAcc : undefined,
+            toolsMs: traces.reduce((sum, tr) => sum + (typeof tr.durationMs === "number" ? tr.durationMs : 0), 0) || undefined,
+            writingMs: writingMsAcc > 0 ? writingMsAcc : undefined,
+          },
           traces,
           model: activeModel,
           mode,

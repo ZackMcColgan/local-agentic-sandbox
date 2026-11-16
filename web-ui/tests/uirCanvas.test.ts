@@ -287,7 +287,7 @@ describe("uir-2 canvas: rendered UI", () => {
     (globalThis as any).document = win.document;
     (globalThis as any).localStorage = win.localStorage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container);
+    win.document.body.appendChild(container as any);
     scrollEl = win.document.createElement("div") as unknown as HTMLDivElement;
     scrollRef = { current: scrollEl };
   });

@@ -22,7 +22,16 @@ export function resolveEffectiveReasoningEffort(
     return undefined;
   }
   const profile = getModelProfile(modelToUse);
-  return requestedEffort || profile?.defaultReasoningEffort || "medium";
+  return requestedEffort || profile?.defaultReasoningEffort || "low";
+}
+
+export function joinNarrationChunks(existing: string, incoming: string): string {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+  if (/\s$/.test(existing) || /^\s/.test(incoming)) {
+    return `${existing}${incoming}`;
+  }
+  return `${existing} ${incoming}`;
 }
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
@@ -558,6 +567,7 @@ export function formatMessageTimestamp(timestamp: string | number | Date, now: D
   if (isNaN(d.getTime())) return String(timestamp);
 
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const datePart = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const isToday =
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
@@ -567,9 +577,8 @@ export function formatMessageTimestamp(timestamp: string | number | Date, now: D
     const diffMs = now.getTime() - d.getTime();
     if (diffMs >= 0 && diffMs < 60_000) return `${time} · Now`;
     if (diffMs >= 60_000 && diffMs < 3_600_000) return `${time} · ${Math.floor(diffMs / 60_000)}m ago`;
-    return time;
+    return `${datePart}, ${time}`;
   }
 
-  const datePart = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return `${datePart}, ${time}`;
 }

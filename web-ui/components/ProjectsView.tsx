@@ -1053,7 +1053,7 @@ export function ProjectsView({
                       type="button"
                       disabled={reviewFinalized}
                       onClick={handleFinalizeReview}
-                      className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-900 dark:bg-zinc-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-zinc-400 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-900 dark:bg-zinc-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-zinc-900 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                       <span>{reviewFinalized ? "Review Finalized" : "Finalize Review"}</span>

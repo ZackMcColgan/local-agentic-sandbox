@@ -106,4 +106,34 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     assert.ok(browserResult.tests.includes("browser-mcp:tests"), "Must map browser-mcp files to browser-mcp:tests");
     assert.equal(browserResult.uncoveredFiles.length, 0, "No uncovered files for browser-mcp changes");
   });
+
+  it("maps the 7 orphaned charter modules to their test suites with zero uncovered files", () => {
+    const charterModules = [
+      ["web-ui/lib/liveStatus.ts", "tests/liveStatus.test.ts"],
+      ["web-ui/lib/executionSummary.ts", "tests/executionSummary.test.ts"],
+      ["web-ui/lib/modelEval.ts", "tests/modelEval.test.ts"],
+      ["web-ui/lib/board/boardStore.ts", "tests/boardStore.test.ts"],
+      ["web-ui/lib/board/dispatcher.ts", "tests/dispatcher.test.ts"],
+      ["web-ui/lib/board/flowMonitor.ts", "tests/flowMonitor.test.ts"],
+      ["web-ui/lib/board/reviewerGate.ts", "tests/reviewerGate.test.ts"]
+    ];
+
+    const result = resolveAffectedTests(charterModules.map(([mod]) => mod));
+    assert.deepEqual(result.uncoveredFiles, []);
+    for (const [, expectedTest] of charterModules) {
+      assert.ok(result.tests.includes(expectedTest), `Expected ${expectedTest} in mapped tests`);
+    }
+  });
+
+  it("includes TypeScript typecheck stage in gate run", () => {
+    const gateOutcome = runTestGate({
+      changedFiles: ["web-ui/lib/toolParser.ts"],
+      dryRun: true
+    });
+    assert.equal(gateOutcome.status, "passed");
+    assert.ok(
+      Array.isArray(gateOutcome.stages) && gateOutcome.stages.includes("tsc --noEmit"),
+      "Gate outcome must include 'tsc --noEmit' in stages"
+    );
+  });
 });

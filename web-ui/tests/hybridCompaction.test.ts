@@ -84,7 +84,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       assert.deepEqual(hybridOff.messages, extraction.messages);
       assert.equal(hybridOff.tokensAfter, extraction.tokensAfter);
       assert.equal(hybridOff.liveContent, extraction.messages[1].content);
-      assert.ok(!hybridOff.liveContent.includes(COMPACTION_MODEL_DIGEST_HEADER));
+      assert.ok(!hybridOff.liveContent?.includes(COMPACTION_MODEL_DIGEST_HEADER));
     } finally {
       if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
       else process.env.COMPACTION_STRATEGY = saved;
@@ -135,8 +135,8 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       assert.equal(aboveCalls, 1, "Exactly ONE summarization pass");
       assert.equal(above.modelSummaryUsed, true);
       assert.equal(above.strategy, "hybrid");
-      assert.ok(above.liveContent.startsWith(COMPACTION_MODEL_DIGEST_HEADER));
-      assert.equal(above.extractionDigest, summarizeTurnHistory(above.replacedMessages));
+      assert.ok(above.liveContent?.startsWith(COMPACTION_MODEL_DIGEST_HEADER));
+      assert.equal(above.extractionDigest, summarizeTurnHistory(above.replacedMessages ?? []));
       assert.ok(above.messages[1].content.startsWith(COMPACTION_MODEL_DIGEST_HEADER));
     } finally {
       if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
@@ -157,7 +157,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       assert.equal(failure.modelSummaryUsed, false);
       assert.equal(failure.fallback, true);
       assert.equal(failure.fallbackReason, "generation_failure");
-      assert.ok(failure.liveContent.includes("[CONVERSATION COMPACTED (85% THRESHOLD)]"));
+      assert.ok(failure.liveContent?.includes("[CONVERSATION COMPACTED (85% THRESHOLD)]"));
 
       const timeout = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
         maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
@@ -282,8 +282,8 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       assert.equal(res.modelSummaryUsed, false);
       assert.equal(res.fallback, true);
       assert.equal(res.fallbackReason, "identifier_post_check_rejected");
-      assert.ok(res.liveContent.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
-      assert.ok(res.liveContent.includes("https://github.com/test/repo"));
+      assert.ok(res.liveContent?.includes("86c8901c6433617cb9abe5db97123a0f52f58c89"));
+      assert.ok(res.liveContent?.includes("https://github.com/test/repo"));
     } finally {
       if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
       else process.env.COMPACTION_STRATEGY = saved;
@@ -360,7 +360,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
         messages: [
           { id: "m1", role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
           { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
-          { id: "m3", role: "tool", name: "workspace_read_file", content: "File contents retrieved.", timestamp: "now" },
+          { id: "m3", role: "tool" as any, content: "File contents retrieved.", timestamp: "now" },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
           { id: "m6", role: "assistant", content: filler, timestamp: "now" },
@@ -414,7 +414,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
         messages: [
           { id: "m1", role: "user", content: "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo", timestamp: "now" },
           { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
-          { id: "m3", role: "tool", name: "workspace_read_file", content: "File contents retrieved.", timestamp: "now" },
+          { id: "m3", role: "tool" as any, content: "File contents retrieved.", timestamp: "now" },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
           { id: "m6", role: "assistant", content: filler, timestamp: "now" },

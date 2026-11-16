@@ -112,7 +112,8 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
             });
             return {
               text: body,
-              content: body
+              content: body,
+              model: "mock-model"
             };
           }
           // Builder generation
@@ -122,14 +123,16 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
             const code = "```typescript\n// targetFile: foundation.ts\nexport const foundation = true;\n```";
             return {
               text: code,
-              content: code
+              content: code,
+              model: "mock-model"
             };
           } else {
             fs.writeFileSync(path.join(tmpGit, "logic.ts"), `export const logic = ${m2TestIteration};\n`, "utf8");
             const code = `\`\`\`typescript\n// targetFile: logic.ts\nexport const logic = ${m2TestIteration};\n\`\`\``;
             return {
               text: code,
-              content: code
+              content: code,
+              model: "mock-model"
             };
           }
         }

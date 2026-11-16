@@ -29,14 +29,18 @@ const trace = (tool: string): ExecutionTraceItem => ({
 
 const activeTask: TaskManifest = {
   taskId: "task-live-1",
-  title: "Live run",
+  goal: "Live run",
+  toolchain: "node:22",
+  branchName: "feat/live-run",
   status: "active",
+  currentMilestoneIndex: 0,
   milestones: [],
+  checkpoints: [],
+  ambiguityFlags: [],
   journal: [],
-  completedMilestones: [],
-  createdAt: new Date().toISOString(),
+  startedAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
-} as TaskManifest;
+};
 
 const baseProps = {
   onTracesUpdate: () => {},
@@ -56,8 +60,8 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
     globalThis.window = win as any;
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container as any);
     root = createRoot(container);
   });
 

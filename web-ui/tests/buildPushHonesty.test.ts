@@ -26,9 +26,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         }
       });
 
-      const supervisor = new OvernightSupervisor({
-        checkpointDir: tmpDir
-      });
+      const supervisor = new OvernightSupervisor({});
 
       const task: TaskManifest = {
         taskId: "task-push-fail-1",
@@ -60,7 +58,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
       });
 
       assert.equal(completed.status, "completed");
@@ -112,9 +110,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         }
       });
 
-      const supervisor = new OvernightSupervisor({
-        checkpointDir: tmpDir
-      });
+      const supervisor = new OvernightSupervisor({});
 
       const task: TaskManifest = {
         taskId: "task-push-succ-1",
@@ -143,7 +139,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
       });
 
       assert.equal(completed.status, "completed");
@@ -172,9 +168,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         }
       });
 
-      const supervisor = new OvernightSupervisor({
-        checkpointDir: tmpDir
-      });
+      const supervisor = new OvernightSupervisor({});
 
       const task: TaskManifest = {
         taskId: "task-push-notconf-1",
@@ -203,7 +197,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
       });
 
       assert.equal(completed.status, "completed");
@@ -240,9 +234,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
       );
 
       // Supervisor must catch, mark task failed, and not execute any milestone
-      const supervisor = new OvernightSupervisor({
-        checkpointDir: tmpDir
-      });
+      const supervisor = new OvernightSupervisor({});
 
       let milestoneExecuted = false;
       const task: TaskManifest = {

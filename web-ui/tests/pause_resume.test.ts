@@ -152,8 +152,8 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
       const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
       const { activeExecutionSet } = await import("../lib/threads/threadStore.js");
 
-      const supA = new OvernightSupervisor(tmpDir);
-      const supB = new OvernightSupervisor(tmpDir);
+      const supA = new OvernightSupervisor({});
+      const supB = new OvernightSupervisor({});
 
       const taskId = `task-cross-sup-pause-${Date.now()}`;
       activeExecutionSet.add(taskId);
@@ -205,7 +205,7 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
       const { ThreadStore, activeExecutionSet } = await import("../lib/threads/threadStore.js");
       const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
 
-      const supervisor = new OvernightSupervisor(tmpDir);
+      const supervisor = new OvernightSupervisor({});
       const threadStore = new ThreadStore(path.join(tmpDir, "threads.json"), supervisor);
 
       const taskId = `task-thread-pause-${Date.now()}`;

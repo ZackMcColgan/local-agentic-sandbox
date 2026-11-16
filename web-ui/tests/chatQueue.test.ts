@@ -35,6 +35,7 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
     it("enqueue appends an item and persists it under the thread key", () => {
       const q = new ChatQueue(storage, "thread-a", nextId);
       const item = q.enqueue("first follow-up");
+      assert.ok(item, "enqueue must return an item");
       assert.equal(item.text, "first follow-up");
       assert.ok(item.id, "items must carry an id");
       assert.deepEqual(q.items(), [item]);

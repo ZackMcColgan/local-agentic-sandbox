@@ -425,7 +425,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     });
 
     const html = renderToString(
-      React.createElement(MorningReportView, {
+      React.createElement(MorningReportView as any, {
         overnightReport,
         report: singleReport
       })
@@ -568,7 +568,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       };
 
       const html = renderToString(
-        React.createElement(MorningReportView, {
+        React.createElement(MorningReportView as any, {
           overnightReport
         })
       );
@@ -616,7 +616,7 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
       " M web-ui/components/ChatStream.tsx\n" +
       "?? web-ui/tmp.txt";
 
-    const overnightReport: OvernightMorningReport = {
+    const overnightReport = {
       generatedAt: "2026-11-14T08:00:00.000Z",
       windowStart: "2026-11-13T20:00:00.000Z",
       windowEnd: "2026-11-14T08:00:00.000Z",
@@ -652,7 +652,7 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
     };
 
     const html = renderToString(
-      React.createElement(MorningReportView, {
+      React.createElement(MorningReportView as any, {
         overnightReport
       })
     );

@@ -94,7 +94,7 @@
   /* 2. Typography */
   --text-primary: #f4f4f5;       /* zinc-100 (17.1:1 on zinc-950) */
   --text-secondary: #a1a1aa;     /* zinc-400 (7.8:1 on zinc-950) */
-  --text-muted: #71717a;         /* zinc-500 (4.6:1 on zinc-950) */
+  --text-muted: #a1a1aa;         /* zinc-400 (meets dark text floor) */
   --text-on-brand: #052e16;
 
   /* 3. Borders & Dividers */

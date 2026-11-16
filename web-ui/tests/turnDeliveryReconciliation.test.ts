@@ -107,9 +107,7 @@ test("Deliverable 2: Honest turn records (finish_reason, outputTokens, honest tr
       id: threadId,
       title: "Honest Records Test",
       model: "strata",
-      reasoningEffort: "medium",
-      status: "active",
-      messages: []
+      reasoningEffort: "medium"
     });
 
     // 1. Abnormal generation with finish_reason: "length"

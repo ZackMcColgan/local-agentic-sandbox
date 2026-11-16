@@ -122,7 +122,7 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
         };
       };
 
-      const mockRepoMap: WorkspaceRepoMap = {
+      const mockRepoMap = {
         root: tmpDir,
         files: [
           {
@@ -131,7 +131,7 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
           }
         ],
         treeSummary: "src/auth.ts: loginUser, SessionManager, UserProfile"
-      };
+      } as unknown as WorkspaceRepoMap;
 
       // Call Planner.generatePlan with repoMap
       const plan = await Planner.generatePlan({
@@ -187,7 +187,9 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
             id: "AC-1",
             assertion: "Large diff passes inspection"
           }
-        ]
+        ],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       const result = await critic.evaluateMilestoneDiff(
@@ -226,7 +228,9 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
             id: "AC-FAIL",
             assertion: "Must pass tests"
           }
-        ]
+        ],
+        builderIterations: 0,
+        criticRounds: 0
       };
 
       const result = await critic.evaluateMilestoneDiff(

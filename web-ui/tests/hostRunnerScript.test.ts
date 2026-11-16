@@ -82,4 +82,38 @@ describe("Architecture Deletion & Provenance Conformance Suite", () => {
       `Deterministic SHA-256 (${computedSha}) must match manifest.json (${manifestJson.bridgeSourceSha256})`
     );
   });
+
+  it("Test 5: swapBinary replaces a running/locked executable without EBUSY", async () => {
+    const os = await import("node:os");
+    const { spawn } = await import("node:child_process");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { swapBinary } = require("../../scripts/build-host-runner.js");
+    assert.strictEqual(typeof swapBinary, "function", "build-host-runner.js must export swapBinary");
+
+    const tmpDir = fs.mkdtempSync(path.join(os.default.tmpdir(), "swap-bin-test-"));
+    const targetExe = path.join(tmpDir, "test-runner.exe");
+    const newExe = path.join(tmpDir, "new-runner.exe");
+    let child: ReturnType<typeof spawn> | null = null;
+    try {
+      // Copy current node.exe as targetExe and launch it so Windows locks the image
+      fs.copyFileSync(process.execPath, targetExe);
+      fs.writeFileSync(newExe, "NEW_BINARY_PAYLOAD", "utf8");
+
+      child = spawn(targetExe, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+      await new Promise((r) => setTimeout(r, 300));
+
+      swapBinary(newExe, targetExe);
+      assert.strictEqual(fs.readFileSync(targetExe, "utf8"), "NEW_BINARY_PAYLOAD");
+    } finally {
+      if (child && !child.killed) {
+        child.kill();
+      }
+      await new Promise((r) => setTimeout(r, 200));
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+  });
 });

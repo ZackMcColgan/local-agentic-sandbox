@@ -34,7 +34,8 @@ describe("Parameterization — Round Generation Cap: ROUND_MAX_TOKENS (16,384) o
     it("default/undefined reasoning effort", () => {
       const opts = computeModelOptions("qwen3.8:27b-q3_k_m");
       assert.equal(opts.num_predict, ROUND_MAX_TOKENS);
-      assert.equal(opts.temperature, 0.5);
+      // LOW-effort ruling Nov 11: default/undefined reasoning effort resolves to "low" (temperature 0.2)
+      assert.equal(opts.temperature, 0.2);
     });
 
     it("models without reasoning effort support (e.g. Hermes 3)", () => {

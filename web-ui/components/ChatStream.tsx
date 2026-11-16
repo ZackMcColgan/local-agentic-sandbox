@@ -1036,7 +1036,8 @@ export function ChatStream({
     try {
       const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "compact" })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1312,6 +1313,10 @@ export function ChatStream({
                       attachments: event.attachments,
                       diffs: event.diffs,
                       durationMs,
+                      thinkingDurationMs: event.thinkingDurationMs,
+                      phaseTimings: event.phaseTimings,
+                      roundPromptTokens: event.roundPromptTokens,
+                      outputTokens: event.outputTokens,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
                       tokensBeforeCompaction: finalTokensBefore,
@@ -1335,6 +1340,8 @@ export function ChatStream({
                 modelUsed: finalModel,
                 selectedModel: msg.selectedModel || activeModel,
                 durationMs: event.durationMs || durationMs,
+                thinkingDurationMs: typeof event.thinkingDurationMs === "number" ? event.thinkingDurationMs : msg.thinkingDurationMs,
+                phaseTimings: event.phaseTimings || msg.phaseTimings,
                 compactedThisTurn: finalCompacted || undefined,
                 tokensBeforeCompaction: finalTokensBefore,
                 tokensAfterCompaction: finalTokensAfter,
@@ -1433,6 +1440,7 @@ export function ChatStream({
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
+      setLiveTurnTraces([]);
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("Approval continuation aborted by user");
@@ -1897,6 +1905,9 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
+      if (turnEndedNormally) {
+        setLiveTurnTraces([]);
+      }
       abortControllerRef.current = null;
       activeAssistantMsgIdRef.current = null;
 
@@ -2136,7 +2147,7 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[160px] truncate"
+            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[320px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -2665,6 +2676,7 @@ export function ChatStream({
                             defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                             durationMs={m.thinkingDurationMs ?? m.durationMs}
                             phaseTimings={m.phaseTimings}
+                            timestamp={m.timestamp}
                           />
                         )}
                       </div>
@@ -3670,7 +3682,7 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
           />
 
           {/* Bottom Deck: Controls Bar */}

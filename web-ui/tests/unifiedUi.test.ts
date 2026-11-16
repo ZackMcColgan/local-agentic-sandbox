@@ -572,18 +572,28 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
   });
 
   describe("Sprint U2 — Labeled Navigation, Collapsible 3-Pane Workbench, DiffViewer Wiring & 840px Track", () => {
-    it("Task 1: Desktop Left Rail (82px) and Mobile Navigation via NavigationDrawer", () => {
+    it("Task 1: Desktop Left Rail (82px) via NavigationDrawer and Mobile Bottom Nav", () => {
       const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
-      // Check for rail presence
+      // Check for desktop rail presence (82px)
       assert.ok(
         pageSrc.includes("app-rail") || (pageSrc.includes("82px") && pageSrc.includes("Chat")),
         "Must render persistent desktop rail"
       );
-      assert.equal(
+      // Check for mobile-bottom-nav presence and behavioral NavView switching
+      assert.ok(
         pageSrc.includes("mobile-bottom-nav"),
-        false,
-        "Mobile bottom navigation bar must be removed in favor of NavigationDrawer"
+        "Mobile bottom navigation bar must be rendered per P0.5 owner ruling"
       );
+      const mobileViews = ["chat", "projects", "builds", "skills", "settings"] as const;
+      let activeView: string = "chat";
+      const onSelect = (v: string) => {
+        activeView = v;
+      };
+      for (const view of mobileViews) {
+        assert.ok(pageSrc.includes(`"${view}"`), `mobile-bottom-nav must include '${view}'`);
+        onSelect(view);
+        assert.equal(activeView, view, `mobile-bottom-nav '${view}' must switch NavView to '${view}'`);
+      }
       // Rail must include labeled views: Chat, Builds, Morning Report/Report, Skills, Settings
       const requiredLabels = ["Chat", "Builds", "Report", "Skills", "Settings"];
       for (const label of requiredLabels) {

@@ -434,11 +434,11 @@ export function ThreadsSidebar({
                     )}
                     {livenessBadge ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${progressTraces} traces`}
+                        {`${progressChars} chars · ${(thread as any).totalTraces ?? progressTraces} total traces`}
                       </span>
-                    ) : progressTraces > 0 ? (
+                    ) : ((thread as any).totalTraces ?? progressTraces) > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`· ${progressTraces} traces`}
+                        {`· ${(thread as any).totalTraces ?? progressTraces} total traces`}
                       </span>
                     ) : null}
                   </div>

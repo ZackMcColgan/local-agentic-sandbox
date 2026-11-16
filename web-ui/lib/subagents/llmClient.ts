@@ -150,7 +150,7 @@ export function createLlmGenerate(options?: {
     // Decouple <think> reasoning budget from code output budget:
     // Add thinking token budget (fast=1024, balanced=4096, deep=8192) ON TOP of requested num_predict
     const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
-    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "balanced") as string;
+    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "fast") as string;
     const thinkingBudget = getThinkingBudget(effort);
     const effectiveNumPredict = requestedPredict + thinkingBudget;
 
@@ -186,8 +186,8 @@ export function createLlmGenerate(options?: {
 
     let accumulatedText = "";
     let thinkingText = "";
-    // swift-15-27b-mtp begins streaming its chain-of-thought immediately and terminates it with </think>
-    let insideThinking = true;
+    // Only enter thinking mode when an explicit <think> tag is seen.
+    let insideThinking = false;
     let loadDurationMs = 0;
     let totalDurationMs = 0;
     let lastLogTime = Date.now();

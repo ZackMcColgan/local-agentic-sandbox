@@ -18,8 +18,8 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     globalThis.document = win.document as any;
     globalThis.localStorage = win.localStorage as any;
     origFetch = globalThis.fetch;
-    container = win.document.createElement("div");
-    win.document.body.appendChild(container);
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container as any);
     root = createRoot(container);
   });
 

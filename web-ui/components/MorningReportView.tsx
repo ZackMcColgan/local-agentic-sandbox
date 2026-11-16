@@ -617,7 +617,7 @@ export function MorningReportView({
                         className="p-3 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                          <div className="text-xs font-bold text-slate-900 dark:text-zinc-100 line-clamp-2 break-words" title={art.name}>
                             {art.name}
                           </div>
                           <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate">

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
 import { formatModelDisplayLabel, formatMessageTimestamp } from "../lib/chatUtils";
+import { EngineStatusPill } from "./EngineStatusPill";
 const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export interface DeployHistoryItem {

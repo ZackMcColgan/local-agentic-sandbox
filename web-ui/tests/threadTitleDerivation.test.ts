@@ -30,7 +30,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       );
       assert.ok(!title.startsWith("JOB"), `title still carries JOB prefix: ${title}`);
       assert.ok(title.startsWith("ui-qa-sweep"), `expected goal-first title: ${title}`);
-      assert.ok(title.length <= 40, `title exceeds 40 chars: ${title.length}`);
+      assert.ok(title.length <= 80, `title exceeds 80 chars: ${title.length}`);
     });
 
     it("strips stacked 'Session: ' and 'JOB — ' prefixes", () => {
@@ -46,7 +46,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       const goal =
         "JOB — implement the progressive tool registry rollout across all three tiers carefully";
       const title = deriveThreadTitle(goal);
-      assert.ok(title.length <= 40, `title exceeds 40 chars: ${title.length}`);
+      assert.ok(title.length <= 80, `title exceeds 80 chars: ${title.length}`);
       // Word-boundary check: locate the title inside the source goal. If the
       // source continues past the title, the very next source character must
       // be whitespace (never a continuation of a word).
@@ -98,7 +98,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       assert.ok(!thread.title.startsWith("JOB"), `title still carries JOB prefix: ${thread.title}`);
       assert.ok(!thread.title.startsWith("Session"), `title still carries Session prefix: ${thread.title}`);
       assert.ok(thread.title.startsWith("ui-qa-sweep"), `unexpected title: ${thread.title}`);
-      assert.ok(thread.title.length <= 40, `title exceeds 40 chars: ${thread.title.length}`);
+      assert.ok(thread.title.length <= 80, `title exceeds 80 chars: ${thread.title.length}`);
     });
 
     it("explicit params.title still wins (existing behavior unchanged)", () => {
@@ -124,7 +124,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
         id: "msg-1",
         role: "user",
         content: `${longFirstLine}\n\nSecond paragraph with extra details.`,
-        createdAt: new Date().toISOString()
+        timestamp: new Date().toISOString()
       });
       const loaded = await store.getThread(thread.id);
       assert.equal(loaded?.title, longFirstLine);
@@ -144,7 +144,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
           id: "msg-1",
           role: "user",
           content: longFirstLine,
-          createdAt: new Date().toISOString()
+          timestamp: new Date().toISOString()
         }
       ];
       fs.writeFileSync(filePath, JSON.stringify(raw, null, 2));

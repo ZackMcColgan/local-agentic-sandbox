@@ -102,7 +102,7 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
   });
 
   it("computeThreadTokenEconomics returns zeros for a thread with no recorded economics", () => {
-    const agg = computeThreadTokenEconomics({ id: "t0", messages: [] });
+    const agg = computeThreadTokenEconomics({ messages: [] });
     assert.deepEqual(agg, { rounds: 0, promptTokens: 0, outputTokens: 0, compactions: 0 });
   });
 

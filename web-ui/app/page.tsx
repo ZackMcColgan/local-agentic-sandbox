@@ -745,7 +745,7 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] flex flex-col md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
+    <div className={`app-shell h-[100dvh] md:flex md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isLoadingThreads={isLoadingThreads}
@@ -773,10 +773,29 @@ export default function Home() {
               localStorage.setItem("preferred_model", m);
             }
           } catch {}
+          if (selectedThreadId) {
+            fetch(`/api/threads/${selectedThreadId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "setModel", model: m, reasoningEffort })
+            }).catch(() => {});
+          }
         }}
         reasoningEffort={reasoningEffort}
         onReasoningChange={(e) => {
           setReasoningEffort(e);
+          try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("las.reasoningEffort", e);
+            }
+          } catch {}
+          if (selectedThreadId) {
+            fetch(`/api/threads/${selectedThreadId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "setModel", model: selectedModel, reasoningEffort: e })
+            }).catch(() => {});
+          }
         }}
         installedModels={installedModels}
       />
@@ -1271,6 +1290,21 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-bottom-nav md:hidden" aria-label="Mobile Navigation">
+        {(["chat", "projects", "builds", "skills", "settings"] as const).map((view) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => handleNavigate(view as any)}
+            aria-label={view}
+            className={`mobile-nav-item ${activeNavView === view ? "active" : ""}`}
+          >
+            <span className="capitalize text-[11px] font-medium">{view}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

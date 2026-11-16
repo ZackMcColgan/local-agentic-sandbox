@@ -53,7 +53,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~12.8 GB",
     supportsReasoningEffort: true,
-    defaultReasoningEffort: "medium",
+    defaultReasoningEffort: "low",
     description: "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning."
   },
   {
@@ -62,7 +62,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~16.0 GB",
     supportsReasoningEffort: true,
-    defaultReasoningEffort: "medium",
+    defaultReasoningEffort: "low",
     description: "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning."
   },
   {
@@ -80,7 +80,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~13.8 GB",
     supportsReasoningEffort: true,
-    defaultReasoningEffort: "medium",
+    defaultReasoningEffort: "low",
     description: "Artificial Analysis #1 Open Model. Deep reasoning, code generation & agentic planning."
   },
   {

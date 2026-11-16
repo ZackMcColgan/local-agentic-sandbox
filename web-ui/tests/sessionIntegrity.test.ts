@@ -5,7 +5,7 @@ import path from "node:path";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ThreadStore, Thread, activeExecutionSet } from "../lib/threads/threadStore";
+import { ThreadStore, Thread, ThreadMessage, activeExecutionSet } from "../lib/threads/threadStore";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ChatStream } from "../components/ChatStream";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
@@ -283,15 +283,14 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
 
     it("derives title from the first user message, truncated at a word boundary (UI-008)", () => {
       const store = new ThreadStore(tempDir);
-      const longPrompt = "How does the critic handle crashes in workerPool when model is unreachable?";
+      const longPrompt = "How does the critic handle crashes in workerPool when model is unreachable during startup?";
       const thread = store.createThread({
         initialPrompt: longPrompt
       });
-      // UI-008: titles must never cut mid-word ('...crashes in wo' was the
-      // raw-slice defect); truncation lands on the last word boundary <= 40.
+      // UI-008: titles must never cut mid-word; truncation lands on the last word boundary <= 80.
       assert.equal(
         thread.title,
-        "How does the critic handle crashes in",
+        "How does the critic handle crashes in workerPool when model is unreachable",
         "Title must be derived from the first user message with word-boundary truncation"
       );
     });

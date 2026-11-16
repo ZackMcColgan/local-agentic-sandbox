@@ -18,7 +18,8 @@ describe("Web UI Model Configuration Suite", () => {
     assert.ok(orchestrator, "qwen3.8:27b-q3_k_m profile must exist");
     assert.equal(orchestrator?.role, "orchestrator");
     assert.equal(orchestrator?.supportsReasoningEffort, true);
-    assert.equal(orchestrator?.defaultReasoningEffort, "medium");
+    // LOW-effort ruling Nov 11: defaultReasoningEffort is "low"
+    assert.equal(orchestrator?.defaultReasoningEffort, "low");
     assert.ok(orchestrator?.recommendedVRAM.includes("13.8 GB"));
 
     const subagent = PRESET_MODEL_PROFILES.find((p) => p.id === "gemma4:e4b");

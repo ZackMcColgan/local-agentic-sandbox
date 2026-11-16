@@ -168,7 +168,8 @@ describe("Phase 1 — Planner Worker Suite", () => {
         generate: mockGenerate
       });
 
-      assert.equal(capturedModel, "swift-15-27b-mtp", "Planner must default to swift-15-27b-mtp");
+      // DEFAULT_PRIMARY_MODEL = resident engine (qwen3.8-flash-next-gyro-gyro-s)
+      assert.equal(capturedModel, "qwen3.8-flash-next-gyro-gyro-s", "Planner must default to qwen3.8-flash-next-gyro-gyro-s");
 
       // Verify no occurrences of qwen3.8 remain in lib/subagents/
       const candidateDirs = [

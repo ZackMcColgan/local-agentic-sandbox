@@ -7,6 +7,7 @@ import {
 } from "./llmClient";
 import { FlywheelSkillsStore, formatSkillsForPlannerPrompt } from "../flywheel/skillsStore";
 import type { WorkspaceRepoMap } from "./workerPool";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 
 export interface PlanSpecInput {
   taskId: string;
@@ -318,7 +319,7 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
     ];
   } else if (!isSynthetic) {
     const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000, scope: userScope });
-    const modelToUse = input.model || process.env.PLANNER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp";
+    const modelToUse = input.model || process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
     let retrievedPatternsContext = "";
     try {

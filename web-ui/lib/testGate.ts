@@ -33,6 +33,7 @@ export interface TestGateOutcome {
   testsRan: string[];
   changedFiles: string[];
   uncoveredFiles: string[];
+  stages?: string[];
   error?: string;
   output?: string;
 }
@@ -46,6 +47,34 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  {
+    match: (p) => p.includes("workerPool.ts") || p.includes("builderSurgicalLoop.test.ts"),
+    tests: ["tests/builderSurgicalLoop.test.ts"],
+  },
+  {
+    match: (p) => p.includes("BuildsView.tsx") || p.includes("buildsViewBoard.test.ts"),
+    tests: ["tests/buildsViewBoard.test.ts"],
+  },
+  {
+    match: (p) => p.includes("dialectGuard") || p.includes("dialectGuardWiring.test.ts"),
+    tests: ["tests/dialectGuardWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("ingestion") || p.includes("ingestionQdrantIds.test.ts"),
+    tests: ["tests/ingestionQdrantIds.test.ts"],
+  },
+  {
+    match: (p) => p.includes("supervisor.ts") || p.includes("p3FinishAndHandoffWiring.test.ts"),
+    tests: ["tests/p3FinishAndHandoffWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("scheduler.ts") || p.includes("schedulerPlanner.test.ts"),
+    tests: ["tests/schedulerPlanner.test.ts"],
+  },
+  {
+    match: (p) => p.includes("security") || p.includes("securityHardeningWiring.test.ts"),
+    tests: ["tests/securityHardeningWiring.test.ts"],
+  },
   // job-queue-isolation: single-slot queue + per-job worktrees
   {
     match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
@@ -76,6 +105,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("darkTextFloor.test.ts") ||
       p.includes("overlayMutualExclusion.test.ts") ||
       p.includes("timestampFormat.test.ts") ||
+      p.includes("chatUtils.ts") ||
       p.includes("telegramErrorDismiss.test.ts") ||
       p.includes("titleTruncationResiduals.test.ts") ||
       p.includes("SvgViewer.tsx") ||
@@ -194,6 +224,23 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
+  {
+    match: (p) => p.includes("app/api/board/route"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+
+  {
+    match: (p) => p.includes("lib/prePrPipeline"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/securityHardening") || p.includes("lib/selfDeployMachinery"),
+    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/finishVerificationGate"),
+    tests: ["tests/p32AndP33SupervisorGates.test.ts"]
+  },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
     match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
@@ -222,6 +269,13 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatTextTruth.test.ts",
       "tests/incompleteStatusAffordance.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
+      "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
+      "tests/p22PatchAndDialect.test.ts",
+      "tests/p32AndP33SupervisorGates.test.ts",
+
+      "tests/p5BoardAndPipeline.test.ts",
+      "tests/p6SecurityDeployEvalIngestion.test.ts",
       "tests/chatSteerSubmitUx.test.ts",
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
@@ -533,7 +587,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/workerPoolIsolation.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/llmClient"),
@@ -687,6 +741,13 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatLiveVisibility.test.ts",
       "tests/chatStreamTokenPreservation.test.ts",
+      "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
+      "tests/p22PatchAndDialect.test.ts",
+      "tests/p32AndP33SupervisorGates.test.ts",
+
+      "tests/p5BoardAndPipeline.test.ts",
+      "tests/p6SecurityDeployEvalIngestion.test.ts",
       "tests/chatQueue.test.ts",
       "tests/punchlistUiFixes.test.ts",
       "tests/uiStateAndDedup.test.ts"
@@ -815,6 +876,51 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
     tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
+  },
+  // Charter modules (P0.1)
+  {
+    match: (p) => p.includes("lib/liveStatus"),
+    tests: ["tests/liveStatus.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/executionSummary"),
+    tests: ["tests/executionSummary.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/modelEval"),
+    tests: ["tests/modelEval.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/boardStore"),
+    tests: ["tests/boardStore.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/dispatcher"),
+    tests: ["tests/dispatcher.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/flowMonitor"),
+    tests: ["tests/flowMonitor.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/reviewerGate"),
+    tests: ["tests/reviewerGate.test.ts"]
+  },
+  {
+    match: (p) => p.includes("config/models") || p.includes("lib/chatUtils") || p.includes("lib/subagents/llmClient"),
+    tests: ["tests/p02ModelEffort.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/threads/threadStore"),
+    tests: ["tests/p03DataLoss.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
+    tests: ["tests/p04VisualGuard.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/page.tsx") || p.includes("components/SettingsView"),
+    tests: ["tests/p05StrayUi.test.ts"]
   }
 ];
 
@@ -839,8 +945,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
+    /(?:^|\/)temp-/.test(normalizedPath) ||
     normalizedPath.includes(".agent") ||
-    normalizedPath.includes("temp-") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
     normalizedPath.includes("test-results") ||
@@ -1056,7 +1162,8 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       budgetSeconds,
       testsRan: resolved.tests,
       changedFiles: changed,
-      uncoveredFiles: []
+      uncoveredFiles: [],
+      stages: ["tsc --noEmit", "tests"]
     };
   }
 
@@ -1090,6 +1197,25 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   delete childEnv.NODE_TEST_CONTEXT;
   if (!childEnv.FORCE_MOCK) childEnv.FORCE_MOCK = "1";
   if (!childEnv.FAST_GRAPH_TEST) childEnv.FAST_GRAPH_TEST = "1";
+
+  // 0. Run TypeScript typecheck (tsc --noEmit) for web-ui
+  try {
+    const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+    const tscOut = execSync("npx tsc --noEmit", {
+      cwd: webUiCwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: childEnv,
+      timeout: remainingTime
+    });
+    if (tscOut) testOutput += tscOut;
+  } catch (err: any) {
+    const stdout = err.stdout ? err.stdout.toString() : "";
+    const stderr = err.stderr ? err.stderr.toString() : "";
+    testOutput += `${stdout}\n${stderr}`;
+    failedCount += 1;
+    runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
+  }
 
   // 1. Run web-ui tests if any mapped
   if (webUiTestsToRun.length > 0) {

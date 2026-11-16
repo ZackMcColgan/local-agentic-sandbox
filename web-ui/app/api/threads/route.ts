@@ -6,6 +6,7 @@ import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
       const branchName = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
       const enableGitOps = body.enableGitOps !== false;
       const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
-      const effectiveModel = body.model || process.env.MODEL_NAME || "swift-15-27b-mtp";
+      const effectiveModel = body.model || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
       // Persist-first launch: create manifest with status "planning" and write checkpoint before planner runs
       const manifest: TaskManifest = {
@@ -109,7 +110,7 @@ export async function POST(req: Request) {
         } else {
           thread = threadStore.createThread({
             model: effectiveModel,
-            reasoningEffort: body.reasoningEffort || "medium",
+            reasoningEffort: body.reasoningEffort || "low",
             initialPrompt: goal,
             attachments: body.attachments,
             taskId,
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
       } else {
         thread = threadStore.createThread({
           model: effectiveModel,
-          reasoningEffort: body.reasoningEffort || "medium",
+          reasoningEffort: body.reasoningEffort || "low",
           initialPrompt: goal,
           attachments: body.attachments,
           taskId,

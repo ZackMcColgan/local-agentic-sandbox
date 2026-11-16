@@ -73,6 +73,7 @@ export interface Milestone {
   commitSha?: string;
   diff?: string;
   diffSummary?: string;
+  modifiedFiles?: string[];
   testsPassed?: number;
   testsFailed?: number;
   testsRun?: number;
@@ -128,6 +129,7 @@ export type TaskStatus = "planning" | "queued" | "active" | "completed" | "parke
 export interface TaskJournalEntry {
   timestamp: string;
   role: string;
+  action?: string;
   message: string;
   data?: any;
 }

@@ -40,6 +40,8 @@ export {
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
+import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
+import { evaluatePrePrGate } from "../prePrPipeline";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 import { WorkerGitOps } from "../git/workerGitOps";
@@ -695,6 +697,7 @@ export interface StepExecutorResult {
   criticRounds?: number;
   builderModel?: string;
   targetFile?: string;
+  modifiedFiles?: string[];
   deliverableContent?: string;
   thinking?: string;
   reason?: string;
@@ -709,6 +712,7 @@ export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
   gitOps?: WorkerGitOps;
   gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  repoRoot?: string;
   signal?: AbortSignal;
 }
 
@@ -1536,6 +1540,15 @@ export class OvernightSupervisor {
         const mIdx = task.currentMilestoneIndex;
         const milestone = task.milestones[mIdx];
         let attempt = 0;
+        const handoffPath = path.join(this.checkpointDirectory, `${task.taskId}.handoff.json`);
+        const priorHandoff = readMilestoneHandoff(handoffPath);
+        if (priorHandoff) {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            message: `Resumed with handoff from ${priorHandoff.nextMilestone || priorHandoff.jobId}`
+          });
+        }
         let milestoneCompleted = false;
 
         while (!milestoneCompleted && attempt < 3) {
@@ -1567,6 +1580,7 @@ export class OvernightSupervisor {
               milestone.status = "completed";
               if (res.gitSha) milestone.commitSha = res.gitSha;
               if (res.diff) milestone.diffSummary = res.diff;
+              if (res.modifiedFiles) milestone.modifiedFiles = res.modifiedFiles;
               if (res.builderIterations !== undefined) milestone.builderIterations = res.builderIterations;
               if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
               if (res.builderModel) milestone.builderModel = res.builderModel;
@@ -1653,6 +1667,13 @@ export class OvernightSupervisor {
       }
 
       if (milestoneCompleted) {
+        writeMilestoneHandoff(handoffPath, {
+          jobId: task.taskId,
+          completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
+          nextMilestone: task.milestones[mIdx + 1]?.id ?? null,
+          summary: milestone.title,
+          updatedAt: milestone.completedAt || new Date().toISOString()
+        });
         task.currentMilestoneIndex = mIdx + 1;
         this.saveCheckpoint(task, milestone.commitSha);
       } else {
@@ -1690,7 +1711,23 @@ export class OvernightSupervisor {
     }
 
     if (task.currentMilestoneIndex >= task.milestones.length) {
-      task.status = "completed";
+      const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
+      const finishVerification = verifyJobCompletion({
+        workspaceRoot: options?.repoRoot || process.cwd(),
+        expectedArtifacts,
+        gatePassed: task.milestones.every((m) => m.status === "completed")
+      });
+      if (!finishVerification.ok) {
+        task.status = "failed";
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "supervisor",
+          action: "Finish verification gate blocked completion",
+          message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
+        });
+      } else {
+        task.status = "completed";
+      }
       task.completedAt = new Date().toISOString();
 
       if (shouldRunGitOps) {
@@ -1735,8 +1772,21 @@ export class OvernightSupervisor {
             message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
           });
 
-          // BUILD-1 Honesty Rule: wire pushBranch into terminal path
-          const pushCheck = await gitOps.isPushConfigured();
+          const prePr = evaluatePrePrGate({
+            flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
+            reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
+            gatePassed: true
+          });
+          if (!prePr.ready) {
+            task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
+            });
+          } else {
+            // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+            const pushCheck = await gitOps.isPushConfigured();
           if (!pushCheck.configured) {
             task.pushStatus = "completed — local only, push not configured";
             task.journal.push({
@@ -1773,6 +1823,7 @@ export class OvernightSupervisor {
               });
               console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
             }
+          }
           }
 
           // Check if autoDeployOnGreen is enabled

@@ -8,6 +8,7 @@ import {
   runSimulatedTask,
   SimulationScenarioKey
 } from "../lib/simulator/index";
+import type { TaskManifest } from "../lib/subagents/types";
 
 describe("Simulation Mode Engine & Scenarios Suite", () => {
   it("parses /simulate composer commands accurately", () => {

@@ -32,12 +32,29 @@ export function BuildsView({
       return;
     }
     let mounted = true;
-    fetch("/api/tasks")
+    fetch("/api/board")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (mounted && data?.tasks) {
-          setInternalTasks(data.tasks);
-        }
+        if (!mounted || !data) return;
+        const boardTasks: TaskManifest[] = Array.isArray(data.tasks)
+          ? data.tasks
+          : Array.isArray(data.threads)
+            ? data.threads.map((t: any) => ({
+                taskId: t.id || t.threadId,
+                goal: t.title || t.goal || "Board Thread",
+                status: t.status || "active",
+                toolchain: t.toolchain || "node:22",
+                branchName: t.branchName || "main",
+                milestones: Array.isArray(t.milestones) ? t.milestones : [],
+                currentMilestoneIndex: 0,
+                checkpoints: [],
+                ambiguityFlags: [],
+                journal: [],
+                startedAt: t.createdAt || new Date().toISOString(),
+                updatedAt: t.updatedAt || new Date().toISOString()
+              }))
+            : [];
+        setInternalTasks(boardTasks);
       })
       .catch(() => {});
     return () => {

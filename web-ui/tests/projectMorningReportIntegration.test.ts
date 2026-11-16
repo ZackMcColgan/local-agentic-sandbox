@@ -72,6 +72,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       status: "completed",
       startedAt: new Date(Date.now() - 3600000).toISOString(),
       completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       currentMilestoneIndex: 1,
       milestones: [
         {
@@ -82,7 +83,10 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
           commitSha: "sha-auth-1",
           testsPassed: 5,
           testsFailed: 0,
-          diffSummary: "Created auth routes"
+          diffSummary: "Created auth routes",
+          acceptanceCriteria: [],
+          builderIterations: 1,
+          criticRounds: 1
         }
       ],
       checkpoints: [],
@@ -114,6 +118,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       status: "completed",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       currentMilestoneIndex: 1,
       milestones: [],
       checkpoints: [],
@@ -140,6 +145,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       status: "completed",
       startedAt: new Date(Date.now() - 120000).toISOString(),
       completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       durationSeconds: 120,
       durationFormatted: "2m 0s",
       artifacts: [],
@@ -160,6 +166,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       status: "completed",
       startedAt: new Date(Date.now() - 60000).toISOString(),
       completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       durationSeconds: 60,
       durationFormatted: "1m 0s",
       artifacts: [],
@@ -242,6 +249,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       status: "completed",
       startedAt: taskResult.created_at,
       completedAt: taskResult.updated_at,
+      updatedAt: taskResult.updated_at,
       currentMilestoneIndex: 1,
       milestones: [
         {
@@ -252,7 +260,10 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
           commitSha: taskResult.head_sha || "head",
           testsPassed: 4,
           testsFailed: 0,
-          diffSummary: "Modified index.ts, added user.ts"
+          diffSummary: "Modified index.ts, added user.ts",
+          acceptanceCriteria: [],
+          builderIterations: 1,
+          criticRounds: 1
         }
       ],
       checkpoints: [],
