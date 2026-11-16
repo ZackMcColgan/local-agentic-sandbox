@@ -52,7 +52,7 @@ describe("UI-053 & UI-054 — Jump to bottom pill does not occlude content & thr
     const idx = chatStream.indexOf('data-scroll-container="true"');
     assert.ok(idx >= 0, "scroll container found");
     const slice = chatStream.slice(idx, idx + 300);
-    assert.ok(slice.includes("pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6"), "scroll container has balanced top/bottom padding");
+    assert.ok(slice.includes("pt-[16px] pb-4 sm:px-6 sm:pt-4 sm:pb-6"), "scroll container has balanced top/bottom padding");
     assert.ok(slice.includes("pb-16 sm:pb-20"), "chat-track has clean bottom clearance");
   });
 });

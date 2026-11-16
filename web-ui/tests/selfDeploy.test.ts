@@ -348,7 +348,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     );
 
     assert.ok(html.includes("Self-Deploy Pipeline"), "Must render Self-Deploy Pipeline heading");
-    assert.ok(html.includes("Kill switch"), "Must mention kill switch");
+    assert.ok(html.includes("Disable self-deploy"), "Must render Disable self-deploy label");
     assert.ok(html.includes("ROLLED BACK"), "Must show LOUD rollback alert in deploy history");
     assert.ok(html.includes("HTTP 503 CrashLoopBackOff"), "Must render failure error message");
   });

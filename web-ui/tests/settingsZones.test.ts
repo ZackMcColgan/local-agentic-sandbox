@@ -142,12 +142,12 @@ describe("uir-3 Settings zones", () => {
     assert.ok(stripHtml.includes("abc1234"), "strip shows the latest deploy SHA");
   });
 
-  it("status strip is sticky so it stays pinned while Settings scrolls", () => {
+  it("status strip is non-sticky so it does not overlap scrolling headings (UI-079)", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../components/SettingsView.tsx"), "utf8");
     const stripIdx = src.indexOf('data-testid="settings-live-status-strip"');
     assert.ok(stripIdx > -1, "strip testid present in source");
     const around = src.slice(Math.max(0, stripIdx - 400), stripIdx + 100);
-    assert.ok(around.includes("sticky"), "strip container uses sticky positioning");
+    assert.ok(!around.includes("sticky"), "strip container must not use sticky positioning");
   });
 
   it("Engine zone contains the engine controls and the Models row", async () => {

@@ -53,11 +53,9 @@ describe("Lane C UI Polish", () => {
     // Meter denominator contrast
     assert.match(chatStream, /text-slate-500 dark:text-zinc-400/, "Token meter denominator must use text-slate-500 dark:text-zinc-400");
 
-    // Model pill Form A / Form B toggle, defaulted to A
-    assert.match(chatStream, /useState<"A" \| "B">\("A"\)/, "Model pill form toggle must default to Form A");
+    // Model pill Form A is hard-coded; Form A/B toggle is removed (UI-068)
     assert.doesNotMatch(chatStream, /data-testid="model-pill-form-toggle"/, "Prototype A/B toggle must be removed (UI-068)");
     assert.match(chatStream, /#f4f4f5/, "Form A must include #f4f4f5 semibold label");
-    assert.match(chatStream, /#34d399/, "Form B must include #34d399 semibold label");
     assert.doesNotMatch(chatStream, /max-w-\[88px\] xl:max-w-\[110px\] truncate/, "Model pill label must not truncate on desktop");
   });
 
