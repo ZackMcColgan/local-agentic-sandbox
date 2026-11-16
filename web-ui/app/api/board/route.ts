@@ -6,11 +6,12 @@ import {
   type CreateBoardItemInput,
   type UpdateBoardItemInput,
 } from "@/lib/board/boardStore";
+import { mergeThreadsIntoBoard } from "@/lib/board/mergeThreadsIntoBoard";
 
 export async function GET() {
   try {
     const store = getBoardStore();
-    const items = seedBoardIfEmpty(store);
+    const items = await mergeThreadsIntoBoard(seedBoardIfEmpty(store));
     return NextResponse.json({ items });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load board";
