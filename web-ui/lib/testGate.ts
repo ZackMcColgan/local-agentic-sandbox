@@ -49,6 +49,12 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("lib/board/dispatcher") ||
+      p.includes("dispatcher.test.ts"),
+    tests: ["tests/dispatcher.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/") ||
       p.includes("app/api/board/") ||
       p.includes("BoardView.tsx") ||
