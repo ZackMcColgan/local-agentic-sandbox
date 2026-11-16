@@ -121,3 +121,39 @@ export function appendNarrationChunk(existing: string, chunk: string): string {
   }
   return existing + chunk;
 }
+
+export interface HostRunnerDisconnectClassification {
+  kind: "disconnected" | "recovered" | "none";
+  summary: string;
+  remainingContent: string;
+}
+
+const HOST_DISCONNECT_LINE_RE = /^.*Host runner (?:daemon )?disconnected mid-(?:turn|watch)[^\n]*$/gim;
+const HOST_RECOVER_LINE_RE = /^.*Host runner (?:recovered|reconnected)[^\n]*$/gim;
+
+/**
+ * UI-007: Classify host-runner disconnect/recovery narration inside an assistant
+ * message so the stream renders a distinct status element instead of bare text.
+ */
+export function classifyHostRunnerDisconnect(content: string): HostRunnerDisconnectClassification {
+  if (!content) return { kind: "none", summary: "", remainingContent: content };
+  const hasDisconnect = HOST_DISCONNECT_LINE_RE.test(content);
+  HOST_DISCONNECT_LINE_RE.lastIndex = 0;
+  if (!hasDisconnect) {
+    return { kind: "none", summary: "", remainingContent: content };
+  }
+  const hasRecovery = HOST_RECOVER_LINE_RE.test(content);
+  HOST_RECOVER_LINE_RE.lastIndex = 0;
+
+  const remainingContent = content
+    .replace(HOST_DISCONNECT_LINE_RE, "")
+    .replace(HOST_RECOVER_LINE_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    kind: hasRecovery ? "recovered" : "disconnected",
+    summary: hasRecovery ? "Host runner disconnected & recovered" : "Host runner disconnected mid-turn",
+    remainingContent,
+  };
+}

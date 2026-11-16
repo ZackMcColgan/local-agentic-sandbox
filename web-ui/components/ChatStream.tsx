@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
 import {
   Send,
   Bot,
@@ -2802,8 +2803,29 @@ export function ChatStream({
                   )}
 
                   {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
-                  {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (
+                  {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (() => {
+                    const hostDisconnect = classifyHostRunnerDisconnect(m.content);
+                    const renderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
+                    return (
                     <>
+                      {hostDisconnect.kind !== "none" && (
+                        <div
+                          data-testid="host-runner-disconnect-status"
+                          className={`mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
+                            hostDisconnect.kind === "recovered"
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                              : "border-zinc-700 bg-black text-zinc-400"
+                          }`}
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              hostDisconnect.kind === "recovered" ? "bg-emerald-500" : "bg-zinc-400"
+                            }`}
+                          />
+                          <span>{hostDisconnect.summary}</span>
+                        </div>
+                      )}
+                      {renderedContent ? (
                       <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -2910,7 +2932,7 @@ export function ChatStream({
                           )
                         }}
                       >
-                        {wrapRawSvgInMarkdown(m.content)}
+                        {wrapRawSvgInMarkdown(renderedContent)}
                       </ReactMarkdown>
                       {m.status === "streaming" && (
                         <span
@@ -2922,6 +2944,7 @@ export function ChatStream({
                         </span>
                       )}
                     </div>
+                      ) : null}
 
                     {/* Copy Response Action: phone-tappable button copying raw assistant markdown */}
                     <div className="flex items-center gap-2 pt-1 text-xs">
@@ -2947,7 +2970,8 @@ export function ChatStream({
                       </button>
                     </div>
                   </>
-                )}
+                    );
+                  })()}
 
                   {/* Tool Generated SVG Visual Artifacts & Code Deliverables */}
                   {!isTaskHostMessage && (
