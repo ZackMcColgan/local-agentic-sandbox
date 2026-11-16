@@ -719,10 +719,15 @@ export default function Home() {
 
   const handleNavigate = (view: NavView) => {
     setActiveNavView(view);
+    setIsDrawerOpen(false);
     if (view === "sessions") {
       const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
       if (isMobile) {
-        setIsSidebarOpen(true);
+        // Navigating to Sessions on mobile must DISMISS the sidebar slide-over
+        // and its backdrop (mobile-sidebar-open mounts a fixed inset-0 z-40
+        // backdrop that would cover the chat and block mid-run controls like
+        // the stop button). The destination view is the chat, not the thread list.
+        setIsSidebarOpen(false);
       }
     }
   };
