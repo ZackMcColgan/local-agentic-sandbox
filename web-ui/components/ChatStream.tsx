@@ -39,6 +39,8 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
+import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
+import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
@@ -101,6 +103,8 @@ export interface ChatMessage {
   content: string;
   thought?: string;
   traces?: ExecutionTraceItem[];
+  completionStamp?: CompletionStamp;
+  verificationGaps?: VerificationGap[];
   attachments?: Array<{
     name: string;
     type: string;
@@ -2690,6 +2694,14 @@ export function ChatStream({
                   })()}
 
                   {/* Inline Expandable Sandbox & Telemetry Badges */}
+                  {!isUser && m.completionStamp === "completed-unverified" && (
+                    <div className="mb-2">
+                      <CompletionVerificationBadge
+                        stamp={m.completionStamp}
+                        gaps={m.verificationGaps}
+                      />
+                    </div>
+                  )}
                   {!isUser && m.traces && m.traces.length > 0 && (() => {
                     const hasManyTraces = m.traces.length > 3;
                     const isTracesExpanded = !!expandedTraces[m.id];

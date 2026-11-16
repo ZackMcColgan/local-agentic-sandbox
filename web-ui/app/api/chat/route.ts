@@ -66,6 +66,7 @@ import {
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
+import { evaluateMarkupRound, evaluateZeroTraceTripwire } from "@/lib/toolCallIntegrity";
 import { ReadDedupRegistry, type ReadDedupMeta } from "@/lib/readDedup";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
@@ -954,6 +955,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         let budgetExhaustedAtTokens = 0;
         let groundingDirectivePending = false;
         let consecutiveFailures = 0;
+        let consecutiveMarkupFailures = 0;
         let webResearchCalls = 0;
         let webBudgetNoticeAdded = false;
         let groundingEnforced = false;
@@ -1395,6 +1397,36 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           });
 
           if (!toolCalls || toolCalls.length === 0) {
+            const markupEval = evaluateMarkupRound({
+              roundContent: fullRoundContent,
+              executedToolCallsCount: 0,
+              consecutiveMarkupFailures,
+            });
+            if (markupEval.action === "reprompt") {
+              consecutiveMarkupFailures = markupEval.consecutiveMarkupFailures;
+              conversationMessages.push({
+                role: "assistant",
+                content: fullRoundContent,
+              });
+              conversationMessages.push({
+                role: "user",
+                content: markupEval.directive!,
+              });
+              groundingDirectivePending = true;
+              lastRoundTools = [];
+              round++;
+              continue;
+            }
+            if (markupEval.action === "end_turn") {
+              consecutiveMarkupFailures = markupEval.consecutiveMarkupFailures;
+              honestEndMarker = markupEval.marker!;
+              accumulatedStreamedTokens += markupEval.marker!;
+              streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+              await sendEvent({ type: "token", content: markupEval.marker! });
+              break;
+            }
+            consecutiveMarkupFailures = 0;
+
             if (
               isLiveRealTimeIntent(userPrompt) &&
               webResearchCalls === 0 &&
@@ -1472,6 +1504,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           if (fullRoundContent.trim()) {
             carriedToolRoundProse = joinNarrationChunks(carriedToolRoundProse, fullRoundContent.trim());
           }
+          consecutiveMarkupFailures = 0;
 
           if (accumulatedThoughts.length > 0) {
             await sendEvent({
@@ -2235,6 +2268,11 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
         const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
 
+        const zeroTraceResult = evaluateZeroTraceTripwire({
+          content: cleanedContent,
+          tracesCount: traces.length,
+        });
+
         if (activeThreadId && !assistantPersisted) {
           const assistantMsgToSave = {
             id: assistantMessageId,
@@ -2242,6 +2280,8 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             content: cleanedContent,
             thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
             traces: traces.length > 0 ? (traces as any) : undefined,
+            completionStamp: zeroTraceResult.completionStamp,
+            verificationGaps: zeroTraceResult.gaps.length > 0 ? zeroTraceResult.gaps : undefined,
             attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
             diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
             modelUsed: activeModel,
