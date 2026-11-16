@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
 
-export type NavView = "sessions" | "thread" | "builds" | "skills" | "morning-report" | "settings" | "security" | "projects";
+export type NavView = "sessions" | "thread" | "builds" | "board" | "skills" | "morning-report" | "settings" | "security" | "projects";
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -289,6 +289,23 @@ export function NavigationDrawer({
           >
             <Rocket className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
             <span>Builds</span>
+          </button>
+
+          {/* Destination: Board */}
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate("board");
+              onClose();
+            }}
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+              activeView === "board"
+                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
+                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+            }`}
+          >
+            <Rocket className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <span>Board</span>
           </button>
 
           {/* Destination: Projects & Folders */}

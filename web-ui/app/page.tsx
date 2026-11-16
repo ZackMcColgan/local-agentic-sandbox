@@ -34,6 +34,8 @@ import { CodeBlock } from "@/components/ArtifactRenderers";
 import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
 import { SettingsView } from "@/components/SettingsView";
 import { BuildsView } from "@/components/BuildsView";
+import { BoardView } from "@/components/BoardView";
+import type { BoardItem } from "@/lib/board/boardStore";
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
@@ -82,7 +84,20 @@ export default function Home() {
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [boardItems, setBoardItems] = useState<BoardItem[]>([]);
   const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
+
+  useEffect(() => {
+    if (activeNavView !== "board") return;
+    fetch("/api/board")
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => {
+        if (Array.isArray(data.items)) {
+          setBoardItems(data.items);
+        }
+      })
+      .catch(() => {});
+  }, [activeNavView]);
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
   const [deployHistory, setDeployHistory] = useState<any[]>([]);
@@ -1172,6 +1187,17 @@ export default function Home() {
             selfDeployEnabled={selfDeployEnabled}
             onToggleSelfDeploy={handleToggleSelfDeploy}
             deployHistory={deployHistory}
+          />
+        )}
+
+        {activeNavView === "board" && (
+          <BoardView
+            items={boardItems}
+            onOpenDrawer={() => setIsDrawerOpen(true)}
+            onItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
+            onAskAssistant={() => {
+              setActiveNavView("thread");
+            }}
           />
         )}
 
