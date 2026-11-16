@@ -247,7 +247,9 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
       await act(async () => {
         const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
-        (textarea as any)[propsKey].onChange({ target: { value: "go" } });
+        if (propsKey) {
+          (textarea as any)[propsKey].onChange({ target: { value: "go" } });
+        }
       });
       const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
       await act(async () => {
