@@ -151,6 +151,8 @@ export interface UiHostApproval {
 }
 
 interface ChatStreamProps {
+  draftPrompt?: string | null;
+  onClearDraftPrompt?: () => void;
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
   liveTraces?: ExecutionTraceItem[];
   activeModel: string;
@@ -337,6 +339,8 @@ function UserMessageContent({ content }: { content: string }) {
 }
 
 export function ChatStream({
+  draftPrompt,
+  onClearDraftPrompt,
   onTracesUpdate,
   liveTraces,
   activeModel,
@@ -401,6 +405,13 @@ export function ChatStream({
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (draftPrompt) {
+      setInput(draftPrompt);
+      onClearDraftPrompt?.();
+    }
+  }, [draftPrompt, onClearDraftPrompt]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStoppingTask, setIsStoppingTask] = useState(false);
   const [activeThreadState, setActiveThreadId] = useState<string | undefined>(threadId);
