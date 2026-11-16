@@ -724,7 +724,7 @@ export function ChatStream({
   const chatQueueRef = useRef<ChatQueue | null>(null);
 
   // Poll and reconcile thread records if a stream disconnected mid-turn.
-  // UI-006/UI-006b (docs/ui-qa-findings-2026-11-10.md): the re-arm was a fixed
+  // UI-006/UI-006b: the re-arm was a fixed
   // 1s setTimeout with no backoff, no attempt cap, no total-time cap, and it
   // kept polling while ChatStream was hidden (page.tsx hides via CSS; the
   // component stays mounted). Now: exponential backoff, attempt + total-time

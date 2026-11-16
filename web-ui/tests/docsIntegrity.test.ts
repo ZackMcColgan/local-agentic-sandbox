@@ -9,10 +9,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
   const docsToCheck = [
     "README.md",
     "ARCHITECTURE.md",
-    "MEMORY.md",
-    "docs/FIRST_OVERNIGHT_TASK.md",
     "docs/KUBERNETES_DEPLOYMENT.md",
-    "docs/FLYWHEEL_SPIKE.md",
     "docs/AI_GOVERNANCE.md",
     "deploy/modelfiles/README.md"
   ];
@@ -57,10 +54,9 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     );
   });
 
-  it("README.md, docs/FIRST_OVERNIGHT_TASK.md, and deploy/modelfiles/README.md reference swift-15-27b-mtp as active model", () => {
+  it("README.md and deploy/modelfiles/README.md reference swift-15-27b-mtp as active model", () => {
     const targetFiles = [
       "README.md",
-      "docs/FIRST_OVERNIGHT_TASK.md",
       "deploy/modelfiles/README.md"
     ];
 

@@ -71,3 +71,6 @@ web-ui/tmp-test-*
 operator-memory.json
 
 web-ui/temp-*
+
+# Internal operating documents, kept locally only
+docs/internal/

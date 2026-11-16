@@ -1,6 +1,6 @@
 // UI-011a: completed-thread trace rows must carry an accessible name.
 //
-// The sweep (docs/ui-qa-findings-2026-11-10.md, ledger UI-011a) measured zero
+// The sweep (ledger UI-011a) measured zero
 // [aria-label*='Tool'] elements: trace buttons carried only font-mono text.
 // PR #81 (qa-3) covered the ChatStream proof rows (ChatStream.tsx:2479) and the
 // live strips (ChatStream.tsx:2992, LiveRunBlock.tsx:538). This test pins the
