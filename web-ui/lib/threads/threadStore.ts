@@ -251,6 +251,16 @@ export interface Thread {
   isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /** In-app supervisor: reason the turn was honestly ended after stalling. */
+  stalledReason?: string;
+  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
+  needsAttention?: boolean;
+  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
+  autoResumeCount?: number;
+  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
+  resumedFromThreadId?: string;
+  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
+  resumedToThreadId?: string;
   /**
    * TOKEN ECONOMICS (a): per-job rollup aggregated across the thread's turns
    * (rounds, prompt-token integral, output tokens, compaction count). Surfaced
@@ -1088,6 +1098,16 @@ export class ThreadStore {
     isTest?: boolean;
   isSubagent?: boolean;
   isScheduled?: boolean;
+  /** In-app supervisor: reason the turn was honestly ended after stalling. */
+  stalledReason?: string;
+  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
+  needsAttention?: boolean;
+  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
+  autoResumeCount?: number;
+  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
+  resumedFromThreadId?: string;
+  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
+  resumedToThreadId?: string;
     hostAccess?: boolean;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
