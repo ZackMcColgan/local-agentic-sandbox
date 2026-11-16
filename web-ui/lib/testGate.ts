@@ -338,6 +338,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/zombieStreamingCap.test.ts"]
   },
   {
+    match: (p) =>
+      p.includes("lib/commandDialectGuard") ||
+      p.includes("lib/commandDialectTraps") ||
+      p.includes("lib/hostMode"),
+    tests: ["tests/commandDialectGuard.test.ts"]
+  },
+  {
     match: (p) => p.includes("lib/finishVerification") || p.includes("components/CompletionVerificationBadge"),
     tests: ["tests/finishVerification.test.ts"]
   },

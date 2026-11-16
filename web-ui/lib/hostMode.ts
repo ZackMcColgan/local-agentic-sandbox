@@ -336,6 +336,8 @@ export function generateHostFileDiff(
   return null;
 }
 
+import { lintHostCommand } from "./commandDialectGuard";
+
 export async function executeHostTool(
   tool: string,
   args: any,
@@ -346,6 +348,22 @@ export async function executeHostTool(
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
   if (tool === "host_run_powershell") {
+    if (typeof args?.command === "string") {
+      const lint = lintHostCommand(args.command);
+      if (lint.rejected) {
+        return {
+          ok: false,
+          error: `Command rejected by dialect guard (${lint.ruleIds.join(", ")}): ${lint.hint}`,
+          dialectGuard: {
+            ruleIds: lint.ruleIds,
+            traceNotes: lint.traceNotes,
+          },
+        };
+      }
+      if (lint.rewritten) {
+        args = { ...args, command: lint.command };
+      }
+    }
     let timeoutSec = 120;
     if (typeof args?.timeoutSeconds === "number" && !isNaN(args.timeoutSeconds)) {
       timeoutSec = Math.max(1, Math.min(600, Math.floor(args.timeoutSeconds)));
