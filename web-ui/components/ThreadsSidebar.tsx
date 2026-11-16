@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import {
   Menu,
+  MessageSquare,
   Plus,
   Search,
   MoreHorizontal,

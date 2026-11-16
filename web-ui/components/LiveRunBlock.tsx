@@ -51,7 +51,7 @@ export function LiveRunBlock({
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
     if (task.startedAt) {
       const start = new Date(task.startedAt).getTime();
-      const endTs = task.completedAt || (task.status !== "active" && task.status !== "in_progress" && task.status !== "planning" ? task.updatedAt : undefined);
+      const endTs = task.completedAt || (task.status !== "active" && String(task.status) !== "in_progress" && task.status !== "planning" ? task.updatedAt : undefined);
       const end = endTs ? new Date(endTs).getTime() : Date.now();
       return Math.max(0, Math.floor((end - start) / 1000));
     }

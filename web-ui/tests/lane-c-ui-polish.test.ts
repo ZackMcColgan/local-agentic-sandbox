@@ -55,7 +55,7 @@ describe("Lane C UI Polish", () => {
 
     // Model pill Form A / Form B toggle, defaulted to A
     assert.match(chatStream, /useState<"A" \| "B">\("A"\)/, "Model pill form toggle must default to Form A");
-    assert.match(chatStream, /data-testid="model-pill-form-toggle"/, "Model pill form toggle button must exist");
+    assert.doesNotMatch(chatStream, /data-testid="model-pill-form-toggle"/, "Prototype A/B toggle must be removed (UI-068)");
     assert.match(chatStream, /#f4f4f5/, "Form A must include #f4f4f5 semibold label");
     assert.match(chatStream, /#34d399/, "Form B must include #34d399 semibold label");
     assert.doesNotMatch(chatStream, /max-w-\[88px\] xl:max-w-\[110px\] truncate/, "Model pill label must not truncate on desktop");
