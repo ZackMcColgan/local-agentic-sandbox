@@ -48,6 +48,10 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (f) => f.startsWith("eval/") || f.includes("evalPackGraders.test.ts"),
+    tests: ["tests/evalPackGraders.test.ts"],
+  },
+  {
     match: (p) => p.includes("workerPool.ts") || p.includes("builderSurgicalLoop.test.ts"),
     tests: ["tests/builderSurgicalLoop.test.ts"],
   },
