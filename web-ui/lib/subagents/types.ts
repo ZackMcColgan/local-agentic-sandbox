@@ -112,7 +112,11 @@ export interface AmbiguityFlag {
   reviewed: boolean;
 }
 
+import type { CompletionStamp, VerificationGap } from "../finishVerification";
+
 export interface CheckpointState {
+  completionStamp?: CompletionStamp;
+  verificationGaps?: VerificationGap[];
   checkpointId: string;
   taskId: string;
   milestoneId: string;
@@ -135,6 +139,8 @@ export interface TaskJournalEntry {
 }
 
 export interface TaskManifest {
+  completionStamp?: CompletionStamp;
+  verificationGaps?: VerificationGap[];
   taskId: string;
   threadId?: string;
   parentRunId?: string;
