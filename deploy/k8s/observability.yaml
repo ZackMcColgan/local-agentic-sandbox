@@ -22,6 +22,8 @@ spec:
         - name: otel-collector
           image: jaegertracing/all-in-one:1.53
           imagePullPolicy: IfNotPresent
+          args:
+            - --query.base-path=/jaeger
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
