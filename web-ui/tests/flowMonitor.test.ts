@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   FLOW_MONITOR_STAGE2_DEFAULT,
   isFlowMonitorStage2Enabled,
@@ -18,6 +19,10 @@ function makeItem(overrides: Partial<FlowMonitorBoardItem> = {}): FlowMonitorBoa
     brief: "Watch open PR checks to conclusion.",
     status: "pr-open",
     dependencies: [],
+    author: "Owner",
+    source: "manual",
+    createdAt: "2026-11-16T00:00:00.000Z",
+    updatedAt: "2026-11-16T00:00:00.000Z",
     prNumber: 124,
     branch: "feature/flow-monitor",
     worktreePath: "C:\\Users\\zackm\\Desktop\\repos\\flowmonitor-wt",
@@ -37,24 +42,24 @@ function allFiveGreenChecks(): PrCheckResult[] {
 
 describe("flow-monitor", () => {
   it("defaults stage 2 flag to OFF (shadow mode)", () => {
-    expect(FLOW_MONITOR_STAGE2_DEFAULT).toBe(false);
-    expect(isFlowMonitorStage2Enabled(undefined, {})).toBe(false);
-    expect(isFlowMonitorStage2Enabled(undefined, { FLOW_MONITOR_STAGE2: "false" })).toBe(false);
-    expect(isFlowMonitorStage2Enabled(undefined, { FLOW_MONITOR_STAGE2: "true" })).toBe(true);
-    expect(isFlowMonitorStage2Enabled(true, { FLOW_MONITOR_STAGE2: "false" })).toBe(true);
+    assert.equal(FLOW_MONITOR_STAGE2_DEFAULT, false);
+    assert.equal(isFlowMonitorStage2Enabled(undefined, {}), false);
+    assert.equal(isFlowMonitorStage2Enabled(undefined, { FLOW_MONITOR_STAGE2: "false" }), false);
+    assert.equal(isFlowMonitorStage2Enabled(undefined, { FLOW_MONITOR_STAGE2: "true" }), true);
+    assert.equal(isFlowMonitorStage2Enabled(true, { FLOW_MONITOR_STAGE2: "false" }), true);
   });
 
   it("returns green verdict only when ALL FIVE checks pass on the PR head SHA, and voids on head change", () => {
     const verdict = evaluatePrChecks("sha-abc123", allFiveGreenChecks());
-    expect(verdict.status).toBe("green");
-    expect(verdict.headSha).toBe("sha-abc123");
-    expect(isVerdictValidForHead(verdict, "sha-abc123")).toBe(true);
-    expect(isVerdictValidForHead(verdict, "sha-def456")).toBe(false);
+    assert.equal(verdict.status, "green");
+    assert.equal(verdict.headSha, "sha-abc123");
+    assert.equal(isVerdictValidForHead(verdict, "sha-abc123"), true);
+    assert.equal(isVerdictValidForHead(verdict, "sha-def456"), false);
 
     // Missing Typecheck -> not green
     const missingTypecheck = allFiveGreenChecks().filter((c) => c.name !== "Typecheck");
     const incompleteVerdict = evaluatePrChecks("sha-abc123", missingTypecheck);
-    expect(incompleteVerdict.status).toBe("running");
+    assert.equal(incompleteVerdict.status, "running");
   });
 
   it("reports a PR whose checks are still running as running, never green or red", () => {
@@ -66,8 +71,8 @@ describe("flow-monitor", () => {
       { name: "Typecheck", status: "COMPLETED", conclusion: "SUCCESS" },
     ];
     const verdict = evaluatePrChecks("sha-running", checks);
-    expect(verdict.status).toBe("running");
-    expect(verdict.headSha).toBe("sha-running");
+    assert.equal(verdict.status, "running");
+    assert.equal(verdict.headSha, "sha-running");
   });
 
   it("composes exactly one bounded fix-cycle brief on red naming failing job, step/test, and exact error on the same PR", async () => {
@@ -93,29 +98,30 @@ describe("flow-monitor", () => {
       error: "Expected #status-badge to be visible, timed out after 5000ms",
     });
 
-    expect(brief).toContain("Playwright");
-    expect(brief).toContain("board smoke test");
-    expect(brief).toContain("Expected #status-badge to be visible, timed out after 5000ms");
-    expect(brief).toContain("feature/flow-monitor");
-    expect(brief).toContain("PR #124");
-    expect(brief).toMatch(/same PR/i);
+    assert.ok(brief.includes("Playwright"));
+    assert.ok(brief.includes("board smoke test"));
+    assert.ok(brief.includes("Expected #status-badge to be visible, timed out after 5000ms"));
+    assert.ok(brief.includes("feature/flow-monitor"));
+    assert.ok(brief.includes("PR #124"));
+    assert.match(brief, /same PR/i);
 
-    const issueThread = vi.fn().mockResolvedValue({ threadId: "thread-fix-1" });
+    const issuedCalls: Array<{ item: FlowMonitorBoardItem; brief: string }> = [];
     const result = await monitorPrToConclusion({
       item,
       stage2Enabled: true,
-      pollChecks: vi.fn().mockResolvedValue({ headSha: "sha-red1", checks }),
-      issueThread,
-      log: vi.fn(),
+      pollChecks: async () => ({ headSha: "sha-red1", checks }),
+      issueThread: async (params) => {
+        issuedCalls.push(params);
+        return { threadId: "thread-fix-1" };
+      },
+      log: () => {},
     });
 
-    expect(result.action).toBe("fix-cycle-issued");
-    expect(result.verdict.status).toBe("red");
-    expect(issueThread).toHaveBeenCalledTimes(1);
-    expect(issueThread).toHaveBeenCalledWith({
-      item,
-      brief: expect.stringContaining("Playwright"),
-    });
+    assert.equal(result.action, "fix-cycle-issued");
+    assert.equal(result.verdict.status, "red");
+    assert.equal(issuedCalls.length, 1);
+    assert.equal(issuedCalls[0].item, item);
+    assert.ok(issuedCalls[0].brief.includes("Playwright"));
   });
 
   it("escalates to needs-attention on second red with same root cause and never parks", async () => {
@@ -140,23 +146,26 @@ describe("flow-monitor", () => {
       { name: "Typecheck", status: "COMPLETED", conclusion: "SUCCESS" },
     ];
 
-    const issueThread = vi.fn().mockResolvedValue({ threadId: "thread-esc-1" });
+    let issuedCount = 0;
     const result = await monitorPrToConclusion({
       item,
       stage2Enabled: true,
-      pollChecks: vi.fn().mockResolvedValue({ headSha: "sha-red2", checks }),
-      issueThread,
-      log: vi.fn(),
+      pollChecks: async () => ({ headSha: "sha-red2", checks }),
+      issueThread: async () => {
+        issuedCount += 1;
+        return { threadId: "thread-esc-1" };
+      },
+      log: () => {},
     });
 
-    expect(result.action).toBe("needs-attention");
-    expect(result.escalation).toBeDefined();
-    expect(result.escalation?.failingJob).toBe("Unit Tests");
-    expect(result.escalation?.error).toContain("Cannot read properties of undefined");
-    expect(result.escalation?.alreadyTried).toBe("Added null guard in evaluatePrChecks");
-    expect(result.escalation?.strategy).toMatch(/micro-steps/i);
-    expect(JSON.stringify(result)).not.toMatch(/parked/i);
-    expect(issueThread).not.toHaveBeenCalled();
+    assert.equal(result.action, "needs-attention");
+    assert.ok(result.escalation);
+    assert.equal(result.escalation.failingJob, "Unit Tests");
+    assert.ok(result.escalation.error.includes("Cannot read properties of undefined"));
+    assert.equal(result.escalation.alreadyTried, "Added null guard in evaluatePrChecks");
+    assert.match(result.escalation.strategy, /micro-steps/i);
+    assert.doesNotMatch(JSON.stringify(result), /parked/i);
+    assert.equal(issuedCount, 0);
   });
 
   it("in shadow mode (default OFF), logs the decision and issues NOTHING and changes NO board status", async () => {
@@ -175,21 +184,24 @@ describe("flow-monitor", () => {
       { name: "Playwright", status: "COMPLETED", conclusion: "SUCCESS" },
     ];
 
-    const issueThread = vi.fn();
-    const log = vi.fn();
+    let issuedCount = 0;
+    const logs: string[] = [];
 
     const result = await monitorPrToConclusion({
       item,
-      pollChecks: vi.fn().mockResolvedValue({ headSha: "sha-shadow", checks }),
-      issueThread,
-      log,
+      pollChecks: async () => ({ headSha: "sha-shadow", checks }),
+      issueThread: async () => {
+        issuedCount += 1;
+        return { threadId: "should-not-issue" };
+      },
+      log: (msg) => logs.push(msg),
     });
 
-    expect(result.action).toBe("shadow");
-    expect(result.verdict.status).toBe("red");
-    expect(result.brief).toContain("Typecheck");
-    expect(issueThread).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalled();
-    expect(item.status).toBe("pr-open");
+    assert.equal(result.action, "shadow");
+    assert.equal(result.verdict.status, "red");
+    assert.ok(result.brief?.includes("Typecheck"));
+    assert.equal(issuedCount, 0);
+    assert.ok(logs.length > 0);
+    assert.equal(item.status, "pr-open");
   });
 });
