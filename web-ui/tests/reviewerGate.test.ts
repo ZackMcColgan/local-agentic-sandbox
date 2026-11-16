@@ -11,7 +11,7 @@ import {
   isMergeAuthorized,
   type MechanicalCheckInput,
   type ReviewerVerdict,
-} from "../lib/board/reviewerGate.ts";
+} from "../lib/board/reviewerGate";
 
 const CLEAN_DIFF = [
   "diff --git a/web-ui/lib/board/reviewerGate.ts b/web-ui/lib/board/reviewerGate.ts",
