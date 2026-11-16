@@ -83,3 +83,24 @@ export function streamBannerKind(input: {
   }
   return null;
 }
+
+/**
+ * UI-009: On a fresh load with no explicit/stored thread selection, pick the
+ * thread with the most recent activity timestamp (updatedAt, falling back to createdAt).
+ */
+export function pickMostRecentlyActiveThread<
+  T extends { id: string; updatedAt?: string; createdAt?: string }
+>(threads: T[]): T | null {
+  if (!threads || threads.length === 0) return null;
+  let best = threads[0];
+  let bestTs = Date.parse(best.updatedAt || best.createdAt || "") || 0;
+  for (let i = 1; i < threads.length; i++) {
+    const t = threads[i];
+    const ts = Date.parse(t.updatedAt || t.createdAt || "") || 0;
+    if (ts > bestTs) {
+      best = t;
+      bestTs = ts;
+    }
+  }
+  return best;
+}
