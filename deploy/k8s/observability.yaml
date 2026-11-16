@@ -19,7 +19,7 @@ spec:
         tier: observability
     spec:
       containers:
-        - name: jaeger
+        - name: otel-collector
           image: jaegertracing/all-in-one:1.53
           imagePullPolicy: IfNotPresent
           env:
