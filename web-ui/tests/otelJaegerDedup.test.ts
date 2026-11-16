@@ -53,4 +53,17 @@ describe("otel-collector manifest hygiene", () => {
       );
     }
   });
+
+  it("jaeger-ui NodePort Service exists and targets port 16686 on otel-collector", () => {
+    const raw = fs.readFileSync(obsPath, "utf8");
+    const docs = raw.split(/^---\s*$/m);
+    const uiServiceDoc = docs.find(
+      (d) => /kind:\s*Service/.test(d) && /metadata:\s*\r?\n\s*name:\s*jaeger-ui/.test(d)
+    );
+    assert.ok(uiServiceDoc, "jaeger-ui Service must exist in observability.yaml");
+    assert.match(uiServiceDoc, /type:\s*NodePort/, "jaeger-ui Service must be type NodePort");
+    assert.match(uiServiceDoc, /targetPort:\s*16686/, "jaeger-ui Service must target port 16686");
+    assert.match(uiServiceDoc, /nodePort:\s*30686/, "jaeger-ui Service must expose nodePort 30686");
+    assert.match(uiServiceDoc, /app:\s*otel-collector/, "jaeger-ui Service must select app: otel-collector");
+  });
 });
