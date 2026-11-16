@@ -1,6 +1,6 @@
 /**
  * Reconcile-poll backoff policy (UI-006 / UI-006b,
- * docs/ui-qa-findings-2026-11-10.md).
+ * (finding UI-006 / UI-006b).
  *
  * The detached-turn reconciliation poll in ChatStream.tsx previously re-armed
  * on a fixed 1s setTimeout with no backoff, no attempt cap, and no total-time

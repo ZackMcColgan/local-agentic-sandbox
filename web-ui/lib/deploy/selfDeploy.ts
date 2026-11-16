@@ -97,7 +97,7 @@ export class SelfDeployPipeline {
     this.repoRoot =
       options.repoRoot ||
       path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
-    this.runlogPath = options.runlogPath || path.join(this.repoRoot, "docs", "queue-steer-runlog.md");
+    this.runlogPath = options.runlogPath || path.join(this.repoRoot, "docs", "internal", "queue-steer-runlog.md");
 
     this.commandRunner =
       options.commandRunner ??

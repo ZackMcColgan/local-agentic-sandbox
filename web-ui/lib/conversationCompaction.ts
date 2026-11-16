@@ -47,7 +47,7 @@ export const COMPACTION_MODEL_DIGEST_HEADER =
 
 /**
  * COMPACTION_PROMPT_V1 — shipped VERBATIM per owner ruling (Nov 10, 2026).
- * Do not rewrite, retune, or improve. Objections go to docs/queue-steer-runlog.md.
+ * Do not rewrite, retune, or improve. Objections go to docs/internal/queue-steer-runlog.md.
  */
 export const COMPACTION_PROMPT_V1 = `You are compacting the working memory of an ongoing conversation so it can continue past its context limit. Your output REPLACES the conversation history that follows. The assistant continuing this conversation will rely on your output as its only memory of that history. Write for that reader: complete on what matters, ruthless on what does not.
 

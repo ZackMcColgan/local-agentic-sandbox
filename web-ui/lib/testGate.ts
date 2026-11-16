@@ -874,7 +874,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
-    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
+    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report"),
     tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
   },
   // Charter modules (P0.1)

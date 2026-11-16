@@ -12,7 +12,7 @@ import {
 } from "../lib/reconcilePollPolicy";
 
 /**
- * UI-006 + UI-006b (docs/ui-qa-findings-2026-11-10.md): the reconcile poll in
+ * UI-006 + UI-006b: the reconcile poll in
  * ChatStream.tsx re-armed on a fixed 1s setTimeout with no backoff, no attempt
  * cap, no total-time cap, and kept polling while ChatStream was hidden
  * (app/page.tsx hides via CSS; the component stays mounted).

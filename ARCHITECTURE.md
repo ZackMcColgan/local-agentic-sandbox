@@ -149,9 +149,6 @@ local-agentic-sandbox/
 │   ├── architecture.drawio             # Editable Draw.io XML source diagram
 │   ├── architecture.drawio.svg         # Rendered vector SVG diagram for README/docs
 │   ├── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
-│   ├── FIRST_OVERNIGHT_TASK.md         # Autonomous pair-programming agent specification & first runbook
-│   ├── FLYWHEEL_SPIKE.md               # Hermes skills flywheel design & spike assessment
-│   ├── BRANCH_TRIAGE.md                # Git branch audit matrix and merge triage records
 │   └── DEVELOPMENT_SANDBOX.md          # Guide for microVM development sandboxes
 ├── scripts/
 │   ├── lan-bridge.js                   # Zero-auth LAN reverse proxy bridge (0.0.0.0:80 / :3000)
