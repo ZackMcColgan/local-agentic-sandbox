@@ -81,9 +81,12 @@ export function isItemEligible(item: BoardItem, allItems: BoardItem[]): boolean 
   });
 }
 
+export const BOARD_STORE_VERSION = 2;
+
 export class BoardStore {
   private boardDir: string;
   private filePath: string;
+  private metaPath: string;
 
   constructor(boardDir?: string) {
     this.boardDir = boardDir || resolveBoardDir();
@@ -91,6 +94,47 @@ export class BoardStore {
       fs.mkdirSync(this.boardDir, { recursive: true, mode: 0o770 });
     }
     this.filePath = path.join(this.boardDir, "board.json");
+    this.metaPath = path.join(this.boardDir, "board.meta.json");
+    this.migrateIfNeeded();
+  }
+
+  private migrateIfNeeded(): void {
+    if (!fs.existsSync(this.filePath)) return;
+    let currentVersion = 1;
+    if (fs.existsSync(this.metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(this.metaPath, "utf8")) as { version?: number };
+        if (typeof meta.version === "number") {
+          currentVersion = meta.version;
+        }
+      } catch {
+        // Ignore corrupt meta and run migration
+      }
+    }
+    if (currentVersion >= BOARD_STORE_VERSION) return;
+
+    const seedById = new Map(BOARD_SEED_ITEMS.map((item) => [item.id, item]));
+    const items = this.readAll();
+    let changed = false;
+    const now = new Date().toISOString();
+    const migrated = items.map((item) => {
+      const seed = seedById.get(item.id);
+      if (!seed) return item;
+      if (item.status !== seed.status || JSON.stringify(item.evidence) !== JSON.stringify(seed.evidence)) {
+        changed = true;
+        return {
+          ...item,
+          status: seed.status,
+          evidence: seed.evidence,
+          updatedAt: now,
+        };
+      }
+      return item;
+    });
+    if (changed) {
+      fs.writeFileSync(this.filePath, JSON.stringify(migrated, null, 2), "utf8");
+    }
+    fs.writeFileSync(this.metaPath, JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2), "utf8");
   }
 
   private readAll(): BoardItem[] {

@@ -67,32 +67,33 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     sprint: "Sprint 3",
   },
 
-  // Working item
+  // Shipped Sprint 3–4 items
   {
     id: "item-15",
     key: "#15",
     title: "tool-call-integrity",
     brief: "Markup-in-content detector + zero-trace tripwire. Failed calls end the turn honestly.",
     dependencies: [],
-    status: "working",
+    status: "done",
     author: "Owner",
     source: "manual",
     evidence: {
-      liveLine: "Run live since 23:22 — Phase 1 of 2 · in status 24m",
+      prNumber: 111,
     },
     sprint: "Sprint 3",
   },
-
-  // Queued items (in queue order with dependencies)
   {
     id: "item-16",
     key: "#16",
     title: "command-dialect-guard",
     brief: "Pre-execution host-command lint. Rewrites and rejections stay visible in traces.",
     dependencies: ["item-15"],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 112,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -101,9 +102,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "bottom-nav-removal",
     brief: "Remove the bottom bar and its dead space. Hamburger drawer only.",
     dependencies: [],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 113,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -112,9 +116,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "evidence-linked-summaries",
     brief: "Completion claims must cite resolvable commits, PRs, or gate lines — or flag unverified.",
     dependencies: [],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 114,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -123,9 +130,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "job-chunking-handoffs",
     brief: "Long jobs bank in chunks and hand off cleanly instead of running forever.",
     dependencies: [],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 115,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -134,9 +144,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "model-eval-pack",
     brief: "Frozen golden tasks + pass bars. Every future model scored against the same bar.",
     dependencies: [],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 116,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -145,9 +158,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "board-as-data",
     brief: "This board — the backlog as live in-app data instead of an external state file.",
     dependencies: [],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 122,
+    },
     sprint: "Sprint 4",
   },
   {
@@ -156,9 +172,12 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     title: "dispatcher",
     brief: "The loop takes the next dependency-ready item off the board and starts it.",
     dependencies: ["item-21"],
-    status: "queued",
+    status: "done",
     author: "Owner",
     source: "manual",
+    evidence: {
+      prNumber: 123,
+    },
     sprint: "Sprint 4",
   },
 
