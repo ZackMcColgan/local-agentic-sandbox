@@ -51,7 +51,8 @@ export function LiveRunBlock({
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
     if (task.startedAt) {
       const start = new Date(task.startedAt).getTime();
-      const end = task.completedAt ? new Date(task.completedAt).getTime() : Date.now();
+      const endTs = task.completedAt || (task.status !== "active" && task.status !== "in_progress" && task.status !== "planning" ? task.updatedAt : undefined);
+      const end = endTs ? new Date(endTs).getTime() : Date.now();
       return Math.max(0, Math.floor((end - start) / 1000));
     }
     return 0;
@@ -130,15 +131,27 @@ export function LiveRunBlock({
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
+            isRunning ? "bg-emerald-600 text-white" : isFailed || isCrashed ? "bg-rose-600 text-white" : "bg-zinc-700 text-zinc-200"
+          }`}>
             <RotateCcw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-base font-bold text-slate-900 dark:text-zinc-100">
-              Live run
+              {isRunning
+                ? "Live run"
+                : status === "parked"
+                  ? "Run parked"
+                  : isFailed || isCrashed
+                    ? "Run failed"
+                    : isCompleted
+                      ? "Run completed"
+                      : isStopped
+                        ? "Run stopped"
+                        : "Run paused"}
             </span>
             {isPlanning && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 flex items-center gap-1.5 border border-amber-200/60 dark:border-amber-800/60">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-700">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 <span>Planning</span>
               </span>

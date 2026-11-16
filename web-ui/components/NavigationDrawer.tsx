@@ -17,6 +17,7 @@ import {
   Trash2
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 
 export type NavView = "sessions" | "thread" | "builds" | "board" | "skills" | "morning-report" | "settings" | "security" | "projects";
 
@@ -430,7 +431,7 @@ export function NavigationDrawer({
                     className="flex-1 min-w-0 text-left flex flex-col gap-0.5 focus:outline-none"
                     title={thread.title}
                   >
-                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{thread.title || "Untitled session"}</span>
+                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{deriveThreadDisplayTitle(thread.title)}</span>
                     {(thread as any).matchSnippet && (
                       <span className="text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
@@ -534,6 +535,22 @@ export function NavigationDrawer({
               </button>
             </div>
             <div className="space-y-2">
+              {onSelectThread && (
+                <button
+                  type="button"
+                  data-testid="action-sheet-open-btn"
+                  onClick={() => {
+                    const target = actionSheetThread;
+                    setActionSheetThread(null);
+                    onSelectThread(target.id);
+                    onClose();
+                  }}
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span>Open session</span>
+                </button>
+              )}
               {onDeleteThread && (
                 <button
                   type="button"

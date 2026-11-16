@@ -18,6 +18,7 @@ import {
   List
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 import { NavView } from "./NavigationDrawer";
 
 interface ThreadsSidebarProps {
@@ -48,6 +49,32 @@ export function ThreadsSidebar({
   isLoadingThreads = false
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchResults, setServerSearchResults] = useState<Thread[] | null>(null);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setServerSearchResults(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.threads)) {
+          setServerSearchResults(data.threads);
+        }
+      } catch {
+        // Fallback to local filter on network error
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
@@ -150,14 +177,16 @@ export function ThreadsSidebar({
     }
   };
 
-  const filteredThreads = threads.filter((t) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      t.title.toLowerCase().includes(q) ||
-      (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
-    );
-  });
+  const filteredThreads = searchQuery.trim() && serverSearchResults !== null
+    ? serverSearchResults
+    : threads.filter((t) => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+          t.title.toLowerCase().includes(q) ||
+          (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
+        );
+      });
 
   const formatThreadTimestamp = (dateStr: string) => {
     try {
@@ -371,7 +400,7 @@ export function ThreadsSidebar({
                           : "font-semibold text-slate-900 dark:text-zinc-100"
                       }`}
                     >
-                      {thread.title || "New session"}
+                      {deriveThreadDisplayTitle(thread.title)}
                     </h2>
                     {(thread as any).matchSnippet && (
                       <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
@@ -445,7 +474,7 @@ export function ThreadsSidebar({
                     ) : null}
                   </div>
 
-                  {isRunning && (
+                  {isRunning && !isSelected && (
                     <div className="mt-3 flex items-center gap-2">
                       <button
                         type="button"
@@ -574,6 +603,19 @@ export function ThreadsSidebar({
               </button>
             </div>
             <div className="space-y-2">
+              <button
+                type="button"
+                data-testid="action-sheet-open-btn"
+                onClick={() => {
+                  const target = actionSheetThread;
+                  setActionSheetThread(null);
+                  onSelectThread(target.id);
+                }}
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>Open session</span>
+              </button>
               {onDeleteThread && (
                 <button
                   type="button"

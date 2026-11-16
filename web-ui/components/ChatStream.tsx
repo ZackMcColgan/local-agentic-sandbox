@@ -67,7 +67,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp, displayRepoPath, displayBasename } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
@@ -2422,7 +2422,7 @@ export function ChatStream({
         onWheel={handleContainerWheel}
         onTouchMove={handleContainerTouchMove}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-[16px] pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
       >
         <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
@@ -2566,9 +2566,9 @@ export function ChatStream({
                       {m.status === "streaming" && (
                         <div
                           data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-300 dark:border-cyan-800 text-[11px] font-mono font-medium text-cyan-800 dark:text-cyan-300 w-fit"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           <span>Streaming</span>
                         </div>
                       )}
@@ -2668,7 +2668,7 @@ export function ChatStream({
                             data-testid="turn-done-chip"
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
                           >
-                            <span>{`✓ DONE · ${m.traces?.length ?? 0} traces · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
+                            <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
                           </div>
                         )}
                         {shouldRenderThinking && (
@@ -2721,7 +2721,7 @@ export function ChatStream({
                               >
                                 <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
                                   {human.badge === "browser" && (
-                                    <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold shrink-0">
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                                       <Globe className="h-3.5 w-3.5" />
                                       <span>Web</span>
                                     </span>
@@ -2754,7 +2754,7 @@ export function ChatStream({
                                   )}
                                 </div>
 
-                                <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-auto">
+                                <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-sans font-medium shrink-0 ml-auto">
                                   <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
                                   <span className="hidden sm:inline">{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
                                   {isExpanded ? (
@@ -2767,7 +2767,7 @@ export function ChatStream({
 
                               {isExpanded && (
                                 <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                                  <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                                  <pre className="p-2 rounded bg-zinc-900 text-emerald-300 overflow-x-auto whitespace-pre-wrap">
                                     {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
                                   </pre>
                                 </div>
@@ -3212,7 +3212,10 @@ export function ChatStream({
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <span className="font-semibold truncate">{pathLabel}</span>
+                              <div className="min-w-0">
+                                <div className="font-semibold truncate">{displayBasename(pathLabel)}</div>
+                                <div className="text-[10px] text-zinc-400 truncate">{displayRepoPath(pathLabel)}</div>
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0 ml-2">
                               <a

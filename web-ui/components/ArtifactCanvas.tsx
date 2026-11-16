@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { displayBasename } from "../lib/chatUtils";
 import {
   Check,
   ChevronLeft,
@@ -360,7 +361,7 @@ function CanvasFileView({
               <div key={i}>{i + 1}</div>
             ))}
           </div>
-          <pre className="text-slate-900 dark:text-zinc-100 flex-1 whitespace-pre">
+          <pre className="text-slate-900 dark:text-zinc-100 flex-1 whitespace-pre overflow-x-auto pr-4">
             <code>{highlightTokens(artifact.code, (artifact.language || "").toLowerCase())}</code>
           </pre>
         </div>
@@ -426,7 +427,7 @@ export function ArtifactCanvasPane() {
   const activeView: CanvasView = resolvedViews.includes(canvas.view)
     ? canvas.view
     : resolvedViews[0];
-  const title = artifact.kind === "file" ? artifact.filename : artifact.title;
+  const title = artifact.kind === "file" ? displayBasename(artifact.filename) : artifact.title;
 
   const copyableText =
     artifact.kind === "diff"

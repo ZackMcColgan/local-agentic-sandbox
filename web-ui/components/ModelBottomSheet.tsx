@@ -155,6 +155,9 @@ export function ModelBottomSheet({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Model and thinking effort"
         className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 animate-in slide-in-from-bottom duration-250 flex flex-col gap-4 max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -307,33 +310,17 @@ export function ModelBottomSheet({
                 {engineStatus === "running" ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)" : "Stopped · 0 MB VRAM"}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (engineStatus === "running" && !confirmingStop) {
-                  setConfirmingStop(true);
-                  return;
-                }
-                handleToggleEngine();
-              }}
-              disabled={engineLoading}
-              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
-                engineStatus === "running"
-                  ? "bg-rose-600 hover:bg-rose-700 active:scale-95"
-                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
-              }`}
-            >
-              <Power className="h-3.5 w-3.5" />
-              <span>
-                {engineLoading
-                  ? "Updating..."
-                  : engineStatus === "running"
-                    ? confirmingStop
-                      ? "Confirm Turn Off"
-                      : "Turn Off"
-                    : "Start Engine"}
-              </span>
-            </button>
+            {engineStatus !== "running" && (
+              <button
+                type="button"
+                onClick={handleToggleEngine}
+                disabled={engineLoading}
+                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+              >
+                <Power className="h-3.5 w-3.5" />
+                <span>{engineLoading ? "Updating..." : "Start Engine"}</span>
+              </button>
+            )}
           </div>
           {engineError && (
             <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 px-1">

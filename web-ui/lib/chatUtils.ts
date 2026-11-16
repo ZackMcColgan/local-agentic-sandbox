@@ -582,3 +582,47 @@ export function formatMessageTimestamp(timestamp: string | number | Date, now: D
 
   return `${datePart}, ${time}`;
 }
+
+/**
+ * Strip local machine/checkout prefixes (e.g. C:\Users\<user>\Desktop\repos\<repo>\)
+ * so diff headers and citation cards show repo-relative paths.
+ */
+export function displayRepoPath(rawPath: string): string {
+  if (!rawPath) return "";
+  const normalized = rawPath.replace(/\\/g, "/");
+  // Match .../repos/<repo-name>/<rest>
+  const reposMatch = normalized.match(/\/repos\/[^/]+\/(.+)$/i);
+  if (reposMatch?.[1]) return reposMatch[1];
+  // Match .../web-ui/<rest>
+  const webUiMatch = normalized.match(/\/(web-ui\/.+)$/i);
+  if (webUiMatch?.[1]) return webUiMatch[1];
+  return normalized.replace(/^[a-zA-Z]:\/Users\/[^/]+\//i, "");
+}
+
+export function displayBasename(rawPath: string): string {
+  const normalized = rawPath.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] || rawPath;
+}
+
+/**
+ * Derive a clean short display title for a thread when the stored title is a
+ * raw prompt prefix or overly long string (UI-008). Never renders personal names.
+ */
+export function deriveThreadDisplayTitle(rawTitle?: string): string {
+  const title = (rawTitle || "").trim();
+  if (!title) return "New session";
+
+  let cleaned = title
+    .replace(/^You are working on a PR-sized coding task\.?\s*/i, "")
+    .replace(/^You are the builder for [^'’\n]+(?:'s|’s)?\s*/i, "")
+    .replace(/^Task:\s*/i, "")
+    .trim();
+
+  if (!cleaned) cleaned = title;
+  // Take first sentence / line
+  const firstLine = cleaned.split(/[\r\n]+/)[0] || cleaned;
+  const firstSentence = firstLine.split(/(?<=[.!?])\s+/)[0] || firstLine;
+  if (firstSentence.length <= 60) return firstSentence;
+  return firstSentence.slice(0, 57).trimEnd() + "...";
+}
