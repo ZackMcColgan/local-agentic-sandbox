@@ -282,13 +282,9 @@ export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; fun
     }
 
     const toolParameters: Record<string, any> = { type: "object" };
-    if (schema?.properties && typeof schema.properties === "object") {
-      toolParameters.properties = schema.properties;
-    }
     if (name === "search_web") {
+      toolParameters.properties = { query: { type: "string" } };
       toolParameters.required = ["query"];
-    } else if (Array.isArray(schema?.required) && schema.required.length > 0) {
-      toolParameters.required = schema.required;
     }
 
     layer1.push({

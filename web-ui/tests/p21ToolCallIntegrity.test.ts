@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
-import { buildLayer1Tools } from "../lib/progressiveTools";
+import { buildLayer1Tools, buildToolRegistry, describeTool } from "../lib/progressiveTools";
 import { parseToolCallsFromText } from "../lib/toolParser";
 import { NextRequest } from "next/server";
 import { ThreadStore } from "../lib/threads/threadStore";
@@ -38,7 +38,7 @@ function startMockOllamaServer(
 }
 
 describe("P2.1: Tool-call integrity", () => {
-  it("progressiveTools: buildLayer1Tools preserves properties and required fields from input schema", () => {
+  it("progressiveTools: preserves properties and required fields via Layer 2 on-demand resolution; Layer 1 stays open-schema", () => {
     const tools = [
       {
         name: "workspace_read_file",
@@ -56,15 +56,33 @@ describe("P2.1: Tool-call integrity", () => {
     const layer1 = buildLayer1Tools(tools);
     const readTool = layer1.find((t: any) => t.function?.name === "workspace_read_file");
     assert.ok(readTool, "workspace_read_file should be in layer1");
+    assert.ok(readTool.function.description.length <= 120, "layer1 description must be <= 120 chars");
+    assert.equal(readTool.function.parameters.type, "object", "layer1 parameters.type must be object");
+    assert.equal("properties" in readTool.function.parameters, false, "layer1 must not include properties");
+    assert.equal("required" in readTool.function.parameters, false, "layer1 must not include required");
+
+    const registry = buildToolRegistry(tools);
+    const layer2Read = describeTool("workspace_read_file", registry);
+    assert.ok(layer2Read.tool, "workspace_read_file should resolve via Layer 2");
+    assert.ok(layer2Read.tool.parameters, "workspace_read_file Layer 2 tool should have parameters");
     assert.deepEqual(
-      readTool.function.parameters.properties,
+      layer2Read.tool.parameters.properties,
       tools[0].inputSchema.properties,
       "properties must survive progressive disclosure"
     );
     assert.deepEqual(
-      readTool.function.parameters.required,
+      layer2Read.tool.parameters.required,
       ["path"],
       "required must survive progressive disclosure"
+    );
+
+    const layer2Search = describeTool("search_web", registry);
+    assert.ok(layer2Search.tool, "search_web should resolve via Layer 2");
+    assert.ok(layer2Search.tool.parameters, "search_web Layer 2 tool should have parameters");
+    assert.deepEqual(
+      layer2Search.tool.parameters.required,
+      ["query"],
+      "search_web required: ['query'] must resolve via Layer 2"
     );
   });
 
