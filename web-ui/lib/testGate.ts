@@ -823,6 +823,13 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/deploy/selfDeployVerified"),
     tests: ["tests/selfDeployVerified.test.ts"]
   },
+  {
+    match: (p) =>
+      p.includes("components/DiffViewer") ||
+      p.includes("components/ThinkingPanel") ||
+      p.includes("next.config"),
+    tests: ["tests/uiPolishPass2.test.ts"]
+  },
   // Self-Deploy Pipeline (Sprint 12 Phase 10)
   {
     match: (p) => p.includes("lib/deploy/selfDeploy"),
