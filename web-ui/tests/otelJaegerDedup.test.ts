@@ -67,3 +67,29 @@ describe("otel-collector manifest hygiene", () => {
     assert.match(uiServiceDoc, /app:\s*otel-collector/, "jaeger-ui Service must select app: otel-collector");
   });
 });
+
+describe("jaeger gateway route and base-path", () => {
+  const repoRoot = path.resolve(__dirname, "../..");
+  const nginxPath = path.join(repoRoot, "scripts", "kind-gateway", "nginx.conf");
+  const obsPath = path.join(repoRoot, "deploy", "k8s", "observability.yaml");
+
+  it("nginx.conf contains a location /jaeger/ block proxying to desktop-control-plane:30686", () => {
+    const raw = fs.readFileSync(nginxPath, "utf8");
+    const jaegerBlockMatch = raw.match(/location\s+\/jaeger\/\s*\{([\s\S]*?)\}/);
+    assert.ok(jaegerBlockMatch, "nginx.conf must contain a location /jaeger/ block");
+    assert.match(
+      jaegerBlockMatch[1],
+      /desktop-control-plane:30686/,
+      "location /jaeger/ must proxy to desktop-control-plane:30686"
+    );
+  });
+
+  it("otel-collector container carries --query.base-path=/jaeger arg", () => {
+    const raw = fs.readFileSync(obsPath, "utf8");
+    assert.match(
+      raw,
+      /--query\.base-path=\/jaeger/,
+      "otel-collector container must carry --query.base-path=/jaeger"
+    );
+  });
+});
