@@ -49,6 +49,13 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("invariantNetA2.test.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("NavigationDrawer.tsx"),
+    tests: ["tests/invariantNetA2.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("invariantNetA1.spec.ts") ||
       p.includes("ChatStream.tsx") ||
       p.includes("BoardView.tsx") ||
