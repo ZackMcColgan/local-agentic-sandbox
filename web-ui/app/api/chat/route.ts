@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { handleLiveTurnChunkBudget, resolveThreadChunkBudget } from "@/lib/jobChunking";
+import { handleLiveTurnChunkBudget, resolveThreadChunkBudget, resolveChunkHandoffTarget } from "@/lib/jobChunking";
 import { resolveThreadsDir, ThreadStore, deriveStoredThreadTitle, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import { appendNarrationChunk } from "@/lib/liveActivity";
@@ -1003,8 +1003,11 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         const turnStartMs = Date.now();
         const chunkBudget = resolveThreadChunkBudget(threadData as any);
         const chunkWorkspaceRoot = _worktree?.path || resolveJobRepoRoot() || process.cwd();
-        const chunkJobId = activeThreadId || _job.threadId || _job.id;
-        const chunkHandoffPath = path.join(chunkWorkspaceRoot, ".agent/checkpoints", `${chunkJobId}.handoff.json`);
+        const { jobId: chunkJobId, handoffPath: chunkHandoffPath } = resolveChunkHandoffTarget({
+          taskId: threadData?.taskId,
+          threadId: activeThreadId || _job.threadId,
+          fallbackJobId: _job.id,
+        });
         const chunkRunlogPath = path.join(chunkWorkspaceRoot, "docs/internal/queue-steer-runlog.md");
 
         while (true) {

@@ -6,6 +6,7 @@ import {
   writeMilestoneHandoff,
   type MilestoneHandoffState,
 } from "./subagents/finishVerificationGate";
+import { getCanonicalCheckpointDir } from "./subagents/morningReport";
 
 export const DEFAULT_CHUNK_MAX_ROUNDS = 25;
 export const DEFAULT_CHUNK_MAX_DURATION_MS = 45 * 60 * 1000;
@@ -358,5 +359,39 @@ export async function handleLiveTurnChunkBudget(
     reason: chunkEval.reason,
     marker: TURN_CHUNK_COMPLETE_MARKER,
     handoff,
+  };
+}
+
+export interface ChunkHandoffTargetInput {
+  taskId?: string | null;
+  threadId?: string | null;
+  fallbackJobId?: string | null;
+  checkpointDir?: string;
+}
+
+export interface ChunkHandoffTarget {
+  jobId: string;
+  checkpointDir: string;
+  handoffPath: string;
+}
+
+/**
+ * Resolves the canonical handoff target for a live turn so it lands in the
+ * exact checkpoint directory and `<taskId>.handoff.json` filename the
+ * OvernightSupervisor reads (falling back to threadId when no taskId exists).
+ */
+export function resolveChunkHandoffTarget(
+  input: ChunkHandoffTargetInput
+): ChunkHandoffTarget {
+  const jobId =
+    (input.taskId && input.taskId.trim()) ||
+    (input.threadId && input.threadId.trim()) ||
+    (input.fallbackJobId && input.fallbackJobId.trim()) ||
+    "unknown-job";
+  const checkpointDir = input.checkpointDir ?? getCanonicalCheckpointDir();
+  return {
+    jobId,
+    checkpointDir,
+    handoffPath: path.join(checkpointDir, `${jobId}.handoff.json`),
   };
 }

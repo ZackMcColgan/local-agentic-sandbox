@@ -16,10 +16,12 @@ import {
   resolveSupervisorChunkResume,
   handleLiveTurnChunkBudget,
   resolveThreadChunkBudget,
+  resolveChunkHandoffTarget,
   type ChunkBudgetConfig,
   type ChunkHandoffBrief,
 } from "../lib/jobChunking";
 import { readMilestoneHandoff } from "../lib/subagents/finishVerificationGate";
+import { getCanonicalCheckpointDir } from "../lib/subagents/supervisor";
 
 function initTempGitRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chunking-test-"));
@@ -310,4 +312,92 @@ test("resolveThreadChunkBudget plumbs per-job config and marathonOptOut from thr
     resolveThreadChunkBudget({ marathonOptOut: true }),
     { maxRounds: undefined, maxDurationMs: undefined, marathonOptOut: true }
   );
+});
+
+test("rendezvous: route handoff path resolves to supervisor checkpoint dir + taskId", () => {
+  const prevDir = process.env.AGENT_CHECKPOINT_DIR;
+  const tmpCheckpointDir = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-rendezvous-dir-"));
+  process.env.AGENT_CHECKPOINT_DIR = tmpCheckpointDir;
+  try {
+    const taskTarget = resolveChunkHandoffTarget({
+      taskId: "task-1794817009999",
+      threadId: "thread-abc-123",
+      fallbackJobId: "job-fallback",
+    });
+    const supervisorHandoffPath = path.join(
+      getCanonicalCheckpointDir(),
+      "task-1794817009999.handoff.json"
+    );
+    assert.equal(taskTarget.jobId, "task-1794817009999");
+    assert.equal(path.resolve(taskTarget.handoffPath), path.resolve(supervisorHandoffPath));
+
+    const threadOnlyTarget = resolveChunkHandoffTarget({
+      threadId: "thread-abc-123",
+      fallbackJobId: "job-fallback",
+    });
+    assert.equal(threadOnlyTarget.jobId, "thread-abc-123");
+    assert.equal(
+      path.resolve(threadOnlyTarget.handoffPath),
+      path.resolve(path.join(getCanonicalCheckpointDir(), "thread-abc-123.handoff.json"))
+    );
+  } finally {
+    if (prevDir === undefined) {
+      delete process.env.AGENT_CHECKPOINT_DIR;
+    } else {
+      process.env.AGENT_CHECKPOINT_DIR = prevDir;
+    }
+    fs.rmSync(tmpCheckpointDir, { recursive: true, force: true });
+  }
+});
+
+test("rendezvous: chunkComplete handoff written via route target is seen by supervisor resume decision", async () => {
+  const repoDir = initTempGitRepo();
+  const tmpCheckpointDir = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-rendezvous-resume-"));
+  const prevDir = process.env.AGENT_CHECKPOINT_DIR;
+  process.env.AGENT_CHECKPOINT_DIR = tmpCheckpointDir;
+  const runlogPath = path.join(repoDir, "docs", "internal", "queue-steer-runlog.md");
+
+  try {
+    fs.writeFileSync(path.join(repoDir, "work.txt"), "chunk work\n", "utf8");
+    const target = resolveChunkHandoffTarget({
+      taskId: "task-1794817009888",
+      threadId: "thread-live-rendezvous",
+    });
+
+    const hit = await handleLiveTurnChunkBudget({
+      roundsUsed: 2,
+      elapsedMs: 200,
+      budget: { maxRounds: 2 },
+      jobId: target.jobId,
+      workspaceRoot: repoDir,
+      handoffPath: target.handoffPath,
+      runlogPath,
+      currentState: "round 2 done",
+      nextStep: "resume from round 2",
+      openQuestions: [],
+    });
+    assert.equal(hit.exceeded, true);
+
+    const supervisorPath = path.join(getCanonicalCheckpointDir(), "task-1794817009888.handoff.json");
+    const priorHandoff = readMilestoneHandoff(supervisorPath) as ChunkHandoffBrief | null;
+    assert.ok(priorHandoff);
+    assert.equal(priorHandoff?.chunkComplete, true);
+    assert.equal(priorHandoff?.jobId, "task-1794817009888");
+
+    const resume1 = resolveSupervisorChunkResume(0);
+    assert.equal(resume1.action, "auto-resume");
+    assert.equal(resume1.nextResumeCount, 1);
+
+    const resumeCap = resolveSupervisorChunkResume(2);
+    assert.equal(resumeCap.action, "needs-attention");
+    assert.equal(resumeCap.nextResumeCount, 2);
+  } finally {
+    if (prevDir === undefined) {
+      delete process.env.AGENT_CHECKPOINT_DIR;
+    } else {
+      process.env.AGENT_CHECKPOINT_DIR = prevDir;
+    }
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.rmSync(tmpCheckpointDir, { recursive: true, force: true });
+  }
 });
