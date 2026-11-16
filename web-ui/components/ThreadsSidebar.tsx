@@ -457,7 +457,7 @@ export function ThreadsSidebar({
                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
                           livenessBadge === "alive"
                             ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
-                            : "bg-zinc-100 dark:bg-zinc-950/60 text-zinc-700 dark:text-zinc-300"
+                            : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300"
                         }`}
                         title={livenessBadge === "alive" ? "Turn active — activity within the last 30s" : "Turn stalled — no activity past the stale window"}
                       >

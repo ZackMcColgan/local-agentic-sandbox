@@ -2575,7 +2575,7 @@ export function ChatStream({
                       {m.status === "incomplete" && (
                         <div
                           data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-300 dark:border-zinc-800 text-[11px] font-mono font-medium text-zinc-800 dark:text-zinc-300 w-fit"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-300 dark:border-zinc-800 text-[11px] font-mono font-medium text-zinc-800 dark:text-zinc-300 w-fit"
                         >
                           <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-pulse" />
                           <span>Incomplete</span>
@@ -3507,7 +3507,7 @@ export function ChatStream({
             return (
               <div
                 data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
+                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
               >
                 <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400 shrink-0" />
                 <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>

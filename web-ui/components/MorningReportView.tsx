@@ -713,7 +713,7 @@ export function MorningReportView({
                                 isComp
                                   ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                   : isStalled
-                                  ? "bg-zinc-50 dark:bg-zinc-950/80 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
+                                  ? "bg-zinc-50 dark:bg-zinc-900/80 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                                   : isFail
                                   ? "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                                   : "bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
@@ -791,7 +791,7 @@ export function MorningReportView({
                             <div
                               className={`p-2.5 rounded-lg text-xs font-mono ${
                                 isStalled
-                                  ? "bg-zinc-50 dark:bg-zinc-950/40 text-zinc-900 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-900/50"
+                                  ? "bg-zinc-50 dark:bg-zinc-900/40 text-zinc-900 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-900/50"
                                   : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
                               }`}
                             >

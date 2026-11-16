@@ -254,7 +254,7 @@ export function BuildsView({
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                             isPlanning
-                              ? "bg-zinc-100 dark:bg-zinc-950/60 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
+                              ? "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                               : isActive
                               ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                               : isCompleted

@@ -53,7 +53,7 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "rw,noexec,nosuid",
       icon: Zap,
       status: "enforced",
-      accent: "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950/40 border-zinc-200 dark:border-zinc-500/20"
+      accent: "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20"
     },
     {
       title: "Supply-Chain Trust",
