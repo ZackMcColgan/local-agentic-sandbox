@@ -41,6 +41,7 @@ import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
+import { resolveSupervisorChunkResume } from "../jobChunking";
 import {
   verifyCompletionClaims,
   stampCompletion,
@@ -1592,6 +1593,17 @@ export class OvernightSupervisor {
         const handoffPath = path.join(this.checkpointDirectory, `${task.taskId}.handoff.json`);
         const priorHandoff = readMilestoneHandoff(handoffPath);
         if (priorHandoff) {
+          if (priorHandoff.chunkComplete) {
+            const currentResumes = (task as any).chunkResumeCount ?? 0;
+            const decision = resolveSupervisorChunkResume(currentResumes);
+            if (decision.action === "needs-attention") {
+              task.status = "parked";
+              task.parkedReason = "needs-attention: exceeded max auto-resumes for chunk-complete job";
+              this.saveCheckpoint(task);
+              break;
+            }
+            (task as any).chunkResumeCount = decision.nextResumeCount;
+          }
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",

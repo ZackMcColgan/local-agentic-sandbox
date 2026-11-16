@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { evaluateChunkBudget, TURN_CHUNK_COMPLETE_MARKER } from "@/lib/jobChunking";
 import { resolveThreadsDir, ThreadStore, deriveStoredThreadTitle, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import { appendNarrationChunk } from "@/lib/liveActivity";
@@ -999,9 +1000,16 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
         
 
+        const turnStartMs = Date.now();
+
         while (true) {
           
           if (turnAbortController.signal.aborted) break;
+          const chunkEval = evaluateChunkBudget(round, Date.now() - turnStartMs);
+          if (chunkEval.exceeded) {
+            honestEndMarker = TURN_CHUNK_COMPLETE_MARKER;
+            break;
+          }
           console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);
 
           // TOKEN ECONOMICS (c): MICRO-ELISION. Superseded tool results (those

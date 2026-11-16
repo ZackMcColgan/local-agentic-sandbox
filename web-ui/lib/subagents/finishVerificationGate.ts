@@ -51,6 +51,14 @@ export interface MilestoneHandoffState {
   nextMilestone: string | null;
   summary: string;
   updatedAt: string;
+  // Optional chunk-handoff fields (item 18)
+  chunkComplete?: boolean;
+  currentState?: string;
+  branch?: string;
+  headSha?: string;
+  nextStep?: string;
+  openQuestions?: string[];
+  completedSteps?: number;
 }
 
 export function writeMilestoneHandoff(handoffPath: string, state: MilestoneHandoffState): void {

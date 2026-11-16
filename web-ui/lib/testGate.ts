@@ -75,6 +75,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("security") || p.includes("securityHardeningWiring.test.ts"),
     tests: ["tests/securityHardeningWiring.test.ts"],
   },
+  {
+    match: (p) => p.includes("lib/jobChunking") || p.includes("jobChunkingHandoffs.test.ts"),
+    tests: ["tests/jobChunkingHandoffs.test.ts"],
+  },
   // job-queue-isolation: single-slot queue + per-job worktrees
   {
     match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
