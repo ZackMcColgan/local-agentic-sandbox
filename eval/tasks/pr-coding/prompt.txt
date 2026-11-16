@@ -1,0 +1,8 @@
+You are working on a PR-sized coding task.
+Implement `parseRetryAfter(headerValue, nowMs)` in `retryAfter.mjs` so that it parses HTTP `Retry-After` header values into a delay in milliseconds:
+- If `headerValue` is `null`, `undefined`, or empty/whitespace-only, return `null`.
+- If `headerValue` is a non-negative integer string (e.g. `"120"` or `"0"`), return `seconds * 1000`.
+- If `headerValue` is a valid HTTP-date string (e.g. `"Wed, 21 Oct 2015 07:28:00 GMT"`), return `Math.max(0, Date.parse(headerValue) - nowMs)` where `nowMs` defaults to `Date.now()`.
+- If `headerValue` is negative (e.g. `"-5"`) or unparseable, return `null`.
+
+Output ONLY the complete updated contents of `retryAfter.mjs` inside a single ```js or ```mjs code block.
