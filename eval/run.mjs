@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
 function parseArgs(argv) {
-  const args = { mode: "endpoint", chunkRounds: 8, all: false };
+  const args = { mode: "endpoint", chunkRounds: 8, jobTimeoutMinutes: 90, all: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--endpoint") args.endpoint = argv[++i];
@@ -16,6 +16,7 @@ function parseArgs(argv) {
     else if (a === "--model") args.model = argv[++i];
     else if (a === "--mode") args.mode = argv[++i];
     else if (a === "--chunk-rounds") args.chunkRounds = Number(argv[++i]);
+    else if (a === "--job-timeout-minutes") args.jobTimeoutMinutes = Number(argv[++i]);
     else if (a === "--sandbox-url") args.sandboxUrl = argv[++i];
     else if (a === "--out") args.out = argv[++i];
   }
@@ -79,6 +80,90 @@ async function callEndpoint(endpoint, model, prompt, taskId) {
   };
 }
 
+const TERMINAL_THREAD_STATUSES = new Set(["completed", "failed", "stopped"]);
+
+export async function runJobMode({
+  sandboxUrl,
+  prompt,
+  chunkRounds,
+  pollIntervalMs = 15000,
+  timeoutMs = 90 * 60 * 1000,
+  tracePath,
+  taskId,
+  fetchImpl = fetch,
+}) {
+  const baseUrl = (sandboxUrl || "http://127.0.0.1:3000").replace(/\/$/, "");
+  const start = Date.now();
+  const res = await fetchImpl(`${baseUrl}/api/threads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "launchTask",
+      goal: prompt,
+      chunkBudget: { maxRounds: chunkRounds },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Sandbox job submit failed (${res.status}): ${await res.text()}`);
+  }
+  const submitData = await res.json();
+  const threadId = submitData?.thread?.id || submitData?.id;
+  if (!threadId) {
+    throw new Error(`Sandbox job submit did not return a thread id: ${JSON.stringify(submitData)}`);
+  }
+
+  let lastThread = submitData?.thread || submitData;
+  const writeFailureTrace = () => {
+    if (tracePath) {
+      fs.writeFileSync(
+        tracePath,
+        JSON.stringify({ taskId, prompt, output: "", durationMs: Date.now() - start, raw: lastThread }, null, 2),
+        "utf8"
+      );
+    }
+  };
+
+  while (true) {
+    if (Date.now() - start >= timeoutMs) {
+      writeFailureTrace();
+      throw new Error(`Sandbox job ${threadId} timed out after ${timeoutMs}ms (last status: ${lastThread?.status})`);
+    }
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    const pollRes = await fetchImpl(`${baseUrl}/api/threads/${threadId}`);
+    if (!pollRes.ok) {
+      writeFailureTrace();
+      throw new Error(`Sandbox job poll failed (${pollRes.status}): ${await pollRes.text()}`);
+    }
+    const pollData = await pollRes.json();
+    lastThread = pollData?.thread || pollData;
+    const status = lastThread?.status;
+    if (status === "needs_input") {
+      writeFailureTrace();
+      throw new Error(`Sandbox job ${threadId} stopped with status needs_input`);
+    }
+    if (TERMINAL_THREAD_STATUSES.has(status)) {
+      break;
+    }
+  }
+
+  const messages = Array.isArray(lastThread?.messages) ? lastThread.messages : [];
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m?.role === "assistant" && typeof m?.content === "string" && m.content.trim().length > 0);
+  if (!lastAssistant) {
+    writeFailureTrace();
+    throw new Error(`Sandbox job ${threadId} finished (${lastThread?.status}) with no assistant message content`);
+  }
+
+  return {
+    output: lastAssistant.content,
+    toolCalls: [],
+    toolCallsExecuted: 0,
+    durationMs: Date.now() - start,
+    raw: lastThread,
+  };
+}
+
 async function runTask(task, args, runDir) {
   const prompt = fs.readFileSync(path.join(repoRoot, task.promptFile), "utf8");
   const graderMod = await import(pathToFileURL(path.join(repoRoot, task.grader)).href);
@@ -86,29 +171,14 @@ async function runTask(task, args, runDir) {
 
   let trace;
   if (args.mode === "job") {
-    const sandboxUrl = (args.sandboxUrl || "http://127.0.0.1:3000").replace(/\/$/, "");
-    const start = Date.now();
-    const res = await fetch(`${sandboxUrl}/api/jobs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        maxRounds: args.chunkRounds,
-        taskId: task.id,
-      }),
+    trace = await runJobMode({
+      sandboxUrl: args.sandboxUrl,
+      prompt,
+      chunkRounds: args.chunkRounds,
+      timeoutMs: (args.jobTimeoutMinutes || 90) * 60 * 1000,
+      tracePath: path.join(runDir, `${task.id}.trace.json`),
+      taskId: task.id,
     });
-    const durationMs = Date.now() - start;
-    if (!res.ok) {
-      throw new Error(`Sandbox job submit failed (${res.status}): ${await res.text()}`);
-    }
-    const jobData = await res.json();
-    trace = {
-      output: jobData.output || jobData.result || JSON.stringify(jobData),
-      toolCalls: jobData.toolCalls || [],
-      toolCallsExecuted: jobData.toolCallsExecuted ?? 0,
-      durationMs,
-      raw: jobData,
-    };
   } else {
     const model = await resolveModel(args.endpoint, args.model);
     trace = await callEndpoint(args.endpoint, model, prompt, task.id);
@@ -193,7 +263,9 @@ async function main() {
   console.log(JSON.stringify(scorecard, null, 2));
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
