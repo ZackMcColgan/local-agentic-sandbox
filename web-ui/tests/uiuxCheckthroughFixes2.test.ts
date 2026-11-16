@@ -56,3 +56,33 @@ describe("UI-087: queue deck scroller + steer deck remove & clear-all", () => {
     );
   });
 });
+
+describe("UI-083: board scrolling on mobile", () => {
+  it("tracks touch start in a ref rather than React state", () => {
+    const src = readComponent("components/BoardView.tsx");
+    assert.ok(
+      !src.includes("setTouchStartX"),
+      "BoardView should not use React state (setTouchStartX) for touch tracking"
+    );
+    assert.ok(
+      src.includes("useRef"),
+      "BoardView should use a ref for touch start coordinates"
+    );
+  });
+
+  it("requires horizontal dominance (|dx| > 50 && |dx| > 2 * |dy|) to flip columns", () => {
+    const src = readComponent("components/BoardView.tsx");
+    assert.ok(
+      src.includes("Math.abs(dx) > 50") && src.includes("Math.abs(dx) > 2 * Math.abs(dy)"),
+      "BoardView should require |dx| > 50 and |dx| > 2 * |dy| before flipping columns"
+    );
+  });
+
+  it("applies touch-pan-y and overscroll-contain to the column list container", () => {
+    const src = readComponent("components/BoardView.tsx");
+    assert.ok(
+      src.includes("touch-pan-y") && src.includes("overscroll-contain"),
+      "BoardView column list container should carry touch-pan-y and overscroll-contain"
+    );
+  });
+});
