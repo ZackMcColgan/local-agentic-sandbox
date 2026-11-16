@@ -112,3 +112,13 @@ describe("UI-085: drawer menu text contrast", () => {
     );
   });
 });
+
+describe("UI-084: chat header room", () => {
+  it("gives the chat header bar min-h-[56px] and vertical padding", () => {
+    const src = readComponent("components/ChatStream.tsx");
+    assert.ok(
+      src.includes("sticky top-0 z-30 min-h-[56px] py-1.5"),
+      "ChatStream header should have min-h-[56px] and py-1.5"
+    );
+  });
+});
