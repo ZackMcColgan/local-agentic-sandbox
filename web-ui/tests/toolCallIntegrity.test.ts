@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   containsToolCallMarkup,
+  isMarkupOnlyToolCall,
   evaluateMarkupRound,
   evaluateZeroTraceTripwire,
   TURN_TOOL_MARKUP_MARKER,
@@ -35,6 +36,36 @@ describe("tool-call-integrity: markup-in-content detector", () => {
     assert.equal(second.consecutiveMarkupFailures, 2);
     assert.equal(second.marker, TURN_TOOL_MARKUP_MARKER);
     assert.equal(second.marker, "⚠️ [Turn ended: tool calls were not executable.]");
+  });
+
+  it("detects <|im_start|>function_calls> and <parameter=...> hybrid dialect", () => {
+    const fullHybrid = [
+      "<tool_call>",
+      "<|im_start|>function_calls>",
+      "<parameter=arguments>",
+      '{"command": "ls -la"}',
+    ].join("\n");
+    assert.equal(containsToolCallMarkup(fullHybrid), true);
+
+    const withoutToolCallTag = [
+      "<|im_start|>function_calls>",
+      "<parameter=arguments>",
+      '{"command": "ls -la"}',
+    ].join("\n");
+    assert.equal(containsToolCallMarkup(withoutToolCallTag), true);
+    const evalResult = evaluateMarkupRound({
+      roundContent: withoutToolCallTag,
+      executedToolCallsCount: 0,
+      consecutiveMarkupFailures: 0,
+    });
+    assert.equal(evalResult.action, "reprompt");
+
+    assert.equal(containsToolCallMarkup("function_calls>\n<parameter=path>\nfoo.ts"), true);
+    assert.equal(containsToolCallMarkup("<parameter=arguments>\n{}"), true);
+
+    assert.equal(isMarkupOnlyToolCall(fullHybrid), true);
+    assert.equal(isMarkupOnlyToolCall(withoutToolCallTag), true);
+    assert.equal(isMarkupOnlyToolCall("Here is the result:\n<tool_call>...</tool_call>"), false);
   });
 
   it("leaves a normal tool round untouched when tool calls were parsed and executed", () => {

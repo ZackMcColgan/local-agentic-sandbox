@@ -11,6 +11,9 @@ const TOOL_CALL_MARKUP_PATTERNS: RegExp[] = [
   /<function=[a-zA-Z0-9_.-]+>/i,
   /<\|tool_call\|>/i,
   /<\|tool_calls_section_begin\|>/i,
+  /<\|im_start\|>/i,
+  /function_calls>/i,
+  /<parameter=[a-zA-Z0-9_.-]+>/i,
 ];
 
 const TOOL_WORK_CLAIM_PATTERNS: RegExp[] = [
@@ -27,6 +30,16 @@ const TOOL_WORK_CLAIM_PATTERNS: RegExp[] = [
 export function containsToolCallMarkup(text: string): boolean {
   if (!text) return false;
   return TOOL_CALL_MARKUP_PATTERNS.some((re) => re.test(text));
+}
+
+/**
+ * Returns true if a stored assistant message is markup-only (begins with
+ * `<tool_call>` or `<|im_start|>function_calls>` with no leading prose).
+ */
+export function isMarkupOnlyToolCall(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return /^(?:<tool_call>\s*)?(?:<\|im_start\|>function_calls>|<tool_call>)/i.test(trimmed);
 }
 
 export interface MarkupRoundEvaluation {

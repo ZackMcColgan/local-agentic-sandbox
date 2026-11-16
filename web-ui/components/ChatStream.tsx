@@ -66,6 +66,7 @@ import {
   extractCodeDeliverablesFromMessage
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
+import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../lib/toolCallIntegrity";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp, displayRepoPath, displayBasename } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
@@ -2816,7 +2817,11 @@ export function ChatStream({
                   {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
                   {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (() => {
                     const hostDisconnect = classifyHostRunnerDisconnect(m.content);
-                    const renderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
+                    const rawRenderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
+                    const renderedContent =
+                      m.role === "assistant" && isMarkupOnlyToolCall(rawRenderedContent)
+                        ? TURN_TOOL_MARKUP_MARKER
+                        : rawRenderedContent;
                     return (
                     <>
                       {hostDisconnect.kind !== "none" && (
