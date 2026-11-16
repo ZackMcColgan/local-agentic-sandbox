@@ -722,7 +722,7 @@ export default function Home() {
     if (view === "sessions") {
       const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
       if (isMobile) {
-        setSelectedThreadId(null);
+        setIsSidebarOpen(true);
       }
     }
   };
