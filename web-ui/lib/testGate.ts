@@ -349,6 +349,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/finishVerification.test.ts"]
   },
   {
+    match: (p) => p.includes("lib/evidenceLinkedSummaries") || p.includes("app/api/chat/route"),
+    tests: ["tests/evidenceLinkedSummaries.test.ts"]
+  },
+  {
     match: (p) =>
       p.includes("lib/toolCallIntegrity") ||
       p.includes("app/api/chat/route") ||
