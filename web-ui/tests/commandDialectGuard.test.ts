@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { lintHostCommand } from "../lib/commandDialectGuard";
 import { COMMAND_DIALECT_TRAPS } from "../lib/commandDialectTraps";
+import { executeHostTool } from "../lib/hostMode";
 
 describe("command-dialect-guard", () => {
   it("keeps traps in a single data array", () => {
@@ -40,5 +41,55 @@ describe("command-dialect-guard", () => {
     assert.equal(res.command, clean);
     assert.deepEqual(res.ruleIds, []);
     assert.deepEqual(res.traceNotes, []);
+  });
+
+  it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on && rewrite", async () => {
+    const origFetch = globalThis.fetch;
+    let capturedBody: any = null;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({ ok: true, stdout: "done" }),
+      } as any;
+    }) as any;
+    try {
+      const result = await executeHostTool("host_run_powershell", {
+        command: "echo a && echo b",
+      });
+      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
+      assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-and"));
+      assert.ok(
+        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and"))
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on || rewrite", async () => {
+    const origFetch = globalThis.fetch;
+    let capturedBody: any = null;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({ ok: true, stdout: "done" }),
+      } as any;
+    }) as any;
+    try {
+      const result = await executeHostTool("host_run_powershell", {
+        command: "echo a || echo b",
+      });
+      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
+      assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-or"));
+      assert.ok(
+        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or"))
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
