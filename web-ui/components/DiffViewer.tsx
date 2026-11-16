@@ -44,14 +44,14 @@ export function DiffViewer({
   const deletions = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
 
   return (
-    <div className={`rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
+    <div className={`max-w-full min-w-0 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
       {/* Header Bar */}
-      <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-50/80 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800">
+      <div className="px-3.5 py-2.5 flex items-center justify-between gap-2 min-w-0 bg-slate-50/80 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
-          className="flex items-center gap-2 text-left group"
+          className="flex items-center gap-2 text-left group min-w-0 flex-1"
         >
           {isOpen ? (
             <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
@@ -59,10 +59,10 @@ export function DiffViewer({
             <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
           )}
           <GitBranch className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200">
+          <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate min-w-0">
             {branch}
           </span>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2 shrink-0">
             {additions > 0 && (
               <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 {`+${additions}`}
@@ -76,7 +76,7 @@ export function DiffViewer({
           </div>
         </button>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {diagramSvg && (
             <button
               type="button"

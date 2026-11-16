@@ -2868,7 +2868,7 @@ export function ChatStream({
                             }
                             return (
                               <code
-                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs border border-slate-200 dark:border-zinc-700"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs border border-slate-200 dark:border-zinc-700 break-all max-w-full"
                                 {...props}
                               >
                                 {children}
