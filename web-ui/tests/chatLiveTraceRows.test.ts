@@ -200,4 +200,74 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("severed stream: live client converges liveness out of running when stream cuts", async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async pull(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: {"type":"trace","trace":{"tool":"workspace_grep","args":{},"result":"hit","durationMs":5,"timestamp":"${new Date().toISOString()}"}}\n\n`
+          )
+        );
+        controller.error(new Error("stream severed"));
+      },
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: any) => {
+      const url = typeof input === "string" ? input : String(input?.url ?? "");
+      if (url.includes("/api/chat")) {
+        return { ok: true, status: 200, body: stream } as any;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          messages: [],
+          thread: { id: "t-live-1", status: "stopped", liveness: "settled" },
+        }),
+      } as any;
+    }) as typeof globalThis.fetch;
+
+    try {
+      await act(async () => {
+        root.render(
+          React.createElement(ChatStream, {
+            ...baseProps,
+            messages: [
+              { id: "u1", role: "user", content: "go", timestamp: new Date().toISOString() },
+            ] as any,
+            setMessages: () => {},
+            activeTask: null,
+          })
+        );
+      });
+
+      const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+      await act(async () => {
+        const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
+        (textarea as any)[propsKey].onChange({ target: { value: "go" } });
+      });
+      const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
+      await act(async () => {
+        const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
+        if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
+          (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+        } else {
+          sendBtn.click();
+        }
+      });
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 80));
+      });
+
+      // After stream sever, the live client must not stay stuck in a running/streaming state.
+      const stopBtn = container.querySelector('[data-testid="stop-button"]');
+      assert.equal(stopBtn, null, "Live client must not remain in running/stop-button state after stream sever");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
