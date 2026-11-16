@@ -28,7 +28,7 @@ test.describe("Phase B2 — Start/stop abuse", () => {
         await route.fulfill({
           status: 200,
           contentType: "text/event-stream",
-          body: 'data: {"content":"Recovered response"}\n\ndata: {"done":true}\n\n',
+          body: 'data: {"type":"token","text":"Recovered response"}\n\ndata: {"type":"done"}\n\n',
         });
       }
     });
@@ -76,9 +76,9 @@ test.describe("Phase B2 — Start/stop abuse", () => {
     await page.locator('[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")').first().click();
     await page.waitForTimeout(2500);
 
-    // Navigate back to Sessions / Chat
-    await page.locator('button[aria-label="Open navigation menu"]').first().click();
-    await page.locator('[data-testid="navigation-drawer"] button:has-text("Sessions"), div.rounded-r-3xl button:has-text("Sessions")').first().click();
+    // Navigate back to Sessions / Chat via Back button or drawer
+    const backBtn = page.locator('button[aria-label="Back to chat"], button[aria-label="Open navigation menu"]:visible').first();
+    await backBtn.click();
     await page.waitForTimeout(300);
 
     // No stuck stop button
