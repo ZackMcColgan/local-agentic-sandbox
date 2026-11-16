@@ -14,6 +14,8 @@ import {
   runChunkedJobLoop,
   continueJobFromHandoff,
   resolveSupervisorChunkResume,
+  handleLiveTurnChunkBudget,
+  resolveThreadChunkBudget,
   type ChunkBudgetConfig,
   type ChunkHandoffBrief,
 } from "../lib/jobChunking";
@@ -241,4 +243,71 @@ test("supervisor chunk resume enforces max 2 auto-resumes then needs-attention",
   assert.deepEqual(resolveSupervisorChunkResume(0), { action: "auto-resume", nextResumeCount: 1 });
   assert.deepEqual(resolveSupervisorChunkResume(1), { action: "auto-resume", nextResumeCount: 2 });
   assert.deepEqual(resolveSupervisorChunkResume(2), { action: "needs-attention", nextResumeCount: 2 });
+});
+
+test("live turn budget hit banks commit, writes complete handoff, and returns chunk-complete marker", async () => {
+  const repoDir = initTempGitRepo();
+  const handoffPath = path.join(repoDir, ".agent", "checkpoints", "thread-live-1.handoff.json");
+  const runlogPath = path.join(repoDir, "docs", "internal", "queue-steer-runlog.md");
+
+  try {
+    fs.writeFileSync(path.join(repoDir, "live-work.txt"), "uncommitted round work\n", "utf8");
+
+    const notYet = await handleLiveTurnChunkBudget({
+      roundsUsed: 1,
+      elapsedMs: 100,
+      budget: { maxRounds: 2 },
+      jobId: "thread-live-1",
+      workspaceRoot: repoDir,
+      handoffPath,
+      runlogPath,
+      currentState: "round 1 done",
+      nextStep: "resume from round 1",
+      openQuestions: [],
+    });
+    assert.equal(notYet.exceeded, false);
+
+    const hit = await handleLiveTurnChunkBudget({
+      roundsUsed: 2,
+      elapsedMs: 200,
+      budget: { maxRounds: 2 },
+      jobId: "thread-live-1",
+      workspaceRoot: repoDir,
+      handoffPath,
+      runlogPath,
+      currentState: "round 2 done",
+      nextStep: "resume from round 2",
+      openQuestions: ["verify edge case"],
+    });
+    assert.equal(hit.exceeded, true);
+    if (hit.exceeded) {
+      assert.equal(hit.marker, TURN_CHUNK_COMPLETE_MARKER);
+      assert.equal(hit.handoff.chunkComplete, true);
+      assert.equal(hit.handoff.currentState, "round 2 done");
+      assert.ok(hit.handoff.branch.length > 0);
+      assert.ok(hit.handoff.headSha.length >= 7);
+      assert.equal(hit.handoff.nextStep, "resume from round 2");
+      assert.deepEqual(hit.handoff.openQuestions, ["verify edge case"]);
+    }
+
+    const written = readMilestoneHandoff(handoffPath) as ChunkHandoffBrief | null;
+    assert.ok(written);
+    assert.equal(written?.chunkComplete, true);
+    assert.equal(written?.headSha, hit.exceeded ? hit.handoff.headSha : "");
+    assert.ok(fs.existsSync(runlogPath));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test("resolveThreadChunkBudget plumbs per-job config and marathonOptOut from thread record", () => {
+  assert.equal(resolveThreadChunkBudget(null), undefined);
+  assert.deepEqual(
+    resolveThreadChunkBudget({ chunkBudget: { maxRounds: 5, maxDurationMs: 12000, marathonOptOut: true } }),
+    { maxRounds: 5, maxDurationMs: 12000, marathonOptOut: true }
+  );
+  assert.deepEqual(
+    resolveThreadChunkBudget({ marathonOptOut: true }),
+    { maxRounds: undefined, maxDurationMs: undefined, marathonOptOut: true }
+  );
 });

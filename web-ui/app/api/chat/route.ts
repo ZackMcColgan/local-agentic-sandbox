@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { evaluateChunkBudget, TURN_CHUNK_COMPLETE_MARKER } from "@/lib/jobChunking";
+import { handleLiveTurnChunkBudget, resolveThreadChunkBudget } from "@/lib/jobChunking";
 import { resolveThreadsDir, ThreadStore, deriveStoredThreadTitle, activeExecutionSet, markTurnActive, clearTurnActive, registerTurnAbortController, clearTurnAbortController, registerRoundAbortController, clearRoundAbortController, touchActiveTurn } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import { appendNarrationChunk } from "@/lib/liveActivity";
@@ -1001,13 +1001,29 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
         
 
         const turnStartMs = Date.now();
+        const chunkBudget = resolveThreadChunkBudget(threadData as any);
+        const chunkWorkspaceRoot = _worktree?.path || resolveJobRepoRoot() || process.cwd();
+        const chunkJobId = activeThreadId || _job.threadId || _job.id;
+        const chunkHandoffPath = path.join(chunkWorkspaceRoot, ".agent/checkpoints", `${chunkJobId}.handoff.json`);
+        const chunkRunlogPath = path.join(chunkWorkspaceRoot, "docs/internal/queue-steer-runlog.md");
 
         while (true) {
           
           if (turnAbortController.signal.aborted) break;
-          const chunkEval = evaluateChunkBudget(round, Date.now() - turnStartMs);
-          if (chunkEval.exceeded) {
-            honestEndMarker = TURN_CHUNK_COMPLETE_MARKER;
+          const chunkResult = await handleLiveTurnChunkBudget({
+            roundsUsed: round,
+            elapsedMs: Date.now() - turnStartMs,
+            budget: chunkBudget,
+            jobId: chunkJobId,
+            workspaceRoot: chunkWorkspaceRoot,
+            handoffPath: chunkHandoffPath,
+            runlogPath: chunkRunlogPath,
+            currentState: (carriedToolRoundProse || carriedLengthContent || `round ${round} completed`).slice(0, 500),
+            nextStep: `resume from round ${round}`,
+            openQuestions: [],
+          });
+          if (chunkResult.exceeded) {
+            honestEndMarker = chunkResult.marker;
             break;
           }
           console.log(`[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`);

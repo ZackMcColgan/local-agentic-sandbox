@@ -282,3 +282,81 @@ export function resolveSupervisorChunkResume(
     nextResumeCount: currentResumeCount,
   };
 }
+
+export interface ThreadRecordChunkFields {
+  chunkBudget?: ChunkBudgetConfig | null;
+  maxRounds?: number;
+  maxDurationMs?: number;
+  marathonOptOut?: boolean;
+}
+
+/**
+ * Extracts per-job chunk budget configuration from a thread record when present.
+ * Returns undefined when no per-job overrides are set so defaults apply.
+ */
+export function resolveThreadChunkBudget(
+  threadRecord: ThreadRecordChunkFields | null | undefined
+): ChunkBudgetConfig | undefined {
+  if (!threadRecord) return undefined;
+  const nested = threadRecord.chunkBudget;
+  const maxRounds = nested?.maxRounds ?? threadRecord.maxRounds;
+  const maxDurationMs = nested?.maxDurationMs ?? threadRecord.maxDurationMs;
+  const marathonOptOut = nested?.marathonOptOut ?? threadRecord.marathonOptOut;
+  if (maxRounds === undefined && maxDurationMs === undefined && marathonOptOut === undefined) {
+    return undefined;
+  }
+  return { maxRounds, maxDurationMs, marathonOptOut };
+}
+
+export interface LiveTurnChunkBudgetInput {
+  roundsUsed: number;
+  elapsedMs: number;
+  budget?: ChunkBudgetConfig;
+  jobId: string;
+  workspaceRoot: string;
+  handoffPath: string;
+  runlogPath?: string;
+  currentState: string;
+  nextStep: string;
+  openQuestions: string[];
+}
+
+export type LiveTurnChunkBudgetResult =
+  | { exceeded: false }
+  | {
+      exceeded: true;
+      reason: "rounds" | "time";
+      marker: string;
+      handoff: ChunkHandoffBrief;
+    };
+
+/**
+ * Evaluates the live turn's chunk budget and, on budget hit, banks git work
+ * and writes the chunk handoff before returning the chunk-complete marker.
+ */
+export async function handleLiveTurnChunkBudget(
+  input: LiveTurnChunkBudgetInput
+): Promise<LiveTurnChunkBudgetResult> {
+  const chunkEval = evaluateChunkBudget(input.roundsUsed, input.elapsedMs, input.budget);
+  if (!chunkEval.exceeded || !chunkEval.reason) {
+    return { exceeded: false };
+  }
+
+  const handoff = await bankAndWriteChunkHandoff({
+    jobId: input.jobId,
+    workspaceRoot: input.workspaceRoot,
+    handoffPath: input.handoffPath,
+    runlogPath: input.runlogPath,
+    currentState: input.currentState,
+    nextStep: input.nextStep,
+    openQuestions: input.openQuestions,
+    completedSteps: input.roundsUsed,
+  });
+
+  return {
+    exceeded: true,
+    reason: chunkEval.reason,
+    marker: TURN_CHUNK_COMPLETE_MARKER,
+    handoff,
+  };
+}
