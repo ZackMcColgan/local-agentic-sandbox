@@ -1,11 +1,11 @@
-import { TURN_STALL_WINDOW_MS, type Thread } from "./threadStore";
+import type { Thread } from "./threadStore";
 
 /**
  * Default inactivity window before a streaming turn is declared stalled.
  * 10 minutes (600,000 ms) gives legitimate long tool or model rounds enough
  * headroom when they heartbeat via touchActiveTurn, while catching hung turns.
  */
-export const STALL_WINDOW_MS = TURN_STALL_WINDOW_MS;
+export const STALL_WINDOW_MS = 600_000;
 
 /** Hard cap on automatic resume turns per job before surfacing needs-attention. */
 export const MAX_AUTO_RESUMES = 2;

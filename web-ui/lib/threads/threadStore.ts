@@ -12,6 +12,7 @@ import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconom
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
+import { superviseStalledThread } from "./inAppSupervisor";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
@@ -655,6 +656,38 @@ export class ThreadStore {
   reconcileThread(thread: Thread): boolean {
     let changed = false;
 
+    const supervisorOutcome = superviseStalledThread(thread, {
+      threadAdapter: {
+        saveThread: (t) => this.saveThread(t),
+        createFreshThread: (opts) =>
+          this.createThread({
+            title: opts.title,
+            taskId: opts.taskId,
+            resumedFromThreadId: opts.resumedFromThreadId,
+          }),
+        dispatchTurn: (threadId, prompt) => this.dispatchSupervisorTurn(threadId, prompt),
+      },
+      jobStore: {
+        hasBankedState: (jobId) => {
+          const runlogPath = path.join(this.threadsDir, "tasks", jobId, "runlog.md");
+          if (fs.existsSync(runlogPath)) return true;
+          try {
+            return fs.existsSync(this.supervisor.getCheckpointFilePath(jobId));
+          } catch {
+            return false;
+          }
+        },
+        getAutoResumeCount: () => thread.autoResumeCount ?? 0,
+        incrementAutoResumeCount: () => (thread.autoResumeCount ?? 0) + 1,
+        markNeedsAttention: () => {
+          thread.needsAttention = true;
+        },
+      },
+    });
+    if (supervisorOutcome.action !== "not_stalled") {
+      return true;
+    }
+
     // qa-6: reap zombie live signals first. A leaked presence entry older
     // than the hard cap with a stale record is deleted so it cannot keep a
     // dead turn "live" forever; a leaked execution-set entry is discounted
@@ -1052,6 +1085,25 @@ export class ThreadStore {
     } catch {
       return null;
     }
+  }
+
+  private supervisorDispatchTurn?: (threadId: string, prompt: string) => void;
+
+  setSupervisorDispatchTurn(fn: (threadId: string, prompt: string) => void): void {
+    this.supervisorDispatchTurn = fn;
+  }
+
+  private dispatchSupervisorTurn(threadId: string, prompt: string): void {
+    if (this.supervisorDispatchTurn) {
+      this.supervisorDispatchTurn(threadId, prompt);
+      return;
+    }
+    const port = process.env.PORT || "3000";
+    void fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threadId, message: prompt }),
+    }).catch(() => {});
   }
 
   saveThread(thread: Thread): void {
