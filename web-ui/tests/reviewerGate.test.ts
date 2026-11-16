@@ -93,6 +93,39 @@ describe("reviewerGate — mechanical checks", () => {
     assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes("gemini")));
   });
 
+  for (const term of ["hydrogen", "argon", "sandy"]) {
+    it(`FAILs when ${term} appears in added lines`, () => {
+      const diff = [
+        "diff --git a/web-ui/lib/board/reviewerGate.ts b/web-ui/lib/board/reviewerGate.ts",
+        "--- a/web-ui/lib/board/reviewerGate.ts",
+        "+++ b/web-ui/lib/board/reviewerGate.ts",
+        "@@ -1,1 +1,2 @@",
+        " export const x = 1;",
+        `+// note mentioning ${term}`,
+      ].join("\n");
+
+      const result = runMechanicalChecks(makeCleanInput({ diff }));
+      assert.equal(result.verdict, "FAIL");
+      assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
+    });
+
+    it(`FAILs when ${term} appears in a commit subject`, () => {
+      const result = runMechanicalChecks(
+        makeCleanInput({ commitSubjects: [`Fix issue in ${term} pass`] }),
+      );
+      assert.equal(result.verdict, "FAIL");
+      assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
+    });
+
+    it(`FAILs when ${term} appears in the branch name`, () => {
+      const result = runMechanicalChecks(
+        makeCleanInput({ branchName: `feature/${term}-fix` }),
+      );
+      assert.equal(result.verdict, "FAIL");
+      assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
+    });
+  }
+
   it("FAILs when a test file is deleted", () => {
     const diff = [
       "diff --git a/web-ui/tests/reviewerGate.test.ts b/web-ui/tests/reviewerGate.test.ts",

@@ -44,6 +44,9 @@ const BANNED_HYGIENE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "antigravity", pattern: /\bantigravity\b/i },
   { label: "zack", pattern: /\bzack\b/i },
   { label: "mccolgan", pattern: /\bmccolgan\b/i },
+  { label: "hydrogen", pattern: /\bhydrogen\b/i },
+  { label: "argon", pattern: /\bargon\b/i },
+  { label: "sandy", pattern: /\bsandy\b/i },
 ];
 
 const TEST_FILE_PATTERN = /(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
