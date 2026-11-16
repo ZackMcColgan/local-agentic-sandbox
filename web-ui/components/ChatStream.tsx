@@ -2428,9 +2428,9 @@ export function ChatStream({
         onWheel={handleContainerWheel}
         onTouchMove={handleContainerTouchMove}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-white dark:bg-black relative"
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
       >
-        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
+        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-6 sm:pb-8">
         {deduplicatedMessages.length === 0 && !activeTask && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
@@ -3573,7 +3573,7 @@ export function ChatStream({
 
       {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
       {isUserScrolledUp && (
-        <div className="flex justify-center -mt-14 mb-3 z-30 pointer-events-none">
+        <div className="flex justify-center py-2 z-30 pointer-events-none bg-transparent">
           <button
             type="button"
             onClick={() => scrollToBottom("smooth")}

@@ -39,3 +39,20 @@ describe("UI-052 — DiffViewer and inline code chips prevent mobile horizontal 
     assert.ok(line.includes("break-all"), "inline code chip should include break-all");
   });
 });
+
+describe("UI-053 & UI-054 — Jump to bottom pill does not occlude content & thread padding is balanced", () => {
+  it("Jump to bottom pill docks above composer without negative top margin (-mt-14)", () => {
+    const idx = chatStream.indexOf('Floating "Jump to bottom" button');
+    assert.ok(idx >= 0, "Jump to bottom comment found");
+    const slice = chatStream.slice(idx, idx + 300);
+    assert.ok(!slice.includes("-mt-14"), "Jump to bottom wrapper must not use -mt-14");
+  });
+
+  it("ChatStream scroll container and chat-track use balanced top/bottom padding", () => {
+    const idx = chatStream.indexOf('data-scroll-container="true"');
+    assert.ok(idx >= 0, "scroll container found");
+    const slice = chatStream.slice(idx, idx + 300);
+    assert.ok(slice.includes("pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6"), "scroll container has balanced top/bottom padding");
+    assert.ok(slice.includes("pb-6 sm:pb-8"), "chat-track has clean bottom clearance");
+  });
+});
