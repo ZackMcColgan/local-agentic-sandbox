@@ -13,6 +13,8 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     createdAt: now,
     updatedAt: now,
     status: "stopped",
+    model: "test-model",
+    reasoningEffort: "low",
     messages: [],
     ...overrides,
   };

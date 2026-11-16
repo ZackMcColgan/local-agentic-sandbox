@@ -30,6 +30,8 @@ function makeStalledThread(overrides: Partial<Thread> = {}): Thread {
     createdAt: staleIso,
     updatedAt: staleIso,
     status: "active",
+    model: "test-model",
+    reasoningEffort: "low",
     messages: [
       { id: "m1", role: "user", content: "Do the work", timestamp: staleIso },
       {
