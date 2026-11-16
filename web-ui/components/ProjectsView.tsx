@@ -959,7 +959,7 @@ export function ProjectsView({
                           ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
                           : item.changeType === "R"
                           ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                          : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+                          : "bg-zinc-100 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800";
 
                       const typeLabel =
                         item.changeType === "A"

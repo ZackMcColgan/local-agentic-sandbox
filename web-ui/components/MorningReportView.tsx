@@ -289,7 +289,7 @@ export function MorningReportView({
               verdict.state === "failed"
                 ? "border-rose-300 dark:border-rose-800"
                 : verdict.state === "attention"
-                  ? "border-amber-300 dark:border-amber-800"
+                  ? "border-zinc-300 dark:border-zinc-800"
                   : verdict.state === "empty"
                     ? "border-slate-200 dark:border-zinc-800"
                     : "border-emerald-300 dark:border-emerald-800"
@@ -299,7 +299,7 @@ export function MorningReportView({
               {verdict.state === "failed" ? (
                 <XCircle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
               ) : verdict.state === "attention" ? (
-                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <AlertTriangle className="h-5 w-5 shrink-0 text-zinc-600 dark:text-zinc-400" />
               ) : verdict.state === "empty" ? (
                 <Clock className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" />
               ) : (
@@ -415,7 +415,7 @@ export function MorningReportView({
           <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertTriangle className="h-4 w-4 text-zinc-500" />
                 <span>What Needs Attention</span>
               </h3>
               <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -444,7 +444,7 @@ export function MorningReportView({
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                             item.status === "parked"
-                              ? "bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200"
+                              ? "bg-zinc-200/80 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-200"
                               : "bg-rose-200/80 dark:bg-rose-900 text-rose-900 dark:text-rose-200"
                           }`}
                         >
@@ -478,7 +478,7 @@ export function MorningReportView({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-amber-500" />
+                  <ShieldAlert className="h-4 w-4 text-zinc-500" />
                   <span>Ambiguity Flags &amp; Judgment Calls</span>
                 </h2>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -713,7 +713,7 @@ export function MorningReportView({
                                 isComp
                                   ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                   : isStalled
-                                  ? "bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                  ? "bg-zinc-50 dark:bg-zinc-950/80 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                                   : isFail
                                   ? "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                                   : "bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
@@ -722,7 +722,7 @@ export function MorningReportView({
                               {isComp ? (
                                 <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                               ) : isStalled ? (
-                                <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                <AlertTriangle className="h-3 w-3 text-zinc-600 dark:text-zinc-400" />
                               ) : isFail ? (
                                 <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
                               ) : null}
@@ -761,7 +761,7 @@ export function MorningReportView({
                               {t.durationFormatted}
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
+                              <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
                               {t.branch}
                             </span>
                             {t.milestones && t.milestones.length > 0 && (
@@ -791,7 +791,7 @@ export function MorningReportView({
                             <div
                               className={`p-2.5 rounded-lg text-xs font-mono ${
                                 isStalled
-                                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50"
+                                  ? "bg-zinc-50 dark:bg-zinc-950/40 text-zinc-900 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-900/50"
                                   : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
                               }`}
                             >
@@ -822,7 +822,7 @@ export function MorningReportView({
                                   className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800 text-xs flex items-center justify-between"
                                 >
                                   <div className="min-w-0 pr-2">
-                                    <span className="font-mono font-semibold text-[10px] text-indigo-600 dark:text-indigo-400 mr-1.5">
+                                    <span className="font-mono font-semibold text-[10px] text-emerald-600 dark:text-emerald-400 mr-1.5">
                                       {m.id}
                                     </span>
                                     <span className="text-slate-800 dark:text-zinc-200 line-clamp-2" title={m.title}>{m.title}</span>

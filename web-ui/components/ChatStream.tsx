@@ -2179,13 +2179,13 @@ export function ChatStream({
           {activeSimulation && (
             <div
               data-testid="simulation-badge"
-              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
+              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
               title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
               <span className="sr-only sm:not-sr-only">SIMULATION</span>
               <span aria-hidden="true" className="sm:hidden">SIM</span>
-              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
                 (${activeSimulation.scenarioKey})
               </span>
               <button
@@ -2197,7 +2197,7 @@ export function ChatStream({
                   }
                   setActiveSimulation(null);
                 }}
-                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
                 title="Exit simulation mode"
                 aria-label="Exit simulation mode"
               >
@@ -2229,7 +2229,7 @@ export function ChatStream({
                     displayContextTokens > 85000
                       ? "text-rose-600 dark:text-rose-400"
                       : displayContextTokens > 70000
-                      ? "text-amber-600 dark:text-amber-400"
+                      ? "text-zinc-600 dark:text-zinc-400"
                       : "text-slate-700 dark:text-zinc-100"
                   }`}
                 >
@@ -2253,7 +2253,7 @@ export function ChatStream({
                   displayContextTokens > 85000
                     ? "bg-rose-500"
                     : displayContextTokens > 70000
-                    ? "bg-amber-500"
+                    ? "bg-zinc-500"
                     : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
                 }`}
                 style={{
@@ -2288,11 +2288,11 @@ export function ChatStream({
               type="button"
               data-testid="host-disconnect-chip"
               onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
+              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
               title={runnerReason || "Host runner is unreachable — open Settings"}
               aria-label="Host disconnected — open Settings"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
               <span className="hidden min-[420px]:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
               <span className="min-[420px]:hidden">DISCONNECTED</span>
               <span className="sr-only">HOST DISCONNECTED</span>
@@ -2575,9 +2575,9 @@ export function ChatStream({
                       {m.status === "incomplete" && (
                         <div
                           data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[11px] font-mono font-medium text-amber-800 dark:text-amber-300 w-fit"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-300 dark:border-zinc-800 text-[11px] font-mono font-medium text-zinc-800 dark:text-zinc-300 w-fit"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-pulse" />
                           <span>Incomplete</span>
                         </div>
                       )}
@@ -2594,7 +2594,7 @@ export function ChatStream({
                           type="button"
                           data-testid="incomplete-retry"
                           onClick={handleRetry}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-400 dark:border-amber-700 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/60 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900/40 border border-zinc-400 dark:border-zinc-700 text-[11px] font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                         >
                           <RefreshCw className="h-3 w-3" />
                           <span>Retry turn</span>
@@ -3189,7 +3189,7 @@ export function ChatStream({
                               defaultOpen={false}
                             />
                             {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
-                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20">
                                 Truncated: showing {MAX_DIFF_LINES_CAP} of {diffItem.totalDiffLines} diff lines ({diffItem.omittedLines} omitted)
                               </div>
                             ) : null}
@@ -3350,12 +3350,12 @@ export function ChatStream({
                   <div
                     key={approval.id}
                     data-testid="host-approval-card"
-                    className="w-full rounded-2xl border border-amber-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
+                    className="w-full rounded-2xl border border-zinc-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
                   >
                     <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        <ShieldAlert className="h-4 w-4 text-zinc-600 dark:text-zinc-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                           Security Approval Required
                         </span>
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono font-medium text-slate-700 dark:text-zinc-300">
@@ -3435,7 +3435,7 @@ export function ChatStream({
                             : approval.status === "denied"
                             ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
                             : approval.status === "expired"
-                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                            ? "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20"
                             : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
                         }`}
                       >
@@ -3507,9 +3507,9 @@ export function ChatStream({
             return (
               <div
                 data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
               >
-                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400 shrink-0" />
                 <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>
               </div>
             );

@@ -348,7 +348,7 @@ export function ThreadsSidebar({
               if (statusLabel === "Failed")
                 return { label: "✕ FAILED", classes: "bg-red-500/10 text-red-700 dark:text-[#fca5a5]" };
               if (statusLabel === "Needs Input")
-                return { label: "NEEDS INPUT", classes: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
+                return { label: "NEEDS INPUT", classes: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300" };
               return { label: "NEW", classes: "bg-slate-500/10 text-slate-500 dark:text-zinc-400" };
             })();
 
@@ -456,7 +456,7 @@ export function ThreadsSidebar({
                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
                           livenessBadge === "alive"
                             ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
-                            : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
+                            : "bg-zinc-100 dark:bg-zinc-950/60 text-zinc-700 dark:text-zinc-300"
                         }`}
                         title={livenessBadge === "alive" ? "Turn active — activity within the last 30s" : "Turn stalled — no activity past the stale window"}
                       >

@@ -323,9 +323,9 @@ export function SettingsView({
 
   const activeModel = defaultModel || selectedModel;
   const engineStatusLabel = engineData.status === "running" ? "Running" : engineData.status === "starting" ? "Starting" : "Stopped";
-  const engineDotClass = engineData.status === "running" ? "bg-emerald-500" : engineData.status === "starting" ? "bg-amber-500 animate-pulse" : "bg-slate-400 dark:bg-zinc-600";
+  const engineDotClass = engineData.status === "running" ? "bg-emerald-500" : engineData.status === "starting" ? "bg-zinc-500 animate-pulse" : "bg-slate-400 dark:bg-zinc-600";
   const hostStatusLabel = hostSettings.hostAccessEnabled ? (hostSettings.runnerAvailable ? "Connected" : "Runner offline") : "Off";
-  const hostDotClass = hostSettings.hostAccessEnabled && hostSettings.runnerAvailable ? "bg-emerald-500" : hostSettings.hostAccessEnabled ? "bg-amber-500" : "bg-slate-400 dark:bg-zinc-600";
+  const hostDotClass = hostSettings.hostAccessEnabled && hostSettings.runnerAvailable ? "bg-emerald-500" : hostSettings.hostAccessEnabled ? "bg-zinc-500" : "bg-slate-400 dark:bg-zinc-600";
   const stripModel = engineData.model || activeModel;
   const latestDeploy = deployHistory.length > 0 ? [...deployHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : undefined;
   const latestDeployLabel = latestDeploy ? `${latestDeploy.newSha.slice(0, 7)} · ${latestDeploy.status === "rolled_back" || latestDeploy.rollbackStatus === "rolled_back" ? "Rolled back" : latestDeploy.status === "failed" ? "Failed" : "Deployed"}` : "No deploys yet";
@@ -504,8 +504,8 @@ export function SettingsView({
                   </>
                 ) : engineData.status === "starting" ? (
                   <>
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-amber-700 dark:text-amber-400">Starting...</span>
+                    <span className="h-2 w-2 rounded-full bg-zinc-500 animate-pulse" />
+                    <span className="text-zinc-700 dark:text-zinc-400">Starting...</span>
                   </>
                 ) : (
                   <>
@@ -742,7 +742,7 @@ export function SettingsView({
                   hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
                     ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                     : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
-                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 text-zinc-700 dark:text-zinc-400"
                     : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
                 }`}
               >
@@ -751,7 +751,7 @@ export function SettingsView({
                     hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
                       ? "bg-emerald-500"
                       : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
-                      ? "bg-amber-500"
+                      ? "bg-zinc-500"
                       : "bg-slate-400 dark:bg-zinc-600"
                   }`}
                 />
@@ -848,7 +848,7 @@ export function SettingsView({
                   hostSettings.allowUnattendedHostGit && hostSettings.runnerAvailable
                     ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                     : hostSettings.allowUnattendedHostGit && !hostSettings.runnerAvailable
-                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 text-zinc-700 dark:text-zinc-400"
                     : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
                 }`}
               >
@@ -857,7 +857,7 @@ export function SettingsView({
                     hostSettings.allowUnattendedHostGit && hostSettings.runnerAvailable
                       ? "bg-emerald-500"
                       : hostSettings.allowUnattendedHostGit && !hostSettings.runnerAvailable
-                      ? "bg-amber-500"
+                      ? "bg-zinc-500"
                       : "bg-slate-400 dark:bg-zinc-600"
                   }`}
                 />
@@ -1019,7 +1019,7 @@ export function SettingsView({
                   notifStatus.configured && notifStatus.enabled
                     ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                     : notifStatus.configured && !notifStatus.enabled
-                    ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 text-zinc-700 dark:text-zinc-400"
                     : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
                 }`}
               >
@@ -1028,7 +1028,7 @@ export function SettingsView({
                     notifStatus.configured && notifStatus.enabled
                       ? "bg-emerald-500"
                       : notifStatus.configured && !notifStatus.enabled
-                      ? "bg-amber-500"
+                      ? "bg-zinc-500"
                       : "bg-slate-400 dark:bg-zinc-600"
                   }`}
                 />
