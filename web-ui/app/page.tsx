@@ -1294,21 +1294,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="mobile-bottom-nav md:hidden" aria-label="Mobile Navigation">
-        {(["chat", "projects", "builds", "skills", "settings"] as const).map((view) => (
-          <button
-            key={view}
-            type="button"
-            onClick={() => handleNavigate(view as any)}
-            aria-label={view}
-            className={`mobile-nav-item ${activeNavView === view ? "active" : ""}`}
-          >
-            <span className="capitalize text-[11px] font-medium">{view}</span>
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }

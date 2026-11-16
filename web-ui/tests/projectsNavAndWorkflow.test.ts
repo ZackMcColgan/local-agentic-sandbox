@@ -8,46 +8,23 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 
 describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
-  it("page.tsx renders .mobile-bottom-nav wired to NavView switcher alongside NavigationDrawer", () => {
+  it("page.tsx omits .mobile-bottom-nav and routes all views through NavigationDrawer", () => {
     const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
     assert.ok(
-      pageSrc.includes("mobile-bottom-nav"),
-      "page.tsx must render .mobile-bottom-nav per P0.5 owner ruling"
+      !pageSrc.includes("mobile-bottom-nav"),
+      "page.tsx must not render .mobile-bottom-nav"
     );
     assert.ok(
       pageSrc.includes("<NavigationDrawer"),
       "page.tsx must render NavigationDrawer for desktop rail / drawer navigation"
     );
-    // Behavioral check: each mobile-bottom-nav item switches NavView to the matching view
+    const drawerSrc = fs.readFileSync(path.resolve(__dirname, "../components/NavigationDrawer.tsx"), "utf8");
     const views = ["chat", "projects", "builds", "skills", "settings"] as const;
-    let currentView: string = "chat";
-    const handleNavigate = (v: string) => {
-      currentView = v;
-    };
-    const navElement = React.createElement(
-      "nav",
-      { className: "mobile-bottom-nav md:hidden", "aria-label": "Mobile Navigation" },
-      views.map((view) =>
-        React.createElement(
-          "button",
-          {
-            key: view,
-            type: "button",
-            onClick: () => handleNavigate(view),
-            "aria-label": view,
-            className: `mobile-nav-item ${currentView === view ? "active" : ""}`,
-          },
-          view
-        )
-      )
-    );
-    const html = renderToString(navElement);
-    assert.ok(html.includes("mobile-bottom-nav"), "Rendered nav must include mobile-bottom-nav");
     for (const view of views) {
-      assert.ok(html.includes(`aria-label="${view}"`), `Rendered nav must include ${view} item`);
-      assert.ok(pageSrc.includes(`"${view}"`), `page.tsx mobile-bottom-nav must include view '${view}'`);
-      handleNavigate(view);
-      assert.equal(currentView, view, `Clicking ${view} must switch NavView to ${view}`);
+      assert.ok(
+        drawerSrc.toLowerCase().includes(view) || pageSrc.toLowerCase().includes(view),
+        `NavigationDrawer or page.tsx must include view '${view}'`
+      );
     }
   });
 
