@@ -64,3 +64,15 @@ describe("UI-055 — DiffViewer exposes a Canvas affordance on mobile and deskto
     assert.ok(diffViewer.includes("Open in Canvas"), "DiffViewer should have an accessible Open in Canvas label/title");
   });
 });
+
+const nextConfigSrc = fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
+
+describe("UI-056 — HTML document cache headers prevent stale JS bundles across deploys", () => {
+  it("next.config.ts sets no-cache, no-store, must-revalidate on HTML routes", () => {
+    assert.ok(nextConfigSrc.includes("async headers()"), "next.config.ts should define async headers()");
+    assert.ok(
+      nextConfigSrc.includes("no-cache, no-store, must-revalidate"),
+      "next.config.ts should set Cache-Control: no-cache, no-store, must-revalidate on non-static routes",
+    );
+  });
+});
