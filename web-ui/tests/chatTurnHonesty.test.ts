@@ -208,8 +208,12 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         "Must render 'Incomplete' badge label"
       );
       assert.ok(
-        html.includes("text-amber-800") || html.includes("bg-amber-50"),
-        "Must render amber styling for incomplete badge"
+        html.includes("bg-zinc-50") && html.includes("text-zinc-800"),
+        "Must render neutral styling for incomplete badge"
+      );
+      assert.ok(
+        !html.includes("text-amber-800") && !html.includes("bg-amber-50"),
+        "Must not render banned amber styling for incomplete badge"
       );
     });
 

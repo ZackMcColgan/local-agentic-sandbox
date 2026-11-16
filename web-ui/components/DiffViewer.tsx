@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye, PanelRightOpen } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
 import { useCanvas } from "./CanvasContext";
+import { displayRepoPath } from "../lib/chatUtils";
 
 interface DiffViewerProps {
   branch?: string;
@@ -62,7 +63,7 @@ export function DiffViewer({
           )}
           <GitBranch className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate min-w-0">
-            {branch}
+            {displayRepoPath(branch)}
           </span>
           <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2 shrink-0">
             {additions > 0 && (
@@ -102,7 +103,7 @@ export function DiffViewer({
                   code: diff,
                 })
               }
-              className="flex items-center gap-1 min-h-[32px] sm:min-h-0 px-2 py-1 rounded text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-emerald-300/70 dark:border-emerald-700/50 transition-colors"
+              className="flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 rounded text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-emerald-300/70 dark:border-emerald-700/50 transition-colors"
               title="Open in Canvas"
               aria-label="Open in Canvas"
             >

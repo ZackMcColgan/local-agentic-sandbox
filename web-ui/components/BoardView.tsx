@@ -9,8 +9,6 @@ export interface BoardViewProps {
   onOpenDrawer: () => void;
   onItemCreated: (item: BoardItem) => void;
   onAskAssistant: (draftPrompt: string) => void;
-  modelLabel?: string;
-  meterLabel?: string;
 }
 
 const COLUMNS: { status: BoardStatus; label: string }[] = [
@@ -26,13 +24,12 @@ export function BoardView({
   onOpenDrawer,
   onItemCreated,
   onAskAssistant,
-  modelLabel = "Flash-Next",
-  meterLabel = "0.0K / 100K",
 }: BoardViewProps) {
   const [activeColIndex, setActiveColIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [expandedBriefIds, setExpandedBriefIds] = useState<Record<string, boolean>>({});
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -113,17 +110,21 @@ export function BoardView({
           isLive ? "shadow-[0_0_0_1px_#10b981_inset]" : ""
         }`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <div className={`h-2 w-2 flex-none rounded-full ${dotColor}`} />
-          <div className="flex-1 text-[14.5px] font-semibold tracking-[-0.1px] text-zinc-100">
+          <div className="flex-1 min-w-0 break-words line-clamp-2 text-[14.5px] font-semibold tracking-[-0.1px] text-zinc-100">
             {item.title}
           </div>
-          <div className="font-mono text-[10.5px] text-zinc-400">
+          <div className="max-w-[96px] truncate font-mono text-[10.5px] text-zinc-400">
             {item.key}
           </div>
         </div>
 
-        <div className="pt-1 text-[12.5px] leading-[1.45] text-zinc-400">
+        <div
+          className={`pt-1 text-[12.5px] leading-[1.45] text-zinc-400 ${
+            expandedBriefIds[item.id] ? "whitespace-pre-wrap" : "line-clamp-3"
+          }`}
+        >
           {item.brief}
         </div>
 
@@ -169,9 +170,18 @@ export function BoardView({
           )}
           {isLive && (
             <>
-              <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
-                Brief ›
-              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedBriefIds((prev) => ({
+                    ...prev,
+                    [item.id]: !prev[item.id],
+                  }))
+                }
+                className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400 hover:text-zinc-200"
+              >
+                {expandedBriefIds[item.id] ? "Brief ⌄" : "Brief ›"}
+              </button>
               {item.threadLink && (
                 <a
                   href={item.threadLink}
@@ -189,7 +199,7 @@ export function BoardView({
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col bg-black text-zinc-100"
+      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-black text-zinc-100"
       onTouchStart={(e) => setTouchStartX(e.touches[0]?.clientX ?? null)}
       onTouchEnd={(e) => {
         if (touchStartX === null) return;
@@ -200,12 +210,12 @@ export function BoardView({
       }}
     >
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 pt-3.5 pb-2.5 md:px-6">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-zinc-800 bg-black px-4 md:px-6">
         <button
           type="button"
           onClick={onOpenDrawer}
           aria-label="Open navigation drawer"
-          className="flex h-8 w-8 flex-col items-center justify-center gap-1 rounded-lg hover:bg-zinc-900"
+          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1 rounded-lg hover:bg-zinc-900 md:hidden"
         >
           <span className="block h-0.5 w-5 rounded bg-zinc-300" />
           <span className="block h-0.5 w-5 rounded bg-zinc-300" />
@@ -217,21 +227,14 @@ export function BoardView({
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
-          className="hidden rounded-[10px] border-[1.5px] border-[#10b981] px-3.5 py-1.5 text-[13px] font-semibold text-[#10b981] hover:bg-[#10b981]/10 md:inline-flex"
+          className="hidden min-h-[36px] rounded-[10px] border-[1.5px] border-[#10b981] px-3.5 py-1.5 text-[13px] font-semibold text-[#10b981] hover:bg-[#10b981]/10 md:inline-flex md:items-center"
         >
           + Add item
         </button>
-        <div className="rounded-full border border-[#26262b] px-2.5 py-1 text-[11px] text-zinc-400">
-          {meterLabel}
-        </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-[#26262b] px-2.5 py-1 text-[11px] text-zinc-300">
-          <span className="h-[7px] w-[7px] rounded-full bg-[#10b981]" />
-          {modelLabel}
-        </div>
       </header>
 
       {/* Search / filter row */}
-      <div className="mx-4 mt-1 flex items-center gap-2.5 rounded-xl border border-[#1d1d21] bg-[#101013] px-3.5 py-2.5 md:mx-6">
+      <div className="mx-4 mt-3 flex shrink-0 items-center gap-2.5 rounded-xl border border-[#1d1d21] bg-[#101013] px-3.5 py-2.5 md:mx-6">
         <span className="text-[15px] text-zinc-400">⌕</span>
         <input
           type="search"
@@ -241,11 +244,10 @@ export function BoardView({
           aria-label="Search the board"
           className="flex-1 bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
         />
-        <span className="text-[14px] text-zinc-300">⧩</span>
       </div>
 
       {/* Mobile: single-column carousel */}
-      <div className="flex flex-1 flex-col md:hidden">
+      <div className="flex flex-1 min-h-0 flex-col md:hidden">
         <div className="flex items-center gap-2.5 px-4 pt-4">
           <button
             type="button"
@@ -320,12 +322,12 @@ export function BoardView({
       </div>
 
       {/* Desktop: five columns side by side */}
-      <div className="hidden flex-1 grid-cols-5 gap-3.5 px-6 pt-4 pb-6 md:grid">
+      <div className="hidden flex-1 min-h-0 grid-cols-5 gap-3.5 overflow-hidden px-6 pt-4 pb-6 md:grid">
         {COLUMNS.map((col) => {
           const colItems = byStatus[col.status];
           return (
-            <div key={col.status} className="flex flex-col">
-              <div className="mb-2.5 flex items-baseline gap-2 px-0.5">
+            <div key={col.status} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+              <div className="mb-2.5 flex shrink-0 items-baseline gap-2 px-0.5">
                 <h2 className="text-[12px] font-bold tracking-[1.1px] text-zinc-300">
                   {col.label}
                 </h2>
@@ -333,13 +335,15 @@ export function BoardView({
                   {colItems.length}
                 </span>
               </div>
-              {colItems.length === 0 ? (
-                <div className="rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-5 text-center text-[12.5px] text-zinc-400">
-                  No items
-                </div>
-              ) : (
-                colItems.map(renderCard)
-              )}
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                {colItems.length === 0 ? (
+                  <div className="rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-5 text-center text-[12.5px] text-zinc-400">
+                    No items
+                  </div>
+                ) : (
+                  colItems.map(renderCard)
+                )}
+              </div>
             </div>
           );
         })}

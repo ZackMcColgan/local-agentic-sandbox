@@ -5,7 +5,8 @@ import {
   Bot,
   Plus,
   List,
-  Rocket,
+  Hammer,
+  Columns3,
   Wrench,
   FileText,
   Settings,
@@ -16,6 +17,7 @@ import {
   Trash2
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 
 export type NavView = "sessions" | "thread" | "builds" | "board" | "skills" | "morning-report" | "settings" | "security" | "projects";
 
@@ -213,7 +215,7 @@ export function NavigationDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Navigation Drawer"
-        className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-white dark:bg-zinc-900 shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-slate-100 dark:border-zinc-800 transition-transform animate-in slide-in-from-left duration-200"
+        className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-white dark:bg-[#0b0b0d] shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-slate-100 dark:border-zinc-800 transition-transform animate-in slide-in-from-left duration-200"
       >
         
         {/* Top Header: Robot Sparkle Icon + "Agent" + Close (X) button */}
@@ -287,7 +289,7 @@ export function NavigationDrawer({
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <Rocket className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <Hammer className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
             <span>Builds</span>
           </button>
 
@@ -304,7 +306,7 @@ export function NavigationDrawer({
                 : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
             }`}
           >
-            <Rocket className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
+            <Columns3 className="h-5 w-5 text-slate-600 dark:text-zinc-400 shrink-0" />
             <span>Board</span>
           </button>
 
@@ -343,7 +345,7 @@ export function NavigationDrawer({
               <span>Skills</span>
             </div>
             {pendingSkillsCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 font-bold text-[11px] shrink-0 border border-amber-200 dark:border-amber-800">
+              <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 font-bold text-[11px] shrink-0 border border-zinc-200 dark:border-zinc-800">
                 {`${pendingSkillsCount} pending`}
               </span>
             )}
@@ -377,7 +379,7 @@ export function NavigationDrawer({
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-1 px-1 py-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1 px-1 pt-1 pb-4">
           {isLoadingThreads && threads.length === 0 ? (
             <div className="space-y-2 px-1 py-1" aria-label="Loading sessions">
               {[0, 1, 2].map((i) => (
@@ -401,10 +403,10 @@ export function NavigationDrawer({
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                   onTouchCancel={handleTouchEnd}
-                  className={`group relative flex items-center justify-between rounded-[14px] px-3.5 py-3 text-xs transition-colors min-h-[44px] bg-white dark:bg-[#18181b] border ${
+                  className={`group relative flex items-center justify-between rounded-[14px] px-3.5 py-3 text-xs transition-colors min-h-[44px] bg-white dark:bg-[#141418] border ${
                     isSelected
                       ? "text-emerald-900 dark:text-emerald-200 font-semibold border-emerald-500/50"
-                      : "text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
+                      : "text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-[#222228] hover:border-slate-300 dark:hover:border-zinc-700"
                   }`}
                 >
                   <button
@@ -429,7 +431,7 @@ export function NavigationDrawer({
                     className="flex-1 min-w-0 text-left flex flex-col gap-0.5 focus:outline-none"
                     title={thread.title}
                   >
-                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{thread.title || "Untitled session"}</span>
+                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{deriveThreadDisplayTitle(thread.title)}</span>
                     {(thread as any).matchSnippet && (
                       <span className="text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
@@ -533,6 +535,22 @@ export function NavigationDrawer({
               </button>
             </div>
             <div className="space-y-2">
+              {onSelectThread && (
+                <button
+                  type="button"
+                  data-testid="action-sheet-open-btn"
+                  onClick={() => {
+                    const target = actionSheetThread;
+                    setActionSheetThread(null);
+                    onSelectThread(target.id);
+                    onClose();
+                  }}
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span>Open session</span>
+                </button>
+              )}
               {onDeleteThread && (
                 <button
                   type="button"

@@ -85,39 +85,17 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
         );
       });
 
+      const dialog = container.querySelector('[role="dialog"]');
+      assert.ok(dialog, "Expected role='dialog' on ModelBottomSheet");
+
       const findTurnOffBtn = () =>
         Array.from(container.querySelectorAll("button")).find((b) =>
           b.textContent?.includes("Turn Off")
         );
 
       const btn1 = findTurnOffBtn();
-      assert.ok(btn1, "Expected Turn Off button");
-
-      // First click: should ask for confirmation, NOT post
-      await act(async () => {
-        btn1.click();
-      });
-      assert.equal(postCount, 0, "First click must not POST /api/engine");
-      assert.ok(
-        container.textContent?.includes("Confirm Turn Off"),
-        "Expected 'Confirm Turn Off' after first click"
-      );
-
-      // Second click: should POST, receive 502, preserve 'running', and show error
-      const btn2 = findTurnOffBtn();
-      assert.ok(btn2);
-      await act(async () => {
-        btn2.click();
-      });
-      assert.equal(postCount, 1, "Second click must POST /api/engine");
-      assert.ok(
-        container.textContent?.includes("Running"),
-        "Expected status to remain Running on 502"
-      );
-      assert.ok(
-        container.textContent?.includes("Engine stop not supported"),
-        "Expected error message to be rendered"
-      );
+      assert.equal(btn1, undefined, "Turn Off control must not live in ModelBottomSheet (UI-071)");
+      assert.equal(postCount, 0, "No /api/engine POST should occur");
     } finally {
       await act(async () => root.unmount());
       globalThis.fetch = origFetch;

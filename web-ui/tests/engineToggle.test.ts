@@ -122,7 +122,7 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
 
     it("ModelBottomSheet provides Engine Management card with toggle", () => {
       assert.ok(modelSheetFile.includes("Standalone llama.cpp Engine"), "Must contain engine label");
-      assert.ok(modelSheetFile.includes("Turn Off"), "Must contain Turn Off button");
+      assert.ok(modelSheetFile.includes("Start Engine"), "Must contain Start Engine button when stopped");
       assert.ok(modelSheetFile.includes('/api/engine'), "Must call /api/engine");
     });
 

@@ -96,7 +96,7 @@ describe("parity PR3 — drawer rows + rail (board language on the secondary sur
   it("drawer session rows use the board card surface and wrap titles", () => {
     const row = around(drawer, "data-testid={`thread-row-", 200, 900);
     assert.ok(row.includes("rounded-[14px]"), "drawer rows take the board card radius");
-    assert.ok(row.includes("dark:bg-[#18181b]"), "drawer rows take the board card bg (bg-2)");
+    assert.ok(row.includes("dark:bg-[#141418]"), "drawer rows use #141418 for elevation contrast");
     const title = around(drawer, "title={thread.title}", 40, 220);
     assert.ok(title.includes("line-clamp-2"), "drawer titles wrap like board cards");
     assert.ok(!title.includes("truncate"), "drawer titles no longer single-line truncate");

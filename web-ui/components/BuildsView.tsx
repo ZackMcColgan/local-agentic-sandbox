@@ -36,24 +36,27 @@ export function BuildsView({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!mounted || !data) return;
-        const boardTasks: TaskManifest[] = Array.isArray(data.tasks)
-          ? data.tasks
-          : Array.isArray(data.threads)
-            ? data.threads.map((t: any) => ({
-                taskId: t.id || t.threadId,
-                goal: t.title || t.goal || "Board Thread",
-                status: t.status || "active",
-                toolchain: t.toolchain || "node:22",
-                branchName: t.branchName || "main",
-                milestones: Array.isArray(t.milestones) ? t.milestones : [],
-                currentMilestoneIndex: 0,
-                checkpoints: [],
-                ambiguityFlags: [],
-                journal: [],
-                startedAt: t.createdAt || new Date().toISOString(),
-                updatedAt: t.updatedAt || new Date().toISOString()
-              }))
-            : [];
+        const rawItems = Array.isArray(data.items)
+          ? data.items
+          : Array.isArray(data.tasks)
+            ? data.tasks
+            : Array.isArray(data.threads)
+              ? data.threads
+              : [];
+        const boardTasks: TaskManifest[] = rawItems.map((t: any) => ({
+          taskId: t.taskId || t.id || t.threadId,
+          goal: t.title || t.goal || t.brief || "Board Item",
+          status: t.status === "working" ? "active" : t.status || "active",
+          toolchain: t.toolchain || "node:22",
+          branchName: t.branchName || "main",
+          milestones: Array.isArray(t.milestones) ? t.milestones : [],
+          currentMilestoneIndex: 0,
+          checkpoints: [],
+          ambiguityFlags: [],
+          journal: [],
+          startedAt: t.createdAt || new Date().toISOString(),
+          updatedAt: t.updatedAt || new Date().toISOString()
+        }));
         setInternalTasks(boardTasks);
       })
       .catch(() => {});
@@ -171,7 +174,7 @@ export function BuildsView({
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
                 {pipelineTask ? (
                   <span>
-                    Branch <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">{pipelineTask.branchName || "feat/task"}</code> ({pipelineTask.status}) · Ready for 1-Click Merge &amp; Rollout
+                    Branch <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">{pipelineTask.branchName || "feat/task"}</code> ({pipelineTask.status}) · {pipelineTask.status === "completed" ? "Ready for 1-Click Merge & Rollout" : `Task ${pipelineTask.status} — not ready to deploy`}
                   </span>
                 ) : (
                   <span>No active branch undergoing deployment.</span>
@@ -182,16 +185,18 @@ export function BuildsView({
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <button
                 type="button"
-                className="py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+                disabled
+                title="No previous deploy available to roll back"
+                className="min-h-[44px] py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-semibold opacity-50 cursor-not-allowed transition-colors"
               >
                 Rollback (Previous)
               </button>
               <button
                 type="button"
                 data-testid="merge-deploy-btn"
-                disabled={!activeTask || !onDeployRun}
+                disabled={!activeTask || !onDeployRun || activeTask.status !== "completed"}
                 onClick={() => onDeployRun && activeTask && onDeployRun(activeTask.taskId)}
-                className="py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
+                className="min-h-[44px] py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
               >
                 Merge to develop & Deploy
               </button>
@@ -212,7 +217,7 @@ export function BuildsView({
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
               <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">3. 1-Click Approval</div>
               <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mt-0.5">
-                {activeTask?.status === "completed" ? "Ready" : "CEO Sign-off"}
+                {activeTask?.status === "completed" ? "Ready" : "Owner approval"}
               </div>
             </div>
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
@@ -249,7 +254,7 @@ export function BuildsView({
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                             isPlanning
-                              ? "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                              ? "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                               : isActive
                               ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                               : isCompleted

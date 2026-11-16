@@ -27,7 +27,9 @@ import {
   MessageSquare,
   Sun,
   Sparkles,
-  Settings
+  Settings,
+  Columns3,
+  FolderGit2
 } from "lucide-react";
 import { DiffViewer } from "@/components/DiffViewer";
 import { CodeBlock } from "@/components/ArtifactRenderers";
@@ -86,6 +88,7 @@ export default function Home() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [boardItems, setBoardItems] = useState<BoardItem[]>([]);
   const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
+  const [draftComposerPrompt, setDraftComposerPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeNavView !== "board") return;
@@ -716,10 +719,15 @@ export default function Home() {
 
   const handleNavigate = (view: NavView) => {
     setActiveNavView(view);
+    setIsDrawerOpen(false);
     if (view === "sessions") {
       const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
       if (isMobile) {
-        setSelectedThreadId(null);
+        // Navigating to Sessions on mobile must DISMISS the sidebar slide-over
+        // and its backdrop (mobile-sidebar-open mounts a fixed inset-0 z-40
+        // backdrop that would cover the chat and block mid-run controls like
+        // the stop button). The destination view is the chat, not the thread list.
+        setIsSidebarOpen(false);
       }
     }
   };
@@ -833,6 +841,20 @@ export default function Home() {
 
           <button
             type="button"
+            onClick={() => { setActiveNavView("board"); setViewMode("unified"); }}
+            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
+              activeNavView === "board"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
+            }`}
+            title="Board"
+          >
+            <Columns3 className="h-5 w-5 shrink-0" />
+            <span className="rail-label text-[11px] font-bold">Board</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "builds"
@@ -843,6 +865,20 @@ export default function Home() {
           >
             <Hammer className="h-5 w-5 shrink-0" />
             <span className="rail-label text-[11px] font-bold">Builds</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveNavView("projects"); setViewMode("unified"); }}
+            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
+              activeNavView === "projects"
+                ? "bg-emerald-500 text-[#052e16] border border-transparent shadow-sm"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-zinc-100 border border-transparent"
+            }`}
+            title="Projects & Folders"
+          >
+            <FolderGit2 className="h-5 w-5 shrink-0" />
+            <span className="rail-label text-[11px] font-bold">Projects</span>
           </button>
 
           <button
@@ -908,7 +944,7 @@ export default function Home() {
         />
 
         {/* 3-Pane Collapsible Workbench (Sessions View) */}
-        <div className={`${(activeNavView === "sessions" && viewMode === "unified") ? "flex" : "hidden"} flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative`}>
+        <div className={`${((activeNavView === "sessions" || !["board", "builds", "projects", "morning-report", "skills", "settings"].includes(activeNavView)) && viewMode === "unified") ? "flex" : "hidden"} flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative`}>
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
@@ -937,6 +973,8 @@ export default function Home() {
           >
             <ChatStream
               messages={messages}
+              draftPrompt={draftComposerPrompt}
+              onClearDraftPrompt={() => setDraftComposerPrompt(null)}
               setMessages={setMessages}
               onTracesUpdate={handleTracesUpdate}
               liveTraces={traces}
@@ -1195,8 +1233,11 @@ export default function Home() {
             items={boardItems}
             onOpenDrawer={() => setIsDrawerOpen(true)}
             onItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
-            onAskAssistant={() => {
-              setActiveNavView("thread");
+            onAskAssistant={(draftPrompt) => {
+              setDraftComposerPrompt(draftPrompt);
+              setActiveNavView("sessions");
+              setViewMode("unified");
+              void handleNewThread();
             }}
           />
         )}

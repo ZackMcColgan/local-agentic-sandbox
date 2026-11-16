@@ -67,7 +67,7 @@ import {
 } from "../lib/svgUtils";
 import { AgentMode, isReasoningEffortSupported } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
+import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp, displayRepoPath, displayBasename } from "../lib/chatUtils";
 import { DiffViewer } from "./DiffViewer";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
@@ -151,6 +151,8 @@ export interface UiHostApproval {
 }
 
 interface ChatStreamProps {
+  draftPrompt?: string | null;
+  onClearDraftPrompt?: () => void;
   onTracesUpdate: (traces: ExecutionTraceItem[]) => void;
   liveTraces?: ExecutionTraceItem[];
   activeModel: string;
@@ -337,6 +339,8 @@ function UserMessageContent({ content }: { content: string }) {
 }
 
 export function ChatStream({
+  draftPrompt,
+  onClearDraftPrompt,
   onTracesUpdate,
   liveTraces,
   activeModel,
@@ -397,10 +401,16 @@ export function ChatStream({
   });
   const [pendingSteers, setPendingSteers] = useState<string[]>([]);
   const [isSubmittingSteer, setIsSubmittingSteer] = useState(false);
-  const [modelPillForm, setModelPillForm] = useState<"A" | "B">("A");
 
   // Single M3 input field: starts completely empty, no starter chips, no default prompt!
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (draftPrompt) {
+      setInput(draftPrompt);
+      onClearDraftPrompt?.();
+    }
+  }, [draftPrompt, onClearDraftPrompt]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStoppingTask, setIsStoppingTask] = useState(false);
   const [activeThreadState, setActiveThreadId] = useState<string | undefined>(threadId);
@@ -2169,13 +2179,13 @@ export function ChatStream({
           {activeSimulation && (
             <div
               data-testid="simulation-badge"
-              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
+              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
               title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
               <span className="sr-only sm:not-sr-only">SIMULATION</span>
               <span aria-hidden="true" className="sm:hidden">SIM</span>
-              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-amber-600 dark:text-amber-300">
+              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
                 (${activeSimulation.scenarioKey})
               </span>
               <button
@@ -2187,7 +2197,7 @@ export function ChatStream({
                   }
                   setActiveSimulation(null);
                 }}
-                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 transition-colors"
+                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
                 title="Exit simulation mode"
                 aria-label="Exit simulation mode"
               >
@@ -2219,7 +2229,7 @@ export function ChatStream({
                     displayContextTokens > 85000
                       ? "text-rose-600 dark:text-rose-400"
                       : displayContextTokens > 70000
-                      ? "text-amber-600 dark:text-amber-400"
+                      ? "text-zinc-600 dark:text-zinc-400"
                       : "text-slate-700 dark:text-zinc-100"
                   }`}
                 >
@@ -2243,7 +2253,7 @@ export function ChatStream({
                   displayContextTokens > 85000
                     ? "bg-rose-500"
                     : displayContextTokens > 70000
-                    ? "bg-amber-500"
+                    ? "bg-zinc-500"
                     : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
                 }`}
                 style={{
@@ -2278,11 +2288,11 @@ export function ChatStream({
               type="button"
               data-testid="host-disconnect-chip"
               onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-dashed border-amber-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
+              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
               title={runnerReason || "Host runner is unreachable — open Settings"}
               aria-label="Host disconnected — open Settings"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
               <span className="hidden min-[420px]:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
               <span className="min-[420px]:hidden">DISCONNECTED</span>
               <span className="sr-only">HOST DISCONNECTED</span>
@@ -2294,29 +2304,13 @@ export function ChatStream({
             <button
               type="button"
               onClick={onOpenModelSheet}
-              className={`min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap ${
-                modelPillForm === "A"
-                  ? "bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
-                  : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-[#34d399] hover:bg-emerald-500/15"
-              }`}
+              className="min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
               title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
               aria-label={`Configure model: currently ${shortModelLabel}`}
             >
-              {modelPillForm === "A" && (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
-              )}
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
               <span className="whitespace-nowrap">{shortModelLabel}</span>
               <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              data-testid="model-pill-form-toggle"
-              onClick={() => setModelPillForm((prev) => (prev === "A" ? "B" : "A"))}
-              className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-black text-[10px] font-mono font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors"
-              title={`Model pill form: ${modelPillForm} (click to preview Form ${modelPillForm === "A" ? "B" : "A"})`}
-              aria-label={`Switch model pill form (currently ${modelPillForm})`}
-            >
-              {modelPillForm}
             </button>
           </div>
 
@@ -2428,7 +2422,7 @@ export function ChatStream({
         onWheel={handleContainerWheel}
         onTouchMove={handleContainerTouchMove}
         data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-[16px] pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
       >
         <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
         {deduplicatedMessages.length === 0 && !activeTask && (
@@ -2572,18 +2566,18 @@ export function ChatStream({
                       {m.status === "streaming" && (
                         <div
                           data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-300 dark:border-cyan-800 text-[11px] font-mono font-medium text-cyan-800 dark:text-cyan-300 w-fit"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           <span>Streaming</span>
                         </div>
                       )}
                       {m.status === "incomplete" && (
                         <div
                           data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-[11px] font-mono font-medium text-amber-800 dark:text-amber-300 w-fit"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-300 dark:border-zinc-800 text-[11px] font-mono font-medium text-zinc-800 dark:text-zinc-300 w-fit"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-pulse" />
                           <span>Incomplete</span>
                         </div>
                       )}
@@ -2600,7 +2594,7 @@ export function ChatStream({
                           type="button"
                           data-testid="incomplete-retry"
                           onClick={handleRetry}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-400 dark:border-amber-700 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/60 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900/40 border border-zinc-400 dark:border-zinc-700 text-[11px] font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                         >
                           <RefreshCw className="h-3 w-3" />
                           <span>Retry turn</span>
@@ -2674,7 +2668,7 @@ export function ChatStream({
                             data-testid="turn-done-chip"
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
                           >
-                            <span>{`✓ DONE · ${m.traces?.length ?? 0} traces · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
+                            <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
                           </div>
                         )}
                         {shouldRenderThinking && (
@@ -2727,7 +2721,7 @@ export function ChatStream({
                               >
                                 <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
                                   {human.badge === "browser" && (
-                                    <span className="inline-flex items-center gap-1 text-cyan-600 dark:text-cyan-400 font-semibold shrink-0">
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                                       <Globe className="h-3.5 w-3.5" />
                                       <span>Web</span>
                                     </span>
@@ -2760,7 +2754,7 @@ export function ChatStream({
                                   )}
                                 </div>
 
-                                <div className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-sans font-medium shrink-0 ml-auto">
+                                <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-sans font-medium shrink-0 ml-auto">
                                   <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
                                   <span className="hidden sm:inline">{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
                                   {isExpanded ? (
@@ -2773,7 +2767,7 @@ export function ChatStream({
 
                               {isExpanded && (
                                 <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                                  <pre className="p-2 rounded bg-zinc-900 text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                                  <pre className="p-2 rounded bg-zinc-900 text-emerald-300 overflow-x-auto whitespace-pre-wrap">
                                     {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
                                   </pre>
                                 </div>
@@ -3195,7 +3189,7 @@ export function ChatStream({
                               defaultOpen={false}
                             />
                             {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
-                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20">
                                 Truncated: showing {MAX_DIFF_LINES_CAP} of {diffItem.totalDiffLines} diff lines ({diffItem.omittedLines} omitted)
                               </div>
                             ) : null}
@@ -3218,7 +3212,10 @@ export function ChatStream({
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <span className="font-semibold truncate">{pathLabel}</span>
+                              <div className="min-w-0">
+                                <div className="font-semibold truncate">{displayBasename(pathLabel)}</div>
+                                <div className="text-[10px] text-zinc-400 truncate">{displayRepoPath(pathLabel)}</div>
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0 ml-2">
                               <a
@@ -3353,12 +3350,12 @@ export function ChatStream({
                   <div
                     key={approval.id}
                     data-testid="host-approval-card"
-                    className="w-full rounded-2xl border border-amber-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
+                    className="w-full rounded-2xl border border-zinc-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
                   >
                     <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        <ShieldAlert className="h-4 w-4 text-zinc-600 dark:text-zinc-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                           Security Approval Required
                         </span>
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono font-medium text-slate-700 dark:text-zinc-300">
@@ -3438,7 +3435,7 @@ export function ChatStream({
                             : approval.status === "denied"
                             ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
                             : approval.status === "expired"
-                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                            ? "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20"
                             : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
                         }`}
                       >
@@ -3510,9 +3507,9 @@ export function ChatStream({
             return (
               <div
                 data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
               >
-                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400 shrink-0" />
                 <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>
               </div>
             );
