@@ -13,6 +13,7 @@ import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
 import { superviseStalledThread } from "./inAppSupervisor";
+import type { ChunkBudgetConfig } from "../jobChunking";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
 
@@ -125,6 +126,8 @@ export interface ThreadMessage {
   readDedups?: ReadDedupMeta[];
   /** TOKEN ECONOMICS (a): per-job rollup for this turn (rounds, prompt integral, output, compactions). */
   tokenEconomics?: JobTokenRollup;
+  /** Per-job chunk budget override (maxRounds, maxDurationMs, marathonOptOut). */
+  chunkBudget?: ChunkBudgetConfig | null;
 }
 
 /**
@@ -268,6 +271,8 @@ export interface Thread {
    * with the board item; no separate UI surface in this pass.
    */
   tokenEconomics?: JobTokenRollup;
+  /** Per-job chunk budget override (maxRounds, maxDurationMs, marathonOptOut). */
+  chunkBudget?: ChunkBudgetConfig | null;
 }
 
 export function resolveThreadsDir(): string {
@@ -1203,6 +1208,7 @@ export class ThreadStore {
   /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
   resumedToThreadId?: string;
     hostAccess?: boolean;
+    chunkBudget?: ChunkBudgetConfig | null;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     deletedThreadIds.delete(threadId);
@@ -1220,6 +1226,7 @@ export class ThreadStore {
       taskId: params.taskId,
       scope: params.scope,
       isTest: params.isTest ?? false,
+      ...(params.chunkBudget !== undefined ? { chunkBudget: params.chunkBudget } : {}),
       messages: params.initialPrompt
         ? [
             {

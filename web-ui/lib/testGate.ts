@@ -93,6 +93,17 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chatTurnGate") || p.includes("app/api/chat/route"),
     tests: ["tests/jobQueueRoute.test.ts"]
   },
+  {
+    match: (p) =>
+      p.includes("app/api/threads/route") ||
+      p.includes("lib/jobChunking") ||
+      p.includes("threadsLaunchChunkBudget.test.ts"),
+    tests: ["tests/threadsLaunchChunkBudget.test.ts"],
+  },
+  {
+    match: (p) => p.includes("eval/run.mjs") || p.includes("evalRunnerJobMode.test.ts"),
+    tests: ["tests/evalRunnerJobMode.test.ts"],
+  },
   // Lane C UI polish (header, canvas & desktop top bar)
   {
     match: (p) =>
