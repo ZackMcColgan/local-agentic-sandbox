@@ -819,6 +819,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/ci/"),
     tests: ["tests/workerCiFeedback.test.ts", "tests/productionTestRunnerWiring.test.ts"]
   },
+  {
+    match: (p) => p.includes("lib/deploy/selfDeployVerified"),
+    tests: ["tests/selfDeployVerified.test.ts"]
+  },
   // Self-Deploy Pipeline (Sprint 12 Phase 10)
   {
     match: (p) => p.includes("lib/deploy/selfDeploy"),
