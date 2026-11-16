@@ -88,8 +88,8 @@ export async function runJobMode({
   chunkRounds,
   pollIntervalMs = 15000,
   timeoutMs = 90 * 60 * 1000,
-  tracePath,
-  taskId,
+  tracePath = "",
+  taskId = "",
   fetchImpl = fetch,
 }) {
   const baseUrl = (sandboxUrl || "http://127.0.0.1:3000").replace(/\/$/, "");
