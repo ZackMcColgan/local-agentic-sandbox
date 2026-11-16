@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import {
   RotateCcw,
   Check,
@@ -172,9 +173,16 @@ export function LiveRunBlock({
               </span>
             )}
             {isCompleted && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                • Completed
-              </span>
+              task.completionStamp ? (
+                <CompletionVerificationBadge
+                  stamp={task.completionStamp}
+                  gaps={task.verificationGaps}
+                />
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  • Completed
+                </span>
+              )
             )}
             {task.parentRunId && (
               <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">

@@ -41,12 +41,61 @@ import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
+import {
+  verifyCompletionClaims,
+  stampCompletion,
+  type CompletionClaims,
+  type VerificationAdapters
+} from "../finishVerification";
 import { evaluatePrePrGate } from "../prePrPipeline";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
 import { WorkerGitOps } from "../git/workerGitOps";
 import { SelfDeployPipeline } from "../deploy/selfDeploy";
 import { notify } from "../notifications";
+
+export function buildVerificationAdapters(repoRoot: string): VerificationAdapters {
+  return {
+    resolveCommit: async (sha: string) => {
+      try {
+        execFileSync("git", ["rev-parse", "--verify", `${sha}^{commit}`], {
+          cwd: repoRoot,
+          stdio: "ignore"
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    branchExists: async (branch: string) => {
+      try {
+        execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+          cwd: repoRoot,
+          stdio: "ignore"
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    fileExists: async (filePath: string) => {
+      const resolved = path.isAbsolute(filePath) ? filePath : path.join(repoRoot, filePath);
+      return fs.existsSync(resolved);
+    },
+    checkPr: async (prNumber: number) => {
+      try {
+        const out = execFileSync(
+          "gh",
+          ["pr", "view", String(prNumber), "--json", "state", "--jq", ".state"],
+          { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+        ).trim();
+        return { exists: true, state: out || null };
+      } catch {
+        return { exists: false, state: null };
+      }
+    }
+  };
+}
 
 let sycophancyProbeExecuted = false;
 
@@ -1726,7 +1775,29 @@ export class OvernightSupervisor {
           message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
         });
       } else {
+        const repoRoot = options?.repoRoot || process.cwd();
+        const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(repoRoot);
+        const milestoneCommits = task.milestones
+          .map((m) => (m as any).commitSha as string | undefined)
+          .filter((sha): sha is string => Boolean(sha));
+        const claims: CompletionClaims = (options as any)?.completionClaims || {
+          commits: milestoneCommits,
+          files: expectedArtifacts,
+          gatePassed: task.gatePassed
+        };
+        const claimVerification = await verifyCompletionClaims(claims, adapters);
+        const stamped = stampCompletion(task, claimVerification);
+        task.completionStamp = stamped.completionStamp;
+        task.verificationGaps = stamped.verificationGaps;
         task.status = "completed";
+        if (claimVerification.status === "completed-unverified") {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            action: "Completion stamped completed-unverified",
+            message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`
+          });
+        }
       }
       task.completedAt = new Date().toISOString();
 
