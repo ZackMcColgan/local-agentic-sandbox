@@ -939,6 +939,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report"),
     tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
   },
+  {
+    match: (p) => p.includes("deploy/k8s/observability.yaml"),
+    tests: ["tests/otelJaegerDedup.test.ts"]
+  },
   // Charter modules (P0.1)
   {
     match: (p) => p.includes("lib/liveStatus"),
