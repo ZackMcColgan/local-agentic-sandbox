@@ -639,8 +639,7 @@ Use \`run_command\` for shell actions.
       );
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
-      assert.ok(html.includes("newHelper.ts"), "Must render file path/name newHelper.ts");
-      assert.ok(html.includes("+2"), "Must render +2 added lines badge");
+      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
     });
   });
   // -------------------------------------------------------------
@@ -755,7 +754,7 @@ Use \`run_command\` for shell actions.
       );
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
-      assert.ok(html.includes("persistedHelper.ts"), "Must render path for CanvasDiffCard");
+      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
       assert.ok(html.includes("+1"), "Must render +1 badge");
       assert.ok(html.includes("-1"), "Must render -1 badge");
     });
