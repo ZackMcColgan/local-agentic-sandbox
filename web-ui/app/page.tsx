@@ -983,7 +983,7 @@ export default function Home() {
                   aria-label="Open file explorer"
                   data-testid="explorer-toggle-btn"
                   title="File Explorer"
-                  className="absolute top-14 right-3 z-20 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition-colors"
+                  className="absolute top-[68px] right-3 z-20 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition-colors"
                 >
                   <FolderTree className="w-4 h-4" />
                 </button>
