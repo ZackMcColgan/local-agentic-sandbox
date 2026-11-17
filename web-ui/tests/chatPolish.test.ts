@@ -755,6 +755,9 @@ Use \`run_command\` for shell actions.
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
       assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
+      const text = html.replace(/<!--[\s\S]*?-->/g, "");
+      assert.ok(text.includes("+1"), "Must render +1 added-lines count");
+      assert.ok(text.includes("−1"), "Must render −1 removed-lines count");
 
 
     });
