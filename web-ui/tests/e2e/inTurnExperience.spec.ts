@@ -16,7 +16,7 @@ for (const width of PHONE_WIDTHS) {
     test("displays 1-decimal K label, visible min fill at 3.9K, and proportional amber fill at 72.4K", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       let turnCount = 0;
       await page.route("**/api/chat", async (route) => {
@@ -86,7 +86,7 @@ for (const width of PHONE_WIDTHS) {
     test("streams tool rows live without 0 traces empty state and highlights in-flight row", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       let releaseSecondTrace!: () => void;
       const secondTraceGate = new Promise<void>((r) => {
@@ -180,7 +180,7 @@ for (const width of PHONE_WIDTHS) {
     test("shows Round N, elapsed timer, Live badge, and collapsible Show full brief", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       let releaseDone!: () => void;
       const doneGate = new Promise<void>((r) => {
@@ -250,7 +250,7 @@ for (const width of PHONE_WIDTHS) {
     test("persistent RUNNING pill stays visible while streaming and is replaced by DONE on completion", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       let releaseDone!: () => void;
       const doneGate = new Promise<void>((r) => {
@@ -318,7 +318,7 @@ for (const width of PHONE_WIDTHS) {
     test("shows amber DISCONNECTED with retry count on stream abort, then green RECOVERED on reconcile", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       await page.route("**/api/chat", async (route) => {
         await route.abort("failed");
@@ -348,7 +348,7 @@ for (const width of PHONE_WIDTHS) {
     test("never renders canned fallback prose and renders streamed thought verbatim", async ({
       page,
     }) => {
-      await setupStubbedEngineRoutes(page);
+      await setupStubbedEngineRoutes(page, { threads: [] });
 
       let releaseThought!: () => void;
       const thoughtGate = new Promise<void>((r) => {
@@ -404,6 +404,25 @@ for (const width of PHONE_WIDTHS) {
       releaseDone();
       await expect(page.getByText("Done.")).toBeVisible();
       server.close();
+    });
+  });
+
+  test.describe(`P7 — Greeting empty-state (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("renders greeting text intact without stray superscript or clipping", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+      await page.goto("/");
+
+      await expect(page.locator("header").first()).toBeVisible();
+      await expect(page.locator("sup")).toHaveCount(0);
     });
   });
 }
