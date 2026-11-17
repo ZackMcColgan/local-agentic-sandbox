@@ -1000,7 +1000,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Test gate itself
   {
     match: (p) => p.includes("lib/testGate") || p.includes("scripts/test-gate"),
-    tests: ["tests/testGate.test.ts", "tests/gateManifestCompleteness.test.ts"]
+    tests: ["tests/testGate.test.ts", "tests/gateManifestCompleteness.test.ts", "tests/testGateRunner.test.ts"]
   },
   // Overnight dogfood runner
   {
@@ -1319,6 +1319,64 @@ export function parseTapCounts(output: string): { passed: number; failed: number
   return { passed, failed };
 }
 
+/** Dedicated 15-minute timeout for the Playwright e2e stage (excluded from the 90s unit budget). */
+export const PLAYWRIGHT_STAGE_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Partitions web-ui test paths into Playwright e2e specs (`tests/e2e/*.spec.ts`)
+ * and tsx unit/integration tests.
+ */
+export function partitionWebUiTests(tests: string[]): { playwrightSpecs: string[]; tsxTests: string[] } {
+  const playwrightSpecs: string[] = [];
+  const tsxTests: string[] = [];
+
+  for (const testPath of tests) {
+    const normalized = testPath.replace(/\\/g, "/");
+    if (normalized.includes("tests/e2e/") && normalized.endsWith(".spec.ts")) {
+      playwrightSpecs.push(testPath);
+    } else {
+      tsxTests.push(testPath);
+    }
+  }
+
+  return { playwrightSpecs, tsxTests };
+}
+
+/**
+ * Parses Playwright's JSON reporter output (`playwright-report/test-results.json`).
+ * Throws on missing, malformed, or incomplete reports so failures are never masked as zeros.
+ */
+export function parsePlaywrightReport(reportPath: string): { passed: number; failed: number } {
+  const raw = fs.readFileSync(reportPath, "utf8");
+  const parsed = JSON.parse(raw) as {
+    errors?: unknown[];
+    stats?: {
+      expected?: unknown;
+      unexpected?: unknown;
+      flaky?: unknown;
+    };
+  };
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !parsed.stats ||
+    typeof parsed.stats !== "object" ||
+    typeof parsed.stats.expected !== "number" ||
+    typeof parsed.stats.unexpected !== "number"
+  ) {
+    throw new Error(`Invalid Playwright JSON report structure at ${reportPath}`);
+  }
+
+  const passed = parsed.stats.expected + (typeof parsed.stats.flaky === "number" ? parsed.stats.flaky : 0);
+  const topLevelErrors = Array.isArray(parsed.errors) ? parsed.errors.length : 0;
+  const failed =
+    parsed.stats.unexpected +
+    (parsed.stats.unexpected === 0 && topLevelErrors > 0 ? topLevelErrors : 0);
+
+  return { passed, failed };
+}
+
 /**
  * Runs the change-aware test gate.
  * Budgeted (<90s), zero-coverage-is-an-error.
@@ -1388,6 +1446,9 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   let passedCount = 0;
   let failedCount = 0;
   let runError: string | undefined;
+  let playwrightDurationMs = 0;
+
+  const { playwrightSpecs, tsxTests } = partitionWebUiTests(webUiTestsToRun);
 
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
@@ -1396,7 +1457,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
 
   // 0. Run TypeScript typecheck (tsc --noEmit) for web-ui
   try {
-    const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+    const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
     const tscOut = execSync("npx tsc --noEmit", {
       cwd: webUiCwd,
       encoding: "utf8",
@@ -1413,11 +1474,11 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
   }
 
-  // 1. Run web-ui tests if any mapped
-  if (webUiTestsToRun.length > 0) {
+  // 1. Run web-ui tsx tests if any mapped
+  if (tsxTests.length > 0) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
-      const cmd = `npx tsx --tsconfig tsconfig.json --test ${webUiTestsToRun.join(" ")}`;
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+      const cmd = `npx tsx --tsconfig tsconfig.json --test ${tsxTests.join(" ")}`;
       const out = execSync(cmd, {
         cwd: webUiCwd,
         encoding: "utf8",
@@ -1449,10 +1510,82 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     }
   }
 
+  // 1b. Run Playwright e2e specs if any mapped (dedicated timeout, excluded from 90s unit budget)
+  if (playwrightSpecs.length > 0) {
+    const pwStart = Date.now();
+    try {
+      const buildIdPath = path.join(webUiCwd, ".next", "BUILD_ID");
+      let buildOk = fs.existsSync(buildIdPath);
+      if (!buildOk) {
+        try {
+          const buildOut = execSync("npm run build", {
+            cwd: webUiCwd,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            env: childEnv,
+            timeout: PLAYWRIGHT_STAGE_TIMEOUT_MS
+          });
+          testOutput += `\n--- Playwright Stage Build ---\n${buildOut}`;
+          buildOk = true;
+        } catch (err: any) {
+          const stdout = err.stdout ? err.stdout.toString() : "";
+          const stderr = err.stderr ? err.stderr.toString() : "";
+          testOutput += `\n--- Playwright Stage Build Failure ---\n${stdout}\n${stderr}`;
+          failedCount += 1;
+          runError = `Playwright pre-build failed: ${err.message}`;
+        }
+      }
+
+      if (buildOk) {
+        const reportPath = path.join(webUiCwd, "playwright-report", "test-results.json");
+        const pwRemainingMs = Math.max(1, PLAYWRIGHT_STAGE_TIMEOUT_MS - (Date.now() - pwStart));
+        const cmd = `npx playwright test ${playwrightSpecs.join(" ")}`;
+        try {
+          const pwOut = execSync(cmd, {
+            cwd: webUiCwd,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            env: childEnv,
+            timeout: pwRemainingMs
+          });
+          testOutput += `\n--- Playwright Spec Stage ---\n${pwOut}`;
+          const counts = parsePlaywrightReport(reportPath);
+          if (counts.passed === 0 && counts.failed === 0) {
+            failedCount += 1;
+            runError = "Playwright test runner produced empty test results";
+          } else {
+            passedCount += counts.passed;
+            failedCount += counts.failed;
+            testOutput += `\n[Playwright Spec Stage] passed=${counts.passed} failed=${counts.failed}\n`;
+          }
+        } catch (err: any) {
+          const stdout = err.stdout ? err.stdout.toString() : "";
+          const stderr = err.stderr ? err.stderr.toString() : "";
+          testOutput += `\n--- Playwright Spec Stage ---\n${stdout}\n${stderr}`;
+          try {
+            const counts = parsePlaywrightReport(reportPath);
+            if (counts.passed === 0 && counts.failed === 0) {
+              failedCount += 1;
+            } else {
+              passedCount += counts.passed;
+              failedCount += counts.failed > 0 ? counts.failed : 1;
+              testOutput += `\n[Playwright Spec Stage] passed=${counts.passed} failed=${counts.failed}\n`;
+            }
+          } catch {
+            failedCount += 1;
+          }
+          runError = err.message;
+        }
+      }
+    } finally {
+      playwrightDurationMs = Date.now() - pwStart;
+    }
+  }
+
   // 2. Run mcp-server tests if mcp-server was touched
   if (mcpIncluded && fs.existsSync(mcpServerCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
       const mcpOut = execSync("npm test", {
         cwd: mcpServerCwd,
         encoding: "utf8",
@@ -1487,7 +1620,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   // 3. Run browser-mcp tests if browser-mcp was touched
   if (browserMcpIncluded && fs.existsSync(browserMcpCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
       const browserOut = execSync("npm test", {
         cwd: browserMcpCwd,
         encoding: "utf8",
@@ -1519,11 +1652,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     }
   }
 
-  const rawDurationSeconds = (Date.now() - startTime) / 1000;
+  const totalElapsedMs = Date.now() - startTime;
+  const rawDurationSeconds = totalElapsedMs / 1000;
   const durationSeconds = parseFloat(rawDurationSeconds.toFixed(3));
+  const nonPlaywrightDurationSeconds = (totalElapsedMs - playwrightDurationMs) / 1000;
 
-  // Check budget overrun or execution timeout
-  const timedOut = rawDurationSeconds > budgetSeconds ||
+  // Check budget overrun (excluding Playwright stage duration) or execution timeout
+  const timedOut = nonPlaywrightDurationSeconds > budgetSeconds ||
     (runError && (runError.includes("ETIMEDOUT") || runError.includes("timed out")));
 
   if (timedOut) {
