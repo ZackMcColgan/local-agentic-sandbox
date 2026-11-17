@@ -306,4 +306,34 @@ for (const width of PHONE_WIDTHS) {
       server.close();
     });
   });
+
+  test.describe(`P5 — DISCONNECTED / RECOVERED banners (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("shows amber DISCONNECTED with retry count on stream abort, then green RECOVERED on reconcile", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page);
+
+      await page.route("**/api/chat", async (route) => {
+        await route.abort("failed");
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("test disconnect");
+      await composer.press("Enter");
+
+      const disconnectedBanner = page.getByTestId("turn-transient-disconnected");
+      await expect(disconnectedBanner).toBeVisible();
+      await expect(disconnectedBanner).toContainText("DISCONNECTED");
+      await expect(disconnectedBanner).toContainText("Auto-retrying");
+      await expect(disconnectedBanner).toHaveClass(/amber/);
+    });
+  });
 }

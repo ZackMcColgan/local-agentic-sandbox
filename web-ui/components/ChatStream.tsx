@@ -436,6 +436,9 @@ export function ChatStream({
   const turnStartedAtRef = useRef<number | null>(null);
   const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
   const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
+  const [disconnectedAtMs, setDisconnectedAtMs] = useState<number | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState<number>(1);
+  const [recoveredAfterSec, setRecoveredAfterSec] = useState<number>(1);
   const [completedTurnMsgId, setCompletedTurnMsgId] = useState<string | null>(null);
 
   // Any stream-visible change counts as activity for the freshness readout.
@@ -3535,10 +3538,10 @@ export function ChatStream({
             return (
               <div
                 data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
+                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
               >
-                <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400 shrink-0" />
-                <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/3)`}</span>
               </div>
             );
           }
@@ -3548,7 +3551,7 @@ export function ChatStream({
                 data-testid="stream-recovered-banner"
                 className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium w-full max-w-xl"
               >
-                <span>↻ RECOVERED · Reconnected — turn state restored from the record</span>
+                <span>{`↻ RECOVERED · Reconnected after ${recoveredAfterSec}s`}</span>
               </div>
             );
           }
