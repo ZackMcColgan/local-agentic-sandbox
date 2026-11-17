@@ -7,14 +7,17 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
   const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
   const drawioPath = path.resolve(repoRoot, "docs/architecture.drawio");
   const svgPath = path.resolve(repoRoot, "docs/architecture.drawio.svg");
+  const companionSvgPath = path.resolve(repoRoot, "docs/architecture.svg");
 
   it("both architecture.drawio and architecture.drawio.svg exist", () => {
     assert.ok(fs.existsSync(drawioPath), "docs/architecture.drawio must exist");
     assert.ok(fs.existsSync(svgPath), "docs/architecture.drawio.svg must exist");
+    assert.ok(fs.existsSync(companionSvgPath), "docs/architecture.svg must exist");
   });
 
-  it("architecture.drawio.svg contains all current Strata & host-bridge topology components", () => {
+  it("architecture.drawio.svg and architecture.svg contain all current Strata & host-bridge topology components", () => {
     const svgContent = fs.readFileSync(svgPath, "utf8");
+    const companionSvgContent = fs.readFileSync(companionSvgPath, "utf8");
 
     const requiredLabels = [
       "Operator",
@@ -31,6 +34,10 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
       assert.ok(
         svgContent.includes(label),
         `docs/architecture.drawio.svg must contain label: "${label}"`
+      );
+      assert.ok(
+        companionSvgContent.includes(label),
+        `docs/architecture.svg must contain label: "${label}"`
       );
     }
   });

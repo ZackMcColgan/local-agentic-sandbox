@@ -55,8 +55,9 @@
 <rect x="918.0" y="71" width="64.0" height="18" rx="4" fill="#ffffff" stroke="none"/>
 <text x="950" y="84" text-anchor="middle" font-size="11" fill="#64748b">/jaeger/</text>
 <polyline points="520,280 420,280" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
-<rect x="379.5" y="254" width="181.0" height="18" rx="4" fill="#ffffff" stroke="none"/>
-<text x="470" y="267" text-anchor="middle" font-size="11" fill="#64748b">local inference — no cloud</text>
+<rect x="422" y="246" width="96" height="30" rx="4" fill="#ffffff" stroke="none"/>
+<text x="470" y="258" text-anchor="middle" font-size="11" fill="#64748b">local inference</text>
+<text x="470" y="272" text-anchor="middle" font-size="11" fill="#64748b">— no cloud</text>
 <polyline points="865,232 920,232" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
 <polyline points="1027,265 1027,310" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
 <polyline points="665,380 665,445" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
