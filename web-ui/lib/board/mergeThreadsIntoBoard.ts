@@ -17,7 +17,7 @@ export function mapThreadStatusToBoardStatus(status: string | undefined): BoardS
  */
 export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<BoardItem[]> {
   const store = new ThreadStore(resolveThreadsDir());
-  const threads = await store.listThreads();
+  const threads = await store.listThreadSummaries();
   if (threads.length === 0) {
     return boardItems;
   }
