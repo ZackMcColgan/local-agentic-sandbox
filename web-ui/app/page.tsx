@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { ChatStream, ChatMessage } from "@/components/ChatStream";
+import { ExplorerPanel } from "@/components/ExplorerPanel";
 import { ThreadsSidebar } from "@/components/ThreadsSidebar";
 import { ModelBottomSheet } from "@/components/ModelBottomSheet";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
@@ -23,6 +24,7 @@ import {
   Hammer,
   Shield,
   Activity,
+  FolderTree,
   Menu,
   MessageSquare,
   Sun,
@@ -108,6 +110,7 @@ export default function Home() {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
+  const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
@@ -971,7 +974,21 @@ export default function Home() {
           <main
             className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
           >
-            <ChatStream
+            <div className="flex flex-1 min-h-0 flex-row relative">
+            <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
+              {!isExplorerOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsExplorerOpen(true)}
+                  aria-label="Open file explorer"
+                  data-testid="explorer-toggle-btn"
+                  title="File Explorer"
+                  className="absolute top-[68px] right-3 z-20 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition-colors"
+                >
+                  <FolderTree className="w-4 h-4" />
+                </button>
+              )}
+              <ChatStream
               messages={messages}
               draftPrompt={draftComposerPrompt}
               onClearDraftPrompt={() => setDraftComposerPrompt(null)}
@@ -1030,6 +1047,12 @@ export default function Home() {
               initialSimulation={initialSimulation || undefined}
               placeholder="Message..."
             />
+            </div>
+            <ExplorerPanel
+              open={isExplorerOpen}
+              onClose={() => setIsExplorerOpen(false)}
+            />
+            </div>
           </main>
 
           {/* Right Workspace Inspector Panel */}
