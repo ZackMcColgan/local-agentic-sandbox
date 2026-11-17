@@ -15,18 +15,18 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
 
   test("Type-confusion & injection & unicode strings in Board titles render as inert text without layout break", async ({ page }) => {
     const hostileCards = [
-      { id: "c1", title: "12345", column: "todo", status: "todo" },
-      { id: "c2", title: "0", column: "todo", status: "todo" },
-      { id: "c3", title: "-1", column: "todo", status: "todo" },
-      { id: "c4", title: "1e9", column: "todo", status: "todo" },
-      { id: "c5", title: "null", column: "todo", status: "todo" },
-      { id: "c6", title: "undefined", column: "todo", status: "todo" },
-      { id: "c7", title: "NaN", column: "todo", status: "todo" },
-      { id: "c8", title: "<script>alert(1)</script>", column: "todo", status: "todo" },
-      { id: "c9", title: "<img src=x onerror=alert(1)>", column: "todo", status: "todo" },
-      { id: "c10", title: "Zalgo a\u0301\u0302\u0303\u0304\u0305\u0306", column: "todo", status: "todo" },
-      { id: "c11", title: "\u202ERTL_OVERRIDE_TEST", column: "todo", status: "todo" },
-      { id: "c12", title: "🚀🔥🧪", column: "todo", status: "todo" },
+      { id: "c1", title: "12345", status: "queued" },
+      { id: "c2", title: "0", status: "queued" },
+      { id: "c3", title: "-1", status: "queued" },
+      { id: "c4", title: "1e9", status: "queued" },
+      { id: "c5", title: "null", status: "queued" },
+      { id: "c6", title: "undefined", status: "queued" },
+      { id: "c7", title: "NaN", status: "queued" },
+      { id: "c8", title: "<script>alert(1)</script>", status: "queued" },
+      { id: "c9", title: "<img src=x onerror=alert(1)>", status: "queued" },
+      { id: "c10", title: "Zalgo a\u0301\u0302\u0303\u0304\u0305\u0306", status: "queued" },
+      { id: "c11", title: "\u202ERTL_OVERRIDE_TEST", status: "queued" },
+      { id: "c12", title: "🚀🔥🧪", status: "queued" },
     ].map((c) => ({ ...c, priority: "medium", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
 
     await page.route("**/api/board**", async (route) => {
@@ -73,7 +73,7 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: 'data: {"type":"token","text":"<img src=x onerror=alert(1)> safe"}\n\ndata: {"type":"done"}\n\n',
+        body: 'data: {"type":"token","content":"<img src=x onerror=alert(1)> safe"}\n\ndata: {"type":"done"}\n\n',
       });
     });
 
@@ -85,5 +85,6 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
 
     expect(dialogFired).toBe(false);
     await expect(page.getByText("<script>alert(1)</script>").first()).toBeVisible();
+    await expect(page.getByText("<img src=x onerror=alert(1)> safe").first()).toBeVisible();
   });
 });
