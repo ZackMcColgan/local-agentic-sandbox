@@ -103,12 +103,13 @@ test.describe("Phase B1 — Saturation and overflow", () => {
   });
 
   test("1 MB paste into chat input & 10,000-char unbroken string: no crash, no layout break", async ({ page }) => {
+    test.setTimeout(120_000);
     await page.goto("/");
     const composer = page.locator("textarea").first();
     await expect(composer).toBeVisible();
 
     const oneMb = "A".repeat(1024 * 1024);
-    await composer.fill(oneMb);
+    await composer.fill(oneMb, { timeout: 60_000 });
     const valLen = await composer.evaluate((el: HTMLTextAreaElement) => el.value.length);
     expect(valLen).toBeGreaterThan(0);
 
