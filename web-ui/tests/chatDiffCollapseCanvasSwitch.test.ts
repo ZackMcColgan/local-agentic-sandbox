@@ -112,11 +112,8 @@ describe("UI-023/UI-024 — source wiring", () => {
     assert.match(diffViewerSrc, /useState\(defaultOpen\)/, "open state initializes from the prop");
   });
 
-  it("ChatStream renders chat diff cards collapsed by default", () => {
-    const i = chatStreamSrc.indexOf('data-testid="chat-diff-card"');
-    assert.ok(i >= 0, "chat diff card block present");
-    const block = chatStreamSrc.slice(i, i + 1600);
-    assert.ok(block.includes("defaultOpen={false}"), "chat DiffViewer starts collapsed");
+  it("ChatStream renders chat diff cards via CanvasDiffCard", () => {
+    assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
   });
 
   it("ChatStream hands the canvas the full diff, not the capped preview", () => {

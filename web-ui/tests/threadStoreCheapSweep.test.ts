@@ -180,6 +180,7 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     const nowIso = new Date().toISOString();
     writeThreadFile(dir, {
       id: "t-board-1",
+      taskId: "task-board-1",
       title: "Board Thread",
       status: "active",
       createdAt: nowIso,
