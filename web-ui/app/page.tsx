@@ -784,6 +784,11 @@ export default function Home() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onDeleteThread={handleDeleteThread}
+        onOpenExplorer={() => {
+          setActiveNavView("sessions");
+          setViewMode("unified");
+          setIsExplorerOpen(true);
+        }}
       />
 
       {/* Modal Bottom Sheet for Model & Thinking Effort */}
@@ -976,18 +981,6 @@ export default function Home() {
           >
             <div className="flex flex-1 min-h-0 flex-row relative">
             <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
-              {!isExplorerOpen && (
-                <button
-                  type="button"
-                  onClick={() => setIsExplorerOpen(true)}
-                  aria-label="Open file explorer"
-                  data-testid="explorer-toggle-btn"
-                  title="File Explorer"
-                  className="absolute top-[68px] right-3 z-20 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition-colors"
-                >
-                  <FolderTree className="w-4 h-4" />
-                </button>
-              )}
               <ChatStream
               messages={messages}
               draftPrompt={draftComposerPrompt}

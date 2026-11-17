@@ -11,6 +11,7 @@ import {
   FileText,
   Settings,
   FolderGit2,
+  FolderTree,
   X,
   MessageSquare,
   MoreHorizontal,
@@ -33,6 +34,7 @@ interface NavigationDrawerProps {
   onSelectThread?: (threadId: string) => void;
   onDeleteThread?: (threadId: string) => void;
   isLoadingThreads?: boolean;
+  onOpenExplorer?: () => void;
 }
 
 export function NavigationDrawer({
@@ -46,7 +48,8 @@ export function NavigationDrawer({
   selectedThreadId,
   onSelectThread,
   onDeleteThread,
-  isLoadingThreads = false
+  isLoadingThreads = false,
+  onOpenExplorer
 }: NavigationDrawerProps) {
   const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
   const [confirmDeleteThread, setConfirmDeleteThread] = useState<Thread | null>(null);
@@ -326,6 +329,22 @@ export function NavigationDrawer({
             <FolderGit2 className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
             <span>Projects &amp; Folders</span>
           </button>
+
+          {/* Destination: File Explorer */}
+          {onOpenExplorer && (
+            <button
+              type="button"
+              data-testid="explorer-drawer-entry"
+              onClick={() => {
+                onOpenExplorer();
+                onClose();
+              }}
+              className="w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+            >
+              <FolderTree className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+              <span>File Explorer</span>
+            </button>
+          )}
 
           {/* Destination: Skills with pending badge */}
           <button

@@ -54,7 +54,7 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
     for (const task of tasks) {
       const ghostId = `thread-${task.taskId}`;
       const hasMatchingThread = threads.some(
-        (t) => t.id === task.taskId || t.id === ghostId,
+        (t) => t.id === task.taskId || t.id === ghostId || t.taskId === task.taskId,
       );
       if (hasMatchingThread) {
         continue;
