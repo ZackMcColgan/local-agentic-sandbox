@@ -77,8 +77,12 @@ test.describe("Phase B2 — Start/stop abuse", () => {
     await page.waitForTimeout(2500);
 
     // Navigate back to Sessions / Chat via Back button or drawer
-    const backBtn = page.locator('button[aria-label="Back to chat"]:visible, button[aria-label="Open navigation menu"]:visible').first();
+    const backBtn = page.locator('button[aria-label="Back to chat"]:visible, button[aria-label="Open navigation drawer"]:visible, button[aria-label="Open navigation menu"]:visible').first();
     await backBtn.click();
+    const chatNavBtn = page.locator('[data-testid="navigation-drawer"] button:has-text("Chat"), div.rounded-r-3xl button:has-text("Chat")').first();
+    if (await chatNavBtn.isVisible().catch(() => false)) {
+      await chatNavBtn.click();
+    }
     await page.waitForTimeout(300);
 
     // No stuck stop button
