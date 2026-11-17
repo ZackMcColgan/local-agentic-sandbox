@@ -2240,40 +2240,21 @@ export function ChatStream({
             title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
           >
             <div className="flex flex-col gap-1">
-              <span className="font-mono text-[11px] sm:text-xs leading-none whitespace-nowrap">
-                <span
-                  className={`font-semibold ${
-                    displayContextTokens > 85000
-                      ? "text-rose-600 dark:text-rose-400"
-                      : displayContextTokens > 70000
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-slate-700 dark:text-zinc-100"
-                  }`}
-                >
+              <span className="font-mono text-[12.3px] leading-none whitespace-nowrap">
+                <span className="font-normal text-slate-700 dark:text-zinc-100">
                   {formatContextK(displayContextTokens)}
                 </span>{" "}
-                <span className="text-slate-500 dark:text-zinc-400">
+                <span className="font-normal text-zinc-400">
                   / {Math.round(contextStats.budgetTokens / 1000)}K
                 </span>
               </span>
-            {/* Board parity (FINAL-DESIGN): the meter is bare — value over a
-                128px track on phones, 240px on desktop — with the emerald
-                gradient fill and the redline tick at the 85% (85K) compaction
-                trigger. State colors stay semantic: amber past 70%, rose past
-                the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[6px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-[3px] bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
                 data-testid="context-meter-fill"
-                className={`h-full rounded-full transition-all ${
-                  displayContextTokens > 85000
-                    ? "bg-rose-500"
-                    : displayContextTokens > 70000
-                    ? "bg-amber-500"
-                    : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
-                }`}
+                className="h-full rounded-[3px] transition-all bg-gradient-to-r from-[#10b981] to-[#34d399]"
                 style={{
                   width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`,
                   minWidth: displayContextTokens > 0 ? "4px" : "0px",
@@ -2283,7 +2264,7 @@ export function ChatStream({
                 data-testid="context-meter-tick"
                 aria-hidden="true"
                 title="85K compaction trigger"
-                className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] rounded-full bg-rose-500"
+                className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
               />
             </div>
             </div>

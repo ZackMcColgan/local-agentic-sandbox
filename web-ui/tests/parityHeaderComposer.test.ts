@@ -41,11 +41,11 @@ describe("parity PR1 — meter track geometry (board: 128px phone / 240px deskto
     assert.ok(!track.includes("w-[40px]"), "the 40px narrow tier is removed");
   });
 
-  it("normal-state fill uses the board emerald gradient", () => {
+  it("fill uses the FINAL-DESIGN two-stop emerald gradient at every level", () => {
     const track = segment('data-testid="context-meter-track"', 900);
     assert.ok(
-      track.includes("from-emerald-600") && track.includes("to-emerald-400"),
-      "fill gradient emerald-600 -> emerald-400 in the normal state",
+      track.includes("from-[#10b981]") && track.includes("to-[#34d399]"),
+      "fill gradient #10b981 -> #34d399",
     );
   });
 });
