@@ -49,6 +49,13 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("ciSpeed.test.ts") ||
+      p.includes(".github/workflows/ci.yml") ||
+      p.includes(".github/workflows/chaos.yml"),
+    tests: ["tests/ciSpeed.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("explorerFs.test.ts") ||
       p.includes("explorerFs.ts"),
     tests: ["tests/explorerFs.test.ts"],
