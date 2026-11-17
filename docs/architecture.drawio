@@ -59,7 +59,7 @@
         <mxCell id="browser" value="&lt;b&gt;Browser MCP&lt;/b&gt;&lt;br/&gt;isolated pod · web egress&lt;br/&gt;with SSRF guards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
           <mxGeometry x="948" y="508" width="308" height="112" as="geometry"/>
         </mxCell>
-        <mxCell id="strata" value="&lt;b&gt;Strata inference engine&lt;/b&gt;&lt;br/&gt;host process · RX 9070 XT · ROCm/HIP&lt;br/&gt;resident ~125B-class MoE&lt;br/&gt;27B fallback · 128K context&lt;br/&gt;served locally on :8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+        <mxCell id="strata" value="&lt;b&gt;Strata inference engine&lt;/b&gt;&lt;br/&gt;host process · RX 9070 XT · ROCm/HIP&lt;br/&gt;Qwen3.8-Flash-Next (125B MoE)&lt;br/&gt;27B fallback · 128K context&lt;br/&gt;served locally on :8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
           <mxGeometry x="64" y="244" width="264" height="140" as="geometry"/>
         </mxCell>
         <mxCell id="hostbridge" value="&lt;b&gt;Host bridge&lt;/b&gt;&lt;br/&gt;host process&lt;br/&gt;sole external boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
