@@ -89,6 +89,14 @@ body {
 .live-activity-pulse {
   animation: live-activity-pulse-slide 1.6s ease-in-out infinite;
 }
+@media (prefers-reduced-motion: reduce) {
+  .live-activity-pulse {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.75;
+  }
+}
 
 /* Touch-friendly horizontal scroller hiding ugly scrollbars */
 .no-scrollbar::-webkit-scrollbar {

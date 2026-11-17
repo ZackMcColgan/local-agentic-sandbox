@@ -215,4 +215,21 @@ describe("uir-0 — header diet in ChatStream", () => {
     const page = readSrc("app/page.tsx");
     assert.ok(page.includes("onOpenSettings"), "page wires onOpenSettings into ChatStream");
   });
+
+  it("LiveActivityHeader indeterminate bar reads emerald on mobile and handles reduced-motion", () => {
+    const headerSrc = readSrc("components/LiveActivityHeader.tsx");
+    const cssSrc = readSrc("app/globals.css");
+    assert.ok(
+      headerSrc.includes("bg-emerald-500/20"),
+      "indeterminate track uses emerald tint instead of pure grey"
+    );
+    assert.ok(
+      headerSrc.includes("h-[3px]"),
+      "indeterminate track is 3px tall for mobile legibility"
+    );
+    assert.ok(
+      cssSrc.includes("prefers-reduced-motion: reduce") && cssSrc.includes(".live-activity-pulse"),
+      "globals.css provides a reduced-motion fallback for .live-activity-pulse"
+    );
+  });
 });
