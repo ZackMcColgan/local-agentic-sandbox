@@ -69,17 +69,19 @@ The system supports two access path modes controlled by environment variable `AC
 1. `gateway` (default): Runs `kind-gateway` container; bypasses `kubectl port-forward`.
 2. `legacy-port-forward`: Runs legacy `kubectl port-forward svc/web-ui 3001:3000` child process.
 
-### Operational Switching via AI-ON / AI-OFF
+### Operational Switching via Repo Gateway & Bridge Scripts
 ```powershell
-# Default: Start in gateway mode
-C:\AI\ai-control\AI-ON.ps1
+# Default: Start kind-gateway and launch LAN bridge in gateway mode
+.\scripts\kind-gateway\start-gateway.ps1
+$env:ACCESS_PATH_MODE = "gateway"
+node scripts/lan-bridge.js
 
-# Rollback: Start in legacy port-forward mode
-C:\AI\ai-control\AI-ON.ps1 -AccessPathMode legacy-port-forward
+# Rollback: Run LAN bridge in legacy port-forward mode
+$env:ACCESS_PATH_MODE = "legacy-port-forward"
+node scripts/lan-bridge.js
 
-# Teardown matching mode
-C:\AI\ai-control\AI-OFF.ps1 -AccessPathMode gateway
-C:\AI\ai-control\AI-OFF.ps1 -AccessPathMode legacy-port-forward
+# Teardown kind-gateway container
+.\scripts\kind-gateway\stop-gateway.ps1
 ```
 
 ---
