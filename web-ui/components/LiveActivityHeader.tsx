@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { formatElapsedDuration } from "../lib/chatUtils";
 import { freshnessFor } from "../lib/liveActivity";
+import type { ExecutionTraceItem } from "./ExecutionTrace";
 
 interface LiveActivityHeaderProps {
   /** Wall-clock ms when the turn started. */
@@ -12,6 +13,8 @@ interface LiveActivityHeaderProps {
   /** Current round, when known. Omitted from the meta when unknown. */
   round?: number;
   traceCount: number;
+  /** Live tool traces for the active turn. */
+  traces?: ExecutionTraceItem[];
   /** Phase in words, e.g. "Writing code — host_run_file_write". */
   phaseLabel: string;
   /** Current micro-activity line; defaults to "Resolving…". */
@@ -33,6 +36,7 @@ export function LiveActivityHeader({
   lastActivityAtMs,
   round,
   traceCount,
+  traces = [],
   phaseLabel,
   activityLabel = null,
   isStreaming = true,
@@ -53,7 +57,7 @@ export function LiveActivityHeader({
 
   const metaParts: string[] = [];
   if (round != null && round > 0) metaParts.push(`Round ${round}`);
-  metaParts.push(`${traceCount} ${traceCount === 1 ? "trace" : "traces"}`);
+  if (traceCount > 0) metaParts.push(`${traceCount} ${traceCount === 1 ? "trace" : "traces"}`);
 
   // Board phase line: the activity in words, the tool as a mono muted tail
   // ("Writing code — host_run_file_write").
@@ -118,23 +122,78 @@ export function LiveActivityHeader({
 
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
-        <div className="relative h-[2px] rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden" aria-hidden="true">
-          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400" />
+        <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+          <div className="h-full w-1/3 rounded-full bg-emerald-500 animate-pulse" />
         </div>
       )}
 
-      {/* Current activity + mono meta */}
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs text-slate-500 dark:text-zinc-400 truncate">
-          {activityLabel && activityLabel.trim() ? activityLabel.trim() : "Resolving…"}
-        </span>
-        <span
-          data-testid="live-activity-meta"
-          className="font-mono tabular-nums text-[11px] text-slate-500 dark:text-zinc-400 shrink-0"
-        >
-          {metaParts.join(" · ")}
-        </span>
-      </div>
+      {/* Meta line */}
+      {(metaParts.length > 0 || activityLabel) && (
+        <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+          <span className="truncate">{activityLabel || metaParts.join(" · ")}</span>
+          {activityLabel && metaParts.length > 0 && (
+            <span className="shrink-0">{metaParts.join(" · ")}</span>
+          )}
+        </div>
+      )}
+
+      {/* Live trace rows */}
+      {traces.length > 0 && (
+        <div className="pt-1 space-y-1 border-t border-slate-200/70 dark:border-zinc-800/80">
+          {traces.map((trace, idx) => {
+            const tr = trace as ExecutionTraceItem & {
+              id?: string;
+              status?: string;
+              durationMs?: number;
+              args?: Record<string, unknown>;
+              error?: string;
+            };
+            const isFailed = tr.status === "error" || tr.status === "failed" || Boolean(tr.error);
+            const isInFlight =
+              !isFailed &&
+              (tr.status === "running" ||
+                (isStreaming && idx === traces.length - 1 && tr.durationMs == null && tr.status !== "completed"));
+            const target =
+              (typeof tr.args?.path === "string" && tr.args.path) ||
+              (typeof tr.args?.file === "string" && tr.args.file) ||
+              (typeof tr.args?.command === "string" && tr.args.command) ||
+              null;
+            return (
+              <div
+                key={tr.id || `${tr.tool}-${idx}`}
+                data-testid="live-trace-row"
+                data-in-flight={isInFlight ? "true" : "false"}
+                className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg text-xs font-mono ${
+                  isFailed
+                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                    : isInFlight
+                    ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+                    : "text-zinc-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {isFailed ? (
+                    <span className="text-rose-400 shrink-0">✕</span>
+                  ) : isInFlight ? (
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  ) : (
+                    <span className="text-emerald-400 shrink-0">✓</span>
+                  )}
+                  <span className="font-semibold truncate">{tr.tool}</span>
+                  {target && <span className="text-zinc-400 truncate">{target}</span>}
+                </div>
+                <span className="text-[11px] text-zinc-400 tabular-nums shrink-0">
+                  {tr.durationMs != null
+                    ? `${tr.durationMs}ms`
+                    : isInFlight
+                    ? formatElapsedDuration(elapsedSeconds)
+                    : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

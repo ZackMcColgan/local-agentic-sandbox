@@ -2661,6 +2661,7 @@ export function ChatStream({
                             lastActivityAtMs={lastActivityAtMs}
                             round={m.roundPromptTokens?.length}
                             traceCount={traceCount}
+                            traces={isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces}
                             phaseLabel={phaseLabel}
                             activityLabel={statusTool ? null : streamStatus}
                             isStreaming={isStreamingThis}
