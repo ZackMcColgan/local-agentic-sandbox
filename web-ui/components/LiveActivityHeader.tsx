@@ -122,7 +122,7 @@ export function LiveActivityHeader({
 
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
-        <div className="relative h-[2px] rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden" aria-hidden="true">
+        <div className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden" aria-hidden="true">
           <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400" />
         </div>
       )}
