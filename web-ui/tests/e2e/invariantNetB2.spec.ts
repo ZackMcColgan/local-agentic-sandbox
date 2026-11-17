@@ -22,13 +22,13 @@ test.describe("Phase B2 — Start/stop abuse", () => {
         await route.fulfill({
           status: 200,
           contentType: "text/event-stream",
-          body: 'data: {"done":true}\n\n',
+          body: 'data: {"type":"done"}\n\n',
         });
       } else {
         await route.fulfill({
           status: 200,
           contentType: "text/event-stream",
-          body: 'data: {"type":"token","text":"Recovered response"}\n\ndata: {"type":"done"}\n\n',
+          body: 'data: {"type":"token","content":"Recovered response"}\n\ndata: {"type":"done"}\n\n',
         });
       }
     });
@@ -62,7 +62,7 @@ test.describe("Phase B2 — Start/stop abuse", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: 'data: {"content":"Mid-stream done"}\n\ndata: {"done":true}\n\n',
+        body: 'data: {"type":"token","content":"Mid-stream done"}\n\ndata: {"type":"done"}\n\n',
       });
     });
 
@@ -77,7 +77,7 @@ test.describe("Phase B2 — Start/stop abuse", () => {
     await page.waitForTimeout(2500);
 
     // Navigate back to Sessions / Chat via Back button or drawer
-    const backBtn = page.locator('button[aria-label="Back to chat"], button[aria-label="Open navigation menu"]:visible').first();
+    const backBtn = page.locator('button[aria-label="Back to chat"]:visible, button[aria-label="Open navigation menu"]:visible').first();
     await backBtn.click();
     await page.waitForTimeout(300);
 
