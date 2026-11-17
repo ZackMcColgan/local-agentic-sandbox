@@ -108,7 +108,9 @@ describe("parity PR2 — RUNNING pill + activity header details", () => {
   it("LiveRunBlock running state is the board's solid emerald pill", () => {
     const pill = segment(liveRunBlock, 'data-testid="running-pill"', 500);
     assert.ok(pill.includes("bg-emerald-500"), "solid emerald fill");
-    assert.ok(pill.includes("text-[#052e16]"), "dark text on the pill");
+    assert.ok(pill.includes("text-[#04120c]"), "near-black text on the pill");
+    assert.ok(pill.includes("border-transparent"), "no dark border on solid pill");
+    assert.ok(pill.includes("bg-[#04120c]"), "near-black pulse dot on solid pill");
     assert.ok(pill.includes("RUNNING ·"), "pill reads RUNNING · elapsed");
   });
 
@@ -123,8 +125,12 @@ describe("parity PR2 — RUNNING pill + activity header details", () => {
       "hero elapsed 27px phone / 34px desktop",
     );
     assert.ok(
-      activityHeader.includes("from-emerald-600 via-emerald-500 to-emerald-400"),
+      activityHeader.includes("from-emerald-500 to-emerald-400"),
       "pulse track carries the moving emerald gradient",
+    );
+    assert.ok(
+      !activityHeader.includes("from-emerald-600"),
+      "pulse track does not lead with dark emerald-600",
     );
     assert.ok(
       activityHeader.includes('data-testid="live-activity-tool"'),

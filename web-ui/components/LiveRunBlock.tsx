@@ -159,9 +159,9 @@ export function LiveRunBlock({
             {!isPlanning && isRunning && (
               <span
                 data-testid="running-pill"
-                className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500 text-[#052e16] flex items-center gap-1.5"
+                className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500 border border-transparent text-[#04120c] flex items-center gap-1.5"
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-[#052e16] animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#04120c] animate-pulse" />
                 <span>RUNNING · {formatElapsedDuration(elapsedSeconds)}</span>
               </span>
             )}
