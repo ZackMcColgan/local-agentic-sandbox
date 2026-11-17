@@ -59,7 +59,7 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME
-              value: "enterprise-ai-portal"
+              value: "local-agentic-sandbox"
             - name: MODEL_NAME
               value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: PLANNER_MODEL

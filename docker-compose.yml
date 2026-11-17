@@ -60,7 +60,7 @@ services:
     build:
       context: ./web-ui
       dockerfile: Dockerfile
-    container_name: enterprise-ai-portal
+    container_name: local-agentic-sandbox
     ports:
       - "3001:3000"
     environment:
@@ -71,7 +71,7 @@ services:
       - MODEL_NAME=swift-15-27b-mtp
       - PLANNER_MODEL=swift-15-27b-mtp
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
-      - OTEL_SERVICE_NAME=enterprise-ai-portal
+      - OTEL_SERVICE_NAME=local-agentic-sandbox
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
