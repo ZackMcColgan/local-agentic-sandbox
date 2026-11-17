@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildDiffFiles } from "../components/ArtifactCanvas";
 import { CodeBlock } from "../components/ArtifactRenderers";
 
-describe("E1: buildDiffFiles deduplication (UI-032 + NEW-ARGON-07)", () => {
+describe("E1: buildDiffFiles deduplication (UI-032)", () => {
   it("deduplicates same path and prefers unified diff with removedLines > 0 or @@ hunk headers", () => {
     const fileWriteDiff = {
       path: "./hero.svg",

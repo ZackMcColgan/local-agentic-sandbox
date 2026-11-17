@@ -1,6 +1,6 @@
 # Resource Budgets & Two-Tier Sandbox Architecture
 
-**Target Environment**: AMD Ryzen 7 5700X3D, AMD Radeon RX 9070 XT 16GB VRAM, ROCm, Ollama, Local Kubernetes, Next.js 15, Node.js 22 LTS.
+**Target Environment**: AMD Ryzen 7 5700X3D, AMD Radeon RX 9070 XT 16GB VRAM, ROCm, Strata (`:8080`), Host Bridge (`:8765`), Local Kubernetes, Next.js 15, Node.js 22 LTS.
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 1.1 Hardware Baseline & Allocation
 - **GPU**: AMD Radeon RX 9070 XT (16 GB GDDR6 VRAM).
-- **Driver / Runtime**: AMD ROCm runtime with direct host passthrough to Ollama inference engine.
+- **Driver / Runtime**: AMD ROCm runtime with direct host passthrough to the Strata inference engine (`:8080`) and host-bridge (`:8765`).
 - **Model Roster**: User-managed via configuration (e.g. Qwen 3.8 / Gemma 4). The platform reads model names dynamically from config and does not prescribe hardcoded rosters.
 
 ### 1.2 Concurrency & Headroom
@@ -17,7 +17,7 @@
 
 ### 1.3 Cancellation & Zero VRAM Leakage Guarantee
 - Every running worker session is bound to an `AbortController` cancellation token.
-- Triggering cancellation (e.g. via mobile Web UI kill switch or API `/api/tasks/cancel`) immediately signals Ollama to abort streaming inference, halts child tool processes, and recovers active worker count to 0 (idle) in under 30 seconds.
+- Triggering cancellation (e.g. via mobile Web UI kill switch or API `/api/tasks/cancel`) immediately signals Strata to abort streaming inference, halts child tool processes, and recovers active worker count to 0 (idle) in under 30 seconds.
 
 ---
 

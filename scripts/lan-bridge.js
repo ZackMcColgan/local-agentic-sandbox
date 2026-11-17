@@ -85,6 +85,16 @@ function startStrata() {
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.resolve(__dirname, "../deploy/ssl/cert.pem");
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.resolve(__dirname, "../deploy/ssl/key.pem");
 
+function ensureSslCerts() {
+  if (fs.existsSync(SSL_CERT_PATH) && fs.existsSync(SSL_KEY_PATH)) return;
+  fs.mkdirSync(path.dirname(SSL_CERT_PATH), { recursive: true });
+  fs.mkdirSync(path.dirname(SSL_KEY_PATH), { recursive: true });
+  execSync(
+    `openssl req -x509 -newkey rsa:2048 -nodes -keyout "${SSL_KEY_PATH}" -out "${SSL_CERT_PATH}" -days 365 -subj "/CN=localhost"`,
+    { stdio: "ignore" }
+  );
+}
+
 const DEFAULT_BIND_HOST = "0.0.0.0";
 const STARTUP_WARNING = '[LAN Bridge] WARNING: unauthenticated — any device on the local network can reach the UI and execute shell commands via workspace_run_command. See README.md "LAN bridge security" section.';
 
@@ -219,6 +229,7 @@ function createProxyServer(listenPort) {
 
   let server;
   if (isHttps) {
+    try { ensureSslCerts(); } catch {}
     if (!fs.existsSync(SSL_CERT_PATH) || !fs.existsSync(SSL_KEY_PATH)) {
       console.warn(`[LAN Bridge :443] Notice: SSL cert/key not found at ${SSL_CERT_PATH}. Skipping HTTPS.`);
       return null;

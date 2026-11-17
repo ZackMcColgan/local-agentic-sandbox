@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { ThreadStore, activeExecutionSet } from "../lib/threads/threadStore";
 
-describe("NEW-ARGON-02: listThreadSummaries avoids re-reading full thread bodies", () => {
+describe("listThreadSummaries avoids re-reading full thread bodies", () => {
   let tmpDir: string;
   let store: ThreadStore;
 

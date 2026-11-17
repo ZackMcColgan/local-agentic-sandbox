@@ -12,34 +12,23 @@ Docker Compose is **not** used for the live deployment.
 | mcp-runner | K8s | Sandboxed code execution |
 | qdrant | K8s | Semantic memory |
 | otel-collector | K8s | Observability |
-| ollama | **Host** (native, not K8s) | K8s reaches it via `host.docker.internal:11434` |
+| strata | **Host** (native, not K8s) | K8s reaches it via `strata-service` (`host.docker.internal:8080`) |
+| host-bridge | **Host** (native, not K8s) | K8s reaches it via `host-runner-service` (`host.docker.internal:8765`) |
 
-The in-cluster `ollama-rocm-gpu` deployment is intentionally scaled to 0.
-Ollama runs natively on the host for GPU access.
+Strata and host-bridge run natively on the host for GPU and OS keyring access.
 
 ## Prerequisites
 
-### 1. Ollama host configuration (required)
+### 1. Host Strata & Host-Bridge configuration (required)
 
-K8s pods reach Ollama via `host.docker.internal`. Ollama's DNS-rebinding
-protection 403s any non-loopback Host header unless it's bound to `0.0.0.0`.
-
-**Windows (Machine-level, survives reboots):**
-```powershell
-# Admin PowerShell
-[System.Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0:11434", "Machine")
-[System.Environment]::SetEnvironmentVariable("OLLAMA_ORIGINS", "*", "Machine")
-```
-
-Then fully quit Ollama (tray icon → Quit) and restart it.
+K8s pods reach Strata on `:8080` and host-bridge on `:8765` via `host.docker.internal`.
 
 **Verify:**
 ```powershell
-netstat -an | Select-String "LISTENING" | Select-String "11434"
-# Want: 0.0.0.0:11434  (not 127.0.0.1:11434)
+netstat -an | Select-String "LISTENING" | Select-String "8080|8765"
 
-kubectl exec -it deployment/web-ui -n local-agentic-sandbox -- wget -qO- http://ollama-service:11434/api/tags
-# Want: JSON model list (not 403)
+kubectl exec -it deployment/web-ui -n local-agentic-sandbox -- wget -qO- http://strata-service:8080/health
+kubectl exec -it deployment/web-ui -n local-agentic-sandbox -- wget -qO- http://host-runner-service:8765/health
 ```
 
 ### 2. Ingress controller (for phone/LAN access without port-forward)
@@ -94,7 +83,7 @@ kubectl apply -k deploy/k8s
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Ollama engine returned 403` | Ollama bound to loopback | Set `OLLAMA_HOST=0.0.0.0:11434`, restart Ollama |
+| `Strata / host-bridge unreachable` | Host service not running or bound to loopback | Start Strata (`:8080`) / host-bridge (`:8765`) on host |
 | Tasks stuck at 25%, milestones `pending` | Old image (pre-fix) | `make k8s-deploy` to rebuild |
 | `kubectl` connection refused | Docker Desktop not running | Start Docker Desktop, wait for whale icon |
 | UI not loading after deploy | Port-forward died | Restart port-forward |

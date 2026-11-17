@@ -12,14 +12,14 @@
 
 ## What it is
 
-`local-agentic-sandbox` is a self-hosted agentic engineering system built around one idea: **an AI that does real work must be verifiable.** Every job runs as a chat thread, is decomposed into small per-file patches that are committed as they land, and is gated by tests and CI before anything merges. The cluster that runs it holds no credentials and has no internet egress; the only path out is a host-side bridge with approval gates for destructive actions.
+`local-agentic-sandbox` is a self-hosted agentic engineering system built around one idea: **an AI that does real work must be verifiable.** Every job runs as a chat thread, is decomposed into small per-file patches that are committed as they land, and is gated by tests and CI before anything merges. `web-ui` has zero external internet egress; `browser-mcp` is an isolated SSRF-guarded web-fetch pod (`:80`/`:443`); `mcp-runner` may reach GitHub CIDRs on `:443` only; credentials live only in the host OS keyring behind the host bridge.
 
 - **Threads are the job container** — a conversation is the unit of work: prompt, plan, patches, checkpoints, and deliverables all live in one durable thread that survives restarts and streams live to phone and desktop at the same time.
 - **Patches, not blobs** — long jobs are chunked into small, individually committed patches with durable checkpoints and handoffs, so a killed session resumes instead of restarting.
-- **Fail-closed verification** — a change-aware local test gate, a five-job CI pipeline, an invariant test net, and an adversarial "chaos" battery (overflow inputs, stop/start abuse, unhappy paths) stand between a model's output and `develop`.
+- **Fail-closed verification** — a change-aware local test gate, a seven-check CI pipeline, an invariant test net, and an adversarial "chaos" battery (overflow inputs, stop/start abuse, unhappy paths) stand between a model's output and `develop`.
 - **A work board, not a black box** — queued, working, and done items are visible and editable in the UI; the operator can steer, stop (stop aborts the server-side turn), and inspect everything from a phone.
 - **Full observability** — every agent turn is an OpenTelemetry trace (a real 51-span turn is shown below), viewable in Jaeger.
-- **Local inference** — a ~125B-class MoE model served on the host GPU (AMD RX 9070 XT, ROCm/HIP) with a `swift-15-27b-mtp` (27B Q3_K_M with Multi-Token Prediction) fallback; 128K context. Nothing leaves the machine.
+- **Local inference** — **Strata** inference engine on the host GPU (AMD RX 9070 XT, ROCm/HIP), serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`), 128K context, with `swift-15-27b-mtp` fallback. Nothing leaves the machine.
 
 ![A real agent turn as a Jaeger trace: 51 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
 
@@ -37,26 +37,20 @@
 | **Pre-Validation & Gates** | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts) | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback |
 | **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts) | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser |
 | **Durable Run Ledger** | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts) | SQLite-backed task state, pause/resume lifecycle, and restart lineage |
+| **Thread Store** | [`web-ui/lib/threads/threadStore.ts`](./web-ui/lib/threads/threadStore.ts) | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads |
 | **Safe Git Operations** | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts) | Argv-safe git commands, branch isolation, and commit validation immune to shell injection |
-| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, image push, Kubernetes rollout wait, and rollback on failure |
-| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary, path traversal guards, and ReDoS-safe workspace inspection |
+| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, local save/import, Kubernetes `set image` rollout wait, and rollback on failure |
+| **Host Bridge** | [`host-bridge/`](./host-bridge/) | Sole external boundary (host process): host tools, git/GitHub, internet access behind an approval classifier; credentials live only in the host OS keyring |
+| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary in a read-only, capability-dropped pod; path traversal guards and ReDoS-safe workspace inspection |
+| **Browser MCP** | [`browser-mcp/`](./browser-mcp/) | Isolated web-fetch pod with SSRF guards (RFC 1918 blocked) |
+| **Observability** | [`deploy/k8s/observability.yaml`](./deploy/k8s/observability.yaml) | OpenTelemetry collector + Jaeger; every turn, tool call, and model round is a span |
+| **Eval Pack** | [`eval/`](./eval/) | Graded task suite used as the end-to-end regression for chunked job execution |
 | **Enterprise AI Governance** | [`docs/AI_GOVERNANCE.md`](./docs/AI_GOVERNANCE.md) | Deterministic runtime enforcement, NIST AI RMF 1.0 mapping, and OWASP Agentic Top 10 controls |
-
-| Component | Where | Role |
-| :--- | :--- | :--- |
-| **Web UI / orchestrator** | `web-ui/` (Next.js, kind cluster) | Chat threads, supervisor and scheduler, the work board, self-deploy, the test gate (`web-ui/lib/testGate.ts`) |
-| **Supervisor** | `web-ui/lib/subagents/supervisor.ts` | Checkpointed multi-agent loop: plan → build → verify, crash recovery from durable checkpoints |
-| **Thread store** | `web-ui/lib/threads/threadStore.ts` | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads |
-| **Host bridge** | `host-bridge/` (host process) | The sole external boundary: host tools, git/GitHub, internet access — behind an approval classifier; credentials live only in the host OS keyring |
-| **MCP runner** | `mcp-server/` (sandboxed pod) | Filesystem/command/test tools in a read-only, capability-dropped, egress-denied container |
-| **Browser MCP** | `browser-mcp/` (isolated pod) | Web retrieval with SSRF guards (RFC 1918 blocked) |
-| **Observability** | `deploy/k8s/observability.yaml` | OpenTelemetry collector + Jaeger; every turn, tool call, and model round is a span |
-| **Eval pack** | `eval/` | Graded task suite used as the end-to-end regression for chunked job execution |
 
 ### Security boundary
 
-- The Kubernetes cluster is **credential-free and egress-blocked** by NetworkPolicy. It cannot reach the internet and holds no tokens.
-- The **host bridge is the only way out**, and destructive host actions require explicit approval through its classifier.
+- `web-ui` has **zero external internet egress**; `browser-mcp` is an isolated SSRF-guarded web-fetch pod (`:80`/`:443`); `mcp-runner` may reach GitHub CIDRs on `:443` only (`deploy/k8s/network-policies.yaml`). Credentials live only in the host OS keyring behind the host bridge.
+- The **host bridge is the only way out** for host tools and git/GitHub, and destructive host actions require explicit approval through its classifier.
 - The web UI is a single-tenant LAN appliance by design (no auth on API routes); it is not exposed to the public internet.
 
 Full specification: [ARCHITECTURE.md](ARCHITECTURE.md) · Governance mapping: [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md)
@@ -92,7 +86,7 @@ The UI is served on the LAN through the cluster gateway; the same session is liv
 cd web-ui
 npm test            # 1,600+ unit and contract tests
 npm run test:gate   # change-aware gate: runs exactly the tests a change touches
-npm run test:e2e    # Playwright suite (75 spec files, 4 projects)
+npm run test:e2e    # Playwright suite (252 tests across 11 spec files and 4 projects)
 ```
 
 The gate is strict on purpose: a changed file with no test coverage is rejected outright, and e2e specs run under the real Playwright runner. CI additionally runs an invariant net and a chaos battery that hammers the unhappy paths — mid-stream stops, overflow inputs, type-confused payloads.

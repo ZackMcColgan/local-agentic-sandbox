@@ -5,7 +5,7 @@ import path from "node:path";
 
 const WEB_UI_ROOT = path.resolve(__dirname, "..");
 
-describe("NEW-ARGON-01 residuals: title/name surfaces use line-clamp-2 instead of single-line truncate", () => {
+describe("title/name surfaces use line-clamp-2 instead of single-line truncate", () => {
   it("MorningReportView.tsx and SvgViewer.tsx do not truncate titles with single-line truncate", () => {
     const morning = fs.readFileSync(path.join(WEB_UI_ROOT, "components/MorningReportView.tsx"), "utf8");
     assert.doesNotMatch(

@@ -27,7 +27,7 @@ describe("Lane C UI Polish", () => {
     assert.match(railBtnBody, /padding:\s*\d+px\s+(?:[6-9]|\d{2,})px/, ".rail-btn must have >= 6px horizontal padding");
   });
 
-  it("C2 (UI-046 + UI-047 + NEW-ARGON-06): all 4 desktop pane headers share h-12 top bar with border-b and no duplicate Hide buttons", () => {
+  it("C2 (UI-046 + UI-047): all 4 desktop pane headers share h-12 top bar with border-b and no duplicate Hide buttons", () => {
     const threadsSidebar = readWebUiFile("components/ThreadsSidebar.tsx");
     const chatStream = readWebUiFile("components/ChatStream.tsx");
     const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");

@@ -96,7 +96,7 @@ describe("Phase 1 — Morning Report Suite", () => {
     const md = formatMorningReportMarkdown(report);
 
     assert.equal(report.status, "parked");
-    assert.ok(md.includes("⚠️ **Status: PARKED (Requires Zack's Review)**"));
+    assert.ok(md.includes("⚠️ **Status: PARKED (Requires operator review)**"));
     assert.ok(md.includes("Milestone M2 stalled after 20 minutes"));
   });
 

@@ -74,3 +74,6 @@ web-ui/temp-*
 
 # Internal operating documents, kept locally only
 docs/internal/
+
+# Local TLS certs (generated at deploy/launch time)
+deploy/ssl/*.pem
