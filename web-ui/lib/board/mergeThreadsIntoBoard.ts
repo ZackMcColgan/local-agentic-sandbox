@@ -1,4 +1,5 @@
-import { resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import { deriveThreadTitle, resolveThreadsDir, ThreadStore } from "@/lib/threads/threadStore";
+import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import type { BoardItem, BoardStatus } from "./boardStore";
 
 export function mapThreadStatusToBoardStatus(status: string | undefined): BoardStatus {
@@ -17,10 +18,7 @@ export function mapThreadStatusToBoardStatus(status: string | undefined): BoardS
  */
 export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<BoardItem[]> {
   const store = new ThreadStore(resolveThreadsDir());
-  const threads = await store.listThreads();
-  if (threads.length === 0) {
-    return boardItems;
-  }
+  const threads = await store.listThreadSummaries();
 
   const existingIds = new Set(boardItems.map((item) => item.id));
   const existingLinks = new Set(
@@ -28,12 +26,12 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
   );
 
   const merged = [...boardItems];
+  const now = new Date().toISOString();
   for (const thread of threads) {
     const threadLink = `/?thread=${thread.id}`;
     if (existingIds.has(thread.id) || existingLinks.has(threadLink)) {
       continue;
     }
-    const now = new Date().toISOString();
     merged.push({
       id: thread.id,
       key: thread.id,
@@ -48,6 +46,46 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
       updatedAt: thread.updatedAt ?? now,
     });
   }
+
+  // Preserve ghost synthesis for checkpointed supervisor tasks without a thread file,
+  // using supervisor task metadata only (no full thread-file parsing).
+  try {
+    const tasks = await new OvernightSupervisor().listAllTasks();
+    for (const task of tasks) {
+      const ghostId = `thread-${task.taskId}`;
+      const hasMatchingThread = threads.some(
+        (t) => t.id === task.taskId || t.id === ghostId,
+      );
+      if (hasMatchingThread) {
+        continue;
+      }
+      const threadLink = `/?thread=${ghostId}`;
+      if (existingIds.has(ghostId) || existingLinks.has(threadLink)) {
+        continue;
+      }
+      const honestStatus =
+        task.status === "paused"
+          ? "paused"
+          : task.status === "active"
+            ? "stopped"
+            : task.status === "completed"
+              ? "completed"
+              : "stopped";
+      merged.push({
+        id: ghostId,
+        key: ghostId,
+        title: deriveThreadTitle(task.goal),
+        brief: "",
+        dependencies: [],
+        status: mapThreadStatusToBoardStatus(honestStatus),
+        author: "Owner",
+        source: "manual",
+        threadLink,
+        createdAt: task.startedAt || now,
+        updatedAt: task.updatedAt || task.startedAt || now,
+      });
+    }
+  } catch {}
 
   return merged;
 }

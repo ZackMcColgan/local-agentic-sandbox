@@ -233,6 +233,7 @@ export interface ThreadSummary {
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;
+  hasStreamingMessage: boolean;
   matchSnippet?: string;
 }
 
@@ -690,8 +691,18 @@ export class ThreadStore {
    */
   async sweepStalledThreads(now: number = Date.now()): Promise<number> {
     let acted = 0;
-    const threads = await this.listThreads();
-    for (const thread of threads) {
+    const summaries = await this.listThreadSummaries();
+    for (const s of summaries) {
+      const isStreaming = s.status === "active" || s.status === "running" || s.hasStreamingMessage;
+      const updatedAtMs = Date.parse(s.updatedAt);
+      const isStale = Number.isFinite(updatedAtMs) && now - updatedAtMs > TURN_STALL_WINDOW_MS;
+      if (!isStreaming || !isStale) {
+        continue;
+      }
+      const thread = await this.getThread(s.id);
+      if (!thread) {
+        continue;
+      }
       const outcome = superviseStalledThread(thread, {
         now,
         threadAdapter: {
@@ -998,7 +1009,7 @@ export class ThreadStore {
           continue;
         }
         const cached = this.summaryCache.get(file);
-        if (cached && cached.mtimeMs === stat.mtimeMs) {
+        if (cached && cached.mtimeMs === stat.mtimeMs && typeof cached.summary.hasStreamingMessage === "boolean") {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
         }
@@ -1010,6 +1021,7 @@ export class ThreadStore {
           const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
           const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
           const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
+          const hasStreamingMessage = msgs.some((m) => m.role === "assistant" && m.status === "streaming");
           const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
           const title =
             t.title && t.title !== "New session"
@@ -1029,6 +1041,7 @@ export class ThreadStore {
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,
+            hasStreamingMessage,
           };
           this.summaryCache.set(file, { mtimeMs: stat.mtimeMs, summary });
           indexDirty = true;
@@ -1050,29 +1063,21 @@ export class ThreadStore {
       return summaries;
     }
 
-    // Search path (q present): keep full-read search path in place so body-content snippets remain exact.
-    const threads = await this.listThreads();
+    // Search path (q present): two-stage async search without calling listThreads() or sync fs.
+    const allSummaries = await this.listThreadSummaries();
     const summaries: ThreadSummary[] = [];
 
-    for (const t of threads) {
-      const msgs = Array.isArray(t.messages) ? t.messages : [];
-      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-      const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
-      const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
-      const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
-      const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
-      const title =
-        t.title && t.title !== "New session"
-          ? t.title
-          : firstUserMsg
-            ? deriveStoredThreadTitle(firstUserMsg.content)
-            : t.title || "New session";
-
+    for (const s of allSummaries) {
+      const titleMatches = s.title.toLowerCase().includes(q);
       let matchSnippet: string | undefined;
-      if (q) {
-        const titleMatches = title.toLowerCase().includes(q);
+      let matchIdx = -1;
+
+      const fullPath = path.join(this.threadsDir, `${s.id}.json`);
+      try {
+        const raw = await fs.promises.readFile(fullPath, "utf8");
+        const t = JSON.parse(raw) as Thread;
+        const msgs = Array.isArray(t.messages) ? t.messages : [];
         let bodyMatchContent: string | undefined;
-        let matchIdx = -1;
         for (const m of msgs) {
           if (typeof m.content === "string") {
             const idx = m.content.toLowerCase().indexOf(q);
@@ -1083,29 +1088,24 @@ export class ThreadStore {
             }
           }
         }
-        if (!titleMatches && matchIdx === -1) {
-          continue;
-        }
         if (bodyMatchContent && matchIdx !== -1) {
           const start = Math.max(0, matchIdx - 32);
           const end = Math.min(bodyMatchContent.length, matchIdx + q.length + 48);
           const slice = bodyMatchContent.slice(start, end).replace(/\s+/g, " ").trim();
           matchSnippet = `${start > 0 ? "…" : ""}${slice}${end < bodyMatchContent.length ? "…" : ""}`;
         }
+      } catch {
+        if (!titleMatches && !s.lastMessagePreview.toLowerCase().includes(q)) {
+          continue;
+        }
+      }
+
+      if (!titleMatches && matchIdx === -1) {
+        continue;
       }
 
       summaries.push({
-        id: t.id,
-        title,
-        status: t.status,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        model: t.model,
-        reasoningEffort: t.reasoningEffort,
-        taskId: t.taskId,
-        messageCount: msgs.length,
-        lastMessagePreview,
-        hasDiffs,
+        ...s,
         ...(matchSnippet ? { matchSnippet } : {}),
       });
     }

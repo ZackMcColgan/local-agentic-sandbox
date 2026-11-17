@@ -137,15 +137,17 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
   });
 
   it("Item 3: MorningReportView renders project badge and review link for project tasks, omits them for standalone tasks", () => {
+    const sharedStartedAt = new Date(Date.now() - 60000).toISOString();
+    const sharedNow = new Date().toISOString();
     const projectTaskEntry: any = {
       taskId: "task-view-proj",
       goal: "Build payment gateway",
       branch: "feat/payment",
       gitHeadSha: "head123",
       status: "completed",
-      startedAt: new Date(Date.now() - 120000).toISOString(),
-      completedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      startedAt: sharedStartedAt,
+      completedAt: sharedNow,
+      updatedAt: sharedNow,
       durationSeconds: 120,
       durationFormatted: "2m 0s",
       artifacts: [],
@@ -164,9 +166,9 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       branch: "feat/chart",
       gitHeadSha: "head456",
       status: "completed",
-      startedAt: new Date(Date.now() - 60000).toISOString(),
-      completedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      startedAt: sharedStartedAt,
+      completedAt: sharedNow,
+      updatedAt: sharedNow,
       durationSeconds: 60,
       durationFormatted: "1m 0s",
       artifacts: [],
