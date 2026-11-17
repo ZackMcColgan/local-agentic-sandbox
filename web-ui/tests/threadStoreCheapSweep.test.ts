@@ -225,6 +225,51 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
   }
 });
 
+test("A4b: mergeThreadsIntoBoard dedupes ghost when stored thread carries matching taskId", async () => {
+  const dir = makeTempDir("sweep-a4b-");
+  const checkpointDir = path.join(dir, "checkpoints");
+  fs.mkdirSync(checkpointDir, { recursive: true });
+  const prevEnv = process.env.THREADS_DIR;
+  const prevCheckpointEnv = process.env.AGENT_CHECKPOINT_DIR;
+  process.env.THREADS_DIR = dir;
+  process.env.AGENT_CHECKPOINT_DIR = checkpointDir;
+  try {
+    const nowIso = new Date().toISOString();
+    writeThreadFile(dir, {
+      id: "t-real-1",
+      taskId: "sup-task-99",
+      title: "Real Supervisor Thread",
+      status: "active",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      messages: [{ id: "m1", role: "user", content: "hi", createdAt: nowIso }],
+    });
+
+    fs.writeFileSync(
+      path.join(checkpointDir, "sup-task-99-checkpoint.json"),
+      JSON.stringify({
+        taskId: "sup-task-99",
+        goal: "Real Supervisor Thread",
+        status: "running",
+        startedAt: nowIso,
+        updatedAt: nowIso,
+      }),
+      "utf8",
+    );
+
+    const merged = await mergeThreadsIntoBoard([]);
+    const ids = merged.map((i) => i.id);
+    assert.ok(ids.includes("t-real-1"), "real thread item must be present");
+    assert.ok(!ids.includes("thread-sup-task-99"), "duplicate ghost item must not be synthesized");
+  } finally {
+    if (prevEnv === undefined) delete process.env.THREADS_DIR;
+    else process.env.THREADS_DIR = prevEnv;
+    if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
+    else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("A5: listThreadSummaries(query) matches title, preview, and body without calling listThreads", async () => {
   const dir = makeTempDir("sweep-a5-");
   try {
