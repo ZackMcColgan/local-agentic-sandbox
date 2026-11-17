@@ -12,7 +12,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 ### The Solution
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
-1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving a resident ~125B-class MoE model with a 27B fallback and 128K context window, keeping inference local with no cloud dependency.
+1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) with a 27B fallback (`swift-15-27b-mtp`) and 128K context window, keeping inference local with no cloud dependency.
 2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 8 autonomous developer tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
 4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy, test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage.
@@ -81,8 +81,8 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │  HOST INFERENCE & BRIDGE BOUNDARY (AMD Radeon RX 9070 XT / ROCm/HIP)                              │
 │                                                                                                   │
 │   Strata Inference Engine (Host Process)                                                          │
-│   ├── Resident ~125B-class MoE ── Primary Orchestrator & Autonomous Coding Engine (128K context)  │
-│   └── 27B Fallback               ── Secondary / Fallback Local Model                              │
+│   ├── Qwen3.8-Flash-Next (125B-class MoE) ── Resident Primary Coding Engine (128K context)        │
+│   └── swift-15-27b-mtp (27B Fallback)     ── Secondary / Fallback Local Model                     │
 │                                                                                                   │
 │   Host Bridge (Host Process — Sole External Boundary)                                             │
 │   └── git / GitHub, internet via host, approval gate for destructive actions, host OS keyring     │
@@ -99,7 +99,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 | **`browser-mcp`** | `local-agentic-sandbox` | Read-Only App | Default (No Privs) | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only. |
 | **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge. |
 | **`otel-collector`**| `local-agentic-sandbox` | Ephemeral | Default (No Privs) | Non-Root | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686). |
-| **`strata`** | Host Process / PCIe | Local Drive | Host Native | Host User | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident ~125B-class MoE, 27B fallback, 128K context. |
+| **`strata`** | Host Process / PCIe | Local Drive | Host Native | Host User | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 27B fallback (`swift-15-27b-mtp`), 128K context. |
 | **`host-bridge`** | Host Process | Local Drive | Host Native | Host User | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only). |
 
 ### 3.1 Host-Filesystem Write Trust Boundary (`./workspace:/workspace:rw`)
@@ -153,9 +153,19 @@ local-agentic-sandbox/
 │       ├── network-policies.yaml       # Zero-trust network egress & ingress policies
 │       └── workspace-pvc.yaml          # HostPath persistent volume claim for ./workspace
 ├── docs/
-│   ├── architecture.drawio             # Editable Draw.io XML source diagram
-│   ├── architecture.drawio.svg         # Rendered vector SVG diagram for README/docs
-│   └── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
+│   ├── architecture.drawio                          # Editable Draw.io XML source diagram
+│   ├── architecture.drawio.svg                      # Rendered vector SVG diagram for README/docs
+│   ├── architecture.svg                             # Companion vector SVG diagram
+│   ├── AI_GOVERNANCE.md                             # NIST AI RMF 1.0 & OWASP Agentic Top 10 controls
+│   ├── KUBERNETES_DEPLOYMENT.md                     # Docker Desktop K8s deploy & access guide
+│   ├── MODEL_RESIDENCY.md                           # Host Strata model roster & residency policy
+│   ├── ADR-001-sandboxed-mcp.md                     # Architectural Decision Record: sandboxed MCP
+│   ├── ADR-002-langgraph-supervisor-checkpoints.md  # Architectural Decision Record: LangGraph checkpoints
+│   ├── access-path.md                               # LAN / tailnet bridge & kind-gateway ops guide
+│   ├── live-e2e.md                                  # Live cluster acceptance test battery (L1-L8)
+│   ├── resource-budgets.md                          # VRAM, cache, and two-tier sandbox budgets
+│   ├── topology-matrix.md                           # Component, port, and communication matrix
+│   └── images/                                      # README & UI showcase screenshots
 ├── host-bridge/                        # Host-side tool bridge (sole external boundary, :8765)
 ├── eval/                               # Graded evaluation suite for chunked job execution
 ├── scripts/
@@ -181,7 +191,7 @@ local-agentic-sandbox/
 │   ├── Dockerfile
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── tailwind.config.js
+│   ├── tailwind.config.ts
 │   ├── app/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx                    # Main portal: tabs, persistent state, live telemetry
@@ -209,7 +219,7 @@ local-agentic-sandbox/
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 1,670 total workspace tests (1,636 in web-ui)
+│   └── tests/                          # 1,693 workspace tests (1,659 in web-ui; 1,676 in Linux CI)
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 
@@ -217,40 +227,41 @@ local-agentic-sandbox/
 
 ## 5. Verification & Quickstart
 
-### 6.1 Kubernetes Deployment (Docker Desktop / Production)
+### 5.1 Kubernetes Deployment (Docker Desktop / Local Cluster)
 
 All platform workloads reside inside the dedicated `local-agentic-sandbox` namespace:
 
 ```bash
-# 1. Deploy via Kustomize
-kubectl apply -k deploy/k8s
+# 1. Automated build, containerd import, rollout, and verification (recommended)
+node scripts/deploy-cluster.js web-ui
 
-# OR: Deploy via Helm
+# OR: Apply manifests via Kustomize / Helm
+kubectl apply -k deploy/k8s
 helm install local-agentic-sandbox deploy/helm/local-agentic-sandbox -n local-agentic-sandbox --create-namespace
 
 # 2. Verify all pods and services in the local-agentic-sandbox namespace
 kubectl get all -n local-agentic-sandbox
 
-# 3. Access Web UI (NodePort 30300 or port-forward to 3001)
+# 3. Access Web UI (LAN/gateway bridge on :3001 -> :30300, or port-forward)
 kubectl port-forward svc/web-ui -n local-agentic-sandbox 3001:3000 --address 0.0.0.0
 ```
 
 > **Note**: Docker Desktop's GUI dashboard filters by the `default` namespace by default. Always specify `-n local-agentic-sandbox` when inspecting cluster workloads via CLI or select the `local-agentic-sandbox` namespace dropdown in Docker Desktop.
 
-### 6.2 Docker Compose Quickstart
+### 5.2 Test Verification & Compose Harness
 
 ```bash
-# 1. Ensure the Strata inference engine is running on the host GPU
-make pull-primary
-# OR: npm run pull:primary
+# 1. Typecheck web-ui
+npx tsc --noEmit -p web-ui/tsconfig.json
 
-# 2. Build and launch all services
-make up
-# OR: npm run up
-
-# 3. Run all test suites across workspaces (57 tests)
+# 2. Run workspace unit/contract suites (1,693 workspace tests locally / 1,676 in Linux CI)
 npm test
 
-# 4. Verify security isolation boundaries
+# 3. Run the change-aware local test gate or full Playwright suite (272 tests across 12 spec files and 4 projects)
+npm run test:gate
+npm --prefix web-ui run test:e2e
+
+# 4. Standalone Docker Compose container verification (legacy local harness)
+make up
 make verify-sec
 ```
