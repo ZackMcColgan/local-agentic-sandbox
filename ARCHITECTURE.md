@@ -45,8 +45,8 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │   │   Web UI & Agent Orchestrator (Deployment / Service: web-ui:3000 / NodePort 30300)        │   │
 │   │   - Next.js 15 / React 19 / TypeScript / Tailwind CSS                                     │   │
 │   │   - Tri-Mode Model Dispatcher: [ ✨ Auto | ⚡ Flash | 🧠 Pro ]                             │   │
-│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> gemma4:e4b)              │   │
-│   │   - Session Chat Persistence (localStorage: local_agent_chat_history_v1)                 │   │
+│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> Strata vision)          │   │
+│   │   - Durable Server-Side Persistence (threadStore.ts + SQLite runLedger.ts)             │   │
 │   │   - OpenTelemetry Instrumentation SDK (telemetry.ts -> Jaeger trace waterfall)           │   │
 │   │   - Local Inference via Host Strata Engine (ROCm/HIP, 128K Context)                         │   │
 │   └──────────────────────┬────────────────────────────────────┬───────────────────────────────┘   │
@@ -76,7 +76,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │   │ - Jaeger UI & Trace Waterfall Analytics for user turns & tool executions                  │   │
 │   └───────────────────────────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────┬────────────────────────────────────────────────────────┘
-                                           │ (ExternalName / host.docker.internal:11434)
+                                           │ (strata-service / host.docker.internal:8080)
 ┌──────────────────────────────────────────▼────────────────────────────────────────────────────────┐
 │  HOST INFERENCE & BRIDGE BOUNDARY (AMD Radeon RX 9070 XT / ROCm/HIP)                              │
 │                                                                                                   │
@@ -144,15 +144,20 @@ local-agentic-sandbox/
 │       ├── web-ui.yaml                 # Next.js UI deployment & NodePort service
 │       ├── mcp-runner.yaml             # Air-gapped code runner deployment & service
 │       ├── browser-mcp.yaml            # SSRF-guarded browser scraper deployment & service
-│       ├── ollama-service.yaml         # ExternalName service pointing to host.docker.internal
+│       ├── strata-service.yaml         # Service pointing to host Strata engine (:8080)
+│       ├── host-runner-service.yaml    # Service pointing to host-bridge (:8765)
+│       ├── qdrant.yaml                 # Qdrant vector store deployment & service
+│       ├── builder-tier.yaml           # Builder-tier toolchain sandbox deployment
+│       ├── ingress.yaml                # Nginx ingress rules for web-ui and /jaeger/
 │       ├── observability.yaml          # Jaeger OpenTelemetry collector deployment & service
 │       ├── network-policies.yaml       # Zero-trust network egress & ingress policies
 │       └── workspace-pvc.yaml          # HostPath persistent volume claim for ./workspace
 ├── docs/
 │   ├── architecture.drawio             # Editable Draw.io XML source diagram
 │   ├── architecture.drawio.svg         # Rendered vector SVG diagram for README/docs
-│   ├── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
-│   └── DEVELOPMENT_SANDBOX.md          # Guide for microVM development sandboxes
+│   └── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
+├── host-bridge/                        # Host-side tool bridge (sole external boundary, :8765)
+├── eval/                               # Graded evaluation suite for chunked job execution
 ├── scripts/
 │   ├── lan-bridge.js                   # Zero-auth LAN reverse proxy bridge (0.0.0.0:80 / :3000)
 │   └── test-ui-render.js               # Headless visual inspection test script
@@ -195,7 +200,7 @@ local-agentic-sandbox/
 │   │   └── ThreadsSidebar.tsx          # Material 3 responsive sessions sidebar
 │   ├── lib/
 │   │   ├── agentEngine.ts              # Autonomous test-and-repair agent execution loop
-│   │   ├── chatHistory.ts              # Versioned localStorage persistence (v1)
+│   │   ├── threads/threadStore.ts      # Server-side durable thread store
 │   │   ├── fileParser.ts               # File ingestion & multimodal base64 extractor
 │   │   ├── ledger/runLedger.ts         # SQLite-backed durable run ledger & lifecycle tracking
 │   │   ├── subagents/supervisor.ts     # LangGraph supervisor, fail-closed recovery, and watchdog
@@ -204,24 +209,13 @@ local-agentic-sandbox/
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 50+ unit, component, supervisor, and lifecycle tests across monorepo
+│   └── tests/                          # 1,670 total workspace tests (1,636 in web-ui)
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 
 ---
 
-## 5. Development with Docker Sandboxes
-
-To safely run development CLI tools inside a secure microVM environment with its own Docker daemon, use Oleg Šelajev's kit:
-
-```bash
-# Run CLI inside Docker Sandbox
-sbx run --kit git+https://github.com/shelajev/agy-sbx-kit.git agy .
-```
-
----
-
-## 6. Verification & Quickstart
+## 5. Verification & Quickstart
 
 ### 6.1 Kubernetes Deployment (Docker Desktop / Production)
 
