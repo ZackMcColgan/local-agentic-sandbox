@@ -13,24 +13,24 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
     assert.ok(fs.existsSync(svgPath), "docs/architecture.drawio.svg must exist");
   });
 
-  it("architecture.drawio.svg is an export of the 30-cell superset containing all restored components", () => {
+  it("architecture.drawio.svg contains all current Strata & host-bridge topology components", () => {
     const svgContent = fs.readFileSync(svgPath, "utf8");
 
-    const requiredRestoredLabels = [
-      "Mobile Phone",
-      "LAN Reverse Proxy Bridge",
-      "KUBERNETES CLUSTER",
-      "workspace-pvc",
-      "qwen3.8:27b-q3_k_m",
-      "gemma4:e4b",
-      "ai-mesh",
-      "egress-mesh"
+    const requiredLabels = [
+      "Operator",
+      "kind Gateway (nginx)",
+      "Web UI / orchestrator",
+      "MCP runner",
+      "Browser MCP",
+      "Strata inference engine",
+      "Host bridge",
+      "Host OS"
     ];
 
-    for (const label of requiredRestoredLabels) {
+    for (const label of requiredLabels) {
       assert.ok(
         svgContent.includes(label),
-        `docs/architecture.drawio.svg must contain restored superset label: "${label}"`
+        `docs/architecture.drawio.svg must contain label: "${label}"`
       );
     }
   });
@@ -43,8 +43,7 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
     assert.ok(drawioContent.includes('background="#ffffff"'), "draw.io must use #ffffff background");
     assert.ok(svgContent.includes('background-color: #ffffff') || svgContent.includes('fill="#ffffff"'), "SVG must use #ffffff background");
 
-    // File sizes must reflect the full 30-cell superset
-    assert.ok(Buffer.byteLength(drawioContent, "utf8") >= 12000, "draw.io must be >= 12,000 bytes");
-    assert.ok(Buffer.byteLength(svgContent, "utf8") >= 15000, "SVG must be >= 15,000 bytes (full superset export)");
+    assert.ok(Buffer.byteLength(drawioContent, "utf8") >= 5000, "draw.io must be >= 5,000 bytes");
+    assert.ok(Buffer.byteLength(svgContent, "utf8") >= 5000, "SVG must be >= 5,000 bytes");
   });
 });

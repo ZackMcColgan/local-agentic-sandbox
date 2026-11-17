@@ -200,20 +200,14 @@ describe("SVG Rendering & Sanitization Suite", () => {
 
     // 3. Verify non-empty text labels from the architecture diagram survived intact
     const expectedLabels = [
-      "CLIENT & INGRESS LAYER",
-      "Mobile Phone / Workstation Browser",
-      "LAN Reverse Proxy Bridge",
-      "Public Internet & External Docs",
-      "KUBERNETES CLUSTER",
-      "web-ui Orchestrator Pod",
-      "mcp-runner Tool Boundary",
-      "browser-mcp Scraper Pod",
-      "otel-collector Jaeger Tracing",
-      "workspace-pvc Persistent Volum",
-      "HOST INFERENCE BOUNDARY",
-      "llm-service",
-      "Primary Orchestrator",
-      "Inference /api/chat"
+      "Operator",
+      "kind Gateway (nginx)",
+      "Web UI / orchestrator",
+      "MCP runner",
+      "Browser MCP",
+      "Strata inference engine",
+      "Host bridge",
+      "Host OS"
     ];
 
     if (drawioContent.includes("builder-tier")) {
@@ -246,7 +240,7 @@ describe("SVG Rendering & Sanitization Suite", () => {
     const converted = convertDrawioToSvg(drawioContent);
     assert.ok(converted.includes("viewBox="), "Must compute viewBox");
     assert.ok(
-      converted.includes("web-ui Orchestrator Pod") || converted.includes("web-ui: Orchestrator Pod"),
+      converted.includes("Web UI / orchestrator"),
       "Must contain major pod label"
     );
 
