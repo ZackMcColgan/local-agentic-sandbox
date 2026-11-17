@@ -13,7 +13,7 @@ for (const width of PHONE_WIDTHS) {
       isMobile: true,
     });
 
-    test("displays 1-decimal K label, visible min fill at 3.9K, and proportional amber fill at 72.4K", async ({
+    test("displays 1-decimal K label, visible min fill at 3.9K, and proportional emerald fill at 72.4K", async ({
       page,
     }) => {
       await setupStubbedEngineRoutes(page, { threads: [] });
@@ -72,8 +72,9 @@ for (const width of PHONE_WIDTHS) {
         expect(ratio).toBeLessThan(0.77);
       }).toPass();
 
-      // Amber band for 70-85K
-      await expect(fill).toHaveClass(/bg-amber-500/);
+      // Two-stop emerald gradient fill (FINAL-DESIGN)
+      await expect(fill).toHaveClass(/from-\[#10b981\]/);
+      await expect(fill).toHaveClass(/to-\[#34d399\]/);
     });
   });
 
