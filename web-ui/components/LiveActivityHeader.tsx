@@ -123,7 +123,7 @@ export function LiveActivityHeader({
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
         <div className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden" aria-hidden="true">
-          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400" />
+          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" />
         </div>
       )}
 
@@ -167,7 +167,7 @@ export function LiveActivityHeader({
                   isFailed
                     ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                     : isInFlight
-                    ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                     : "text-zinc-300"
                 }`}
               >

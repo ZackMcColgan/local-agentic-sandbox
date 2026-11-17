@@ -143,6 +143,23 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     assert.ok(html.includes("1 trace"), "trace meta present with singular form");
     assert.ok(!html.includes("Round "), "no Round segment when round is unknown");
   });
+
+  it("pulse track uses design-true emerald-500 to emerald-400 gradient with no emerald-600", () => {
+    const html = renderToString(
+      React.createElement(LiveActivityHeader, {
+        startedAtMs: NOW - 5_000,
+        lastActivityAtMs: NOW - 1_000,
+        nowMs: NOW,
+        traceCount: 1,
+        phaseLabel: "Starting turn…",
+        activityLabel: null,
+        isStreaming: true
+      })
+    );
+    assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
+    assert.ok(html.includes("to-emerald-400"), "pulse gradient ends at emerald-400");
+    assert.ok(!html.includes("emerald-600"), "no dark emerald-600 in pulse gradient");
+  });
 });
 
 describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {

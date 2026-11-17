@@ -3490,7 +3490,7 @@ export function ChatStream({
           return (
             <div
               data-testid="turn-status-slot"
-              className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 w-fit"
+              className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400 w-fit"
             >
               <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>{phaseLabel}</span>
@@ -3502,9 +3502,9 @@ export function ChatStream({
           <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
             <div
               data-testid="running-pill"
-              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-xs font-mono font-medium text-emerald-300 shadow-lg backdrop-blur-sm"
+              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500 border border-transparent text-xs font-mono font-medium text-[#04120c] shadow-lg backdrop-blur-sm"
             >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="h-2 w-2 rounded-full bg-[#04120c] animate-pulse" />
               <span>
                 {`RUNNING${
                   (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
@@ -3796,7 +3796,7 @@ export function ChatStream({
                     onClick={() => handleSelectMidTurnAction("queue")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "queue"
-                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 font-semibold shadow-xs"
                         : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                     }`}
                   >
@@ -3859,7 +3859,7 @@ export function ChatStream({
                   className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
                     isGeneratingOrRunning && midTurnAction === "steer"
                       ? "bg-sky-600 hover:bg-sky-700 text-white"
-                      : "bg-emerald-500 hover:bg-emerald-400 text-[#052e16]"
+                      : "bg-emerald-500 hover:bg-emerald-400 text-[#04120c]"
                   }`}
                   title={
                     isGeneratingOrRunning
