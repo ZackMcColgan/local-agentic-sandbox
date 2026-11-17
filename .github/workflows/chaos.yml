@@ -1,0 +1,51 @@
+name: Chaos & Adversarial Playwright Battery
+
+on:
+  push:
+    branches: ["develop"]
+  workflow_dispatch:
+
+jobs:
+  chaos-playwright:
+    name: Chaos & Adversarial Playwright Suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Install Playwright Chromium (no apt; runner image carries system deps)
+        working-directory: web-ui
+        run: |
+          npx playwright install chromium
+
+      - name: Build Web UI
+        working-directory: web-ui
+        run: |
+          npm run build
+
+      - name: Execute Chaos Playwright Suite
+        working-directory: web-ui
+        run: |
+          npx playwright test --grep @chaos
+
+      - name: Upload Playwright Artifacts on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-playwright-report
+          path: |
+            web-ui/playwright-report/
+            web-ui/test-results/
+          retention-days: 14
