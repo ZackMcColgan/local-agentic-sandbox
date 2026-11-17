@@ -61,8 +61,7 @@ test.describe("Phase B1 — Saturation and overflow", () => {
     const cards = Array.from({ length: 50 }, (_, i) => ({
       id: `bcard-${i}`,
       title: `Card ${i} ${"Task".repeat(4)}`,
-      column: "todo",
-      status: "todo",
+      status: "queued",
       priority: "medium",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -94,6 +93,7 @@ test.describe("Phase B1 — Saturation and overflow", () => {
 
     await drawer.locator('button:has-text("Board")').first().click();
     await page.waitForTimeout(400);
+    await expect(page.getByText("Card 0").first()).toBeVisible();
 
     const { scrollWidth, innerWidth } = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
