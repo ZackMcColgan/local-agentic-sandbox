@@ -62,7 +62,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("explorerPanel.spec.ts"),
-    tests: ["tests/explorerPanel.spec.ts"],
+    tests: ["tests/e2e/explorerPanel.spec.ts"],
   },
   {
     match: (p) =>
