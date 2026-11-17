@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import {
   Menu,
+  MessageSquare,
   Plus,
   Search,
   MoreHorizontal,
@@ -17,6 +19,7 @@ import {
   List
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 import { NavView } from "./NavigationDrawer";
 
 interface ThreadsSidebarProps {
@@ -28,6 +31,9 @@ interface ThreadsSidebarProps {
   onDeleteThread?: (threadId: string) => void;
   onNavigate?: (view: NavView) => void;
   onOpenDrawer?: () => void;
+  onCollapse?: () => void;
+  hideDock?: boolean;
+  isLoadingThreads?: boolean;
 }
 
 export function ThreadsSidebar({
@@ -38,23 +44,150 @@ export function ThreadsSidebar({
   onNewThread,
   onDeleteThread,
   onNavigate,
-  onOpenDrawer
+  onOpenDrawer,
+  onCollapse,
+  hideDock = false,
+  isLoadingThreads = false
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchResults, setServerSearchResults] = useState<Thread[] | null>(null);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setServerSearchResults(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.threads)) {
+          setServerSearchResults(data.threads);
+        }
+      } catch {
+        // Fallback to local filter on network error
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
-  const [swipedThreadId, setSwipedThreadId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const touchStartXRef = React.useRef<number>(0);
+  const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
+  const [confirmDeleteThread, setConfirmDeleteThread] = useState<Thread | null>(null);
 
-  const filteredThreads = threads.filter((t) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      t.title.toLowerCase().includes(q) ||
-      (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
-    );
-  });
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const didLongPressRef = useRef<boolean>(false);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const closeConfirmDialog = () => {
+    setConfirmDeleteThread(null);
+    setTimeout(() => {
+      lastActiveElementRef.current?.focus();
+    }, 0);
+  };
+
+  // Keyboard trap and Esc handler for confirm dialog
+  useEffect(() => {
+    if (!confirmDeleteThread) return;
+    cancelBtnRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeConfirmDialog();
+        return;
+      }
+      if (e.key === "Tab" && confirmDialogRef.current) {
+        const focusableElements = confirmDialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length === 0) return;
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmDeleteThread]);
+
+  // Esc handler for action sheet
+  useEffect(() => {
+    if (!actionSheetThread) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setActionSheetThread(null);
+        lastActiveElementRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [actionSheetThread]);
+
+  const handleTouchStart = (thread: Thread, e: React.TouchEvent) => {
+    didLongPressRef.current = false;
+    touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      didLongPressRef.current = true;
+      lastActiveElementRef.current = document.activeElement as HTMLElement;
+      setActionSheetThread(thread);
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current) return;
+    const deltaX = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = (e?: React.TouchEvent) => {
+    // Preserve touch handling when touching interactive buttons
+    if (e && (e.target as HTMLElement).closest("button")) return;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const filteredThreads = searchQuery.trim() && serverSearchResults !== null
+    ? serverSearchResults
+    : threads.filter((t) => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+          t.title.toLowerCase().includes(q) ||
+          (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
+        );
+      });
 
   const formatThreadTimestamp = (dateStr: string) => {
     try {
@@ -62,29 +195,29 @@ export function ThreadsSidebar({
       const day = d.getDate();
       const month = d.toLocaleDateString(undefined, { month: "short" });
       const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-      return `• ${day} ${month} • ${time}`;
+      return `${day} ${month} · ${time}`;
     } catch {
       return "";
     }
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-[#f4f3f7] dark:bg-zinc-950 border-r border-slate-200/80 dark:border-zinc-800 shrink-0">
+    <aside className="w-full flex flex-col h-full bg-white dark:bg-[#121215] border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
       {/* Top Header matching Mockup media_1791044464191.webp */}
-      <div className="p-4 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shadow-xs">
+      <div className="h-12 px-4 bg-white dark:bg-[#121215] border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           {onOpenDrawer && (
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="p-1.5 -ml-1 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
           )}
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+          <h1 className="text-[19px] font-bold tracking-tight text-slate-900 dark:text-zinc-100">
             Sessions
           </h1>
         </div>
@@ -94,8 +227,9 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={() => setIsSearchOpen(!isSearchOpen)}
-            className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             title="Search sessions"
+            aria-label="Search sessions"
           >
             <Search className="h-5 w-5" />
           </button>
@@ -104,19 +238,21 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={onNewThread}
-            className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-emerald-500 text-[#052e16] hover:bg-emerald-400 transition-colors shrink-0"
             title="New session"
+            aria-label="New session"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
           </button>
 
           {/* Overflow Menu */}
-          <div className="relative">
+          <div className="relative hidden">
             <button
               type="button"
               onClick={() => setShowOverflow(!showOverflow)}
-              className="p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               title="Sessions menu"
+              aria-label="Sessions menu"
             >
               <MoreHorizontal className="h-5 w-5" />
             </button>
@@ -133,20 +269,6 @@ export function ThreadsSidebar({
                 >
                   New session
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const isDark = document.documentElement.classList.contains("dark");
-                    const next = isDark ? "light" : "dark";
-                    document.documentElement.classList.toggle("dark", next === "dark");
-                    document.documentElement.classList.toggle("light", next === "light");
-                    document.documentElement.setAttribute("data-theme", next);
-                    localStorage.setItem("app-theme", next);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
-                >
-                  Toggle theme
-                </button>
               </div>
             )}
           </div>
@@ -156,7 +278,7 @@ export function ThreadsSidebar({
       {/* Expandable Search Input */}
       {isSearchOpen && (
         <div className="px-4 py-2.5 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 animate-in fade-in duration-100">
-          <div className="relative flex items-center bg-[#edf1f7] dark:bg-zinc-800 rounded-full px-3.5 py-1.5 border border-slate-200/50 dark:border-zinc-700">
+          <div className="relative flex items-center bg-white dark:bg-[#18181b] rounded-[11px] px-3.5 py-2 border border-slate-200 dark:border-zinc-800">
             <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
             <input
               type="text"
@@ -179,201 +301,420 @@ export function ThreadsSidebar({
         </div>
       )}
 
+      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-400 dark:text-zinc-400">
+        RECENTS
+      </div>
+
       {/* Elevated Cards Session List matching Mockup media_1791044464191.webp */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3">
-        {filteredThreads.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-500">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]" role="list" aria-label="Sessions list">
+        {isLoadingThreads && filteredThreads.length === 0 ? (
+          <div className="space-y-3" aria-label="Loading sessions">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-16 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800" />
+            ))}
+          </div>
+        ) : filteredThreads.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-400">
             {searchQuery ? "No matching sessions" : "No sessions yet. Tap + to start one."}
           </div>
         ) : (
           filteredThreads.map((thread) => {
             const isSelected = thread.id === selectedThreadId;
             const timeFormatted = formatThreadTimestamp(thread.updatedAt || thread.createdAt);
-            const isSwiped = swipedThreadId === thread.id;
-            const isConfirming = confirmDeleteId === thread.id;
-            const statusLabel =
-              thread.status === "active"
-                ? "Active"
-                : thread.status === "paused"
-                ? "Paused"
-                : thread.status === "stopped"
-                ? "Stopped"
-                : thread.status === "failed"
-                ? "Failed"
-                : "Completed";
+            const progressChars = (thread.messages || []).reduce(
+              (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
+              0
+            );
+            const progressTraces = (thread.messages || []).reduce(
+              (n, m) => n + (m.traces ? m.traces.length : 0),
+              0
+            );
+            const livenessBadge =
+              thread.liveness === "alive" || thread.liveness === "stalled" ? thread.liveness : null;
+            const rawStatus = (thread.status as string) || "";
+            const statusLabel = (() => {
+              if (rawStatus === "running") return "Running";
+              if (rawStatus === "active") return "Active";
+              if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
+              if (rawStatus === "failed") return "Failed";
+              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0) || ((thread as any).messageCount ?? 0) > 0) return "Completed";
+              return "New";
+            })();
+            const isRunning = statusLabel === "Running" || statusLabel === "Active";
+            const statusChip = (() => {
+              if (isRunning)
+                return { label: "● RUNNING", classes: "bg-emerald-500/15 text-emerald-700 dark:text-[#34d399]" };
+              if (statusLabel === "Completed")
+                return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-[#34d399]" };
+              if (statusLabel === "Failed")
+                return { label: "✕ FAILED", classes: "bg-red-500/10 text-red-700 dark:text-[#fca5a5]" };
+              if (statusLabel === "Needs Input")
+                return { label: "NEEDS INPUT", classes: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300" };
+              return { label: "NEW", classes: "bg-slate-500/10 text-slate-500 dark:text-zinc-400" };
+            })();
 
             return (
               <div
                 key={thread.id}
-                onTouchStart={(e) => {
-                  touchStartXRef.current = e.touches[0].clientX;
-                }}
-                onTouchEnd={(e) => {
-                  // Don't reset confirm state when the touch ends on a button
-                  // (e.g. tapping "Confirm?" to delete) — the button's onClick
-                  // needs isConfirming to still be true when it fires.
-                  if ((e.target as HTMLElement).closest("button")) return;
-                  const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-                  if (deltaX < -40) {
-                    setSwipedThreadId(thread.id);
-                  } else if (deltaX > 40) {
-                    setSwipedThreadId(null);
-                    setConfirmDeleteId(null);
+                role="button"
+                tabIndex={0}
+                data-testid={`thread-row-${thread.id}`}
+                aria-label={`Session: ${thread.title || "New session"}`}
+                onTouchStart={(e) => handleTouchStart(thread, e)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+                onKeyDown={(e) => {
+                  if (e.key === "Delete" || e.key === "Backspace") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    lastActiveElementRef.current = e.currentTarget;
+                    setConfirmDeleteThread(thread);
+                  } else if (e.key === "Enter" || e.key === " ") {
+                    if (e.target === e.currentTarget) {
+                      e.preventDefault();
+                      onSelectThread(thread.id);
+                    }
                   }
                 }}
                 onClick={() => {
-                  if (isSwiped) {
-                    setSwipedThreadId(null);
-                    setConfirmDeleteId(null);
-                  } else {
-                    onSelectThread(thread.id);
+                  if (didLongPressRef.current) {
+                    didLongPressRef.current = false;
+                    return;
                   }
+                  onSelectThread(thread.id);
                 }}
-                className={`group relative overflow-hidden rounded-3xl p-4 sm:p-5 transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-white dark:bg-zinc-900 ring-2 ring-[#6750a4] shadow-md"
-                    : "bg-white dark:bg-zinc-900 hover:shadow-md shadow-xs border border-slate-100 dark:border-zinc-850"
+                className={`group relative overflow-hidden rounded-[14px] px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  isRunning
+                    ? "bg-white dark:bg-[#18181b] border border-[rgba(16,185,129,0.45)] shadow-[inset_3px_0_0_#10b981]"
+                    : isSelected
+                    ? "bg-white dark:bg-[#18181b] ring-2 ring-emerald-500 shadow-md border border-transparent"
+                    : "bg-white dark:bg-[#18181b] hover:shadow-md shadow-xs border border-slate-200 dark:border-zinc-800"
                 }`}
               >
-                <div
-                  className={`min-w-0 transition-transform ${
-                    isSwiped ? "-translate-x-20" : ""
-                  }`}
-                >
+                <div className="min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <h2
-                      className={`text-sm sm:text-base leading-snug line-clamp-2 ${
+                      className={`text-[14.5px] leading-snug line-clamp-2 break-words ${
                         isSelected
                           ? "font-bold text-slate-900 dark:text-zinc-100"
                           : "font-semibold text-slate-900 dark:text-zinc-100"
                       }`}
                     >
-                      {thread.title || "New session"}
+                      {deriveThreadDisplayTitle(thread.title)}
                     </h2>
+                    {(thread as any).matchSnippet && (
+                      <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                        {(thread as any).matchSnippet}
+                      </p>
+                    )}
 
                     {onDeleteThread && (
                       <button
                         type="button"
+                        data-testid="thread-overflow-btn"
+                        aria-label={`Session options for ${thread.title || "session"}`}
+                        tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isConfirming) {
-                            onDeleteThread(thread.id);
-                            setConfirmDeleteId(null);
-                            setSwipedThreadId(null);
-                          } else {
-                            setConfirmDeleteId(thread.id);
+                          lastActiveElementRef.current = e.currentTarget;
+                          setActionSheetThread(thread);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            lastActiveElementRef.current = e.currentTarget;
+                            setActionSheetThread(thread);
                           }
                         }}
-                        className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-full text-xs font-medium transition-all ${
-                          isConfirming
-                            ? "opacity-100 bg-rose-600 text-white"
-                            : "text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                        }`}
-                        title={isConfirming ? "Confirm delete" : "Delete session"}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                        title="Session actions"
                       >
-                        {isConfirming ? "Confirm?" : <Trash2 className="h-4 w-4" />}
+                        <MoreHorizontal className="h-4 w-4" />
                       </button>
                     )}
                   </div>
 
                   {/* Subtext matching Mockup: "• 12 Oct • 2:34 PM • 3 participants • Active" */}
-                  <div className="mt-2 text-xs text-slate-500 dark:text-zinc-400 flex items-center flex-wrap gap-1 font-normal">
-                    <span>{timeFormatted || "• Today"}</span>
-                    <span>•</span>
-                    <span
-                      className={
-                        thread.status === "active"
-                          ? "text-[#6750a4] dark:text-[#d0bcff] font-semibold"
-                          : ""
-                      }
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Swiped Action Button */}
-                {isSwiped && onDeleteThread && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isConfirming) {
-                        onDeleteThread(thread.id);
-                        setConfirmDeleteId(null);
-                        setSwipedThreadId(null);
-                      } else {
-                        setConfirmDeleteId(thread.id);
-                      }
-                    }}
-                    className="absolute right-0 top-0 bottom-0 px-5 bg-rose-600 text-white font-medium text-xs flex items-center justify-center transition-all z-10 rounded-r-3xl"
+                  <div
+                    className={`mt-2 font-mono text-[12.3px] flex items-center flex-wrap gap-x-1.5 gap-y-1 ${
+                      isRunning ? "text-slate-600 dark:text-[#34d399]" : "text-slate-500 dark:text-zinc-400"
+                    }`}
                   >
-                    {isConfirming ? "Confirm?" : "Delete"}
-                  </button>
-                )}
+                    <span>{timeFormatted || "Today"}</span>
+                    <span>·</span>
+                    <span
+                      data-testid={`thread-status-chip-${thread.id}`}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold font-sans ${statusChip.classes}`}
+                    >
+                      {statusChip.label}
+                    </span>
+                    <SupervisorStatusBadge thread={thread} />
+                    {livenessBadge && (
+                      <span
+                        data-testid={`thread-liveness-${thread.id}`}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
+                          livenessBadge === "alive"
+                            ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+                            : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300"
+                        }`}
+                        title={livenessBadge === "alive" ? "Turn active — activity within the last 30s" : "Turn stalled — no activity past the stale window"}
+                      >
+                        {livenessBadge === "alive" ? "Alive" : "Stalled"}
+                      </span>
+                    )}
+                    {livenessBadge ? (
+                      <span data-testid={`thread-progress-${thread.id}`}>
+                        {`${progressChars} chars · ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                      </span>
+                    ) : ((thread as any).totalTraces ?? progressTraces) > 0 ? (
+                      <span data-testid={`thread-progress-${thread.id}`}>
+                        {`· ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {isRunning && !isSelected && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid={`thread-resume-${thread.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectThread(thread.id);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 text-[#052e16] text-xs font-bold hover:bg-emerald-400 transition-colors"
+                      >
+                        Resume
+                      </button>
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          data-testid={`thread-open-settings-${thread.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigate("settings");
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                        >
+                          Open settings
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })
         )}
       </div>
 
-      {/* Persistent Desktop Navigation Dock (S7) */}
-      <div className="p-2.5 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 flex items-center justify-around gap-1 shrink-0">
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("sessions") : undefined}
-          aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
-            activeNavView === "sessions" || activeNavView === "thread"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Sessions"
-        >
-          <List className="h-4 w-4" />
-          <span>Sessions</span>
-        </button>
+      {!hideDock && (
+        <div className="p-2.5 bg-white dark:bg-zinc-900 border-t border-slate-200/80 dark:border-zinc-800 flex items-center justify-around gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("sessions") : undefined)}
+            aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
+              activeNavView === "sessions" || activeNavView === "thread"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Sessions"
+          >
+            <List className="h-4 w-4" />
+            <span>Sessions</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={onNewThread}
-          className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-          title="New session"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New</span>
-        </button>
+          <button
+            type="button"
+            onClick={onNewThread}
+            className="flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            title="New session"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("morning-report") : undefined}
-          aria-current={activeNavView === "morning-report" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
-            activeNavView === "morning-report"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Morning report"
-        >
-          <FileText className="h-4 w-4" />
-          <span>Report</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("morning-report") : undefined)}
+            aria-current={activeNavView === "morning-report" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+              activeNavView === "morning-report"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Morning report"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Report</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onNavigate ? onNavigate("settings") : undefined}
-          aria-current={activeNavView === "settings" ? "page" : undefined}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
-            activeNavView === "settings"
-              ? "text-[#5b32e6] dark:text-[#d0bcff] bg-[#ede7fe] dark:bg-indigo-950/60 font-semibold"
-              : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-          }`}
-          title="Settings"
+          <button
+            type="button"
+            onClick={() => (onNavigate ? onNavigate("settings") : undefined)}
+            aria-current={activeNavView === "settings" ? "page" : undefined}
+            className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-medium transition-colors ${
+              activeNavView === "settings"
+                ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"
+                : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            }`}
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+            <span>Settings</span>
+          </button>
+        </div>
+      )}
+
+      {/* Action Sheet for Touch Long-Press & Overflow Button */}
+      {actionSheetThread && (
+        <div
+          data-testid="thread-action-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Session actions"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setActionSheetThread(null);
+            lastActiveElementRef.current?.focus();
+          }}
         >
-          <Settings className="h-4 w-4" />
-          <span>Settings</span>
-        </button>
-      </div>
+          <div
+            className="w-full sm:max-w-sm bg-white dark:bg-zinc-900 border-t sm:border border-slate-200 dark:border-zinc-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate pr-2">
+                {actionSheetThread.title || "Session Options"}
+              </h3>
+              <button
+                type="button"
+                data-testid="action-sheet-close-btn"
+                onClick={() => {
+                  setActionSheetThread(null);
+                  lastActiveElementRef.current?.focus();
+                }}
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                aria-label="Close action sheet"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                data-testid="action-sheet-open-btn"
+                onClick={() => {
+                  const target = actionSheetThread;
+                  setActionSheetThread(null);
+                  onSelectThread(target.id);
+                }}
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>Open session</span>
+              </button>
+              {onDeleteThread && (
+                <button
+                  type="button"
+                  data-testid="action-sheet-delete-btn"
+                  onClick={() => {
+                    const target = actionSheetThread;
+                    setActionSheetThread(null);
+                    setConfirmDeleteThread(target);
+                  }}
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold text-sm hover:bg-rose-100 dark:hover:bg-rose-950/70 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete session</span>
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="action-sheet-cancel-btn"
+                onClick={() => {
+                  setActionSheetThread(null);
+                  lastActiveElementRef.current?.focus();
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 font-medium text-xs hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ONE Confirm Dialog for Permanent Deletion */}
+      {confirmDeleteThread && (
+        <div
+          data-testid="thread-delete-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-delete-title"
+          ref={confirmDialogRef}
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => closeConfirmDialog()}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3
+                  id="confirm-delete-title"
+                  className="text-base font-bold text-slate-900 dark:text-zinc-100 line-clamp-2"
+                >
+                  Delete &ldquo;{confirmDeleteThread.title || "Untitled session"}&rdquo;?
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+                  This action is permanent and cannot be undone.{" "}
+                  {confirmDeleteThread.taskId &&
+                  (confirmDeleteThread.id === `thread-${confirmDeleteThread.taskId}` ||
+                    confirmDeleteThread.id.startsWith("thread-task-"))
+                    ? "All messages and the task checkpoint for this session will be removed."
+                    : confirmDeleteThread.taskId
+                      ? "All messages for this session will be removed. The task checkpoint is retained and the task will be marked cancelled."
+                      : "All messages for this session will be removed."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                ref={cancelBtnRef}
+                data-testid="cancel-delete-btn"
+                onClick={() => closeConfirmDialog()}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                ref={confirmBtnRef}
+                data-testid="confirm-delete-btn"
+                onClick={() => {
+                  if (onDeleteThread) {
+                    onDeleteThread(confirmDeleteThread.id);
+                  }
+                  closeConfirmDialog();
+                }}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

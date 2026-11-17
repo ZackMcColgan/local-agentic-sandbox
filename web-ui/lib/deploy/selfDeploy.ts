@@ -54,9 +54,14 @@ export interface SelfDeployPipelineOptions {
   commandRunner?: CommandRunner;
   healthChecker?: HealthChecker;
   healthCheckUrl?: string;
+  runlogPath?: string;
 }
 
 let inMemoryDeployHistory: SelfDeployRecord[] = [];
+
+export function clearInMemoryDeployHistoryForTest(): void {
+  inMemoryDeployHistory = [];
+}
 
 export function getGlobalSelfDeployHistory(): SelfDeployRecord[] {
   return [...inMemoryDeployHistory];
@@ -83,6 +88,7 @@ export class SelfDeployPipeline {
   private commandRunner: CommandRunner;
   private healthChecker: HealthChecker;
   private explicitHealthCheckUrl?: string;
+  private runlogPath: string;
 
   constructor(options: SelfDeployPipelineOptions = {}) {
     this.enabled = options.enabled ?? isSelfDeployKillSwitchEnabled();
@@ -91,6 +97,7 @@ export class SelfDeployPipeline {
     this.repoRoot =
       options.repoRoot ||
       path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
+    this.runlogPath = options.runlogPath || path.join(this.repoRoot, "docs", "internal", "queue-steer-runlog.md");
 
     this.commandRunner =
       options.commandRunner ??
@@ -160,7 +167,77 @@ export class SelfDeployPipeline {
     } catch {
       // Non-fatal, fallback to in-memory history
     }
-    return [...inMemoryDeployHistory];
+    if (inMemoryDeployHistory.length > 0) {
+      return [...inMemoryDeployHistory];
+    }
+    const runlogFallback = this.readLatestDeployFromRunlog();
+    return runlogFallback ? [runlogFallback] : [];
+  }
+
+  private readLatestDeployFromRunlog(): SelfDeployRecord | null {
+    try {
+      if (!fs.existsSync(this.runlogPath)) return null;
+      const content = fs.readFileSync(this.runlogPath, "utf-8");
+      const lines = content.split(/\r?\n/);
+      let latest: SelfDeployRecord | null = null;
+      for (const line of lines) {
+        const doneMatch = line.match(/\bDONE\s+prod\s+([0-9a-f]{7,40})\b/i);
+        const rollbackMatch = !doneMatch ? line.match(/\brollback\b.*?\b([0-9a-f]{7,40})\b/i) : null;
+        const match = doneMatch || rollbackMatch;
+        if (!match) continue;
+        const isRollback = Boolean(rollbackMatch);
+        const tsMatch = line.match(/\b(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\b/);
+        latest = {
+          deployId: "runlog-latest",
+          timestamp: tsMatch ? tsMatch[1] : new Date(0).toISOString(),
+          branchName: "main",
+          previousSha: "",
+          newSha: match[1],
+          status: isRollback ? "rolled_back" : "deployed",
+          rollbackStatus: isRollback ? "rolled_back" : "none",
+          healthCheckResult: {
+            status: isRollback ? 503 : 200,
+            ok: !isRollback
+          },
+          timeline: []
+        };
+      }
+      return latest;
+    } catch {
+      return null;
+    }
+  }
+
+  public async executeDeploy(
+    input: SelfDeployInput & { preRollout?: boolean; skipPreRollout?: boolean }
+  ): Promise<SelfDeployRecord> {
+    const branchLower = (input.branchName || "").toLowerCase().trim();
+    if (branchLower === "main" || branchLower === "master") {
+      throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");
+    }
+
+    if (input.branchName && (input.branchName.startsWith("feat/task-") || input.branchName.startsWith("feat/"))) {
+      const checkoutRes = await this.commandRunner("git", ["checkout", "develop"], { cwd: this.repoRoot });
+      if (checkoutRes.exitCode !== 0) {
+        throw new Error(`Git checkout develop failed: ${checkoutRes.stderr || checkoutRes.stdout}`);
+      }
+      const mergeRes = await this.commandRunner("git", ["merge", "--no-ff", input.branchName], { cwd: this.repoRoot });
+      if (mergeRes.exitCode !== 0) {
+        throw new Error(`Git merge --no-ff ${input.branchName} into develop failed: ${mergeRes.stderr || mergeRes.stdout}`);
+      }
+    }
+
+    if (input.preRollout === true) {
+      const gateRes = await this.commandRunner("npm", ["run", "test:gate"], { cwd: this.repoRoot });
+      if (gateRes.exitCode !== 0) {
+        throw new Error(`Pre-rollout test:gate failed: ${gateRes.stderr || gateRes.stdout}`);
+      }
+      const buildRes = await this.commandRunner("npm", ["run", "build"], { cwd: this.repoRoot });
+      if (buildRes.exitCode !== 0) {
+        throw new Error(`Pre-rollout build failed: ${buildRes.stderr || buildRes.stdout}`);
+      }
+    }
+    return this.executeSelfDeploy(input);
   }
 
   public async executeSelfDeploy(input: SelfDeployInput): Promise<SelfDeployRecord> {

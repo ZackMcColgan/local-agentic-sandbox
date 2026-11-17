@@ -92,6 +92,9 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     let jumpButton = container.querySelector('button[title="Jump to bottom"]');
     assert.equal(jumpButton, null, "Jump to bottom button must not render when user is at bottom");
 
+    // Wait for initial mount programmatic scroll lock (600ms) to clear
+    await new Promise((r) => setTimeout(r, 650));
+
     // 2. Simulate scrolling up (> 90px from bottom): scrollTop = 200 -> distanceFromBottom = 300
     mockScrollTop = 200;
     act(() => {
@@ -111,6 +114,8 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     assert.equal(jumpButton, null, "Jump to bottom button MUST disappear when user returns to bottom");
 
     // 4. Fix 3.2: Anti-flicker test during smooth scroll
+    // Wait for programmatic scroll lock from returning to bottom to clear
+    await new Promise((r) => setTimeout(r, 650));
     // Scroll up again
     mockScrollTop = 200;
     act(() => {

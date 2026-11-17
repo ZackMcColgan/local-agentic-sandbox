@@ -1,14 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES } from "../config/models.js";
+import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES, isReasoningEffortSupported } from "../config/models.js";
 
 describe("Web UI Model Configuration Suite", () => {
-  it("defaults to swift-15-27b-mtp for orchestrator to fit within 16GB VRAM limit", () => {
-    assert.equal(DEFAULT_PRIMARY_MODEL, "swift-15-27b-mtp");
+  it("defaults to qwen3.8-flash-next-gyro-gyro-s for orchestrator to fit within 16GB VRAM limit", () => {
+    assert.equal(DEFAULT_PRIMARY_MODEL, "qwen3.8-flash-next-gyro-gyro-s");
   });
 
-  it("defaults to swift-15-27b-mtp for fast multimodal sub-agent execution", () => {
-    assert.equal(DEFAULT_SUBAGENT_MODEL, "swift-15-27b-mtp");
+  it("defaults to qwen3.8-flash-next-gyro-gyro-s for fast multimodal sub-agent execution", () => {
+    assert.equal(DEFAULT_SUBAGENT_MODEL, "qwen3.8-flash-next-gyro-gyro-s");
   });
 
   it("contains complete profiles for orchestrator and sub-agents", () => {
@@ -18,12 +18,18 @@ describe("Web UI Model Configuration Suite", () => {
     assert.ok(orchestrator, "qwen3.8:27b-q3_k_m profile must exist");
     assert.equal(orchestrator?.role, "orchestrator");
     assert.equal(orchestrator?.supportsReasoningEffort, true);
-    assert.equal(orchestrator?.defaultReasoningEffort, "medium");
+    // LOW-effort ruling Nov 11: defaultReasoningEffort is "low"
+    assert.equal(orchestrator?.defaultReasoningEffort, "low");
     assert.ok(orchestrator?.recommendedVRAM.includes("13.8 GB"));
 
     const subagent = PRESET_MODEL_PROFILES.find((p) => p.id === "gemma4:e4b");
     assert.ok(subagent, "gemma4:e4b profile must exist");
     assert.equal(subagent?.role, "sub-agent");
     assert.equal(subagent?.supportsReasoningEffort, true);
+
+    const flashNext = PRESET_MODEL_PROFILES.find((p) => p.id === "qwen3.8-flash-next-gyro-gyro-s");
+    assert.ok(flashNext, "qwen3.8-flash-next-gyro-gyro-s profile must exist");
+    assert.equal(flashNext?.supportsReasoningEffort, true);
+    assert.equal(isReasoningEffortSupported("qwen3.8-flash-next-gyro-gyro-s"), true);
   });
 });

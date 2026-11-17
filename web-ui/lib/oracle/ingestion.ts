@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { toQdrantPointId } from './ingestionRoundTrip';
 
 export interface IngestionDocument {
   filePath: string;
@@ -211,7 +212,7 @@ export async function buildQdrantUpsertPoints(
   const vectors = await embedder(texts);
 
   return chunks.map((chunk, index) => ({
-    id: chunk.id,
+    id: toQdrantPointId(`${chunk.id}_${index}`),
     vector: vectors[index] || [],
     payload: {
       citation: chunk.citation,
@@ -424,7 +425,7 @@ export async function indexWorkspaceCodebase(
 
     // Upsert batch in chunks of 100
     const points: QdrantPoint[] = allChunks.map((chunk, idx) => ({
-      id: `${chunk.id}_${idx}`.slice(0, 64),
+      id: toQdrantPointId(`${chunk.id}_${idx}`),
       vector: inMemoryVectors[idx],
       payload: {
         citation: chunk.citation,

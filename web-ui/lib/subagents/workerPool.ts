@@ -3,14 +3,18 @@ import path from "path";
 import { execSync, execFileSync } from "child_process";
 import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAssertionResult, TestSnapshot, RevertResult, TestCounts } from "./types";
 import ts from "typescript";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 export type { TestSnapshot, RevertResult } from "./types";
 import {
+  createLlmGenerate,
   createOllamaGenerate,
   isFastGraphTestMode,
   stripCodeFence,
   type GenerateFn
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
+import { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore";
+export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
 export interface ModelRosterConfig {
   planner?: string;
@@ -23,7 +27,7 @@ export interface ModelRosterConfig {
 export interface WorkerPoolOptions {
   maxConcurrency?: number;
   modelRoster?: ModelRosterConfig;
-  /** Injected model client (tests / alternate backends). Defaults to Ollama per worker. */
+  /** Injected model client (tests / alternate backends). Defaults to local LLM per worker. */
   generate?: GenerateFn;
   /** Residency plan supplying keep_alive per model (see residency.ts). */
   residencyPlan?: ResidencyPlan;
@@ -32,10 +36,13 @@ export interface WorkerPoolOptions {
 }
 
 export interface WorkerJob<T = any> {
+  id?: string;
   role: WorkerRole;
-  taskId: string;
+  taskId?: string;
   abortSignal?: AbortSignal;
-  taskFn: (signal: AbortSignal) => Promise<T>;
+  worktreeRepoRoot?: string;
+  onTerminalState?: (state: "completed" | "aborted" | "failed") => void;
+  taskFn: (signal: AbortSignal, worktreePath?: string) => Promise<T>;
 }
 
 export interface CriticReview {
@@ -60,6 +67,7 @@ export interface BuilderResult {
   /** Model that produced the content (undefined when synthetic). */
   model?: string;
   targetFile: string;
+  modifiedFiles?: string[];
   loadDurationMs?: number;
   thinking?: string;
   rawContent?: string;
@@ -76,10 +84,157 @@ export interface RecordSkillResult {
 
 export interface WorkerModelOptions {
   model?: string;
+  llmUrl?: string;
   ollamaUrl?: string;
   generate?: GenerateFn;
   keepAlive?: string | number;
   scope?: string;
+  workspaceRoot?: string;
+}
+
+export interface WorkspaceFileSymbol {
+  path: string;
+  exports: string[];
+}
+
+export interface WorkspaceRepoMap {
+  root: string;
+  files: WorkspaceFileSymbol[];
+  treeSummary: string;
+  length: number;
+  toString(): string;
+}
+
+const IGNORED_SCAN_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  ".turbo",
+  "out",
+  ".cache",
+  "tmp",
+  "temp",
+  ".gemini"
+]);
+
+export function scanWorkspaceRepoMap(
+  rootDir: string,
+  options?: { query?: string; maxFiles?: number }
+): WorkspaceRepoMap {
+  const maxFiles = options?.maxFiles ?? 500;
+  const files: WorkspaceFileSymbol[] = [];
+  const query = options?.query?.toLowerCase();
+
+  function walk(currentDir: string) {
+    if (files.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) break;
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!IGNORED_SCAN_DIRS.has(entry.name)) {
+          walk(fullPath);
+        }
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"].includes(ext)) {
+          const relPath = path.relative(rootDir, fullPath).replace(/\\/g, "/");
+          let exports: string[] = [];
+
+          try {
+            const content = fs.readFileSync(fullPath, "utf8");
+            if (ext === ".py") {
+              const defMatches = content.match(/^(?:async\s+)?def\s+([a-zA-Z_0-9]+)/gm) || [];
+              const classMatches = content.match(/^class\s+([a-zA-Z_0-9]+)/gm) || [];
+              exports = [
+                ...classMatches.map((c) => c.replace(/^class\s+/, "").trim()),
+                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim())
+              ];
+            } else {
+              const sourceFile = ts.createSourceFile(
+                entry.name,
+                content,
+                ts.ScriptTarget.Latest,
+                true,
+                ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+              );
+
+              for (const stmt of sourceFile.statements) {
+                const mods = (stmt as any).modifiers;
+                const hasExport = Array.isArray(mods) && mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
+                if (hasExport) {
+                  if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isInterfaceDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isTypeAliasDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isEnumDeclaration(stmt) && stmt.name) {
+                    exports.push(stmt.name.text);
+                  } else if (ts.isVariableStatement(stmt)) {
+                    for (const decl of stmt.declarationList.declarations) {
+                      if (decl.name && ts.isIdentifier(decl.name)) {
+                        exports.push(decl.name.text);
+                      }
+                    }
+                  }
+                } else if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+                  for (const el of stmt.exportClause.elements) {
+                    exports.push(el.name.text);
+                  }
+                }
+              }
+            }
+          } catch {
+            // best-effort symbol extraction
+          }
+
+          if (query) {
+            const matchesQuery =
+              relPath.toLowerCase().includes(query) ||
+              exports.some((e) => e.toLowerCase().includes(query));
+            if (!matchesQuery) continue;
+          }
+
+          files.push({ path: relPath, exports });
+        }
+      }
+    }
+  }
+
+  walk(rootDir);
+
+  const treeLines = files.map((f) => {
+    return f.exports.length > 0
+      ? `${f.path}: ${f.exports.join(", ")}`
+      : `${f.path}`;
+  });
+
+  const treeSummary = treeLines.join("\n");
+
+  const repoMap: WorkspaceRepoMap = {
+    root: rootDir,
+    files,
+    treeSummary,
+    length: files.length,
+    toString() {
+      return treeSummary;
+    }
+  };
+
+  return repoMap;
 }
 
 export class ExplorerWorker {
@@ -94,8 +249,11 @@ export class ExplorerWorker {
     return [...this.scopedTools];
   }
 
-  async exploreWorkspace(options: { path?: string; query?: string }): Promise<string> {
-    return `Inventory distillation for ${options.path || "workspace root"}`;
+  async exploreWorkspace(options?: { path?: string; query?: string; repoRoot?: string; maxFiles?: number }): Promise<WorkspaceRepoMap> {
+    const root = options?.path
+      ? (path.isAbsolute(options.path) ? options.path : path.resolve(options?.repoRoot || process.cwd(), options.path))
+      : (options?.repoRoot || process.cwd());
+    return scanWorkspaceRepoMap(root, options);
   }
 }
 
@@ -287,11 +445,13 @@ export class BuilderWorker {
   readonly maxIterations: number = 5;
   private readonly model?: string;
   private readonly injectedGenerate?: GenerateFn;
-  private readonly ollamaUrl?: string;
+  private readonly llmUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
+  private readonly workspaceRoot?: string;
   private readonly scopedTools = [
     "workspace_write_file",
+    "workspace_patch_file",
     "workspace_run_command",
     "git_diff",
     "git_commit"
@@ -300,13 +460,34 @@ export class BuilderWorker {
   constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
     this.injectedGenerate = options?.generate;
-    this.ollamaUrl = options?.ollamaUrl;
+    this.llmUrl = options?.llmUrl || options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
+    this.workspaceRoot = options?.workspaceRoot;
   }
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
+  }
+
+  resolveTargets(milestone: Milestone): string[] {
+    if (milestone.plannedFiles && Array.isArray(milestone.plannedFiles) && milestone.plannedFiles.length > 0) {
+      const valid = milestone.plannedFiles.filter((f) => Boolean(f && typeof f === "string" && f.trim().length > 0));
+      if (valid.length > 0) return valid;
+    }
+    return [this.resolveTarget(milestone)];
+  }
+
+  async patchFile(
+    targetRelPath: string,
+    patches: Array<PatchItem>,
+    options?: { repoRoot?: string } | string
+  ): Promise<PatchFileResult> {
+    const repoRoot =
+      typeof options === "string"
+        ? options
+        : options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    return await workspacePatchFile(repoRoot, targetRelPath, patches);
   }
 
   private resolveTarget(milestone: Milestone, explicit?: string): string {
@@ -322,9 +503,118 @@ export class BuilderWorker {
     return target;
   }
 
+  private async tryApplySurgicalPatches(
+    rawText: string,
+    targetRelPath: string,
+    fullPath: string,
+    previousContent: string,
+    repoRoot: string
+  ): Promise<string | null> {
+    if (!previousContent || !fs.existsSync(fullPath)) return null;
+    let parsedPatches: PatchItem[] | null = null;
+    try {
+      const potentialJson = stripCodeFence(rawText).trim();
+      if (potentialJson.startsWith("{") && potentialJson.endsWith("}")) {
+        const parsed = JSON.parse(potentialJson);
+        if (parsed && Array.isArray(parsed.patches) && parsed.patches.length > 0) {
+          parsedPatches = parsed.patches;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    if (parsedPatches) {
+      try {
+        await this.patchFile(targetRelPath, parsedPatches, { repoRoot });
+        return fs.readFileSync(fullPath, "utf8");
+      } catch (patchErr: any) {
+        console.warn(`[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`);
+      }
+    }
+    return null;
+  }
+
+  private async runSurgicalEditLoop(params: {
+    generate: ReturnType<typeof createLlmGenerate>;
+    model: string;
+    milestone: Milestone;
+    targetRelPath: string;
+    fullPath: string;
+    previousContent: string;
+    repoRoot: string;
+    criticFeedback: string[];
+    priorContext?: string;
+    signal?: AbortSignal;
+    onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+    maxAttempts?: number;
+  }): Promise<{ content: string; loadDurationMs: number; thinking?: string }> {
+    const maxAttempts = params.maxAttempts ?? 3;
+    let totalLoadDuration = 0;
+    let lastThinking: string | undefined;
+    let lastError = "";
+    let lastText = "";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const retryNote = lastError
+        ? `\nPREVIOUS PATCH ATTEMPT FAILED (${lastError}). Fix the search string or syntax and return valid JSON patches.\n`
+        : "";
+      const prompt = `You are an expert autonomous code builder working on milestone [${params.milestone.id}]: ${params.milestone.title}.
+Your task: apply surgical search-and-replace patches to the existing file "${params.targetRelPath}".
+Task Requirements:
+${params.milestone.description}
+Acceptance Criteria:
+${params.milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${params.criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${params.criticFeedback.join("\n")}` : ""}
+${params.priorContext || ""}${retryNote}
+Existing file content:
+${params.previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}
+
+Respond ONLY with a JSON object of the form:
+{"patches": [{"search": "exact existing text", "replace": "replacement text"}]}
+Do not rewrite the entire file.`;
+
+      const result = await params.generate({
+        model: params.model,
+        prompt,
+        keepAlive: this.keepAlive,
+        signal: params.signal,
+        onThinkingChunk: params.onThinkingChunk,
+        scope: this.scope,
+        reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 4096 }
+      });
+      if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+      if (result.thinking) lastThinking = result.thinking;
+      lastText = result.text || "";
+
+      const patched = await this.tryApplySurgicalPatches(
+        result.text,
+        params.targetRelPath,
+        params.fullPath,
+        params.previousContent,
+        params.repoRoot
+      );
+      if (patched !== null) {
+        return { content: patched, loadDurationMs: totalLoadDuration, thinking: lastThinking };
+      }
+      lastError = "Output was not valid { patches: [...] } or search string did not match";
+    }
+
+    const fenceMatch = lastText.match(/```(?:[a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/);
+    const fallbackContent = fenceMatch && fenceMatch[1].trim().length > 0 ? fenceMatch[1] : lastText;
+    if (fallbackContent.trim().length > 0) {
+      fs.mkdirSync(path.dirname(params.fullPath), { recursive: true });
+      fs.writeFileSync(params.fullPath, fallbackContent, "utf8");
+      return { content: fallbackContent, loadDurationMs: totalLoadDuration, thinking: lastThinking };
+    }
+
+    throw new Error(`[builder] Surgical patch loop exhausted ${maxAttempts} attempts for ${params.targetRelPath}: ${lastError}`);
+  }
+
   async executeMilestoneWork(
     milestone: Milestone,
-    options?: {
+    optionsOrIteration?: {
       repoRoot?: string;
       previousDiff?: string;
       criticFeedback?: string[];
@@ -334,14 +624,129 @@ export class BuilderWorker {
       gitSha?: string;
       signal?: AbortSignal;
       onThinkingChunk?: (chunk: string, totalThinking: string) => void;
-    }
+    } | number,
+    legacyCriticFeedback?: string[],
+    legacyRepoRoot?: string
   ): Promise<BuilderResult> {
-    const repoRoot = options?.repoRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+    const options =
+      typeof optionsOrIteration === "object" && optionsOrIteration !== null
+        ? optionsOrIteration
+        : {
+            iteration: typeof optionsOrIteration === "number" ? optionsOrIteration : undefined,
+            criticFeedback: legacyCriticFeedback,
+            repoRoot: legacyRepoRoot
+          };
+    const repoRoot = options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
     const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
-    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || "swift-15-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || DEFAULT_PRIMARY_MODEL;
     const criticFeedback = options?.criticFeedback || [];
-    const targetRelPath = this.resolveTarget(milestone, options?.targetFile);
+    const targets = options?.targetFile ? [options.targetFile] : this.resolveTargets(milestone);
 
+    // Multi-target sequential execution
+    if (targets.length > 1) {
+      const modifiedFiles: string[] = [];
+      const diffs: string[] = [];
+      let totalLoadDuration = 0;
+      let lastThinking: string | undefined;
+      let lastContent = "";
+      const priorFileContexts: Array<{ file: string; content: string }> = [];
+
+      for (const targetRelPath of targets) {
+        const fullPath = path.resolve(repoRoot, targetRelPath);
+        const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
+
+        let newContent: string;
+        const synthetic = !this.injectedGenerate && isFastGraphTestMode();
+        if (synthetic) {
+          newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+        } else {
+          const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
+          const priorContext = priorFileContexts.length > 0
+            ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
+            : "";
+          if (previousContent && fs.existsSync(fullPath)) {
+            const surgical = await this.runSurgicalEditLoop({
+              generate,
+              model: modelToUse,
+              milestone,
+              targetRelPath,
+              fullPath,
+              previousContent,
+              repoRoot,
+              criticFeedback,
+              priorContext,
+              signal: options?.signal,
+              onThinkingChunk: options?.onThinkingChunk
+            });
+            newContent = surgical.content;
+            totalLoadDuration += surgical.loadDurationMs;
+            if (surgical.thinking) lastThinking = surgical.thinking;
+          } else {
+          const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
+Task Requirements:
+${milestone.description}
+Acceptance Criteria:
+${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
+${priorContext}
+${previousContent ? `\nExisting file content to modify:\n${previousContent.replace(`\n${FORCED_FLAW_MARKER}`, "").slice(0, 6000)}` : ""}
+
+Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
+
+          const result = await generate({
+            model: modelToUse,
+            prompt,
+            keepAlive: this.keepAlive,
+            signal: options?.signal,
+            onThinkingChunk: options?.onThinkingChunk,
+            scope: this.scope,
+            reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
+          });
+          newContent = stripCodeFence(result.text);
+          if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+          if (result.thinking) lastThinking = result.thinking;
+
+          const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+          if (patched !== null) {
+            newContent = patched;
+          }
+          }
+        }
+
+        if (!synthetic) {
+          const astCheck = validateCodeAst(targetRelPath, newContent);
+          if (!astCheck.valid) {
+            console.warn(`[builder] AST validation warning for ${targetRelPath}: ${astCheck.error}`);
+          }
+        }
+
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, newContent, "utf8");
+
+        diffs.push(createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent));
+        modifiedFiles.push(targetRelPath);
+        priorFileContexts.push({ file: targetRelPath, content: newContent });
+        lastContent = newContent;
+      }
+
+      const gitSha = options?.gitSha || getResolvedGitSha(repoRoot);
+      return {
+        diff: diffs.join("\n\n"),
+        gitSha,
+        iterations: iteration,
+        synthetic: !this.injectedGenerate && isFastGraphTestMode(),
+        model: (!this.injectedGenerate && isFastGraphTestMode()) ? undefined : modelToUse,
+        targetFile: targets[0],
+        modifiedFiles,
+        loadDurationMs: totalLoadDuration || undefined,
+        thinking: lastThinking,
+        rawContent: lastContent
+      };
+    }
+
+    const targetRelPath = targets[0] || this.resolveTarget(milestone, options?.targetFile);
     const fullPath = path.resolve(repoRoot, targetRelPath);
     const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
 
@@ -355,8 +760,26 @@ export class BuilderWorker {
       console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
       newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
     } else {
-      const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+      const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
       const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
+      if (!isSingleArtifact && previousContent && fs.existsSync(fullPath)) {
+        const surgical = await this.runSurgicalEditLoop({
+          generate,
+          model: modelToUse,
+          milestone,
+          targetRelPath,
+          fullPath,
+          previousContent,
+          repoRoot,
+          criticFeedback,
+          signal: options?.signal,
+          onThinkingChunk: options?.onThinkingChunk
+        });
+        newContent = surgical.content;
+        loadDurationMs = surgical.loadDurationMs || undefined;
+        builderThinking = surgical.thinking;
+      } else {
+
       const prompt = isSingleArtifact
         ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Generate ONLY the requested file. Do NOT create supporting code, project scaffolding, build configs, or API clients. Output the file content directly.
@@ -386,11 +809,18 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         signal: options?.signal,
         onThinkingChunk: options?.onThinkingChunk,
         scope: this.scope,
-        options: { temperature: 0.2, num_predict: 2048 }
+        reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
       });
       newContent = stripCodeFence(result.text);
       loadDurationMs = result.loadDurationMs;
       builderThinking = result.thinking;
+
+      const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
+      if (patched !== null) {
+        newContent = patched;
+      }
+      }
     }
 
     // Guardrail 1 & 5: Pre-write AST validation & Error-signature stuck detection (build-loop pattern)
@@ -415,6 +845,7 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             synthetic: false,
             model: modelToUse,
             targetFile: targetRelPath,
+            modifiedFiles: [targetRelPath],
             loadDurationMs,
             stuck: true,
             errorSignature: signature,
@@ -423,12 +854,12 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         }
 
         astAttempts++;
-        const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+        const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
         const correctionPrompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
 
-Please fix the syntax error and output the complete, valid, raw file content for "${targetRelPath}". Do not wrap in conversational prose or explanation.`;
+Please fix the syntax error and output the complete, valid file content for "${targetRelPath}" enclosed in a markdown code fence (\`\`\`typescript ... \`\`\`). Do not include conversational prose or explanation outside the fence.`;
 
         const retryResult = await generate({
           model: modelToUse,
@@ -436,7 +867,8 @@ Please fix the syntax error and output the complete, valid, raw file content for
           keepAlive: this.keepAlive,
           signal: options?.signal,
           scope: this.scope,
-          options: { temperature: 0.2, num_predict: 2048 }
+          reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 8192 }
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -468,6 +900,7 @@ Please fix the syntax error and output the complete, valid, raw file content for
       synthetic,
       model: synthetic ? undefined : modelToUse,
       targetFile: targetRelPath,
+      modifiedFiles: [targetRelPath],
       loadDurationMs,
       thinking: builderThinking,
       rawContent: newContent
@@ -583,7 +1016,7 @@ export class CriticWorker {
   readonly role: WorkerRole = "critic";
   private readonly model?: string;
   private readonly injectedGenerate?: GenerateFn;
-  private readonly ollamaUrl?: string;
+  private readonly llmUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
   private readonly scopedTools = [
@@ -595,7 +1028,7 @@ export class CriticWorker {
   constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
     this.injectedGenerate = options?.generate;
-    this.ollamaUrl = options?.ollamaUrl;
+    this.llmUrl = options?.llmUrl || options?.ollamaUrl;
     this.keepAlive = options?.keepAlive;
     this.scope = options?.scope;
   }
@@ -611,7 +1044,7 @@ export class CriticWorker {
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || "swift-15-27b-mtp";
+    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
 
     // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
     // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
@@ -795,14 +1228,16 @@ export class CriticWorker {
     }
 
     // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
-    const generate = this.injectedGenerate || createOllamaGenerate({ baseUrl: this.ollamaUrl, scope: this.scope });
+    const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
     const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
 ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("\n")}
+${diffContext?.testExitCode !== undefined ? `\nAcceptance Test Runner Status: Exit Code ${diffContext.testExitCode}` : ""}
+${diffContext?.testOutput ? `\nTest Output:\n${diffContext.testOutput.slice(-2000)}` : ""}
 
 Diff Under Review:
-${diff.slice(0, 6000)}
+${diff.slice(0, 16000)}
 
 Critically inspect the diff against each criterion. Reference actual diff lines and content in your verdict.
 If any criterion is violated, missing, or has flaws, set approved to false and explain the exact flaw in feedback.
@@ -817,7 +1252,7 @@ Respond strictly in JSON:
 
     let verdictText: string;
     try {
-      const useJsonFormat = !modelToUse.toLowerCase().includes("gemma");
+      const useJsonFormat = true;
       const result = await generate({
         model: modelToUse,
         prompt,
@@ -825,7 +1260,8 @@ Respond strictly in JSON:
         keepAlive: this.keepAlive,
         signal: options?.signal,
         scope: this.scope,
-        options: { temperature: 0.1, num_predict: 512 }
+        reasoningEffort: "balanced",
+        options: { temperature: 0.1, num_predict: 2048 }
       });
       verdictText = result.text;
     } catch (err: any) {
@@ -928,8 +1364,60 @@ ${outcome.lesson}
   }
 }
 
+export class Semaphore {
+  private permits: number;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(maxConcurrency: number) {
+    this.permits = Math.max(1, maxConcurrency);
+  }
+
+  tryAcquire(): boolean {
+    if (this.permits > 0) {
+      this.permits--;
+      return true;
+    }
+    return false;
+  }
+
+  async acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      throw new Error("Worker execution aborted before acquiring concurrency slot");
+    }
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        const idx = this.queue.indexOf(grant);
+        if (idx !== -1) this.queue.splice(idx, 1);
+        reject(new Error("Worker execution aborted while waiting for concurrency slot"));
+      };
+      const grant = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.queue.push(grant);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits++;
+    }
+  }
+}
+
+export const singleFlightSemaphore = new Semaphore(1);
+
 export class WorkerPool {
   private readonly maxConcurrency: number;
+  private readonly semaphore: Semaphore;
   private readonly modelRoster: ModelRosterConfig;
   readonly generate?: GenerateFn;
   readonly residencyPlan?: ResidencyPlan;
@@ -937,7 +1425,8 @@ export class WorkerPool {
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
-    this.maxConcurrency = options?.maxConcurrency || 2;
+    this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : (process.env.LLM_ENGINE === "strata" ? 1 : 2));
+    this.semaphore = new Semaphore(this.maxConcurrency);
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
     this.generate = options?.generate;
     this.residencyPlan = options?.residencyPlan;
@@ -975,14 +1464,8 @@ export class WorkerPool {
 
   async executeJob<T>(job: WorkerJob<T>): Promise<T> {
     if (job.abortSignal?.aborted) {
+      job.onTerminalState?.("aborted");
       throw new Error("Worker execution aborted before start");
-    }
-
-    const abortController = new AbortController();
-    if (job.abortSignal) {
-      job.abortSignal.addEventListener("abort", () => {
-        abortController.abort();
-      });
     }
 
     let cleanupTracking: () => void = () => {};
@@ -991,11 +1474,107 @@ export class WorkerPool {
     });
     this.activeJobs.add(trackingPromise);
 
+    if (!this.semaphore.tryAcquire()) {
+      try {
+        await this.semaphore.acquire(job.abortSignal);
+      } catch (err) {
+        this.activeJobs.delete(trackingPromise);
+        cleanupTracking();
+        throw err;
+      }
+    }
+
+    const abortController = new AbortController();
+    let settled = false;
+    const emitTerminal = (state: "completed" | "aborted" | "failed") => {
+      if (settled) return;
+      settled = true;
+      job.onTerminalState?.(state);
+    };
+
+    const onParentAbort = () => {
+      abortController.abort();
+    };
+    if (job.abortSignal) {
+      job.abortSignal.addEventListener("abort", onParentAbort, { once: true });
+    }
+
+
+    let worktreePath: string | undefined;
+    if (job.worktreeRepoRoot) {
+      const os = await import("node:os");
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const { execFileSync } = await import("node:child_process");
+      const wtDir = fs.mkdtempSync(path.join(os.default.tmpdir(), "wp-wt-"));
+      try {
+        execFileSync("git", ["worktree", "add", "--detach", wtDir, "HEAD"], {
+          cwd: job.worktreeRepoRoot,
+          stdio: "ignore"
+        });
+        worktreePath = wtDir;
+      } catch (err) {
+        fs.rmSync(wtDir, { recursive: true, force: true });
+        this.activeJobs.delete(trackingPromise);
+        cleanupTracking();
+        this.semaphore.release();
+        emitTerminal("failed");
+        throw err;
+      }
+    }
+
     try {
-      return await job.taskFn(abortController.signal);
+      const abortPromise = new Promise<never>((_, reject) => {
+        if (abortController.signal.aborted) {
+          emitTerminal("aborted");
+          reject(new Error("Worker execution aborted"));
+          return;
+        }
+        abortController.signal.addEventListener(
+          "abort",
+          () => {
+            setTimeout(() => { emitTerminal("aborted"); reject(new Error("Worker execution aborted")); }, 0);
+            // deferred to allow taskFn abort listener to settle first
+          },
+          { once: true }
+        );
+      });
+
+      const taskPromise = job.taskFn(abortController.signal, worktreePath).then(
+        (res) => {
+          emitTerminal("completed");
+          return res;
+        },
+        (err) => {
+          emitTerminal(abortController.signal.aborted ? "aborted" : "failed");
+          throw err;
+        }
+      );
+
+      return await Promise.race([taskPromise, abortPromise]);
     } finally {
+      if (job.abortSignal) {
+        job.abortSignal.removeEventListener("abort", onParentAbort);
+      }
+      if (worktreePath && job.worktreeRepoRoot) {
+        try {
+          const { execFileSync } = await import("node:child_process");
+          execFileSync("git", ["worktree", "remove", "--force", worktreePath], {
+            cwd: job.worktreeRepoRoot,
+            stdio: "ignore"
+          });
+        } catch {
+          try {
+            const fs = await import("node:fs");
+            fs.rmSync(worktreePath, { recursive: true, force: true });
+          } catch {
+            // Best-effort cleanup
+          }
+        }
+      }
       this.activeJobs.delete(trackingPromise);
       cleanupTracking();
+      this.semaphore.release();
     }
   }
 }
@@ -1003,11 +1582,11 @@ export class WorkerPool {
 /** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
-    planner: process.env.PLANNER_MODEL || "swift-15-27b-mtp",
-    builder: process.env.BUILDER_MODEL || "swift-15-27b-mtp",
-    critic: process.env.CRITIC_MODEL || "swift-15-27b-mtp",
-    explorer: process.env.EXPLORER_MODEL || "swift-15-27b-mtp",
-    recorder: process.env.RECORDER_MODEL || "swift-15-27b-mtp"
+    planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
+    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL
   };
 }
 

@@ -7,7 +7,7 @@ import {
   computeModelOptions,
   resolveEffectiveReasoningEffort
 } from "../lib/chatUtils.js";
-import { isReasoningEffortSupported, PRESET_MODEL_PROFILES } from "../config/models.js";
+import { isReasoningEffortSupported, getModelProfile, PRESET_MODEL_PROFILES } from "../config/models.js";
 
 describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   it("parses completed <think>...</think> blocks into thought and content using real implementation", () => {
@@ -70,14 +70,22 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
     assert.equal(highEffort, "xhigh");
     const highOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "xhigh");
     assert.equal(highOpts.temperature, 0.7);
-    assert.equal(highOpts.num_predict, 8192);
+    assert.equal(highOpts.num_predict, 16384);
 
     // Low reasoning effort
     const lowEffort = resolveEffectiveReasoningEffort("qwen3.8:27b-q3_k_m", "low");
     assert.equal(lowEffort, "low");
     const lowOpts = computeModelOptions("qwen3.8:27b-q3_k_m", "low");
     assert.equal(lowOpts.temperature, 0.2);
-    assert.equal(lowOpts.num_predict, 4096);
+    assert.equal(lowOpts.num_predict, 16384);
+
+    // Swift-1.5-Qwen3.8-27B-IQ3_XS support (Bug regression: case-insensitive check + profile definition)
+    assert.equal(isReasoningEffortSupported("Swift-1.5-Qwen3.8-27B-IQ3_XS"), true);
+    // LOW-effort ruling Nov 11: defaultReasoningEffort is "low"
+    assert.equal(resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS"), "low");
+    const profile = getModelProfile("Swift-1.5-Qwen3.8-27B-IQ3_XS");
+    assert.ok(profile, "Profile must exist for Swift-1.5-Qwen3.8-27B-IQ3_XS");
+    assert.equal(profile?.supportsReasoningEffort, true);
   });
 
   it("disables and omits reasoning effort for unsupported models (Hermes 3)", () => {
@@ -90,7 +98,7 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
 
     const unsupportedOpts = computeModelOptions("hermes3:8b", "xhigh");
     assert.equal(unsupportedOpts.temperature, 0.7, "Must use standard unbiased defaults");
-    assert.equal(unsupportedOpts.num_predict, 4096);
+    assert.equal(unsupportedOpts.num_predict, 16384);
   });
 
   it("CI standing rule: no test file re-implements functions exported by implementation modules", () => {

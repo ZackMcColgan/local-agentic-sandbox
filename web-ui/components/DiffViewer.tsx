@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye } from "lucide-react";
+import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye, PanelRightOpen } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { useCanvas } from "./CanvasContext";
+import { displayRepoPath } from "../lib/chatUtils";
 
 interface DiffViewerProps {
   branch?: string;
@@ -10,6 +12,12 @@ interface DiffViewerProps {
   modifiedFiles?: string[];
   diagramSvg?: string;
   className?: string;
+  /**
+   * UI-023: chat diff cards pass false so a message's diffs start collapsed
+   * (header + counts only) instead of walling off the chat. Defaults to true
+   * so ProjectsView and the workspace inspector keep opening expanded.
+   */
+  defaultOpen?: boolean;
 }
 
 export function DiffViewer({
@@ -17,10 +25,12 @@ export function DiffViewer({
   diff = "",
   modifiedFiles = [],
   diagramSvg,
-  className = ""
+  className = "",
+  defaultOpen = true
 }: DiffViewerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [showDiagram, setShowDiagram] = useState(false);
+  const canvas = useCanvas();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -37,38 +47,39 @@ export function DiffViewer({
   const deletions = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
 
   return (
-    <div className={`rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
+    <div className={`max-w-full min-w-0 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
       {/* Header Bar */}
-      <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-50/80 dark:bg-zinc-950/60 border-b border-slate-200 dark:border-zinc-800">
+      <div className="px-3.5 py-2.5 flex items-center justify-between gap-2 min-w-0 bg-slate-50/80 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 text-left group"
+          aria-expanded={isOpen}
+          className="flex items-center gap-2 text-left group min-w-0 flex-1"
         >
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
           )}
           <GitBranch className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200">
-            {branch}
+          <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate min-w-0">
+            {displayRepoPath(branch)}
           </span>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-mono ml-2 shrink-0">
             {additions > 0 && (
               <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                +{additions}
+                {`+${additions}`}
               </span>
             )}
             {deletions > 0 && (
               <span className="text-rose-600 dark:text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-                -{deletions}
+                {`-${deletions}`}
               </span>
             )}
           </div>
         </button>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {diagramSvg && (
             <button
               type="button"
@@ -77,6 +88,27 @@ export function DiffViewer({
             >
               <Eye className="h-3 w-3" />
               <span>Diagram</span>
+            </button>
+          )}
+
+          {canvas?.enabled && diff && (
+            <button
+              type="button"
+              onClick={() =>
+                canvas.openCanvas({
+                  kind: "file",
+                  id: `diff-${branch}`,
+                  filename: branch,
+                  language: "diff",
+                  code: diff,
+                })
+              }
+              className="flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] sm:min-h-[32px] sm:min-w-0 px-2.5 py-1 rounded text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-emerald-300/70 dark:border-emerald-700/50 transition-colors"
+              title="Open in Canvas"
+              aria-label="Open in Canvas"
+            >
+              <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+              <span>Canvas</span>
             </button>
           )}
 
@@ -109,7 +141,7 @@ export function DiffViewer({
           {/* Modified Files Pills */}
           {modifiedFiles.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-              <span className="text-slate-400 dark:text-zinc-500">Files:</span>
+              <span className="text-slate-400 dark:text-zinc-400">Files:</span>
               {modifiedFiles.map((file, idx) => (
                 <span
                   key={idx}
@@ -129,7 +161,7 @@ export function DiffViewer({
                 <span>Architecture Diagram Preview (.drawio.svg)</span>
               </div>
               <div
-                className="overflow-x-auto max-h-72 p-2 bg-white dark:bg-zinc-950 rounded border border-slate-200 dark:border-zinc-800 flex items-center justify-center"
+                className="overflow-x-auto max-h-72 p-2 bg-white dark:bg-black rounded border border-slate-200 dark:border-zinc-800 flex items-center justify-center"
                 dangerouslySetInnerHTML={{ __html: diagramSvg }}
               />
             </div>

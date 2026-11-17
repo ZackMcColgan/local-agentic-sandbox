@@ -1,0 +1,12 @@
+You are given the following tool results from an investigation. Produce a concise summary of the findings.
+You MUST cite the specific tool result IDs (e.g. `[tool:read_file#1]`, `[tool:run_command#2]`, `[tool:grep#3]`) for every factual claim you make. A reasoning-only finish with zero resolvable citations will fail.
+
+=== TOOL RESULTS ===
+[tool:read_file#1] Path: web-ui/lib/jobChunking.ts
+Lines 12-28: `DEFAULT_MAX_ROUNDS = 8`. When `round >= maxRounds`, the runner writes a handoff file to `.handoffs/<jobId>.json` and transitions the job state to `paused_handoff`.
+
+[tool:run_command#2] Command: npm run test:gate
+Exit code: 0. Passed: 14, Failed: 0, Duration: 3.42s.
+
+[tool:grep#3] Pattern: "paused_handoff" in web-ui/
+Matches: web-ui/lib/jobChunking.ts:24, web-ui/lib/jobQueue.ts:118.

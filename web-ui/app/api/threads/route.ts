@@ -6,13 +6,20 @@ import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import type { ChunkBudgetConfig } from "@/lib/jobChunking";
 
 const threadStore = new ThreadStore();
 const supervisor = new OvernightSupervisor();
 
 export async function GET(req: Request) {
   try {
-    const threads = await threadStore.listThreads();
+    const url = new URL(req.url);
+    const full = url.searchParams.get("full") === "1";
+    const q = url.searchParams.get("q")?.trim() || undefined;
+    const threads = full
+      ? await threadStore.listThreads()
+      : await threadStore.listThreadSummaries(q);
     return NextResponse.json({ threads });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -33,18 +40,29 @@ export async function POST(req: Request) {
       const toolchain: ToolchainType = body.toolchain || "node:22";
       const scope: TaskScope = body.scope || "PROJECT";
       const taskId = `task-${Date.now()}`;
-      const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: body.model });
+      const branchName = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
+      const enableGitOps = body.enableGitOps !== false;
+      const autoDeployOnGreen = Boolean(body.autoDeployOnGreen);
+      const effectiveModel = body.model || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+      const chunkBudget: ChunkBudgetConfig | undefined =
+        body.chunkBudget && typeof body.chunkBudget === "object"
+          ? (body.chunkBudget as ChunkBudgetConfig)
+          : typeof body.maxRounds === "number"
+            ? { maxRounds: body.maxRounds }
+            : undefined;
 
+      // Persist-first launch: create manifest with status "planning" and write checkpoint before planner runs
       const manifest: TaskManifest = {
         taskId,
         goal,
-        branchName: "feat/v2.5-overnight",
-        branch: "feat/v2.5-overnight",
+        branchName,
+        branch: branchName,
+        enableGitOps,
+        autoDeployOnGreen,
         toolchain,
         scope,
-        complexity: planSpec.complexity,
-        status: "active",
-        milestones: planSpec.milestones,
+        status: "planning",
+        milestones: [],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
@@ -52,7 +70,7 @@ export async function POST(req: Request) {
           {
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
+            message: `Planning engineering task for goal: ${goal}`
           }
         ],
         startedAt: new Date().toISOString(),
@@ -71,6 +89,9 @@ export async function POST(req: Request) {
           thread.taskId = taskId;
           thread.scope = scope;
           thread.status = "active";
+          if (chunkBudget !== undefined) {
+            thread.chunkBudget = chunkBudget;
+          }
           const lastMsg = thread.messages[thread.messages.length - 1];
           const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === goal;
           if (!isDuplicate) {
@@ -98,24 +119,26 @@ export async function POST(req: Request) {
           threadStore.saveThread(thread);
         } else {
           thread = threadStore.createThread({
-            title: goal.slice(0, 36),
-            model: body.model || "swift-15-27b-mtp",
-            reasoningEffort: body.reasoningEffort || "medium",
+            model: effectiveModel,
+            reasoningEffort: body.reasoningEffort || "low",
             initialPrompt: goal,
             attachments: body.attachments,
             taskId,
-            scope
+            scope,
+            hostAccess: false,
+            ...(chunkBudget !== undefined ? { chunkBudget } : {})
           });
         }
       } else {
         thread = threadStore.createThread({
-          title: goal.slice(0, 36),
-          model: body.model || "swift-15-27b-mtp",
-          reasoningEffort: body.reasoningEffort || "medium",
+          model: effectiveModel,
+          reasoningEffort: body.reasoningEffort || "low",
           initialPrompt: goal,
           attachments: body.attachments,
           taskId,
-          scope
+          scope,
+          hostAccess: false,
+          ...(chunkBudget !== undefined ? { chunkBudget } : {})
         });
         thread.messages.push({
           id: `msg-${Date.now()}-a`,
@@ -135,11 +158,15 @@ export async function POST(req: Request) {
 
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool({ scope }),
-        model: body.model || "swift-15-27b-mtp",
+        model: effectiveModel,
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
-          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
+          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || (manifest.status !== "active" && manifest.status !== "planning")) {
             return;
+          }
+          manifest.builderThinking = totalThinking;
+          if (manifest.milestones && manifest.milestones[manifest.currentMilestoneIndex]) {
+            manifest.milestones[manifest.currentMilestoneIndex].builderThinking = totalThinking;
           }
           const now = Date.now();
           // Update at most once every 3 seconds or when totalThinking has grown substantially (>120 chars)
@@ -178,6 +205,53 @@ export async function POST(req: Request) {
         }
       });
       (async () => {
+        console.log(`[threads] decomposing goal for task ${taskId}`);
+        try {
+          const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel });
+          manifest.complexity = planSpec.complexity;
+          manifest.milestones = planSpec.milestones;
+          manifest.status = "active";
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "planner",
+            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
+          });
+          supervisor.saveCheckpoint(manifest);
+
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            const lastAsst = currentThread.messages.slice().reverse().find(m => m.role === "assistant" && m.taskId === taskId);
+            if (lastAsst) {
+              lastAsst.content = `Started autonomous engineering run (${planSpec.milestones.length} milestones).`;
+            }
+            threadStore.saveThread(currentThread);
+          }
+        } catch (planErr: any) {
+          console.error(`[threads] Planning failed for task ${taskId}:`, planErr);
+          manifest.status = "failed";
+          manifest.parkedReason = planErr?.message || String(planErr);
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "planner",
+            message: `Planning failed: ${manifest.parkedReason}`
+          });
+          supervisor.saveCheckpoint(manifest);
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            currentThread.status = "failed";
+            currentThread.messages.push({
+              id: `msg-${Date.now()}-err`,
+              role: "assistant",
+              content: `Task failed: ${manifest.parkedReason}`,
+              taskId,
+              timestamp: new Date().toISOString()
+            });
+            threadStore.saveThread(currentThread);
+          }
+          activeExecutionSet.delete(taskId);
+          return;
+        }
+
         console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
         try {
           const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
@@ -186,9 +260,15 @@ export async function POST(req: Request) {
           if (result.status === "completed") {
             const currentThread = await threadStore.getThread(activeThreadId);
             if (currentThread) {
-              const lastMilestone = result.milestones?.[result.milestones.length - 1];
-              const targetFile = lastMilestone?.plannedFiles?.[0] || "weather.svg";
-              let fileContent = "";
+              // Task 3 (Sprint A2): Collect all modified deliverables across all completed milestones without hardcoded weather.svg fallback
+              const allFiles = new Set<string>();
+              for (const m of result.milestones || []) {
+                if (m.plannedFiles && Array.isArray(m.plannedFiles)) {
+                  for (const f of m.plannedFiles) {
+                    if (f && typeof f === "string" && f.trim()) allFiles.add(f.trim());
+                  }
+                }
+              }
 
               const repoCandidates = [
                 process.env.WORKSPACE_DIR,
@@ -197,14 +277,20 @@ export async function POST(req: Request) {
                 path.resolve(process.cwd(), "..")
               ].filter(Boolean) as string[];
 
-              for (const dir of repoCandidates) {
-                const fullP = path.resolve(dir, targetFile);
-                if (fs.existsSync(fullP)) {
-                  try {
-                    fileContent = fs.readFileSync(fullP, "utf8");
-                    break;
-                  } catch {}
+              const deliverables: Array<{ file: string; content: string }> = [];
+
+              for (const targetFile of allFiles) {
+                let fileContent = "";
+                for (const dir of repoCandidates) {
+                  const fullP = path.resolve(dir, targetFile);
+                  if (fs.existsSync(fullP)) {
+                    try {
+                      fileContent = fs.readFileSync(fullP, "utf8");
+                      break;
+                    } catch {}
+                  }
                 }
+                deliverables.push({ file: targetFile, content: fileContent });
               }
 
               // Extract any thinking from the builder journal entries
@@ -213,13 +299,31 @@ export async function POST(req: Request) {
                 ?.map((j) => j.message.replace(/^Builder reasoning:\s*/, ""))
                 ?.join("\n\n");
 
-              let completionContent = `Task completed successfully! Here is the generated \`${targetFile}\`:\n\n`;
-              if (fileContent.trim()) {
-                const isSvg = targetFile.endsWith(".svg") || fileContent.includes("<svg");
-                const fenceLang = isSvg ? "xml" : path.extname(targetFile).replace(".", "") || "text";
-                completionContent += `\`\`\`${fenceLang}\n${fileContent.trim()}\n\`\`\``;
+              let completionContent = "";
+              if (deliverables.length === 0) {
+                completionContent = "Task completed successfully!";
+              } else if (deliverables.length === 1) {
+                const d = deliverables[0];
+                completionContent = `Task completed successfully! Here is the generated \`${d.file}\`:\n\n`;
+                if (d.content.trim()) {
+                  const isSvg = d.file.endsWith(".svg") || d.content.includes("<svg");
+                  const fenceLang = isSvg ? "xml" : path.extname(d.file).replace(".", "") || "text";
+                  completionContent += `\`\`\`${fenceLang}\n${d.content.trim()}\n\`\`\``;
+                } else {
+                  completionContent += `Deliverable committed as \`${d.file}\`.`;
+                }
               } else {
-                completionContent += `Deliverable committed as \`${targetFile}\`.`;
+                completionContent = `Task completed successfully! Generated ${deliverables.length} deliverables:\n\n`;
+                for (const d of deliverables) {
+                  completionContent += `### \`${d.file}\`\n`;
+                  if (d.content.trim()) {
+                    const isSvg = d.file.endsWith(".svg") || d.content.includes("<svg");
+                    const fenceLang = isSvg ? "xml" : path.extname(d.file).replace(".", "") || "text";
+                    completionContent += `\`\`\`${fenceLang}\n${d.content.trim()}\n\`\`\`\n\n`;
+                  } else {
+                    completionContent += `Deliverable committed as \`${d.file}\`.\n\n`;
+                  }
+                }
               }
 
               currentThread.status = "completed";
@@ -233,17 +337,50 @@ export async function POST(req: Request) {
               });
               threadStore.saveThread(currentThread);
             }
+          } else {
+            // Task ended in non-completed terminal state (failed, parked, cancelled)
+            const currentThread = await threadStore.getThread(activeThreadId);
+            if (currentThread) {
+              currentThread.status = result.status === "failed" || (result.status as string) === "crashed" ? "failed" : result.status === "paused" ? "paused" : "stopped";
+              const reason = result.parkedReason || (result.ambiguityFlags?.[0]?.question) || "Task did not reach completion.";
+              currentThread.messages.push({
+                id: `msg-${Date.now()}-term`,
+                role: "assistant",
+                content: `Task ${result.status}: ${reason}`,
+                taskId,
+                timestamp: new Date().toISOString()
+              });
+              threadStore.saveThread(currentThread);
+            }
           }
         } catch (err: any) {
           console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
-          throw err;
+          manifest.status = "failed";
+          manifest.parkedReason = err?.message || String(err);
+          manifest.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            message: `Fatal execution error: ${manifest.parkedReason}`
+          });
+          supervisor.saveCheckpoint(manifest);
+          const currentThread = await threadStore.getThread(activeThreadId);
+          if (currentThread) {
+            currentThread.status = "failed";
+            currentThread.messages.push({
+              id: `msg-${Date.now()}-err`,
+              role: "assistant",
+              content: `Task failed: ${manifest.parkedReason}`,
+              taskId,
+              timestamp: new Date().toISOString()
+            });
+            threadStore.saveThread(currentThread);
+          }
         } finally {
           activeExecutionSet.delete(taskId);
         }
       })().catch((err) => {
         console.error(`[threads] Task ${taskId} execution failed:`, err);
       });
-
 
       return NextResponse.json({ thread, task: manifest }, { status: 201 });
     }

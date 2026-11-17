@@ -5,7 +5,7 @@ import path from "node:path";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ThreadStore, Thread, activeExecutionSet } from "../lib/threads/threadStore";
+import { ThreadStore, Thread, ThreadMessage, activeExecutionSet } from "../lib/threads/threadStore";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ChatStream } from "../components/ChatStream";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
@@ -281,16 +281,17 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       assert.equal(thread.title, "New thread", "Empty thread must have title 'New thread'");
     });
 
-    it("derives title from first ~40 characters of first user message", () => {
+    it("derives title from the first user message, truncated at a word boundary (UI-008)", () => {
       const store = new ThreadStore(tempDir);
-      const longPrompt = "How does the critic handle crashes in workerPool when model is unreachable?";
+      const longPrompt = "How does the critic handle crashes in workerPool when model is unreachable during startup?";
       const thread = store.createThread({
         initialPrompt: longPrompt
       });
+      // UI-008: titles must never cut mid-word; truncation lands on the last word boundary <= 80.
       assert.equal(
         thread.title,
-        longPrompt.slice(0, 40),
-        "Title must be derived from first ~40 chars of first user message"
+        "How does the critic handle crashes in workerPool when model is unreachable",
+        "Title must be derived from the first user message with word-boundary truncation"
       );
     });
 
@@ -313,13 +314,13 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       assert.ok(reloaded);
       assert.equal(
         reloaded?.title,
-        "What is the status of the OTEL waterfall",
+        "What is the status of the OTEL waterfall spans?",
         "Thread with 'New thread' title must be retroactively updated from first user message"
       );
 
       // Verify persisted on disk
       const rawOnDisk = JSON.parse(fs.readFileSync(store.getFilePath(thread.id), "utf8"));
-      assert.equal(rawOnDisk.title, "What is the status of the OTEL waterfall");
+      assert.equal(rawOnDisk.title, "What is the status of the OTEL waterfall spans?");
     });
   });
 
@@ -350,7 +351,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       const afterUser = await store.getThread(thread.id);
       assert.ok(afterUser);
       assert.equal(afterUser.messages.length, 1);
-      assert.equal(afterUser.title, "Explain the kubernetes rollout strategy ");
+      assert.equal(afterUser.title, "Explain the kubernetes rollout strategy for web-ui");
 
       // Simulate assistant reply added via addMessage
       const assistantMsg: ThreadMessage = {

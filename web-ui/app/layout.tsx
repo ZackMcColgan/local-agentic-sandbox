@@ -7,16 +7,20 @@ export const viewport: Viewport = {
   colorScheme: "dark light",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
 };
 
 export const metadata: Metadata = {
   title: "local-agentic-sandbox | Air-Gapped Agentic AI Platform",
-  description: "Autonomous code generation, execution, and supply-chain verification inside zero-trust container sandboxes with Ollama and MCP.",
-  keywords: ["AI Agent", "Sandboxed Execution", "MCP", "Ollama", "Model Context Protocol", "Zero-Trust", "Docker Sandbox"],
+  description: "Autonomous code generation, execution, and supply-chain verification inside zero-trust container sandboxes with local LLM and MCP.",
+  keywords: ["AI Agent", "Sandboxed Execution", "MCP", "llama.cpp", "Local LLM", "Model Context Protocol", "Zero-Trust", "Docker Sandbox"],
   authors: [{ name: "Zack McColgan" }],
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
 };
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default function RootLayout({
   children,
@@ -33,7 +37,7 @@ export default function RootLayout({
                 try {
                   var urlParams = new URLSearchParams(window.location.search);
                   var queryTheme = urlParams.get('theme');
-                  var saved = queryTheme || localStorage.getItem('app-theme');
+                  var saved = queryTheme || localStorage.getItem('app-theme') || localStorage.getItem('theme');
                   var isDark = saved ? saved === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (isDark) {
                     document.documentElement.classList.add('dark');
@@ -52,7 +56,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="h-full bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 font-sans antialiased overflow-x-hidden selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300">
+      <body className="h-full bg-white dark:bg-black text-slate-900 dark:text-zinc-100 font-sans antialiased overflow-x-hidden selection:bg-emerald-500/20 selection:text-emerald-700 dark:selection:text-emerald-300">
         {children}
       </body>
     </html>

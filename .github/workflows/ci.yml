@@ -7,9 +7,33 @@ on:
     branches: [ "main","develop" ]
 
 jobs:
+  typecheck:
+    name: Typecheck (full error report)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Typecheck web-ui
+        run: |
+          npx tsc --noEmit -p web-ui/tsconfig.json
+
   test-and-typecheck:
     name: Unit Tests & Static Analysis
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -36,6 +60,7 @@ jobs:
   coverage-report:
     name: Code Coverage Report
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     needs: test-and-typecheck
     permissions:
       contents: read
@@ -107,6 +132,7 @@ jobs:
   docker-build-and-scout:
     name: Container Build & Docker Scout Scan
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: test-and-typecheck
     permissions:
       contents: read
@@ -120,6 +146,7 @@ jobs:
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
+        continue-on-error: true
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -162,3 +189,53 @@ jobs:
           image: local-agentic-sandbox/mcp-server:test
           only-severities: critical,high
         continue-on-error: true
+
+
+  ui-e2e-playwright:
+    name: Playwright UI (Shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: test-and-typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Install Playwright Chromium (no apt; runner image carries system deps)
+        working-directory: web-ui
+        run: |
+          npx playwright install chromium
+
+      - name: Build Web UI
+        working-directory: web-ui
+        run: |
+          npm run build
+
+      - name: Execute Playwright UI Test Suite
+        working-directory: web-ui
+        run: |
+          npx playwright test --shard=${{ matrix.shard }}/3 --grep-invert @chaos
+
+      - name: Upload Playwright Artifacts on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: |
+            web-ui/playwright-report/
+            web-ui/test-results/
+          retention-days: 14

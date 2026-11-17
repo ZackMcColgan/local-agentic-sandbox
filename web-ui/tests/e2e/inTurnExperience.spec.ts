@@ -1,0 +1,469 @@
+import { test, expect } from "@playwright/test";
+import http from "node:http";
+import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
+
+const PHONE_WIDTHS = [390, 412] as const;
+
+for (const width of PHONE_WIDTHS) {
+  test.describe(`P1 — Context bar (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("displays 1-decimal K label, visible min fill at 3.9K, and proportional emerald fill at 72.4K", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let turnCount = 0;
+      await page.route("**/api/chat", async (route) => {
+        turnCount += 1;
+        const tokens = turnCount === 1 ? 3900 : 72400;
+        const sse = [
+          `data: ${JSON.stringify({ type: "token", content: `Reply ${turnCount}` })}\n\n`,
+          `data: ${JSON.stringify({ type: "done", roundPromptTokens: [tokens] })}\n\n`,
+        ].join("");
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: sse,
+        });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("first");
+      await composer.press("Enter");
+
+      const pill = page.getByTestId("context-meter-pill");
+      await expect(pill).toContainText("3.9K");
+      await expect(pill).toContainText("/ 100K");
+
+      const track = page.getByTestId("context-meter-track");
+      const fill = page.getByTestId("context-meter-fill");
+      await expect(fill).toBeVisible();
+
+      await expect(async () => {
+        const lowTrackBox = await track.boundingBox();
+        const lowFillBox = await fill.boundingBox();
+        expect(lowTrackBox).not.toBeNull();
+        expect(lowFillBox).not.toBeNull();
+        expect(lowFillBox!.width).toBeGreaterThanOrEqual(4);
+        expect(lowTrackBox!.width).toBeGreaterThanOrEqual(100);
+      }).toPass();
+
+      // Second turn at 72.4K
+      await composer.fill("second");
+      await composer.press("Enter");
+
+      await expect(pill).toContainText("72.4K");
+      await expect(pill).toContainText("/ 100K");
+
+      await expect(async () => {
+        const midTrackBox = await track.boundingBox();
+        const midFillBox = await fill.boundingBox();
+        expect(midTrackBox).not.toBeNull();
+        expect(midFillBox).not.toBeNull();
+        const ratio = midFillBox!.width / midTrackBox!.width;
+        expect(ratio).toBeGreaterThan(0.68);
+        expect(ratio).toBeLessThan(0.77);
+      }).toPass();
+
+      // Two-stop emerald gradient fill (FINAL-DESIGN)
+      await expect(fill).toHaveClass(/from-\[#10b981\]/);
+      await expect(fill).toHaveClass(/to-\[#34d399\]/);
+    });
+  });
+
+  test.describe(`P2 — Live trace rows (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("streams tool rows live without 0 traces empty state and highlights in-flight row", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let releaseSecondTrace!: () => void;
+      const secondTraceGate = new Promise<void>((r) => {
+        releaseSecondTrace = r;
+      });
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(`data: ${JSON.stringify({ type: "status", status: "Preparing..." })}\n\n`);
+        setTimeout(() => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "trace",
+              trace: {
+                id: "tr-1",
+                tool: "read_file",
+                args: { path: "src/app.ts" },
+                status: "running",
+              },
+            })}\n\n`
+          );
+        }, 100);
+        secondTraceGate.then(() => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "trace",
+              trace: {
+                id: "tr-2",
+                tool: "write_file",
+                args: { path: "src/out.ts" },
+                status: "running",
+              },
+            })}\n\n`
+          );
+        });
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "All done." })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: "done", roundPromptTokens: [4200] })}\n\n`);
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("run tools");
+      await composer.press("Enter");
+
+      const headerCard = page.getByTestId("live-activity-header");
+      await expect(headerCard).toBeVisible();
+      await expect(headerCard).not.toContainText("0 traces");
+
+      const rows = page.getByTestId("live-trace-row");
+      await expect(rows).toHaveCount(1);
+      await expect(rows.nth(0)).toContainText("read_file");
+      await expect(rows.nth(0)).toHaveAttribute("data-in-flight", "true");
+
+      releaseSecondTrace();
+      await expect(rows).toHaveCount(2);
+      await expect(rows.nth(1)).toContainText("write_file");
+      await expect(rows.nth(1)).toHaveAttribute("data-in-flight", "true");
+
+      releaseDone();
+      await expect(page.getByText("All done.")).toBeVisible();
+      server.close();
+    });
+  });
+
+  test.describe(`P3 — Live work card & JOB brief card (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("shows Round N, elapsed timer, Live badge, and collapsible Show full brief", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(
+          `data: ${JSON.stringify({
+            type: "trace",
+            trace: { id: "tr-r3", tool: "host_run_file_write", status: "running" },
+            roundPromptTokens: [1000, 2000, 3000],
+          })}\n\n`
+        );
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "Round 3 complete." })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: "done", roundPromptTokens: [1000, 2000, 3000] })}\n\n`
+          );
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const longBrief = "JOB BRIEF: " + "Implement the operations view. ".repeat(20);
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill(longBrief);
+      await composer.press("Enter");
+
+      const briefToggle = page.getByTestId("brief-collapse-toggle");
+      await expect(briefToggle).toBeVisible();
+      await expect(briefToggle).toContainText("Show full brief");
+      await briefToggle.click();
+      await expect(briefToggle).toContainText(/Show less|Collapse/i);
+
+      const headerCard = page.getByTestId("live-activity-header");
+      await expect(headerCard).toBeVisible();
+      await expect(page.getByTestId("live-activity-freshness")).toContainText("Live");
+      await expect(page.getByTestId("live-activity-elapsed")).toBeVisible();
+
+      releaseDone();
+      await expect(page.getByText("Round 3 complete.")).toBeVisible();
+      server.close();
+    });
+  });
+
+  test.describe(`P4 — RUNNING pill (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("persistent RUNNING pill stays visible while streaming and is replaced by DONE on completion", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(
+          `data: ${JSON.stringify({
+            type: "trace",
+            trace: { id: "tr-p4", tool: "read_file", status: "completed", durationMs: 42 },
+            roundPromptTokens: [1000, 2000],
+          })}\n\n`
+        );
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "Finished P4." })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: "done", roundPromptTokens: [1000, 2000] })}\n\n`
+          );
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("run p4");
+      await composer.press("Enter");
+
+      const runningPill = page.getByTestId("running-pill");
+      await expect(runningPill).toBeVisible();
+      await expect(runningPill).toContainText("RUNNING");
+
+      // Scroll message list and verify pill remains visible
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(runningPill).toBeVisible();
+
+      releaseDone();
+      await expect(page.getByText("Finished P4.")).toBeVisible();
+      await expect(runningPill).toBeHidden();
+      await expect(page.getByTestId("turn-done-chip")).toBeVisible();
+      server.close();
+    });
+  });
+
+  test.describe(`P5 — DISCONNECTED / RECOVERED banners (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("shows amber DISCONNECTED with retry count on stream abort, then green RECOVERED on reconcile", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let threadPollCount = 0;
+      let releaseSecondPoll!: () => void;
+      const secondPollGate = new Promise<void>((resolve) => {
+        releaseSecondPoll = resolve;
+      });
+      await page.route("**/api/threads/**", async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        threadPollCount += 1;
+        if (threadPollCount === 3) {
+          await secondPollGate;
+        }
+        const status = threadPollCount >= 3 ? "complete" : "streaming";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            thread: {
+              id: "thread-p5",
+              messages: [
+                { id: "u1", role: "user", content: "test disconnect" },
+                { id: "a1", role: "assistant", content: "Reconciled reply", status },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route("**/api/chat", async (route) => {
+        await route.abort("failed");
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("test disconnect");
+      await composer.press("Enter");
+
+      const disconnectedBanner = page.getByTestId("turn-transient-disconnected");
+      await expect(disconnectedBanner).toBeVisible();
+      await expect(disconnectedBanner).toContainText("DISCONNECTED");
+      await expect(disconnectedBanner).toContainText("Auto-retrying");
+      await expect(disconnectedBanner).toHaveClass(/amber/);
+      await expect(disconnectedBanner).toContainText("(2/12)");
+      releaseSecondPoll();
+
+      const recoveredBanner = page.getByTestId("stream-recovered-banner");
+      await expect(recoveredBanner).toBeVisible();
+      await expect(recoveredBanner).toContainText("RECOVERED");
+      await expect(recoveredBanner).toHaveClass(/emerald/);
+      await expect(recoveredBanner).toContainText(/Reconnected after [2-9]\d*s/);
+    });
+  });
+
+  test.describe(`P6 — Real reasoning in Thinking card (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("never renders canned fallback prose and renders streamed thought verbatim", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+
+      let releaseThought!: () => void;
+      const thoughtGate = new Promise<void>((r) => {
+        releaseThought = r;
+      });
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(`data: ${JSON.stringify({ type: "status", status: "Thinking..." })}\n\n`);
+        thoughtGate.then(() => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "thinking",
+              content: "Checking the exact database schema before editing.",
+            })}\n\n`
+          );
+        });
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "Done." })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: "done", roundPromptTokens: [1200] })}\n\n`);
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("think real");
+      await composer.press("Enter");
+
+      await expect(page.getByTestId("live-activity-header")).toBeVisible();
+      await expect(page.locator("body")).not.toContainText("formulating execution plan");
+
+      releaseThought();
+      await expect(
+        page.getByText("Checking the exact database schema before editing.")
+      ).toBeVisible();
+
+      releaseDone();
+      await expect(page.getByText("Done.")).toBeVisible();
+      server.close();
+    });
+  });
+
+  test.describe(`P7 — Greeting empty-state (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("renders greeting text intact without stray superscript or clipping", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page, { threads: [] });
+      await page.goto("/");
+
+      await expect(page.locator("header").first()).toBeVisible();
+      await expect(page.locator("sup")).toHaveCount(0);
+    });
+  });
+}

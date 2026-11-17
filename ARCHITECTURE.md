@@ -1,7 +1,7 @@
 # Architecture Specification: local-agentic-sandbox
 
 **Repository**: `local-agentic-sandbox`  
-**Description**: Full-stack, zero-trust autonomous AI coding platform. Orchestrates local LLMs via Ollama, Model Context Protocol (MCP), and hardened container sandboxes for autonomous code generation, execution, testing, and documentation retrieval.
+**Description**: Full-stack, zero-trust autonomous AI coding platform. Orchestrates local LLMs via the Strata inference engine, Model Context Protocol (MCP), and hardened container sandboxes for autonomous code generation, execution, testing, and documentation retrieval.
 
 ---
 
@@ -12,11 +12,12 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 ### The Solution
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
-1. **Local AI Inference Engine**: Self-hosted LLMs (`swift-15-27b-mtp`: Swift 1.5 Qwen3.8-27B Q3_K_M with Multi-Token Prediction `draft_num_predict 3`) served via Ollama directly over host GPU hardware (AMD Radeon RX 9070 XT 16GB VRAM, ROCm), and CPU-pinned embeddings (`all-minilm`, `num_gpu: 0`), fully air-gapped from internet egress with 24-hour VRAM keep-alive leases.
+1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving a resident ~125B-class MoE model with a 27B fallback and 128K context window, keeping inference local with no cloud dependency.
 2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 8 autonomous developer tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
-4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring a real-time conversational chat, segmented tri-mode model dispatcher (`[ ✨ Auto | ⚡ Flash | 🧠 Pro ]`), multimodal vision ingestion pipeline, OpenTelemetry distributed tracing waterfall, and persistent session storage.
-5. **Observability Engine (`otel-collector` / Jaeger)**: Real-time distributed trace collection across agent turns, tool dispatches, and command executions.
+4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy, test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage.
+5. **Observability Engine (`otel-collector` / Jaeger)**: Real-time distributed trace collection across agent turns, tool dispatches, and command executions, with the Jaeger UI served through the gateway at `/jaeger/`.
+6. **Host Bridge (`host-bridge`)**: Host process acting as the sole external boundary for git/GitHub and host-routed internet access, with an approval gate for destructive host actions and credentials stored only in the host OS keyring.
 
 ---
 
@@ -44,10 +45,10 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │   │   Web UI & Agent Orchestrator (Deployment / Service: web-ui:3000 / NodePort 30300)        │   │
 │   │   - Next.js 15 / React 19 / TypeScript / Tailwind CSS                                     │   │
 │   │   - Tri-Mode Model Dispatcher: [ ✨ Auto | ⚡ Flash | 🧠 Pro ]                             │   │
-│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> gemma4:e4b)              │   │
-│   │   - Session Chat Persistence (localStorage: local_agent_chat_history_v1)                 │   │
+│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> Strata vision)          │   │
+│   │   - Durable Server-Side Persistence (threadStore.ts + SQLite runLedger.ts)             │   │
 │   │   - OpenTelemetry Instrumentation SDK (telemetry.ts -> Jaeger trace waterfall)           │   │
-│   │   - Zero-Cold-Start VRAM Leases (keep_alive: "24h" on all Ollama dispatches)              │   │
+│   │   - Local Inference via Host Strata Engine (ROCm/HIP, 128K Context)                         │   │
 │   └──────────────────────┬────────────────────────────────────┬───────────────────────────────┘   │
 │                          │                                    │                                   │
 │           NetworkPolicy: egress-mesh                          │   NetworkPolicy: ai-mesh          │
@@ -75,15 +76,16 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │   │ - Jaeger UI & Trace Waterfall Analytics for user turns & tool executions                  │   │
 │   └───────────────────────────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────┬────────────────────────────────────────────────────────┘
-                                           │ (ExternalName / host.docker.internal:11434)
+                                           │ (strata-service / host.docker.internal:8080)
 ┌──────────────────────────────────────────▼────────────────────────────────────────────────────────┐
-│  HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB VRAM / ROCm)                                 │
+│  HOST INFERENCE & BRIDGE BOUNDARY (AMD Radeon RX 9070 XT / ROCm/HIP)                              │
 │                                                                                                   │
-│   Ollama Service (Host: 0.0.0.0:11434)                                                            │
-│   ├── qwen3.8:27b-q3_k_m (13.3 GB VRAM) ── Primary Orchestrator & Autonomous Coding Engine        │
-│   └── gemma4:e4b         (3.4 GB VRAM)  ── Fast Multimodal Diagram Ingestion & Triage (~80 tok/s) │
+│   Strata Inference Engine (Host Process)                                                          │
+│   ├── Resident ~125B-class MoE ── Primary Orchestrator & Autonomous Coding Engine (128K context)  │
+│   └── 27B Fallback               ── Secondary / Fallback Local Model                              │
 │                                                                                                   │
-│   * Active 24h VRAM Keep-Alive Lease ensures zero-cold-start latency on conversational turns.     │
+│   Host Bridge (Host Process — Sole External Boundary)                                             │
+│   └── git / GitHub, internet via host, approval gate for destructive actions, host OS keyring     │
 └───────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,9 +97,10 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`mcp-runner`** | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`). |
 | **`browser-mcp`** | `local-agentic-sandbox` | Read-Only App | Default (No Privs) | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only. |
-| **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, and host Ollama. |
+| **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge. |
 | **`otel-collector`**| `local-agentic-sandbox` | Ephemeral | Default (No Privs) | Non-Root | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686). |
-| **`ollama`** | Host Passthrough / PCIe | Local Drive | Host Native | Host User | Air-Gapped GPU Inference (AMD Radeon RX 9070 XT 16GB VRAM, ROCm, Port 11434). Accessible to cluster via `ExternalName: host.docker.internal`. |
+| **`strata`** | Host Process / PCIe | Local Drive | Host Native | Host User | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident ~125B-class MoE, 27B fallback, 128K context. |
+| **`host-bridge`** | Host Process | Local Drive | Host Native | Host User | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only). |
 
 ### 3.1 Host-Filesystem Write Trust Boundary (`./workspace:/workspace:rw`)
 
@@ -141,18 +144,20 @@ local-agentic-sandbox/
 │       ├── web-ui.yaml                 # Next.js UI deployment & NodePort service
 │       ├── mcp-runner.yaml             # Air-gapped code runner deployment & service
 │       ├── browser-mcp.yaml            # SSRF-guarded browser scraper deployment & service
-│       ├── ollama-service.yaml         # ExternalName service pointing to host.docker.internal
+│       ├── strata-service.yaml         # Service pointing to host Strata engine (:8080)
+│       ├── host-runner-service.yaml    # Service pointing to host-bridge (:8765)
+│       ├── qdrant.yaml                 # Qdrant vector store deployment & service
+│       ├── builder-tier.yaml           # Builder-tier toolchain sandbox deployment
+│       ├── ingress.yaml                # Nginx ingress rules for web-ui and /jaeger/
 │       ├── observability.yaml          # Jaeger OpenTelemetry collector deployment & service
 │       ├── network-policies.yaml       # Zero-trust network egress & ingress policies
 │       └── workspace-pvc.yaml          # HostPath persistent volume claim for ./workspace
 ├── docs/
 │   ├── architecture.drawio             # Editable Draw.io XML source diagram
 │   ├── architecture.drawio.svg         # Rendered vector SVG diagram for README/docs
-│   ├── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
-│   ├── FIRST_OVERNIGHT_TASK.md         # Autonomous pair-programming agent specification & first runbook
-│   ├── FLYWHEEL_SPIKE.md               # Hermes skills flywheel design & spike assessment
-│   ├── BRANCH_TRIAGE.md                # Git branch audit matrix and merge triage records
-│   └── DEVELOPMENT_SANDBOX.md          # Guide for microVM development sandboxes
+│   └── ADR-001-sandboxed-mcp.md        # Architectural Decision Record for containerized MCP
+├── host-bridge/                        # Host-side tool bridge (sole external boundary, :8765)
+├── eval/                               # Graded evaluation suite for chunked job execution
 ├── scripts/
 │   ├── lan-bridge.js                   # Zero-auth LAN reverse proxy bridge (0.0.0.0:80 / :3000)
 │   └── test-ui-render.js               # Headless visual inspection test script
@@ -195,7 +200,7 @@ local-agentic-sandbox/
 │   │   └── ThreadsSidebar.tsx          # Material 3 responsive sessions sidebar
 │   ├── lib/
 │   │   ├── agentEngine.ts              # Autonomous test-and-repair agent execution loop
-│   │   ├── chatHistory.ts              # Versioned localStorage persistence (v1)
+│   │   ├── threads/threadStore.ts      # Server-side durable thread store
 │   │   ├── fileParser.ts               # File ingestion & multimodal base64 extractor
 │   │   ├── ledger/runLedger.ts         # SQLite-backed durable run ledger & lifecycle tracking
 │   │   ├── subagents/supervisor.ts     # LangGraph supervisor, fail-closed recovery, and watchdog
@@ -204,24 +209,13 @@ local-agentic-sandbox/
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 50+ unit, component, supervisor, and lifecycle tests across monorepo
+│   └── tests/                          # 1,670 total workspace tests (1,636 in web-ui)
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 
 ---
 
-## 5. Development with Docker Sandboxes
-
-To safely run development CLI tools inside a secure microVM environment with its own Docker daemon, use Oleg Šelajev's kit:
-
-```bash
-# Run CLI inside Docker Sandbox
-sbx run --kit git+https://github.com/shelajev/agy-sbx-kit.git agy .
-```
-
----
-
-## 6. Verification & Quickstart
+## 5. Verification & Quickstart
 
 ### 6.1 Kubernetes Deployment (Docker Desktop / Production)
 
@@ -246,7 +240,7 @@ kubectl port-forward svc/web-ui -n local-agentic-sandbox 3001:3000 --address 0.0
 ### 6.2 Docker Compose Quickstart
 
 ```bash
-# 1. Pull the primary orchestrator model into host Ollama
+# 1. Ensure the Strata inference engine is running on the host GPU
 make pull-primary
 # OR: npm run pull:primary
 

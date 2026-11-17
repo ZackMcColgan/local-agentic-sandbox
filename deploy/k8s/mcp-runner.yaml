@@ -23,6 +23,7 @@ spec:
         runAsGroup: 10001
         runAsNonRoot: true
         fsGroup: 10001
+        supplementalGroups: [1001]
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -49,11 +50,11 @@ spec:
                 - ALL
           resources:
             limits:
-              cpu: "2000m"
-              memory: "1024Mi"
-            requests:
-              cpu: "250m"
+              cpu: "1000m"
               memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "96Mi"
           volumeMounts:
             - name: workspace-volume
               mountPath: /workspace

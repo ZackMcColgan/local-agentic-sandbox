@@ -71,9 +71,13 @@ export interface Milestone {
   criticNotes?: string[];
   forcedFlaw?: boolean;
   commitSha?: string;
+  diff?: string;
   diffSummary?: string;
+  modifiedFiles?: string[];
   testsPassed?: number;
   testsFailed?: number;
+  testsRun?: number;
+  testExitCode?: number | null;
   testFile?: string;
   plannedFiles?: string[];
   skipCriticOnValidSyntax?: boolean;
@@ -86,10 +90,13 @@ export interface Milestone {
   synthetic?: boolean;
   /** Model that generated the builder output (absent when synthetic). */
   builderModel?: string;
+  builderThinking?: string;
   criticScore?: number;
   criticVerdict?: "PASS" | "FAIL";
   criticCritique?: string;
   tokenThroughput?: { promptTokens?: number; completionTokens?: number; tokensPerSecond?: number };
+  toolchain?: ToolchainType;
+  lastError?: string;
 }
 
 export interface AmbiguityFlag {
@@ -105,7 +112,11 @@ export interface AmbiguityFlag {
   reviewed: boolean;
 }
 
+import type { CompletionStamp, VerificationGap } from "../finishVerification";
+
 export interface CheckpointState {
+  completionStamp?: CompletionStamp;
+  verificationGaps?: VerificationGap[];
   checkpointId: string;
   taskId: string;
   milestoneId: string;
@@ -117,16 +128,19 @@ export interface CheckpointState {
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
+export type TaskStatus = "planning" | "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
 
 export interface TaskJournalEntry {
   timestamp: string;
   role: string;
+  action?: string;
   message: string;
   data?: any;
 }
 
 export interface TaskManifest {
+  completionStamp?: CompletionStamp;
+  verificationGaps?: VerificationGap[];
   taskId: string;
   threadId?: string;
   parentRunId?: string;
@@ -136,6 +150,8 @@ export interface TaskManifest {
   complexity?: TaskComplexity;
   branchName: string;
   branch?: string;
+  builderThinking?: string;
+  pushStatus?: string;
   status: TaskStatus;
   milestones: Milestone[];
   currentMilestoneIndex: number;
@@ -156,6 +172,20 @@ export interface TaskManifest {
     failingStep?: string;
     summary?: string;
   };
+  enableGitOps?: boolean;
+  autoDeployOnGreen?: boolean;
+  gatePassed?: boolean;
+  gateOutput?: string;
+  gitOpsBranchCreated?: boolean;
+  testSummary?: {
+    passed: number;
+    failed: number;
+    durationMs?: number;
+  };
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export interface MorningReport {
@@ -185,6 +215,10 @@ export interface MorningReport {
   }>;
   ambiguityFlags: AmbiguityFlag[];
   parkedItems: string[];
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export type WorkerRole = "explorer" | "builder" | "critic" | "recorder";

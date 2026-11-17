@@ -33,6 +33,7 @@ export interface TestGateOutcome {
   testsRan: string[];
   changedFiles: string[];
   uncoveredFiles: string[];
+  stages?: string[];
   error?: string;
   output?: string;
 }
@@ -46,20 +47,321 @@ interface MappingRule {
 }
 
 const MAPPING_RULES: MappingRule[] = [
+  {
+    match: (p) =>
+      p.includes("ciSpeed.test.ts") ||
+      p.includes(".github/workflows/ci.yml") ||
+      p.includes(".github/workflows/chaos.yml"),
+    tests: ["tests/ciSpeed.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("explorerFs.test.ts") ||
+      p.includes("explorerFs.ts"),
+    tests: ["tests/explorerFs.test.ts"],
+  },
+  {
+    match: (p) => p.includes("explorerPanel.spec.ts"),
+    tests: ["tests/e2e/explorerPanel.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("inTurnExperience.spec.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("LiveRunBlock.tsx") ||
+      p.includes("ThinkingPanel.tsx"),
+    tests: ["tests/e2e/inTurnExperience.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetB4.spec.ts") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("ChatStream.tsx"),
+    tests: ["tests/e2e/invariantNetB4.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetB3.spec.ts") ||
+      p.includes("ChatStream.tsx"),
+    tests: ["tests/e2e/invariantNetB3.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetB2.spec.ts") ||
+      p.includes("ChatStream.tsx"),
+    tests: ["tests/e2e/invariantNetB2.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetB1.spec.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("BoardView.tsx"),
+    tests: ["tests/e2e/invariantNetB1.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetA4.test.ts") ||
+      p.includes("NavigationDrawer.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("BoardView.tsx"),
+    tests: ["tests/invariantNetA4.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetA3.test.ts") ||
+      p.includes("toolCallIntegrity.ts"),
+    tests: ["tests/invariantNetA3.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetA2.test.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("NavigationDrawer.tsx"),
+    tests: ["tests/invariantNetA2.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("invariantNetA1.spec.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("NavigationDrawer.tsx"),
+    tests: ["tests/e2e/invariantNetA1.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("uiuxCheckthroughFixes2.test.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("NavigationDrawer.tsx"),
+    tests: ["tests/uiuxCheckthroughFixes2.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("uiuxAuditFixes.test.ts") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("boardSeed.ts") ||
+      p.includes("boardStore.ts"),
+    tests: ["tests/uiuxAuditFixes.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("reviewerGate.test.ts"),
+    tests: ["tests/reviewerGate.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/board/flowMonitor") ||
+      p.includes("flowMonitor.test.ts"),
+    tests: ["tests/flowMonitor.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/board/dispatcher") ||
+      p.includes("dispatcher.test.ts"),
+    tests: ["tests/dispatcher.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/board/") ||
+      p.includes("app/api/board/") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("BoardAddSheet.tsx") ||
+      p.includes("boardStore.test.ts") ||
+      p.includes("boardUi.test.ts"),
+    tests: ["tests/boardStore.test.ts", "tests/boardUi.test.ts"],
+  },
+  {
+    match: (f) => f.startsWith("eval/") || f.includes("evalPackGraders.test.ts"),
+    tests: ["tests/evalPackGraders.test.ts"],
+  },
+  {
+    match: (p) => p.includes("workerPool.ts") || p.includes("builderSurgicalLoop.test.ts"),
+    tests: ["tests/builderSurgicalLoop.test.ts"],
+  },
+  {
+    match: (p) => p.includes("BuildsView.tsx") || p.includes("buildsViewBoard.test.ts"),
+    tests: ["tests/buildsViewBoard.test.ts"],
+  },
+  {
+    match: (p) => p.includes("dialectGuard") || p.includes("dialectGuardWiring.test.ts"),
+    tests: ["tests/dialectGuardWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("ingestion") || p.includes("ingestionQdrantIds.test.ts"),
+    tests: ["tests/ingestionQdrantIds.test.ts"],
+  },
+  {
+    match: (p) => p.includes("supervisor.ts") || p.includes("p3FinishAndHandoffWiring.test.ts"),
+    tests: ["tests/p3FinishAndHandoffWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("scheduler.ts") || p.includes("schedulerPlanner.test.ts"),
+    tests: ["tests/schedulerPlanner.test.ts"],
+  },
+  {
+    match: (p) => p.includes("security") || p.includes("securityHardeningWiring.test.ts"),
+    tests: ["tests/securityHardeningWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/jobChunking") || p.includes("jobChunkingHandoffs.test.ts"),
+    tests: ["tests/jobChunkingHandoffs.test.ts"],
+  },
+  // job-queue-isolation: single-slot queue + per-job worktrees
+  {
+    match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
+    tests: ["tests/jobQueueIsolation.test.ts"]
+  },
+  {
+    // job-queue-isolation wiring: route serialization seam + route-level proof
+    match: (p) => p.includes("lib/chatTurnGate") || p.includes("app/api/chat/route"),
+    tests: ["tests/jobQueueRoute.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("app/api/threads/route") ||
+      p.includes("lib/jobChunking") ||
+      p.includes("threadsLaunchChunkBudget.test.ts"),
+    tests: ["tests/threadsLaunchChunkBudget.test.ts"],
+  },
+  {
+    match: (p) => p.includes("eval/run.mjs") || p.includes("evalRunnerJobMode.test.ts"),
+    tests: ["tests/evalRunnerJobMode.test.ts"],
+  },
+  // Lane C UI polish (header, canvas & desktop top bar)
+  {
+    match: (p) =>
+      p.includes("design-tokens.css") ||
+      p.includes("globals.css") ||
+      p.includes("ThreadsSidebar.tsx") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("ArtifactCanvas.tsx") ||
+      p.includes("ArtifactRenderers.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("ProjectsView.tsx") ||
+      p.includes("BuildsView.tsx") ||
+      p.includes("NavigationDrawer.tsx") ||
+      p.includes("DiffViewer.tsx") ||
+      p.includes("ExecutionTrace.tsx") ||
+      p.includes("LiveActivityHeader.tsx") ||
+      p.includes("MorningReportView.tsx") ||
+      p.includes("darkTextFloor.test.ts") ||
+      p.includes("overlayMutualExclusion.test.ts") ||
+      p.includes("timestampFormat.test.ts") ||
+      p.includes("chatUtils.ts") ||
+      p.includes("telegramErrorDismiss.test.ts") ||
+      p.includes("titleTruncationResiduals.test.ts") ||
+      p.includes("SvgViewer.tsx") ||
+      p.includes("threadSummariesCache.test.ts") ||
+      p.includes("threadStore.ts") ||
+      p.includes("hostRunnerDisconnectPresentation.test.ts") ||
+      p.includes("narrationChunkSeparator.test.ts") ||
+      p.includes("threadInitialSelection.test.ts"),
+    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts", "tests/titleTruncationResiduals.test.ts", "tests/threadSummariesCache.test.ts", "tests/hostRunnerDisconnectPresentation.test.ts", "tests/narrationChunkSeparator.test.ts", "tests/threadInitialSelection.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("design-tokens.css") ||
+      p.includes("globals.css") ||
+      p.includes("ThreadsSidebar.tsx") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("ArtifactCanvas.tsx") ||
+      p.includes("ArtifactRenderers.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("ProjectsView.tsx") ||
+      p.includes("BuildsView.tsx") ||
+      p.includes("SkillsView.tsx") ||
+      p.includes("selfDeploy.ts") ||
+      p.includes("ModelBottomSheet.tsx") ||
+      p.includes("api/engine/route.ts") ||
+      p.includes("SvgViewer.tsx") ||
+      p.includes("app/icon.svg") ||
+      p.includes("app/layout.tsx") ||
+      p.includes("app/page.tsx"),
+    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts", "tests/settingsView.test.ts", "tests/modelBottomSheet.test.ts", "tests/buildsView.test.ts", "tests/skillsView.test.ts", "tests/uiLayoutInvariants.test.ts"]
+  },
+  // kind-gateway assets & launcher scripts
+  {
+    match: (p) => p.includes("kind-gateway") || p.includes("scripts/kind-gateway"),
+    tests: ["tests/kindGateway.test.ts"]
+  },
+  // Dev-proxy & LAN-bridge watchdog
+  {
+    match: (p) => p.includes("scripts/dev-proxy") || p.includes("scripts/lan-bridge"),
+    tests: ["tests/gatewayWatchdog.test.ts"]
+  },
   // Direct test file changed: run itself
   {
-    match: (p) => /tests\/[^/]+\.test\.ts$/.test(p),
+    match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
     tests: [] // handled dynamically
+  },
+  // Notifications & Telegram outbound alerts
+  {
+    match: (p) => p.includes("notifications"),
+    tests: ["tests/notifications.test.ts"]
+  },
+  // Host Mode & approvals & status & Host Bridge & Host Settings
+  {
+    match: (p) =>
+      p.includes("hostMode") ||
+      p.includes("hostSettings") ||
+      p.includes("settings/host") ||
+      p.includes("host/approvals") ||
+      p.includes("host/status") ||
+      p.includes("host-bridge") ||
+      p.includes("hostDaemon") ||
+      p.includes("build-host-runner") ||
+      p.includes("aiLifecycle") ||
+      p.includes("lifecycleTargetGuard") ||
+      p.includes("hostFourState"),
+    tests: [
+      "tests/hostMode.test.ts",
+      "tests/hostSettingsDefault.test.ts",
+      "tests/chunkingSettings.test.ts",
+      "tests/chunkingRouteGate.test.ts",
+      "tests/chunkingSettingsUi.test.ts",
+      "tests/hostFourState.test.ts",
+      "tests/patchTools.test.ts",
+      "tests/hostRunnerScript.test.ts",
+      "tests/hostDaemon.test.ts",
+      "tests/hostLifecycleUnit.test.ts",
+      "tests/hostAsyncJobs.test.ts",
+      "tests/lifecycleGuard.test.ts",
+      "tests/chatFilePaging.test.ts",
+      "tests/hostGitSafetyBattery.test.ts",
+      "tests/unattendedGitOps.test.ts",
+      "tests/unattendedGitToolAdmission.test.ts"
+    ]
+  },
+  // Progressive tool registry (patch tool registration)
+  {
+    match: (p) => p.includes("progressiveTools"),
+    tests: ["tests/patchTools.test.ts"]
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
     match: (p) => p.includes("tests/helpers/"),
     tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"]
   },
+  // Grounding helpers (search query derivation, honest-abort gate)
+  {
+    match: (p) => p.includes("lib/grounding"),
+    tests: ["tests/groundingGate.test.ts"]
+  },
+  // Simulation mode engine, scenarios registry, and offline runner
+  {
+    match: (p) => p.includes("lib/simulator"),
+    tests: ["tests/simulator.test.ts"]
+  },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),
     tests: ["tests/clipboard.test.ts"]
+  },
+  // Artifact download naming, MIME inference, and download helpers
+  {
+    match: (p) => p.includes("lib/artifactDownload") || p.includes("lib/attachmentMime"),
+    tests: ["tests/artifactDownload.test.ts", "tests/svgComponent.test.ts"]
   },
   // SVG utilities and SVG viewer component
   {
@@ -67,13 +369,33 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/svgRendering.test.ts",
       "tests/svgComponent.test.ts",
-      "tests/architectureSvgPair.test.ts"
+      "tests/architectureSvgPair.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts"
     ]
   },
-  // ChatStream, ThinkingPanel, chatUtils, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils"),
+    match: (p) => p.includes("app/api/board/route"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+
+  {
+    match: (p) => p.includes("lib/prePrPipeline"),
+    tests: ["tests/p5BoardAndPipeline.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/securityHardening") || p.includes("lib/selfDeployMachinery"),
+    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/finishVerificationGate"),
+    tests: ["tests/p32AndP33SupervisorGates.test.ts"]
+  },
+  // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
+  {
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
     tests: [
+      "tests/thinkingPanel.test.ts",
+      "tests/stopTurnFidelity.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
       "tests/chatDispatch.test.ts",
       "tests/chatStreaming.test.ts",
@@ -82,15 +404,210 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/unifiedUi.test.ts",
       "tests/chatPolish.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/chatDiffCollapseCanvasSwitch.test.ts",
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/chatContextBudget.test.ts",
+      "tests/chatActionDiscipline.test.ts",
+      "tests/chatScrollFollow.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
+      "tests/mobileUiPolish.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts",
+      "tests/chatUiHonestyAndCopy.test.ts",
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts",
+      "tests/chatTextTruth.test.ts",
+      "tests/incompleteStatusAffordance.test.ts",
+      "tests/chatStreamTokenPreservation.test.ts",
+      "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
+      "tests/p22PatchAndDialect.test.ts",
+      "tests/p32AndP33SupervisorGates.test.ts",
+
+      "tests/p5BoardAndPipeline.test.ts",
+      "tests/p6SecurityDeployEvalIngestion.test.ts",
+      "tests/chatSteerSubmitUx.test.ts",
+      "tests/capDefault.test.ts",
+      "tests/chatRoundBudget.test.ts",
+      "tests/chatWebResearchCap.test.ts",
+      "tests/uirHeaderActivity.test.ts"
     ]
   },
-  // Unified Agent UI (Material 3) components, threads store & API
+  // uir-0/uir-1: Live Activity Header, live-activity helpers, header diet
+  {
+    match: (p) => p.includes("lib/liveActivity") || p.includes("components/LiveActivityHeader"),
+    tests: [
+      "tests/uirHeaderActivity.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatPolish.test.ts"
+    ]
+  },
+  // Threads store & Threads API
+  {
+    match: (p) => p.includes("lib/threads") || p.includes("app/api/threads"),
+    tests: [
+      "tests/threadsLaunchTask.test.ts",
+      "tests/sessionIntegrity.test.ts",
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/permissions.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/threadDelete.test.ts",
+      "tests/threadDeleteUi.test.ts",
+      "tests/threadCompaction.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts",
+      "tests/chatTurnPresence.test.ts",
+      "tests/chatThinkingPreservation.test.ts",
+      "tests/thread-list-summaries.test.ts",
+      "tests/threadStoreCheapSweep.test.ts",
+      "tests/thread-list-loading-and-selection.test.ts",
+      "tests/thread-search-snippet.test.ts",
+      "tests/live-meter-done-parity.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+      "tests/supervisorGitOpsIntegration.test.ts",
+      // UI-008: readable thread-list titles derived at record-create time
+      "tests/threadTitleDerivation.test.ts"
+    ]
+  },
+  // Turn liveness: stall window, heartbeat, forced round-boundary snapshot, sidebar badges
   {
     match: (p) =>
-      p.includes("lib/threads") ||
-      p.includes("app/api/threads") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/threads/streamSnapshot") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
+  },
+  // qa-6 / UI-001 + UI-002: zombie streaming cap — leaked presence /
+  // execution live signals older than the hard cap with a stale record are
+  // reaped by reconcile instead of keeping a dead turn live forever
+  {
+    match: (p) => p.includes("lib/threads/threadStore"),
+    tests: ["tests/zombieStreamingCap.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("lib/commandDialectGuard") ||
+      p.includes("lib/commandDialectTraps") ||
+      p.includes("lib/hostMode"),
+    tests: ["tests/commandDialectGuard.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/finishVerification") || p.includes("components/CompletionVerificationBadge"),
+    tests: ["tests/finishVerification.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/evidenceLinkedSummaries") || p.includes("app/api/chat/route"),
+    tests: ["tests/evidenceLinkedSummaries.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("lib/toolCallIntegrity") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("components/ChatStream"),
+    tests: ["tests/toolCallIntegrity.test.ts"]
+  },
+  // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
+  // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
       p.includes("components/LiveRunBlock") ||
+      p.includes("app/page"),
+    tests: ["tests/chatLiveTraceRows.test.ts"]
+  },
+  // qa-7 / UI-013: live header context meter — latest round's actual prompt
+  // tokens from the record on every client (helper, snapshot carriage, pill)
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/api/chat/route"),
+    tests: ["tests/uirLiveMeter.test.ts"]
+  },
+  // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
+  // title wrap (UI-012), long-brief collapse (UI-014)
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThreadsSidebar"),
+    tests: ["tests/uirChatTextFixes.test.ts"]
+  },
+  // Board parity PR1 (FINAL-DESIGN): header composition + context meter
+  // format/geometry + composer/send geometry in ChatStream, formatContextK
+  // in tokenEconomics
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") || p.includes("lib/tokenEconomics"),
+    tests: ["tests/parityHeaderComposer.test.ts"]
+  },
+  // Board parity PR2 (FINAL-DESIGN): chat surfaces — brief bubble, thinking
+  // card, live trace rows, RUNNING pill, activity header details
+  {
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThinkingPanel") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("components/LiveActivityHeader"),
+    tests: ["tests/parityChatSurfaces.test.ts"]
+  },
+  // Board parity PR3 (FINAL-DESIGN): sessions sidebar + drawer + rail —
+  // board session cards, status chips, running-card actions, rail selection
+  {
+    match: (p) =>
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/NavigationDrawer") ||
+      p.endsWith("app/page.tsx"),
+    tests: ["tests/paritySidebarDrawer.test.ts"]
+  },
+  // Board parity PR4 (FINAL-DESIGN + canvas boards): canvas pane/diff form,
+  // chat canvas doors, Morning Report verdict/KPI/attention forms, and the
+  // UI-021 completed-turn trace surfaces (ExecutionTrace, TraceWaterfall)
+  {
+    match: (p) =>
+      p.includes("components/ArtifactCanvas") ||
+      p.includes("components/ArtifactRenderers") ||
+      p.includes("components/MorningReportView") ||
+      p.includes("components/ExecutionTrace") ||
+      p.includes("components/TraceWaterfall"),
+    tests: ["tests/parityVerificationPass.test.ts"]
+  },
+  // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
+  // micro-elision of superseded tool results, and within-thread read dedup
+  {
+    match: (p) =>
+      p.includes("lib/tokenEconomics") ||
+      p.includes("lib/microElision") ||
+      p.includes("lib/readDedup") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/llm/"),
+    tests: ["tests/tokenEconomics.test.ts", "tests/microElision.test.ts", "tests/readDedup.test.ts"]
+  },
+  // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
+  {
+    match: (p) =>
+      p.includes("permissions") ||
+      p.includes("deploy/k8s/mcp-runner") ||
+      p.includes("deploy/k8s/web-ui"),
+    tests: ["tests/permissions.test.ts"]
+  },
+  // Artifact canvas (uir-2): core logic, pane, and its card affordances
+  {
+    match: (p) =>
+      p.includes("lib/canvas") ||
+      p.includes("components/ArtifactCanvas") ||
+      p.includes("components/CanvasContext") ||
+      p.includes("components/ArtifactRenderers") ||
+      p.includes("components/ChatStream"),
+    tests: ["tests/uirCanvas.test.ts", "tests/chatDiffCollapseCanvasSwitch.test.ts"]
+  },
+  // Unified Agent UI (Material 3) components & design tokens
+  {
+    match: (p) =>
+      p.includes("lib/hooks") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("components/ArtifactRenderers") ||
       p.includes("components/ModelBottomSheet") ||
       p.includes("components/ThreadsSidebar") ||
       p.includes("components/NavigationDrawer") ||
@@ -98,53 +615,130 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/BuildsView") ||
       p.includes("components/SkillsView") ||
       p.includes("tailwind.config") ||
-      p.includes("app/layout.tsx"),
+      p.includes("next.config") ||
+      p.includes("app/layout.tsx") ||
+      p.includes("app/globals.css") ||
+      p.includes("app/design-tokens.css"),
     tests: [
+      "tests/thinkingPanel.test.ts",
+      "tests/stopTurnFidelity.test.ts",
       "tests/chatReasoningAndProgress.test.ts",
       "tests/threadsLaunchTask.test.ts",
       "tests/unifiedUi.test.ts",
+      "tests/oledTrueBlack.test.ts",
       "tests/sessionIntegrity.test.ts",
       "tests/chatPolish.test.ts",
       "tests/taskControls.test.ts",
-      "tests/sprint2UiNavigationAndScroll.test.ts"
+      "tests/sprint2UiNavigationAndScroll.test.ts",
+      "tests/skillsProposeApprove.test.ts",
+      "tests/mobileHeaderNav.test.ts",
+      "tests/engineToggle.test.ts",
+      "tests/shakeoutFixes.test.ts",
+      "tests/threadDelete.test.ts",
+      "tests/threadDeleteUi.test.ts",
+      "tests/projectsNavAndWorkflow.test.ts",
+      "tests/selfDeployWiring.test.ts",
+      "tests/threadsDeleteTouch.test.ts",
+      "tests/uiStateAndDedup.test.ts"
     ]
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
     tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
   },
-  // Memory profile, durable facts & semantic memory
+  // Projects & Folders (Phases 1-4)
+  {
+    match: (p) =>
+      p.includes("lib/projects/") ||
+      p.includes("app/api/projects") ||
+      p.includes("components/ProjectsView"),
+    tests: [
+      "tests/projectsRegistryAndExplorer.test.ts",
+      "tests/projectOvernightRunner.test.ts",
+      "tests/projectDiffReview.test.ts",
+      "tests/projectMorningReportIntegration.test.ts"
+    ]
+  },
+  // Memory profile & durable facts
   {
     match: (p) => p.includes("lib/memory"),
-    tests: ["tests/userProfile.test.ts", "tests/semanticMemory.test.ts"]
+    tests: ["tests/userProfile.test.ts"]
   },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
-  // Chat API route
+  // Chat API route and progressive tools
   {
-    match: (p) => p.includes("app/api/chat/route"),
+    match: (p) => p.includes("app/api/chat/route") || p.includes("lib/progressiveTools") || p.includes("lib/conversationCompaction"),
     tests: [
       "tests/chatStreaming.test.ts",
-      "tests/agentEngine.test.ts",
       "tests/toolParser.test.ts",
       "tests/fileParser.test.ts",
       "tests/ingestionPipeline.test.ts",
       "tests/userProfile.test.ts",
-      "tests/semanticMemory.test.ts"
+      "tests/chatActionDiscipline.test.ts",
+      "tests/agentGroundingAndHeadroom.test.ts",
+      "tests/progressiveToolDisclosure.test.ts",
+      "tests/conversationCompaction.test.ts",
+      "tests/llmProvider.test.ts",
+      "tests/chatFilePaging.test.ts",
+      "tests/chatTurnHonesty.test.ts",
+      "tests/chatTextTruth.test.ts",
+      "tests/chatPersistenceDecoupling.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/synthesisRetry.test.ts",
+      "tests/hybridCompaction.test.ts",
+      "tests/chatRoundBudget.test.ts",
+      "tests/chatToolDegradation.test.ts",
+      "tests/chatTurnPresence.test.ts",
+      "tests/chatThinkingPreservation.test.ts",
+      "tests/thread-list-summaries.test.ts",
+      "tests/threadStoreCheapSweep.test.ts",
+      "tests/thread-list-loading-and-selection.test.ts",
+      "tests/thread-search-snippet.test.ts",
+      "tests/live-meter-done-parity.test.ts",
+      "tests/chatWebResearchCap.test.ts"
+    ]
+  },
+  // LLM Provider abstraction, standalone supervisor & engine control
+  {
+    match: (p) =>
+      p.includes("lib/llm/") ||
+      p.includes("scripts/llamacpp-standalone") ||
+      p.includes("app/api/engine") ||
+      p.includes("components/EngineStatusPill") ||
+      p.includes("app/api/sandbox-status/route"),
+    tests: [
+      "tests/llmProvider.test.ts",
+      "tests/engineRoute.test.ts",
+      "tests/engineToggle.test.ts",
+      "tests/shakeoutFixes.test.ts"
     ]
   },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
-    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts"]
+    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
-  // Files API route
+  // Files API route, Workspace File alias & thread outputs
   {
-    match: (p) => p.includes("app/api/files/route"),
-    tests: ["tests/svgRendering.test.ts"]
+    match: (p) =>
+      p.includes("app/api/files/route") ||
+      p.includes("lib/threadOutputs") ||
+      p.includes("app/api/workspace/file"),
+    tests: [
+      "tests/filesApi.test.ts",
+      "tests/chatAttachments.test.ts",
+      "tests/svgRendering.test.ts",
+      "tests/punchlistBackendFixes.test.ts"
+    ]
+  },
+  // Patch Core surgical utility
+  {
+    match: (p) => p.includes("lib/subagents/patchCore"),
+    tests: ["tests/punchlistBackendFixes.test.ts"]
   },
   // Subagents & Supervisor
   {
@@ -155,36 +749,72 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/taskCompletion.test.ts",
       "tests/browserMcpConnectivity.test.ts",
       "tests/activeTaskRehydration.test.ts",
-      "tests/taskControls.test.ts"
+      "tests/taskControls.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+      "tests/buildPushHonesty.test.ts",
+      "tests/plannerScope.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts",
+      "tests/supervisorGitOpsIntegration.test.ts"
     ]
   },
   {
+    match: (p) =>
+      p.includes("lib/threads/inAppSupervisor") ||
+      p.includes("inAppSupervisor.test.ts") ||
+      p.includes("inAppSupervisorWiring.test.ts"),
+    tests: ["tests/inAppSupervisor.test.ts", "tests/inAppSupervisorWiring.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("components/SupervisorStatusBadge") ||
+      p.includes("components/supervisorBadgeState") ||
+      p.includes("supervisorStatusBadge.test.ts") ||
+      p.includes("supervisorStatusBadgeWiring.test.ts"),
+    tests: ["tests/supervisorStatusBadge.test.ts", "tests/supervisorStatusBadgeWiring.test.ts"]
+  },
+  {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/workerPoolIsolation.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/llmClient"),
-    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts", "tests/llmClient.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/residency"),
-    tests: ["tests/workerHonesty.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/vramResidencyAndMultiFile.test.ts"]
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
-    tests: ["tests/planner.test.ts"]
+    tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts", "tests/plannerScope.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/buildLaunchVisibility.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/morningReport"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
+    match: (p) => p.includes("lib/subagents/morningReport") || p.includes("lib/subagents/failureSummary"),
+    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/buildPushHonesty.test.ts"]
   },
   {
-    match: (p) => p.includes("lib/subagents/types") || p.includes("lib/subagents/scheduler"),
+    match: (p) => p.includes("lib/subagents/types"),
     tests: [
       "tests/supervisor.test.ts",
       "tests/workerPool.test.ts",
       "tests/scheduler.test.ts",
-      "tests/morningReport.test.ts"
+      "tests/morningReport.test.ts",
+      "tests/buildPushHonesty.test.ts",
+      "tests/evidenceLinking.test.ts",
+      "tests/explorerAndCriticUpgrade.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/threadsResumeRestartExecution.test.ts"
+    ]
+  },
+  {
+    match: (p) => p.includes("lib/subagents/scheduler") || p.includes("app/api/schedules") || p.includes("app/api/scheduler"),
+    tests: [
+      "tests/scheduler.test.ts",
+      "tests/schedulerApi.test.ts",
+      "tests/shakeoutFixes.test.ts",
+      "tests/schedulerDaemon.test.ts",
+      "tests/schedulerHealth.test.ts"
     ]
   },
   // Telemetry, Tool Parser, File Parser
@@ -208,7 +838,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Models config & modelfiles
   {
     match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
-    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts", "tests/agentEngine.test.ts"]
+    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts"]
   },
   // Makefile deployment configuration
   {
@@ -244,7 +874,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/MorningReportView") ||
       p.includes("app/morning-report") ||
       p.includes("app/api/morning-report"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts"]
+    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/morningReportViewRestructure.test.ts"]
   },
   // Run Ledger & Run Controls (Sprint 12 Phase 4)
   {
@@ -270,7 +900,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Human Skill Gates (Sprint 3)
   {
     match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
-    tests: ["tests/humanSkillGates.test.ts"]
+    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts", "tests/skillsViewPreview.test.ts"]
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
@@ -280,12 +910,23 @@ const MAPPING_RULES: MappingRule[] = [
   // Worker Git Operations (Sprint 12 Phase 8)
   {
     match: (p) => p.includes("lib/git/"),
-    tests: ["tests/workerGitOps.test.ts"]
+    tests: ["tests/workerGitOps.test.ts", "tests/buildPushHonesty.test.ts", "tests/supervisorGitOpsIntegration.test.ts"]
   },
   // Worker CI Feedback (Sprint 12 Phase 9)
   {
     match: (p) => p.includes("lib/ci/"),
-    tests: ["tests/workerCiFeedback.test.ts"]
+    tests: ["tests/workerCiFeedback.test.ts", "tests/productionTestRunnerWiring.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/deploy/selfDeployVerified"),
+    tests: ["tests/selfDeployVerified.test.ts"]
+  },
+  {
+    match: (p) =>
+      p.includes("components/DiffViewer") ||
+      p.includes("components/ThinkingPanel") ||
+      p.includes("next.config"),
+    tests: ["tests/uiPolishPass2.test.ts"]
   },
   // Self-Deploy Pipeline (Sprint 12 Phase 10)
   {
@@ -294,12 +935,50 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("components/ChatStream"),
-    tests: ["tests/chatStreaming.test.ts", "tests/chatReasoningAndProgress.test.ts"]
+    tests: [
+      "tests/chatStreaming.test.ts",
+      "tests/chatReasoningAndProgress.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatStreamTokenPreservation.test.ts",
+      "tests/fix5NarrationAndProse.test.ts",
+      "tests/p21ToolCallIntegrity.test.ts",
+      "tests/p22PatchAndDialect.test.ts",
+      "tests/p32AndP33SupervisorGates.test.ts",
+
+      "tests/p5BoardAndPipeline.test.ts",
+      "tests/p6SecurityDeployEvalIngestion.test.ts",
+      "tests/chatQueue.test.ts",
+      "tests/punchlistUiFixes.test.ts",
+      "tests/uiStateAndDedup.test.ts"
+    ]
+  },
+  // CHAT-8 live streaming visibility (server snapshots + client poll loop)
+  {
+    match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
+    tests: ["tests/chatLiveVisibility.test.ts", "tests/chatThinkingPreservation.test.ts"]
+  },
+  // CHAT-QUEUE client-side message queue
+  {
+    match: (p) => p.includes("lib/chatQueue"),
+    tests: ["tests/chatQueue.test.ts"]
+  },
+  // Turn delivery & client reconciliation
+  {
+    match: (p) => p.includes("lib/turnReconciliation") || p.includes("turnDeliveryReconciliation"),
+    tests: ["tests/turnDeliveryReconciliation.test.ts"]
+  },
+  // UI-006/UI-006b reconcile-poll backoff policy (ChatStream poll loop gating)
+  {
+    match: (p) => p.includes("lib/reconcilePollPolicy") || p.includes("reconcilePollBackoff"),
+    tests: ["tests/reconcilePollBackoff.test.ts"]
+  },
+  // CHAT-STEER mid-turn server steer mailbox
+  {
+    match: (p) => p.includes("app/api/threads") && p.includes("steer"),
+    tests: ["tests/chatSteer.test.ts"]
   },
   {
     match: (p) =>
-      p.includes("components/Navbar") ||
-      p.includes("components/WorkerTiles") ||
       p.includes("components/DiffViewer") ||
       p.includes("components/ExecutionTrace") ||
       p.includes("app/page.tsx") ||
@@ -307,7 +986,12 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/frontendRefreshRehydration.test.ts",
       "tests/chatHistory.test.ts",
-      "tests/chatStreaming.test.ts"
+      "tests/chatStreaming.test.ts",
+      "tests/artifactDeliveryAndPolish.test.ts",
+      "tests/projectsNavAndWorkflow.test.ts",
+      "tests/selfDeployWiring.test.ts",
+      "tests/traceRowAccessibleNames.test.ts",
+      "tests/chatDiffCollapseCanvasSwitch.test.ts"
     ]
   },
   // MCP server files
@@ -323,7 +1007,7 @@ const MAPPING_RULES: MappingRule[] = [
   // Test gate itself
   {
     match: (p) => p.includes("lib/testGate") || p.includes("scripts/test-gate"),
-    tests: ["tests/testGate.test.ts"]
+    tests: ["tests/testGate.test.ts", "tests/gateManifestCompleteness.test.ts", "tests/testGateRunner.test.ts"]
   },
   // Overnight dogfood runner
   {
@@ -337,7 +1021,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/ingest-docs") ||
       p.includes("scripts/verify-phase-d") ||
       p.includes("eval/"),
-    tests: ["tests/semanticMemory.test.ts"]
+    tests: ["tests/skillGate.test.ts"]
   },
   {
     match: (p) => p.includes("scripts/verify-phase-c"),
@@ -346,6 +1030,17 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("scripts/verify-lan-copy"),
     tests: ["tests/clipboard.test.ts"]
+  },
+  // Verification & capture scripts timeout guard (Phase 0.5)
+  {
+    match: (p) =>
+      p.includes("scripts/capture-svg-render") ||
+      p.includes("scripts/test-ui-render") ||
+      p.includes("scripts/run-full-suite") ||
+      p.includes("scripts/test-honest-abort-live") ||
+      p.includes("scripts/test-model-formulation-live") ||
+      p.includes("scripts/verify-"),
+    tests: ["tests/e2eScriptTimeouts.test.ts"]
   },
   // Architecture diagrams
   {
@@ -359,15 +1054,76 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.endsWith("package.json") || p.endsWith("tsconfig.json"),
     tests: [
-      "tests/agentEngine.test.ts",
       "tests/tasksApi.test.ts",
       "tests/supervisor.test.ts"
     ]
   },
+  // Settings Memory store, API route, prompt injection, and Settings card
+  {
+    match: (p) => p.includes("lib/memory/operatorMemory") || p.includes("app/api/settings/memory"),
+    tests: ["tests/operatorMemory.test.ts", "tests/operatorMemoryInjection.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/api/chat/route"),
+    tests: ["tests/operatorMemoryInjection.test.ts"]
+  },
+  {
+    match: (p) => p.includes("components/SettingsView"),
+    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"]
+  },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
-    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report") || p.includes("BRANCH_TRIAGE"),
+    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report"),
     tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
+  },
+  {
+    match: (p) => p.includes("deploy/k8s/observability.yaml"),
+    tests: ["tests/otelJaegerDedup.test.ts"]
+  },
+  // Charter modules (P0.1)
+  {
+    match: (p) => p.includes("lib/liveStatus"),
+    tests: ["tests/liveStatus.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/executionSummary"),
+    tests: ["tests/executionSummary.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/modelEval"),
+    tests: ["tests/modelEval.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/boardStore"),
+    tests: ["tests/boardStore.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/dispatcher"),
+    tests: ["tests/dispatcher.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/flowMonitor"),
+    tests: ["tests/flowMonitor.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/board/reviewerGate"),
+    tests: ["tests/reviewerGate.test.ts"]
+  },
+  {
+    match: (p) => p.includes("config/models") || p.includes("lib/chatUtils") || p.includes("lib/subagents/llmClient"),
+    tests: ["tests/p02ModelEffort.test.ts"]
+  },
+  {
+    match: (p) => p.includes("lib/threads/threadStore"),
+    tests: ["tests/p03DataLoss.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
+    tests: ["tests/p04VisualGuard.test.ts"]
+  },
+  {
+    match: (p) => p.includes("app/page.tsx") || p.includes("components/SettingsView"),
+    tests: ["tests/p05StrayUi.test.ts"]
   }
 ];
 
@@ -392,19 +1148,41 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("helm/") ||
     normalizedPath.startsWith(".github/") ||
     normalizedPath.includes(".tmp") ||
-    normalizedPath.includes("temp-") ||
+    /(?:^|\/)temp-/.test(normalizedPath) ||
+    normalizedPath.includes(".agent") ||
+    normalizedPath.includes("playwright-report") ||
+    normalizedPath.includes("playwright-live-report") ||
+    normalizedPath.includes("test-results") ||
+    normalizedPath.endsWith("full-suite-results.json") ||
     normalizedPath.startsWith("scripts/lan-bridge") ||
     normalizedPath.startsWith("scripts/dev-proxy") ||
+    normalizedPath.startsWith("scripts/bench-") ||
+    normalizedPath.startsWith("scripts/test-q3") ||
     normalizedPath.startsWith("scripts/test-ui-render") ||
-    normalizedPath.startsWith("scripts/capture-svg-render") ||
-    normalizedPath.startsWith("scripts/verify-") ||
+    normalizedPath.startsWith("scripts/test-acceptance") ||
+    normalizedPath.startsWith("scripts/test-all") ||
+    normalizedPath.startsWith("scripts/shakeout") ||
+    normalizedPath.startsWith("scripts/start-strata") ||
+    normalizedPath.startsWith("scripts/stop-strata") ||
+    normalizedPath.startsWith("scripts/Start-HostRunner") ||
+    normalizedPath.includes("playwright.config") ||
+    normalizedPath.includes("playwright.live.config") ||
+    normalizedPath.includes("test-results") ||
+    normalizedPath.includes("playwright-report") ||
+    normalizedPath.includes("playwright-live-report") ||
+    normalizedPath.includes("tests/e2e/") ||
+    normalizedPath.includes("tests/e2e-live/") ||
+    normalizedPath.includes("tests-live/") ||
+    normalizedPath.endsWith(".live.ts") ||
     normalizedPath.startsWith("docs/") ||
     normalizedPath.includes("/.user_uploaded/") ||
     normalizedPath.endsWith("script.py") ||
     normalizedPath.endsWith(".py")
   ) {
-    // Only exception: docs/architecture.drawio is covered
+    // Exceptions: covered files in otherwise ignored paths
     if (normalizedPath.includes("architecture.drawio")) return false;
+    if (normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") || normalizedPath.startsWith("deploy/k8s/web-ui.yaml")) return false;
+    if (normalizedPath.startsWith("scripts/dev-proxy") || normalizedPath.startsWith("scripts/lan-bridge")) return false;
     return true;
   }
   return false;
@@ -429,7 +1207,7 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
     }
 
     // Direct test file changed
-    if (/tests\/[^/]+\.test\.ts$/.test(normalized)) {
+    if (/tests\/[^/]+\.test\.(ts|js)$/.test(normalized)) {
       const testFile = normalized.startsWith("web-ui/")
         ? normalized.replace(/^web-ui\//, "")
         : normalized;
@@ -469,7 +1247,7 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
 
   try {
     // 1. Uncommitted working tree files (unstaged + staged)
-    const statusOut = execSync("git status --porcelain", { cwd: root, encoding: "utf8" });
+    const statusOut = execSync("git status --porcelain -uall", { cwd: root, encoding: "utf8" });
     for (const rawLine of statusOut.split("\n")) {
       if (!rawLine || rawLine.length < 3) continue;
       // In git status --porcelain: index 0 and 1 are status, index 2 is space, path is index 3+
@@ -548,6 +1326,64 @@ export function parseTapCounts(output: string): { passed: number; failed: number
   return { passed, failed };
 }
 
+/** Dedicated 15-minute timeout for the Playwright e2e stage (excluded from the 90s unit budget). */
+export const PLAYWRIGHT_STAGE_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Partitions web-ui test paths into Playwright e2e specs (`tests/e2e/*.spec.ts`)
+ * and tsx unit/integration tests.
+ */
+export function partitionWebUiTests(tests: string[]): { playwrightSpecs: string[]; tsxTests: string[] } {
+  const playwrightSpecs: string[] = [];
+  const tsxTests: string[] = [];
+
+  for (const testPath of tests) {
+    const normalized = testPath.replace(/\\/g, "/");
+    if (normalized.includes("tests/e2e/") && normalized.endsWith(".spec.ts")) {
+      playwrightSpecs.push(testPath);
+    } else {
+      tsxTests.push(testPath);
+    }
+  }
+
+  return { playwrightSpecs, tsxTests };
+}
+
+/**
+ * Parses Playwright's JSON reporter output (`playwright-report/test-results.json`).
+ * Throws on missing, malformed, or incomplete reports so failures are never masked as zeros.
+ */
+export function parsePlaywrightReport(reportPath: string): { passed: number; failed: number } {
+  const raw = fs.readFileSync(reportPath, "utf8");
+  const parsed = JSON.parse(raw) as {
+    errors?: unknown[];
+    stats?: {
+      expected?: unknown;
+      unexpected?: unknown;
+      flaky?: unknown;
+    };
+  };
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !parsed.stats ||
+    typeof parsed.stats !== "object" ||
+    typeof parsed.stats.expected !== "number" ||
+    typeof parsed.stats.unexpected !== "number"
+  ) {
+    throw new Error(`Invalid Playwright JSON report structure at ${reportPath}`);
+  }
+
+  const passed = parsed.stats.expected + (typeof parsed.stats.flaky === "number" ? parsed.stats.flaky : 0);
+  const topLevelErrors = Array.isArray(parsed.errors) ? parsed.errors.length : 0;
+  const failed =
+    parsed.stats.unexpected +
+    (parsed.stats.unexpected === 0 && topLevelErrors > 0 ? topLevelErrors : 0);
+
+  return { passed, failed };
+}
+
 /**
  * Runs the change-aware test gate.
  * Budgeted (<90s), zero-coverage-is-an-error.
@@ -587,7 +1423,8 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       budgetSeconds,
       testsRan: resolved.tests,
       changedFiles: changed,
-      uncoveredFiles: []
+      uncoveredFiles: [],
+      stages: ["tsc --noEmit", "tests"]
     };
   }
 
@@ -616,17 +1453,39 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   let passedCount = 0;
   let failedCount = 0;
   let runError: string | undefined;
+  let playwrightDurationMs = 0;
+
+  const { playwrightSpecs, tsxTests } = partitionWebUiTests(webUiTestsToRun);
 
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
   if (!childEnv.FORCE_MOCK) childEnv.FORCE_MOCK = "1";
   if (!childEnv.FAST_GRAPH_TEST) childEnv.FAST_GRAPH_TEST = "1";
 
-  // 1. Run web-ui tests if any mapped
-  if (webUiTestsToRun.length > 0) {
+  // 0. Run TypeScript typecheck (tsc --noEmit) for web-ui
+  try {
+    const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+    const tscOut = execSync("npx tsc --noEmit", {
+      cwd: webUiCwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: childEnv,
+      timeout: remainingTime
+    });
+    if (tscOut) testOutput += tscOut;
+  } catch (err: any) {
+    const stdout = err.stdout ? err.stdout.toString() : "";
+    const stderr = err.stderr ? err.stderr.toString() : "";
+    testOutput += `${stdout}\n${stderr}`;
+    failedCount += 1;
+    runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
+  }
+
+  // 1. Run web-ui tsx tests if any mapped
+  if (tsxTests.length > 0) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
-      const cmd = `npx tsx --tsconfig tsconfig.json --test ${webUiTestsToRun.join(" ")}`;
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+      const cmd = `npx tsx --tsconfig tsconfig.json --test ${tsxTests.join(" ")}`;
       const out = execSync(cmd, {
         cwd: webUiCwd,
         encoding: "utf8",
@@ -658,10 +1517,82 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     }
   }
 
+  // 1b. Run Playwright e2e specs if any mapped (dedicated timeout, excluded from 90s unit budget)
+  if (playwrightSpecs.length > 0) {
+    const pwStart = Date.now();
+    try {
+      const buildIdPath = path.join(webUiCwd, ".next", "BUILD_ID");
+      let buildOk = fs.existsSync(buildIdPath);
+      if (!buildOk) {
+        try {
+          const buildOut = execSync("npm run build", {
+            cwd: webUiCwd,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            env: childEnv,
+            timeout: PLAYWRIGHT_STAGE_TIMEOUT_MS
+          });
+          testOutput += `\n--- Playwright Stage Build ---\n${buildOut}`;
+          buildOk = true;
+        } catch (err: any) {
+          const stdout = err.stdout ? err.stdout.toString() : "";
+          const stderr = err.stderr ? err.stderr.toString() : "";
+          testOutput += `\n--- Playwright Stage Build Failure ---\n${stdout}\n${stderr}`;
+          failedCount += 1;
+          runError = `Playwright pre-build failed: ${err.message}`;
+        }
+      }
+
+      if (buildOk) {
+        const reportPath = path.join(webUiCwd, "playwright-report", "test-results.json");
+        const pwRemainingMs = Math.max(1, PLAYWRIGHT_STAGE_TIMEOUT_MS - (Date.now() - pwStart));
+        const cmd = `npx playwright test ${playwrightSpecs.join(" ")}`;
+        try {
+          const pwOut = execSync(cmd, {
+            cwd: webUiCwd,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            env: childEnv,
+            timeout: pwRemainingMs
+          });
+          testOutput += `\n--- Playwright Spec Stage ---\n${pwOut}`;
+          const counts = parsePlaywrightReport(reportPath);
+          if (counts.passed === 0 && counts.failed === 0) {
+            failedCount += 1;
+            runError = "Playwright test runner produced empty test results";
+          } else {
+            passedCount += counts.passed;
+            failedCount += counts.failed;
+            testOutput += `\n[Playwright Spec Stage] passed=${counts.passed} failed=${counts.failed}\n`;
+          }
+        } catch (err: any) {
+          const stdout = err.stdout ? err.stdout.toString() : "";
+          const stderr = err.stderr ? err.stderr.toString() : "";
+          testOutput += `\n--- Playwright Spec Stage ---\n${stdout}\n${stderr}`;
+          try {
+            const counts = parsePlaywrightReport(reportPath);
+            if (counts.passed === 0 && counts.failed === 0) {
+              failedCount += 1;
+            } else {
+              passedCount += counts.passed;
+              failedCount += counts.failed > 0 ? counts.failed : 1;
+              testOutput += `\n[Playwright Spec Stage] passed=${counts.passed} failed=${counts.failed}\n`;
+            }
+          } catch {
+            failedCount += 1;
+          }
+          runError = err.message;
+        }
+      }
+    } finally {
+      playwrightDurationMs = Date.now() - pwStart;
+    }
+  }
+
   // 2. Run mcp-server tests if mcp-server was touched
   if (mcpIncluded && fs.existsSync(mcpServerCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
       const mcpOut = execSync("npm test", {
         cwd: mcpServerCwd,
         encoding: "utf8",
@@ -696,7 +1627,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   // 3. Run browser-mcp tests if browser-mcp was touched
   if (browserMcpIncluded && fs.existsSync(browserMcpCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - (Date.now() - startTime));
+      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
       const browserOut = execSync("npm test", {
         cwd: browserMcpCwd,
         encoding: "utf8",
@@ -728,11 +1659,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     }
   }
 
-  const rawDurationSeconds = (Date.now() - startTime) / 1000;
+  const totalElapsedMs = Date.now() - startTime;
+  const rawDurationSeconds = totalElapsedMs / 1000;
   const durationSeconds = parseFloat(rawDurationSeconds.toFixed(3));
+  const nonPlaywrightDurationSeconds = (totalElapsedMs - playwrightDurationMs) / 1000;
 
-  // Check budget overrun or execution timeout
-  const timedOut = rawDurationSeconds > budgetSeconds ||
+  // Check budget overrun (excluding Playwright stage duration) or execution timeout
+  const timedOut = nonPlaywrightDurationSeconds > budgetSeconds ||
     (runError && (runError.includes("ETIMEDOUT") || runError.includes("timed out")));
 
   if (timedOut) {

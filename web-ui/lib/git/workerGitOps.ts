@@ -25,6 +25,8 @@ export interface WorkerGitOpsOptions {
   repoDir?: string;
   ledger?: RunLedger;
   commandRunner?: GitCommandRunner;
+  pushConfigured?: boolean;
+  bootstrapFromOriginDevelop?: boolean;
 }
 
 const PROTECTED_BRANCHES = new Set(["main", "master", "develop", "production"]);
@@ -36,18 +38,24 @@ export class WorkerGitOps {
   private commandRunner: GitCommandRunner;
   private auditLogs: GitAuditLogEntry[] = [];
   private currentBranch = "";
+  private hasCustomCommandRunner: boolean;
+  private pushConfiguredExplicit?: boolean;
+  private bootstrapFromOriginDevelop: boolean;
 
   constructor(options: WorkerGitOpsOptions) {
     this.runId = options.runId;
     this.repoDir = options.repoDir || process.cwd();
     this.ledger = options.ledger;
+    this.hasCustomCommandRunner = Boolean(options.commandRunner);
+    this.pushConfiguredExplicit = options.pushConfigured;
+    this.bootstrapFromOriginDevelop = Boolean(options.bootstrapFromOriginDevelop);
     this.commandRunner =
       options.commandRunner ??
       (async (file: string, args: string[]) => {
         try {
           const { stdout, stderr } = await execFileAsync(file, args, {
             cwd: this.repoDir,
-            timeout: 60000
+            timeout: 120000
           });
           return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
         } catch (err: any) {
@@ -68,9 +76,9 @@ export class WorkerGitOps {
     if (PROTECTED_BRANCHES.has(normalized.toLowerCase())) {
       throw new Error(`Cannot push directly to protected branch: ${normalized}`);
     }
-    if (!/^(feature|fix|chore|docs|refactor|test)\/[a-zA-Z0-9._-]+$/i.test(normalized)) {
+    if (!/^(feat|feature|fix|chore|docs|refactor|test)\/[a-zA-Z0-9._-]+$/i.test(normalized)) {
       throw new Error(
-        `Invalid worker branch name '${normalized}'. Must follow feature/<slug> or fix/<slug> convention.`
+        `Invalid worker branch name '${normalized}'. Must follow feat/<slug>, feature/<slug> or fix/<slug> convention.`
       );
     }
   }
@@ -92,21 +100,110 @@ export class WorkerGitOps {
 
   public async createAndSwitchBranch(branchName: string): Promise<{
     branchName: string;
+    baseSha?: string;
     eventMarkdown: string;
   }> {
     this.assertSafeBranchName(branchName);
+    let baseSha: string | undefined;
+
+    // Workspace bootstrap safety check: ensure working tree is clean (no modified/staged tracked files)
+    const statusRes = await this.commandRunner("git", ["status", "--porcelain", "-uno"]);
+    this.recordAudit("git status --porcelain -uno", statusRes);
+    const porcelainOut = statusRes.stdout.trim();
+    if (statusRes.exitCode === 0 && porcelainOut.length > 0 && porcelainOut !== "ok") {
+      throw new Error(`Bootstrap failed: dirty working tree in workspace:\n${porcelainOut}`);
+    }
+
+    if (!this.hasCustomCommandRunner || this.bootstrapFromOriginDevelop) {
+      // Fresh-pull discipline: if origin remote exists, fetch origin/develop and branch from origin/develop
+      const remoteRes = await this.commandRunner("git", ["remote", "get-url", "origin"]);
+      this.recordAudit("git remote get-url origin", remoteRes);
+      if (remoteRes.exitCode === 0 && remoteRes.stdout.trim()) {
+        const fetchRes = await this.commandRunner("git", ["fetch", "origin", "develop"]);
+        this.recordAudit("git fetch origin develop", fetchRes);
+        if (fetchRes.exitCode !== 0) {
+          throw new Error(`Bootstrap failed: git fetch origin develop failed: ${fetchRes.stderr || fetchRes.stdout}`);
+        }
+        const verifyOriginDev = await this.commandRunner("git", ["rev-parse", "origin/develop"]);
+        this.recordAudit("git rev-parse origin/develop", verifyOriginDev);
+        if (verifyOriginDev.exitCode !== 0 || !verifyOriginDev.stdout.trim()) {
+          throw new Error(`Bootstrap failed: cannot resolve origin/develop: ${verifyOriginDev.stderr || verifyOriginDev.stdout}`);
+        }
+        baseSha = verifyOriginDev.stdout.trim();
+        const checkoutOriginArgs = ["checkout", "-B", branchName, "origin/develop"];
+        const coRes = await this.commandRunner("git", checkoutOriginArgs);
+        this.recordAudit(["git", ...checkoutOriginArgs].join(" "), coRes);
+        if (coRes.exitCode !== 0) {
+          throw new Error(`Bootstrap failed: git checkout -B ${branchName} origin/develop failed: ${coRes.stderr || coRes.stdout}`);
+        }
+        this.currentBranch = branchName;
+        return {
+          branchName,
+          baseSha,
+          eventMarkdown: `Created and switched to branch \`${branchName}\` from \`origin/develop\` (\`${baseSha.slice(0, 7)}\`)`
+        };
+      }
+    }
+
     const args = ["checkout", "-B", branchName];
     const res = await this.commandRunner("git", args);
     this.recordAudit(["git", ...args].join(" "), res);
 
     if (res.exitCode !== 0) {
-      throw new Error(`Failed to create/switch branch ${branchName}: ${res.stderr || res.stdout}`);
+      throw new Error(`Bootstrap failed: checkout -B ${branchName} failed: ${res.stderr || res.stdout}`);
     }
 
     this.currentBranch = branchName;
     return {
       branchName,
       eventMarkdown: `Created and switched to branch \`${branchName}\``
+    };
+  }
+
+  public async isPushConfigured(): Promise<{ configured: boolean; reason?: string }> {
+    if (this.pushConfiguredExplicit !== undefined) {
+      return {
+        configured: this.pushConfiguredExplicit,
+        reason: this.pushConfiguredExplicit ? undefined : "Push explicitly disabled in configuration"
+      };
+    }
+    try {
+      const remoteRes = await this.commandRunner("git", ["remote", "get-url", "origin"]);
+      if (remoteRes.exitCode !== 0 || !remoteRes.stdout.trim()) {
+        return { configured: false, reason: "No origin remote configured" };
+      }
+      const remoteUrl = remoteRes.stdout.trim();
+      if (remoteUrl.endsWith(".bundle") || remoteUrl.startsWith("/") || remoteUrl.startsWith("file://")) {
+        return { configured: false, reason: "origin remote is a local bundle archive (push not configured)" };
+      }
+      const hasAuth = Boolean(
+        process.env.GITHUB_TOKEN ||
+        process.env.GH_TOKEN ||
+        process.env.GIT_CREDENTIALS ||
+        process.env.ALLOW_GIT_PUSH === "1"
+      );
+      if (!hasAuth) {
+        return { configured: false, reason: "Git push credentials (GITHUB_TOKEN / GH_TOKEN) not configured in environment" };
+      }
+      return { configured: true };
+    } catch {
+      return { configured: false, reason: "Unable to check git remote origin" };
+    }
+  }
+
+  public async runGateTest(): Promise<{
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+    passed: boolean;
+  }> {
+    const res = await this.commandRunner("npm", ["run", "test:gate"]);
+    this.recordAudit("npm run test:gate", res);
+    return {
+      exitCode: res.exitCode,
+      stdout: res.stdout,
+      stderr: res.stderr,
+      passed: res.exitCode === 0
     };
   }
 
@@ -122,6 +219,16 @@ export class WorkerGitOps {
       throw new Error("Commit message is required");
     }
 
+    if (this.currentBranch && PROTECTED_BRANCHES.has(this.currentBranch.toLowerCase())) {
+      throw new Error(`WorkerGitOps cannot commit directly to protected branch: ${this.currentBranch}`);
+    }
+
+    const currentBranchRes = await this.commandRunner("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const activeBranch = currentBranchRes.stdout.trim().toLowerCase();
+    if (activeBranch && PROTECTED_BRANCHES.has(activeBranch)) {
+      throw new Error(`WorkerGitOps cannot commit directly to protected branch: ${activeBranch}`);
+    }
+
     const addArgs = files.length > 0 ? ["add", ...files] : ["add", "-A"];
     const addRes = await this.commandRunner("git", addArgs);
     this.recordAudit(["git", ...addArgs].join(" "), addRes);
@@ -132,7 +239,8 @@ export class WorkerGitOps {
     const commitArgs = ["commit", "-m", commitMessage];
     const commitRes = await this.commandRunner("git", commitArgs);
     this.recordAudit(["git", ...commitArgs].join(" "), commitRes);
-    if (commitRes.exitCode !== 0) {
+    const combinedCommitOut = `${commitRes.stdout}\n${commitRes.stderr}`;
+    if (commitRes.exitCode !== 0 && !/nothing to commit|working tree clean/i.test(combinedCommitOut)) {
       throw new Error(`git commit failed: ${commitRes.stderr || commitRes.stdout}`);
     }
 

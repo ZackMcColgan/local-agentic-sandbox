@@ -1,13 +1,18 @@
-import React, { useState } from "react";
+"use client";
+
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronDown,
   ChevronUp,
   Map,
   Cog,
   CheckCircle2,
-  Sparkles,
-  MoreHorizontal
+  Loader2
 } from "lucide-react";
+
+import { resolveTurnStatusPhase } from "../lib/chatStatus";
+import { formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
+import { formatThoughtLabel } from "../lib/liveActivity";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
 
@@ -18,7 +23,15 @@ export interface ThinkingPhaseCardData {
   timeAgo?: string;
   narrative: string;
   status: "complete" | "in_progress" | "pending";
-  progressPercent: number;
+  /** Legacy field kept for data compatibility; never rendered (UI-017). */
+  progressPercent?: number;
+}
+
+export interface TurnPhaseTimings {
+  contextPrepMs?: number;
+  thinkingMs?: number;
+  toolsMs?: number;
+  writingMs?: number;
 }
 
 interface ThinkingPanelProps {
@@ -28,6 +41,12 @@ interface ThinkingPanelProps {
   defaultExpanded?: boolean;
   onToggleExpand?: () => void;
   className?: string;
+  streamStatus?: string | null;
+  activeTool?: string | null;
+  hasContent?: boolean;
+  durationMs?: number;
+  phaseTimings?: TurnPhaseTimings;
+  timestamp?: string;
 }
 
 export function ThinkingPanel({
@@ -35,191 +54,259 @@ export function ThinkingPanel({
   rawThought = "",
   isStreaming = false,
   defaultExpanded = true,
-  className = ""
+  className = "",
+  streamStatus = null,
+  activeTool = null,
+  hasContent = false,
+  durationMs,
+  phaseTimings,
+  timestamp
 }: ThinkingPanelProps) {
-  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
+  const prevStreamingRef = useRef(isStreaming);
+  const userToggledRef = useRef(false);
 
-  // Group default phases if provided, or synthesize live reasoning card from rawThought
-  const formattedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  // Thinking duration: measured from the first streaming render to the
+  // moment the stream ends, so the collapsed row can honestly read
+  // "Thought for …". Panels mounted after the fact have no measured
+  // duration and never fabricate one.
+  const streamStartRef = useRef<number | null>(null);
+  const [thoughtDurationMs, setThoughtDurationMs] = useState<number | null>(durationMs ?? null);
+  const [headerNowMs, setHeaderNowMs] = useState<number>(() => Date.now());
+  if (isStreaming && streamStartRef.current === null) {
+    streamStartRef.current = Date.now();
+  }
+
+  useEffect(() => {
+    if (durationMs != null) {
+      setThoughtDurationMs(durationMs);
+    }
+  }, [durationMs]);
+
+  useEffect(() => {
+    if (!isStreaming) return;
+    const timer = setInterval(() => setHeaderNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
+
+  // Auto-collapse when generation finishes unless the user manually toggled it
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming) {
+      if (streamStartRef.current !== null) {
+        setThoughtDurationMs(Date.now() - streamStartRef.current);
+        streamStartRef.current = null;
+      }
+      if (!userToggledRef.current) {
+        setIsExpanded(false);
+      }
+    }
+    prevStreamingRef.current = isStreaming;
+  }, [isStreaming]);
+
+  const handleToggle = () => {
+    userToggledRef.current = true;
+    setIsExpanded((prev) => !prev);
+  };
+
+  const formattedTime = timestamp
+    ? formatMessageTimestamp(timestamp)
+    : new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   const effectivePhases: ThinkingPhaseCardData[] = (() => {
     if (phases && phases.length > 0) return phases;
 
     if (rawThought && rawThought.trim()) {
+      const cleanedNarrative = rawThought
+        .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/```[\s\S]*?```/g, " ")
+        .trim() || "Formulated response.";
       return [
         {
           phase: "planning",
           title: isStreaming ? "Reasoning in progress" : "Reasoning summary",
           timestamp: formattedTime,
-          timeAgo: "Now",
-          narrative: rawThought.trim(),
-          status: isStreaming ? "in_progress" : "complete",
-          progressPercent: isStreaming ? 85 : 100
+          timeAgo: timestamp ? undefined : "Now",
+          narrative: cleanedNarrative,
+          status: isStreaming ? "in_progress" : "complete"
         }
       ];
     }
 
-    // Default 3-phase fallback when neither explicit phases nor raw thought are provided
-    return [
-      {
-        phase: "planning",
-        title: "Planning",
-        timestamp: formattedTime,
-        timeAgo: "Just now",
-        narrative: "Broke the task into milestones. Scope evaluated. No unnecessary scaffolding.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      },
-      {
-        phase: "building",
-        title: "Building",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Generating clean deliverable markup and implementation code.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 75 : 100
-      },
-      {
-        phase: "validating",
-        title: "Validating",
-        timestamp: formattedTime,
-        timeAgo: "Now",
-        narrative: "Checking output compiles, adheres to constraints, and passes validation.",
-        status: isStreaming ? "in_progress" : "complete",
-        progressPercent: isStreaming ? 85 : 100
-      }
-    ];
+    return [];
   })();
 
   const activeStepsCount = effectivePhases.length;
 
+  const turnPhaseLabel = resolveTurnStatusPhase({
+    isStreaming,
+    streamStatus,
+    activeTool,
+    hasThought: Boolean(rawThought && rawThought.trim()),
+    hasContent
+  });
+
+  const streamStartMs = streamStartRef.current;
+  const effectiveDurationMs = thoughtDurationMs ?? durationMs ?? null;
+  const headerTitle = isStreaming
+    ? "Thinking"
+    : effectiveDurationMs != null && effectiveDurationMs > 0
+      ? `Thought for ${formatElapsedDuration(Math.max(1, Math.floor(effectiveDurationMs / 1000)))}`
+      : "Thought";
+
   return (
     <div
       data-testid="thinking-panel"
-      className={`w-full max-w-2xl rounded-3xl bg-[#1e1c24] dark:bg-[#15121b] border border-white/10 text-white shadow-xl overflow-hidden transition-all duration-200 ${className}`}
+      className={`w-full max-w-2xl rounded-2xl bg-slate-50/90 dark:bg-zinc-900/90 border border-slate-200/80 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 shadow-2xs overflow-hidden transition-all duration-200 ${className}`}
     >
-      {/* Header bar matching wireframes/thinking-ui-mockup.webp */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-[#262330]/60 backdrop-blur-md">
-        <button
-          type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-3 text-left group transition-transform focus:outline-none"
-          aria-expanded={isExpanded}
-        >
-          <div className="w-8 h-8 rounded-xl bg-purple-900/60 text-purple-300 flex items-center justify-center border border-purple-500/20 group-hover:bg-purple-800/70 transition-colors">
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4 stroke-[2.5]" />
-            ) : (
-              <ChevronUp className="h-4 w-4 stroke-[2.5]" />
-            )}
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-base font-semibold tracking-tight text-white group-hover:text-purple-200 transition-colors">
-              Worker reasoning
-            </span>
-            <span
-              data-testid="streaming-badge"
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 border border-purple-400/30 text-purple-200"
-            >
-              {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />}
-              <span>{isStreaming ? "Streaming" : "Complete"} · {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}</span>
-            </span>
-          </div>
-        </button>
-
-        <div className="flex items-center gap-2 text-slate-400">
-          <button
-            type="button"
-            className="p-1 rounded-lg hover:text-white hover:bg-white/10 transition-colors"
-            title="Options"
+      {/* Compact 1-Line Header Bar */}
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 text-left group transition-colors hover:bg-slate-100/70 dark:hover:bg-zinc-855/60 focus:outline-none"
+        aria-expanded={isExpanded}
+      >
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+          <span
+            aria-hidden="true"
+            className={`h-2 w-2 rounded-full shrink-0 ${
+              isStreaming
+                ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse"
+                : "bg-emerald-500"
+            }`}
+          />
+          <span
+            data-testid="thinking-panel-title"
+            className="text-[13px] font-bold text-slate-800 dark:text-zinc-100 shrink-0 whitespace-nowrap"
           >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+            {headerTitle}
+          </span>
+          {isStreaming && streamStartMs !== null && (
+            <span className="font-mono tabular-nums text-[11px] text-slate-500 dark:text-zinc-400 shrink-0">
+              {formatElapsedDuration(Math.max(0, Math.floor((headerNowMs - streamStartMs) / 1000)))}
+            </span>
+          )}
+          <span
+            data-testid="streaming-badge"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+          >
+            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            <span>
+              {isStreaming ? (
+                <>
+                  <span className="hidden sm:inline">Streaming · </span>
+                  {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline">Thought process · </span>
+                  {activeStepsCount} {activeStepsCount === 1 ? "step" : "steps"}
+                </>
+              )}
+            </span>
+          </span>
 
-      {/* Expanded Content: Phased Cards */}
+          {isStreaming && turnPhaseLabel && (
+            <span
+              data-testid="turn-status-slot"
+              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+              title={turnPhaseLabel}
+            >
+              <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="hidden sm:inline truncate">{turnPhaseLabel}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-zinc-400 group-hover:text-slate-800 dark:group-hover:text-zinc-200 shrink-0 ml-2">
+          <span>{isExpanded ? "Hide" : "Show"}</span>
+          {isExpanded ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </div>
+      </button>
+
+      {/* Expanded Body */}
       {isExpanded && (
-        <div className="p-4 sm:p-5 space-y-3.5 bg-[#17141f]/90">
+        <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-black/40">
+          {phaseTimings &&
+            (phaseTimings.contextPrepMs || phaseTimings.thinkingMs || phaseTimings.toolsMs || phaseTimings.writingMs) && (
+              <div
+                data-testid="phase-timings-breakdown"
+                className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400"
+              >
+                {[
+                  { label: "Context prep", ms: phaseTimings.contextPrepMs },
+                  { label: "Thinking", ms: phaseTimings.thinkingMs },
+                  { label: "Tools", ms: phaseTimings.toolsMs },
+                  { label: "Writing", ms: phaseTimings.writingMs },
+                ]
+                  .filter((p): p is { label: string; ms: number } => typeof p.ms === "number" && p.ms > 0)
+                  .map((p) => (
+                    <span
+                      key={p.label}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800"
+                    >
+                      <span>{p.label}</span>
+                      <span className="text-slate-800 dark:text-zinc-200 font-semibold">
+                        {p.ms < 1000 ? "<1s" : formatElapsedDuration(Math.round(p.ms / 1000))}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            )}
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
             const isValidating = phaseItem.phase === "validating";
 
             const Icon = isPlanning ? Map : isBuilding ? Cog : CheckCircle2;
-            const isCompleted = phaseItem.status === "complete";
             const isInProgress = phaseItem.status === "in_progress";
 
             return (
               <div
                 key={phaseItem.phase}
                 data-testid={`phase-card-${phaseItem.phase}`}
-                className="p-4 rounded-2xl bg-[#231f2d] border border-white/5 space-y-3 shadow-sm hover:border-purple-500/20 transition-colors"
+                className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/70 dark:border-zinc-800/80 space-y-2 shadow-2xs"
               >
                 {/* Card Title & Meta */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-purple-900/40 text-purple-300 border border-purple-500/20 flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4 stroke-[2.2]" />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 flex items-center justify-center shrink-0">
+                      <Icon className="h-3.5 w-3.5 stroke-[2.2]" />
                     </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white tracking-tight">
-                        {phaseItem.title}
-                      </h4>
-                    </div>
+                    <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-100 truncate">
+                      {phaseItem.title}
+                    </h4>
                   </div>
 
-                  <div className="text-right text-[11px] font-mono text-slate-400">
+                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-400 shrink-0">
                     <span>{phaseItem.timestamp}</span>
-                    {phaseItem.timeAgo && (
-                      <span className="text-slate-500"> • {phaseItem.timeAgo}</span>
-                    )}
+                    {phaseItem.timeAgo && <span> • {phaseItem.timeAgo}</span>}
                   </div>
                 </div>
 
-                {/* Narrative Text (Complete sentence, clean, no raw coordinates or code dump) */}
-                <p className="text-xs text-slate-200 leading-relaxed font-sans pr-1">
-                  {phaseItem.narrative}
-                </p>
-
-                {/* Per-phase Progress Bar & Status */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
+                {/* Narrative Text — full reasoning, bottom fade while streaming.
+                    No progress bar: a turn's total length is unknowable, so a
+                    percent-complete would be fabricated (UI-017). */}
+                <div className="relative">
+                  <div className="text-[13px] text-slate-600 dark:text-zinc-100 leading-relaxed whitespace-pre-wrap max-h-72 overflow-y-auto pr-1">
+                    {phaseItem.narrative}
+                  </div>
+                  {isInProgress && (
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        isCompleted
-                          ? "bg-gradient-to-r from-purple-500 to-indigo-500"
-                          : "bg-purple-500"
-                      }`}
-                      style={{ width: `${Math.min(Math.max(phaseItem.progressPercent, 5), 100)}%` }}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white dark:from-zinc-900 to-transparent"
                     />
-                  </div>
-
-                  <div className="flex justify-end text-[11px] font-medium text-slate-400">
-                    {isCompleted ? (
-                      <span className="text-purple-300">Complete</span>
-                    ) : isInProgress ? (
-                      <span className="text-purple-300 font-semibold flex items-center gap-1">
-                        <span>In progress · {phaseItem.progressPercent}%</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-500">Pending</span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             );
           })}
 
-          {/* Footer Status Pill matching Mockup */}
-          <div className="pt-2 flex items-center gap-2 text-xs text-purple-300/90 font-medium">
-            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
-            <span>
-              {isStreaming
-                ? "Reasoning in progress. Formulating structured execution..."
-                : "Reasoning complete. Preparing final response..."}
-            </span>
-          </div>
+
         </div>
       )}
     </div>

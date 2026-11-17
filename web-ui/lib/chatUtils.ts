@@ -1,4 +1,5 @@
 import { isReasoningEffortSupported, getModelProfile } from "../config/models";
+import { ROUND_MAX_TOKENS } from "./modelLimits";
 
 export interface ModelOptions {
   num_ctx: number;
@@ -21,35 +22,46 @@ export function resolveEffectiveReasoningEffort(
     return undefined;
   }
   const profile = getModelProfile(modelToUse);
-  return requestedEffort || profile?.defaultReasoningEffort || "medium";
+  return requestedEffort || profile?.defaultReasoningEffort || "low";
 }
 
+export function joinNarrationChunks(existing: string, incoming: string): string {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+  if (/\s$/.test(existing) || /^\s/.test(incoming)) {
+    return `${existing}${incoming}`;
+  }
+  return `${existing} ${incoming}`;
+}
+
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
+
 /**
- * Computes options for Ollama model request based on model architecture and reasoning effort.
+ * Computes options for local LLM model request based on model architecture and reasoning effort.
  */
 export function computeModelOptions(
   modelToUse: string,
   reasoningEffort?: "low" | "medium" | "xhigh"
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: modelToUse.includes("gemma4") ? 16384 : 8192
+    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);
 
   if (effectiveEffort === "low") {
     opts.temperature = 0.2;
-    opts.num_predict = 4096;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else if (effectiveEffort === "xhigh") {
     opts.temperature = 0.7;
-    opts.num_predict = 8192;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else if (effectiveEffort === "medium") {
     opts.temperature = 0.5;
-    opts.num_predict = 4096;
+    opts.num_predict = ROUND_MAX_TOKENS;
   } else {
     // For models without reasoning effort support (e.g. Hermes 3), use standard unbiased defaults
     opts.temperature = 0.7;
-    opts.num_predict = 4096;
+    opts.num_predict = ROUND_MAX_TOKENS;
   }
 
   return opts;
@@ -189,21 +201,46 @@ export function formatThinkingDisplay(entries: string[]): string[] {
 export interface HumanReadableTrace {
   title: string;
   duration: string;
-  badge: "sandbox" | "browser" | "workspace";
+  badge: "sandbox" | "browser" | "workspace" | "host";
 }
 
 /**
  * Translates technical MCP tool names and timings into plain language descriptions.
  */
-export function formatHumanReadableTrace(trace: { tool: string; durationMs?: number; args?: any }): HumanReadableTrace {
+export function formatHumanReadableTrace(trace: {
+  tool: string;
+  durationMs?: number;
+  args?: any;
+  tier?: "sandbox" | "browser" | "workspace" | "host" | string;
+}): HumanReadableTrace {
   const durationSec = trace.durationMs ? (trace.durationMs / 1000).toFixed(1) + "s" : "";
   const durationFormatted = trace.durationMs ? (trace.durationMs < 1000 ? `${trace.durationMs}ms` : durationSec) : "";
 
   const tool = trace.tool || "";
   let title = tool;
-  let badge: "sandbox" | "browser" | "workspace" = "sandbox";
+  let badge: "sandbox" | "browser" | "workspace" | "host" = "sandbox";
 
-  if (tool === "search_web" || tool.includes("search")) {
+  if (trace.tier === "host" || tool.startsWith("host_")) {
+    badge = "host";
+    if (tool === "host_run_powershell") {
+      const cmd = trace.args?.command ? ` (${trace.args.command.slice(0, 24)})` : "";
+      title = `Ran host PowerShell${cmd}`;
+    } else if (tool === "host_read_file") {
+      const p = trace.args?.path || trace.args?.filePath || "";
+      const filename = p ? p.split(/[\\/]/).pop() || p : "";
+      title = filename ? `Host Read ${filename}` : "Host Read File";
+    } else if (tool === "host_write_file") {
+      const p = trace.args?.path || trace.args?.filePath || "";
+      const filename = p ? p.split(/[\\/]/).pop() || p : "";
+      title = filename ? `Host Wrote ${filename}` : "Host Wrote File";
+    } else if (tool === "host_list_dir") {
+      title = "Host List Dir";
+    } else if (tool === "host_delete_path") {
+      title = "Host Delete Path";
+    } else {
+      title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  } else if (tool === "search_web" || tool.includes("search")) {
     const q = trace.args?.query ? ` for "${trace.args.query.slice(0, 30)}"` : "";
     title = `Searched the web${q}`;
     badge = "browser";
@@ -230,9 +267,16 @@ export function formatHumanReadableTrace(trace: { tool: string; durationMs?: num
   } else if (tool === "git_commit" || tool.includes("git")) {
     title = "Committed changes to repository";
     badge = "workspace";
+  } else if (trace.tier === "workspace" || tool.startsWith("workspace_")) {
+    title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = "workspace";
+  } else if (trace.tier === "browser") {
+    title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = "browser";
   } else {
     // Humanize snake_case
     title = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    badge = trace.tier === "sandbox" ? "sandbox" : "sandbox";
   }
 
   return {
@@ -275,3 +319,310 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
   };
 }
 
+export function canonicalizeModelId(modelId?: string | null): string {
+  if (!modelId) return "";
+  const lower = modelId.trim().toLowerCase().replace(/:latest$/, "");
+  if (lower.includes("swift-1.5") || lower.includes("swift-15") || lower === "swift-1.5") {
+    return "swift-1.5-qwen3.8-27b-iq3_xs";
+  }
+  if (lower.includes("flash-next") || lower.includes("gyro-s") || lower.includes("gyro")) {
+    return "qwen3.8-flash-next-gyro-gyro-s";
+  }
+  if (lower.includes("qwen3.8:27b") || lower === "qwen3.8") {
+    return "qwen3.8:27b-q3_k_m";
+  }
+  if (lower.includes("gemma4")) {
+    return "gemma4:e4b";
+  }
+  return lower;
+}
+
+export function formatModelDisplayLabel(modelId?: string | null): string {
+  const canon = canonicalizeModelId(modelId);
+  if (canon === "qwen3.8-flash-next-gyro-gyro-s") return "Flash-Next";
+  if (canon === "swift-1.5-qwen3.8-27b-iq3_xs") return "Swift-1.5";
+  if (canon === "qwen3.8:27b-q3_k_m") return "qwen3.8";
+  if (canon === "gemma4:e4b") return "gemma4:e4b";
+  return (modelId || "").trim().replace(/:latest$/, "");
+}
+
+export function getServedByNote(modelUsed?: string | null, selectedModel?: string | null): string | null {
+  if (!modelUsed || !modelUsed.trim()) return null;
+  if (!selectedModel || !selectedModel.trim() || selectedModel.trim().toLowerCase() === "auto") {
+    return null;
+  }
+  const servedCanon = canonicalizeModelId(modelUsed);
+  const selectedCanon = canonicalizeModelId(selectedModel);
+  if (!servedCanon || !selectedCanon || servedCanon === selectedCanon) {
+    return null;
+  }
+  return "Served by " + formatModelDisplayLabel(modelUsed) + " (" + formatModelDisplayLabel(selectedModel) + " selected)";
+}
+
+export interface FormattedChatError {
+  summary: string;
+  details?: string;
+}
+
+/**
+ * Normalizes raw chat or engine error payloads into a clean user-facing summary
+ * and optional expandable technical details.
+ */
+export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
+  if (!rawError) {
+    return { summary: "An unknown error occurred" };
+  }
+
+  const rawStr = typeof rawError === "string" ? rawError : (rawError as any).message || String(rawError);
+  const trimmed = rawStr.trim();
+
+  // Attempt to find and parse JSON payload within the error string
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const prefix = trimmed.slice(0, jsonMatch.index).trim().replace(/:\s*$/, "");
+      let extractedMsg = "";
+
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.error === "string") {
+          extractedMsg = parsed.error;
+        } else if (parsed.error && typeof parsed.error.message === "string") {
+          extractedMsg = parsed.error.message;
+        } else if (typeof parsed.message === "string") {
+          extractedMsg = parsed.message;
+        }
+      }
+
+      if (extractedMsg) {
+        const summary = prefix ? `${prefix}: ${extractedMsg}` : extractedMsg;
+        return {
+          summary,
+          details: JSON.stringify(parsed, null, 2)
+        };
+      }
+    } catch {
+      // Fall through to plain text handling
+    }
+  }
+
+  return { summary: trimmed };
+}
+
+export interface ChatFileDiffItem {
+  id: string;
+  path: string;
+  tool: string;
+  addedLines: number;
+  removedLines: number;
+  diffPreview: string;
+  /**
+   * UI-024: the UNCAPPED diff for the same item. diffPreview is capped for
+   * the inline chat card; the canvas contract is the full diff ("every line,
+   * nothing truncated"), and two files whose capped previews coincide (same
+   * 40-line head, e.g. one file written to two paths) rendered identically
+   * in the canvas, so switching files appeared to do nothing.
+   */
+  diffFull: string;
+}
+
+/**
+ * Extracts diff stats and unified previews from assistant trace objects
+ * for file write and patch operations (workspace_write_file, workspace_patch_file, host_write_file).
+ */
+export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffItem[] {
+  if (!Array.isArray(traces) || traces.length === 0) {
+    return [];
+  }
+
+  const items: ChatFileDiffItem[] = [];
+
+  traces.forEach((trace, index) => {
+    const tool = trace?.tool || trace?.name;
+    if (
+      tool !== "workspace_write_file" &&
+      tool !== "workspace_patch_file" &&
+      tool !== "host_write_file"
+    ) {
+      return;
+    }
+
+    if (trace?.status === "error") {
+      return;
+    }
+
+    const filePath = trace?.args?.path || trace?.args?.filePath || trace?.args?.targetFile;
+    if (!filePath || typeof filePath !== "string") {
+      return;
+    }
+
+    const id = trace?.id || `${tool}-${filePath}-${index}`;
+
+    if (tool === "workspace_write_file" || tool === "host_write_file") {
+      const rawContent = typeof trace?.args?.content === "string" ? trace.args.content : "";
+      const normalized = rawContent.replace(/\r\n/g, "\n").replace(/\n$/, "");
+      const lines = normalized.length > 0 ? normalized.split("\n") : [];
+      const addedLines = lines.length;
+      const removedLines = 0;
+      let diffPreview = "";
+      if (lines.length > 0) {
+        const previewLines = lines.slice(0, 40).map((l: string) => "+ " + l);
+        diffPreview = previewLines.join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+      }
+      const diffFull = lines.map((l: string) => "+ " + l).join("\n");
+
+      items.push({
+        id,
+        path: filePath,
+        tool,
+        addedLines,
+        removedLines,
+        diffPreview,
+        diffFull
+      });
+    } else if (tool === "workspace_patch_file") {
+      const hasOldOrNew =
+        trace?.args?.search !== undefined ||
+        trace?.args?.oldText !== undefined ||
+        trace?.args?.target !== undefined ||
+        trace?.args?.replace !== undefined ||
+        trace?.args?.newText !== undefined ||
+        trace?.args?.replacement !== undefined ||
+        trace?.args?.content !== undefined;
+
+      if (!hasOldOrNew && (trace?.args?.diff || trace?.args?.patch)) {
+        const diffStr = String(trace.args.diff || trace.args.patch).replace(/\r\n/g, "\n");
+        const lines = diffStr.length > 0 ? diffStr.split("\n") : [];
+        let addedLines = 0;
+        let removedLines = 0;
+        for (const line of lines) {
+          if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+          else if (line.startsWith("-") && !line.startsWith("---")) removedLines++;
+        }
+        let diffPreview = lines.slice(0, 40).join("\n");
+        if (lines.length > 40) {
+          diffPreview += `\n... (${lines.length - 40} more lines)`;
+        }
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview,
+          diffFull: lines.join("\n")
+        });
+      } else {
+        const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
+        const newStr = trace?.args?.replace ?? trace?.args?.newText ?? trace?.args?.replacement ?? trace?.args?.content ?? "";
+
+        const oldNormalized = oldStr ? String(oldStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+        const newNormalized = newStr ? String(newStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+
+        const oldLines = oldNormalized.length > 0 ? oldNormalized.split("\n") : [];
+        const newLines = newNormalized.length > 0 ? newNormalized.split("\n") : [];
+
+        const removedLines = oldLines.length;
+        const addedLines = newLines.length;
+
+        const diffPreview = [
+          ...oldLines.slice(0, 20).map((l: string) => "- " + l),
+          ...newLines.slice(0, 20).map((l: string) => "+ " + l)
+        ].join("\n");
+
+        const diffFull = [
+          ...oldLines.map((l: string) => "- " + l),
+          ...newLines.map((l: string) => "+ " + l)
+        ].join("\n");
+
+        items.push({
+          id,
+          path: filePath,
+          tool,
+          addedLines,
+          removedLines,
+          diffPreview,
+          diffFull
+        });
+      }
+    }
+  });
+
+  return items;
+}
+
+export * from "./chatDiffs";
+
+
+
+/**
+ * Formats a message timestamp with date context for older-than-today items
+ * and relative labels ("Now", "5m ago") for fresh items from today.
+ */
+export function formatMessageTimestamp(timestamp: string | number | Date, now: Date = new Date()): string {
+  const d = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  if (isNaN(d.getTime())) return String(timestamp);
+
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const datePart = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  if (isToday) {
+    const diffMs = now.getTime() - d.getTime();
+    if (diffMs >= 0 && diffMs < 60_000) return `${time} · Now`;
+    if (diffMs >= 60_000 && diffMs < 3_600_000) return `${time} · ${Math.floor(diffMs / 60_000)}m ago`;
+    return `${datePart}, ${time}`;
+  }
+
+  return `${datePart}, ${time}`;
+}
+
+/**
+ * Strip local machine/checkout prefixes (e.g. C:\Users\<user>\Desktop\repos\<repo>\)
+ * so diff headers and citation cards show repo-relative paths.
+ */
+export function displayRepoPath(rawPath: string): string {
+  if (!rawPath) return "";
+  const normalized = rawPath.replace(/\\/g, "/");
+  // Match .../repos/<repo-name>/<rest>
+  const reposMatch = normalized.match(/\/repos\/[^/]+\/(.+)$/i);
+  if (reposMatch?.[1]) return reposMatch[1];
+  // Match .../web-ui/<rest>
+  const webUiMatch = normalized.match(/\/(web-ui\/.+)$/i);
+  if (webUiMatch?.[1]) return webUiMatch[1];
+  return normalized.replace(/^[a-zA-Z]:\/Users\/[^/]+\//i, "");
+}
+
+export function displayBasename(rawPath: string): string {
+  const normalized = rawPath.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] || rawPath;
+}
+
+/**
+ * Derive a clean short display title for a thread when the stored title is a
+ * raw prompt prefix or overly long string (UI-008). Never renders personal names.
+ */
+export function deriveThreadDisplayTitle(rawTitle?: string): string {
+  const title = (rawTitle || "").trim();
+  if (!title) return "New session";
+
+  let cleaned = title
+    .replace(/^You are working on a PR-sized coding task\.?\s*/i, "")
+    .replace(/^You are the builder for [^'’\n]+(?:'s|’s)?\s*/i, "")
+    .replace(/^Task:\s*/i, "")
+    .trim();
+
+  if (!cleaned) cleaned = title;
+  // Take first sentence / line
+  const firstLine = cleaned.split(/[\r\n]+/)[0] || cleaned;
+  const firstSentence = firstLine.split(/(?<=[.!?])\s+/)[0] || firstLine;
+  if (firstSentence.length <= 60) return firstSentence;
+  return firstSentence.slice(0, 57).trimEnd() + "...";
+}

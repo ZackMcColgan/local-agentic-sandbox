@@ -1,0 +1,260 @@
+[
+  {
+    "tool": "host_delete_path",
+    "args": { "path": "C:\\Windows\\temp" },
+    "expectedDestructive": true,
+    "description": "host_delete_path is always destructive"
+  },
+  {
+    "tool": "host_delete_path",
+    "args": { "path": "test.txt", "recursive": false },
+    "expectedDestructive": true,
+    "description": "host_delete_path with file"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Remove-Item -Recurse -Force ./build" },
+    "expectedDestructive": true,
+    "description": "Remove-Item cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "remove-item ./file.txt" },
+    "expectedDestructive": true,
+    "description": "remove-item case insensitive"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Remove-ItemProperty -Path HKLM:\\Software\\App -Name Test" },
+    "expectedDestructive": true,
+    "description": "Remove-ItemProperty cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Remove-EventLog -LogName MyApp" },
+    "expectedDestructive": true,
+    "description": "Remove-EventLog cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Format-Volume -DriveLetter D -FileSystem NTFS" },
+    "expectedDestructive": true,
+    "description": "Format-Volume cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Clear-Disk -Number 1 -RemoveData" },
+    "expectedDestructive": true,
+    "description": "Clear-Disk cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Initialize-Disk -Number 1" },
+    "expectedDestructive": true,
+    "description": "Initialize-Disk cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Restart-Computer -Force" },
+    "expectedDestructive": true,
+    "description": "Restart-Computer cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Stop-Computer -Force" },
+    "expectedDestructive": true,
+    "description": "Stop-Computer cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "shutdown /s /t 0" },
+    "expectedDestructive": true,
+    "description": "shutdown in start position"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "shutdown.exe -r -t 60" },
+    "expectedDestructive": true,
+    "description": "shutdown.exe in start position"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Process; shutdown /r" },
+    "expectedDestructive": true,
+    "description": "shutdown after semicolon"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "del C:\\temp\\junk.txt" },
+    "expectedDestructive": true,
+    "description": "del alias at command position"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Process; erase junk.log" },
+    "expectedDestructive": true,
+    "description": "erase alias after semicolon"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-ChildItem | rd ./junk" },
+    "expectedDestructive": true,
+    "description": "rd alias after pipe"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Process & rmdir /s /q temp" },
+    "expectedDestructive": true,
+    "description": "rmdir alias after ampersand"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "(ri ./file.txt)" },
+    "expectedDestructive": true,
+    "description": "ri alias after paren"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Host 'hello'\nrm -rf ./build" },
+    "expectedDestructive": true,
+    "description": "rm alias after newline"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& rm ./build" },
+    "expectedDestructive": true,
+    "description": "rm with call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Process; & del foo.txt" },
+    "expectedDestructive": true,
+    "description": "del with call operator after semicolon"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Process | Select-Object -First 5" },
+    "expectedDestructive": false,
+    "description": "Get-Process read-only"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-ChildItem -Recurse" },
+    "expectedDestructive": false,
+    "description": "Get-ChildItem read-only"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Content ./README.md" },
+    "expectedDestructive": false,
+    "description": "Get-Content read-only"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Test-Path ./package.json" },
+    "expectedDestructive": false,
+    "description": "Test-Path read-only"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "$delta = 5; Write-Output $delta" },
+    "expectedDestructive": false,
+    "description": "Variable named delta"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "$item.Delete()" },
+    "expectedDestructive": false,
+    "description": "Method call Delete()"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "$format = 'json'" },
+    "expectedDestructive": false,
+    "description": "Variable named format"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "$rm = 10" },
+    "expectedDestructive": false,
+    "description": "Variable named rm"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "delay 5" },
+    "expectedDestructive": false,
+    "description": "Command containing del substring"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "echo shutdown" },
+    "expectedDestructive": false,
+    "description": "shutdown as argument to echo"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output \"del\"" },
+    "expectedDestructive": false,
+    "description": "Double quoted del string literal"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output \"Remove-Item is a cmdlet\"" },
+    "expectedDestructive": false,
+    "description": "Double quoted Remove-Item literal"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output 'rm -rf /'" },
+    "expectedDestructive": false,
+    "description": "Single quoted rm string literal"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-Content C:\\del\\file.txt" },
+    "expectedDestructive": false,
+    "description": "Path containing del directory"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-ChildItem -Path ./rm/test" },
+    "expectedDestructive": false,
+    "description": "Path containing rm directory"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cat C:\\shutdown\\notes.txt" },
+    "expectedDestructive": false,
+    "description": "Path containing shutdown directory"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "taskkill /F /IM node.exe" },
+    "expectedDestructive": false,
+    "description": "Non-contract taskkill command"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "git reset --hard HEAD~1" },
+    "expectedDestructive": false,
+    "description": "Non-contract git reset command"
+  },
+  {
+    "tool": "host_read_file",
+    "args": { "path": "file.txt" },
+    "expectedDestructive": false,
+    "description": "host_read_file is never destructive"
+  },
+  {
+    "tool": "host_write_file",
+    "args": { "path": "file.txt", "content": "hello" },
+    "expectedDestructive": false,
+    "description": "host_write_file is non-destructive by contract"
+  },
+  {
+    "tool": "host_list_dir",
+    "args": { "path": "." },
+    "expectedDestructive": false,
+    "description": "host_list_dir is never destructive"
+  }
+]

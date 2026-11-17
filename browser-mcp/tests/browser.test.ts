@@ -21,6 +21,26 @@ describe("Browser MCP Toolchain Suite", () => {
       assert.ok(tools["search_web"], "search_web should be registered");
       assert.ok(tools["fetch_webpage_markdown"], "fetch_webpage_markdown should be registered");
     });
+
+    it("returns empty results immediately when SEARCH_FORCE_EMPTY_RESULTS=1", async () => {
+      const orig = process.env.SEARCH_FORCE_EMPTY_RESULTS;
+      try {
+        process.env.SEARCH_FORCE_EMPTY_RESULTS = "1";
+        registerBrowserTools(mcp);
+        // @ts-ignore
+        const handler = mcp._registeredTools["search_web"].handler;
+        const res = await handler({ query: "weather in Spanish Fort AL", limit: 5 });
+        assert.ok(res.content && res.content[0], "Response content should be present");
+        const parsed = JSON.parse(res.content[0].text);
+        assert.deepEqual(parsed, { results: [] });
+      } finally {
+        if (orig !== undefined) {
+          process.env.SEARCH_FORCE_EMPTY_RESULTS = orig;
+        } else {
+          delete process.env.SEARCH_FORCE_EMPTY_RESULTS;
+        }
+      }
+    });
   });
 
   describe("SSRF Security Boundary", () => {
@@ -69,6 +89,32 @@ describe("Browser MCP Toolchain Suite", () => {
       assert.ok(markdown.includes("This is a paragraph explaining the API."));
       assert.ok(markdown.includes("* Item 1"));
       assert.ok(markdown.includes("* Item 2"));
+    });
+
+    it("strips boilerplate layout elements (nav, header, footer, aside, cookie banners)", () => {
+      const pageWithBoilerplate = `
+        <html>
+          <body>
+            <header><div class="menu">Top Navigation Links</div></header>
+            <nav><ul><li>Home</li><li>About</li></ul></nav>
+            <aside>Related Links and ads</aside>
+            <div class="cookie-banner">Accept all cookies</div>
+            <main>
+              <h1>Substantive Article</h1>
+              <p>Current temperature is 72 degrees Fahrenheit with clear skies.</p>
+            </main>
+            <footer>Copyright 2026 Enterprise Inc. Privacy Policy.</footer>
+          </body>
+        </html>
+      `;
+      const markdown = htmlToMarkdown(pageWithBoilerplate);
+      assert.ok(!markdown.includes("Top Navigation Links"), "Header must be stripped");
+      assert.ok(!markdown.includes("Home"), "Nav must be stripped");
+      assert.ok(!markdown.includes("Related Links and ads"), "Aside must be stripped");
+      assert.ok(!markdown.includes("Accept all cookies"), "Cookie banner must be stripped");
+      assert.ok(!markdown.includes("Copyright 2026"), "Footer must be stripped");
+      assert.ok(markdown.includes("Substantive Article"));
+      assert.ok(markdown.includes("Current temperature is 72 degrees Fahrenheit"));
     });
   });
 

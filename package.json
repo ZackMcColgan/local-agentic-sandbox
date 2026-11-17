@@ -6,13 +6,15 @@
   "workspaces": [
     "mcp-server",
     "browser-mcp",
-    "web-ui"
+    "web-ui",
+    "host-bridge"
   ],
   "scripts": {
     "test": "npm run test --workspaces",
     "test:gate": "node scripts/test-gate.js",
     "test:coverage": "npm run test:coverage --workspaces",
     "build": "npm run build --workspaces",
+    "build:host-runner": "node scripts/build-host-runner.js",
     "up": "docker compose up --build -d",
     "down": "docker compose down",
     "restart": "docker compose restart",
@@ -23,11 +25,15 @@
     "verify:sec": "docker compose exec mcp-server id && docker compose exec browser-mcp id",
     "lan:bridge": "node scripts/lan-bridge.js",
     "dev:proxy": "node scripts/dev-proxy.js",
-    "test:ui": "node scripts/test-ui-render.js",
+    "test:ui": "npm --prefix web-ui run test:e2e",
     "deploy:cluster": "node scripts/deploy-cluster.js",
     "deploy:all": "node scripts/deploy-cluster.js all",
     "eval:memory": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/eval-memory.js",
-    "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts"
+    "generate:svg": "node ./web-ui/node_modules/tsx/dist/cli.mjs scripts/drawio-to-svg.ts",
+    "test:ui:update": "npm --prefix web-ui run test:e2e:update",
+    "test:e2e:live": "npm --prefix web-ui run test:e2e:live",
+    "test:lifecycle": "npm --prefix web-ui run test:lifecycle",
+    "test:all": "node scripts/test-all.js"
   },
   "overrides": {
     "ip-address": "^10.7.4",

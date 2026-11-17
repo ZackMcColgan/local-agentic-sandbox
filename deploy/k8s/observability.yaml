@@ -19,9 +19,11 @@ spec:
         tier: observability
     spec:
       containers:
-        - name: jaeger
+        - name: otel-collector
           image: jaegertracing/all-in-one:1.53
           imagePullPolicy: IfNotPresent
+          args:
+            - --query.base-path=/jaeger
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
@@ -40,10 +42,10 @@ spec:
           resources:
             limits:
               cpu: "500m"
-              memory: "512Mi"
-            requests:
-              cpu: "100m"
               memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
 ---
 apiVersion: v1
 kind: Service
@@ -65,6 +67,26 @@ spec:
       protocol: TCP
     - port: 16686
       targetPort: 16686
+      name: jaeger-ui
+      protocol: TCP
+  selector:
+    app: otel-collector
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-ui
+  namespace: local-agentic-sandbox
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: tracing-telemetry
+spec:
+  type: NodePort
+  ports:
+    - port: 16686
+      targetPort: 16686
+      nodePort: 30686
       name: jaeger-ui
       protocol: TCP
   selector:

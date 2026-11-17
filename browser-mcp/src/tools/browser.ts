@@ -33,11 +33,18 @@ function isPrivateIpOrLocalhost(urlString: string): boolean {
 }
 
 export function htmlToMarkdown(html: string): string {
-  // Strip non-content tags
+  // Strip non-content and boilerplate layout tags (nav, header, footer, aside, scripts, styles)
   let text = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "");
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "")
+    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, "")
+    .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, "")
+    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, "")
+    .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, "")
+    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:cookie|banner|advert|ad-|ad_|sidebar|nav-|nav_)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, "");
 
   // Format headers
   text = text.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n\n### $1\n\n");
@@ -87,6 +94,16 @@ export function registerBrowserTools(mcp: McpServer) {
     },
     async ({ query, limit }) => {
       try {
+        // Test hook: when SEARCH_FORCE_EMPTY_RESULTS=1, return empty results immediately without touching the network.
+        if (process.env.SEARCH_FORCE_EMPTY_RESULTS === "1") {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({ results: [] })
+            }]
+          };
+        }
+
         const results: Array<{ title: string; snippet: string; url: string }> = [];
 
         // DuckDuckGo Lite Search (POST method, scriptless, zero CAPTCHAs)
@@ -96,6 +113,7 @@ export function registerBrowserTools(mcp: McpServer) {
           body: new URLSearchParams({ q: query }),
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": "https://lite.duckduckgo.com/lite/",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           },
@@ -136,6 +154,34 @@ export function registerBrowserTools(mcp: McpServer) {
           }
         }
 
+        // Resilient fallback for weather queries if search engine is throttled or empty
+        if (results.length === 0 && /\b(weather|forecast|temperature)\b/i.test(query)) {
+          try {
+            const cleanLoc = query
+              .replace(/\b(what|is|the|tomorrow'?s?|today'?s?|weather|forecast|temperature|in|for|at)\b/gi, " ")
+              .trim()
+              .replace(/\s+/g, "+");
+            if (cleanLoc) {
+              const weatherRes = await fetch(`https://wttr.in/${encodeURIComponent(cleanLoc)}?format=j1`, {
+                signal: AbortSignal.timeout(4000)
+              });
+              if (weatherRes.ok) {
+                const wData: any = await weatherRes.json();
+                const current = wData.current_condition?.[0];
+                const forecasts = wData.weather || [];
+                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f: any) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || 'clear'}`).join("; ")}`;
+                results.push({
+                  title: `Weather Forecast: ${query}`,
+                  snippet,
+                  url: `https://wttr.in/${encodeURIComponent(cleanLoc)}`
+                });
+              }
+            }
+          } catch {
+            // ignore network/parse errors
+          }
+        }
+
         // Auto-fetch best substantive candidate from top links
         let topResultContent: { title: string; url: string; markdown: string } | null = null;
         const candidates = results.slice(0, 4);
@@ -172,8 +218,8 @@ export function registerBrowserTools(mcp: McpServer) {
           }
 
           if (bestCandidate) {
-            const truncated = bestCandidate.markdown.length > 15000
-              ? bestCandidate.markdown.substring(0, 15000) + "\n\n...[Content truncated for context window]"
+            const truncated = bestCandidate.markdown.length > 3000
+              ? bestCandidate.markdown.substring(0, 3000) + "\n\n...[Content truncated for context window]"
               : bestCandidate.markdown;
 
             topResultContent = {
@@ -255,7 +301,7 @@ export function registerBrowserTools(mcp: McpServer) {
 
         const rawHtml = await res.text();
         const markdown = htmlToMarkdown(rawHtml);
-        const truncated = markdown.length > 25000 ? markdown.substring(0, 25000) + "\n\n...[Content truncated for context window]" : markdown;
+        const truncated = markdown.length > 4000 ? markdown.substring(0, 4000) + "\n\n...[Content truncated for context window]" : markdown;
 
         return {
           content: [{

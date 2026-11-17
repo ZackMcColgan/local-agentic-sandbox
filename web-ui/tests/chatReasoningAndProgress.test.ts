@@ -79,7 +79,7 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
     it("ThinkingPanel source contains phased cards (Planning, Building, Validating), streaming badge, and is expanded by default", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ThinkingPanel.tsx"), "utf8");
       assert.ok(src.includes("planning") && src.includes("building") && src.includes("validating"), "Must have 3 pipeline phases");
-      assert.ok(src.includes("Worker reasoning"), "Must have panel header matching mockup");
+      assert.ok(src.includes("Thinking") && src.includes("formatThoughtLabel"), "Must have panel header matching the final design board (Thinking / Thought for …)");
       assert.ok(src.includes("Streaming") || src.includes("streaming-badge"), "Must have streaming badge");
       assert.ok(src.includes("defaultExpanded = true"), "Must be expanded by default as requested by user");
     });
@@ -97,6 +97,13 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
       assert.ok(src.includes("CodeBlock"), "LiveRunBlock must import and mount CodeBlock for non-SVG code deliverables");
       assert.ok(src.includes("codeSnippet"), "LiveRunBlock must extract code snippet from milestone diff or content");
+    });
+
+    it("mounts sandboxed iframe preview when deliverable is an HTML document (e.g. spanish-fort-weather.html)", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      assert.ok(src.includes("isHtml"), "LiveRunBlock must detect HTML deliverable");
+      assert.ok(src.includes("iframe"), "LiveRunBlock must render sandboxed iframe for HTML deliverable preview");
+      assert.ok(src.includes("/api/files?path="), "Must load HTML deliverable via /api/files endpoint");
     });
   });
 
@@ -149,6 +156,11 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
       // Check that shortModelLabel handles swift-27b-mtp cleanly
       assert.ok(src.includes("swift"), "shortModelLabel must recognize swift model");
+    });
+
+    it("activeModel indicator resolves to Flash-Next if model contains flash-next or gyro", () => {
+      const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      assert.ok(src.includes("Flash-Next"), "shortModelLabel must format Flash-Next");
     });
   });
 

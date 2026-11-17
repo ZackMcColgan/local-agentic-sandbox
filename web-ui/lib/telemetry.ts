@@ -159,7 +159,7 @@ export class TelemetryTracer {
           {
             resource: {
               attributes: [
-                { key: "service.name", value: { stringValue: process.env.OTEL_SERVICE_NAME || "enterprise-ai-portal" } },
+                { key: "service.name", value: { stringValue: process.env.OTEL_SERVICE_NAME || "local-agentic-sandbox" } },
                 { key: "session.id", value: { stringValue: span.sessionId } }
               ]
             },

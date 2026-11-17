@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
 import { copyText } from "../lib/clipboard";
+import { resolveArtifactDownload } from "../lib/artifactDownload";
 
 export interface SvgViewerProps {
   code?: string;
@@ -27,6 +28,7 @@ export interface SvgViewerProps {
   title?: string;
   initialTab?: "preview" | "code";
   allowFullscreen?: boolean;
+  embeddedInCanvas?: boolean;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function SvgViewer({
   title = "SVG Vector Graphic",
   initialTab = "preview",
   allowFullscreen = true,
+  embeddedInCanvas = false,
   className = ""
 }: SvgViewerProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "code">(initialTab);
@@ -138,15 +141,12 @@ export function SvgViewer({
 
   const handleDownload = () => {
     if (!rawSvg) return;
-    const isXml = isDrawio && !rawSvg.startsWith("<svg");
-    const mime = isXml ? "application/xml;charset=utf-8" : "image/svg+xml;charset=utf-8";
-    const blob = new Blob([rawSvg], { type: mime });
+    const { filename, mime } = resolveArtifactDownload(title, rawSvg, isDrawio);
+    const blob = new Blob([rawSvg], { type: `${mime};charset=utf-8` });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    const cleanTitle = title.replace(/[^a-zA-Z0-9_.-]/g, "_").toLowerCase();
-    const ext = isXml ? ".drawio" : ".svg";
-    a.download = cleanTitle.endsWith(ext) || cleanTitle.endsWith(".svg") ? cleanTitle : `${cleanTitle}${ext}`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -159,7 +159,7 @@ export function SvgViewer({
 
   const bgClasses: Record<BgMode, string> = {
     white: "bg-white",
-    dark: "bg-zinc-950",
+    dark: "bg-black",
     grid: "bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:16px_16px] bg-slate-50 dark:bg-zinc-900"
   };
 
@@ -172,12 +172,13 @@ export function SvgViewer({
       }`}
     >
       {/* 1. Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
+      {!embeddedInCanvas && (
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
         {/* Left: Title & Metadata Badge */}
         <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 truncate">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 min-w-0">
             <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="truncate max-w-[200px] sm:max-w-xs">{title}</span>
+            <span className="line-clamp-2" title={title}>{title}</span>
           </div>
           {isDrawio && (
             <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
@@ -358,9 +359,54 @@ export function SvgViewer({
           )}
         </div>
       </div>
+      )}
 
       {/* 2. Main Content Viewport */}
       <div className="relative flex-1 min-h-[220px] max-h-[500px] overflow-auto flex flex-col items-center justify-center">
+        {embeddedInCanvas && activeTab === "preview" && (
+          <div
+            data-testid="svg-embedded-floating-pill"
+            className="absolute top-3 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-slate-200 dark:border-zinc-700 shadow-sm text-[11px]"
+          >
+            {(["white", "dark", "grid"] as BgMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setBgMode(mode)}
+                className={`px-1.5 py-0.5 rounded-full capitalize font-medium transition-colors ${
+                  bgMode === mode
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                }`}
+                title={`Background: ${mode}`}
+              >
+                {mode}
+              </button>
+            ))}
+            <span className="h-3 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.25, +(z - 0.25).toFixed(2)))}
+              className="p-0.5 rounded text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              title="Zoom out"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <span className="font-mono text-[10px] text-slate-700 dark:text-zinc-300 min-w-[34px] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))}
+              className="p-0.5 rounded text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              title="Zoom in"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="py-12 flex flex-col items-center gap-2 text-slate-500 dark:text-zinc-400">
             <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
@@ -385,7 +431,7 @@ export function SvgViewer({
                   transformOrigin: "center center",
                   transition: "transform 0.15s ease-out"
                 }}
-                className="flex items-center justify-center max-w-full [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
+                className="flex items-center justify-center w-full max-w-full [&>svg]:w-full [&>svg]:max-w-[760px] [&>svg]:max-h-[520px] [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
                 dangerouslySetInnerHTML={{ __html: sanitized }}
               />
             ) : rawSvg ? (
@@ -417,16 +463,18 @@ export function SvgViewer({
       </div>
 
       {/* 3. Footer Bar */}
+      {!embeddedInCanvas && (
       <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
         <span className="font-mono truncate">
           {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
         </span>
         {activeTab === "preview" && (
-          <span className="hidden sm:inline text-slate-400 dark:text-zinc-500 shrink-0">
+          <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
             Click +/- or zoom buttons to inspect details
           </span>
         )}
       </div>
+      )}
 
     </div>
   );
@@ -493,7 +541,7 @@ export function SvgFileLink({
     <span className="inline-flex flex-col my-1 max-w-full align-middle">
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs shadow-xs font-mono">
         <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span className="font-semibold truncate max-w-[200px] sm:max-w-xs">{title}</span>
+        <span className="font-semibold line-clamp-2" title={title}>{title}</span>
         <button
           type="button"
           onClick={() => setShowInline(!showInline)}

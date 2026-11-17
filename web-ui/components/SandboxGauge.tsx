@@ -53,7 +53,7 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "rw,noexec,nosuid",
       icon: Zap,
       status: "enforced",
-      accent: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-500/20"
+      accent: "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20"
     },
     {
       title: "Supply-Chain Trust",
@@ -88,7 +88,7 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
           return (
             <div
               key={i}
-              className="p-3 rounded-xl bg-white dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors flex items-start gap-3 shadow-sm"
+              className="p-3 rounded-xl bg-white dark:bg-black/60 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors flex items-start gap-3 shadow-sm"
             >
               <div className={`p-2 rounded-lg border shrink-0 ${rule.accent}`}>
                 <IconComponent className="h-4 w-4" />

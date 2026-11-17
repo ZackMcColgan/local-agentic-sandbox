@@ -22,12 +22,13 @@ export async function POST(
       return NextResponse.json({ error: "Schedule not found or disabled" }, { status: 404 });
     }
 
-    const result = await triggerScheduleRun(scheduleId, options);
-    if (!result) {
-      return NextResponse.json({ error: "Schedule execution failed or not found" }, { status: 404 });
-    }
+    // Trigger execution asynchronously so HTTP connection does not timeout
+    const runId = `task-${Date.now()}`;
+    triggerScheduleRun(scheduleId, options).catch((err) => {
+      console.error(`[scheduler] Background trigger failed for ${scheduleId}:`, err);
+    });
 
-    return NextResponse.json({ runId: result.runId, status: result.status }, { status: 200 });
+    return NextResponse.json({ runId, status: "active" }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

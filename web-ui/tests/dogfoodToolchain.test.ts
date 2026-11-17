@@ -78,7 +78,7 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
       "browser-mcp Scraper Pod",
       "builder-tier Toolchain Sandbox",
       "qdrant-service: Qdrant Vector",
-      "ollama-service"
+      "llm-service"
     ];
 
     for (const label of requiredLabels) {

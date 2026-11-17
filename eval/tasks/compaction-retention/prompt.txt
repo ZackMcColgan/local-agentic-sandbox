@@ -1,0 +1,9 @@
+Compact the following session context into a concise handoff summary.
+You MUST retain all five exact identifiers (`ID_ALPHA_719`, `ID_BRAVO_402`, `ID_CHARLIE_885`, `ID_DELTA_163`, `ID_ECHO_941`) verbatim while reducing the overall length by roughly 45-55% (target ~54.5% retention).
+
+=== SESSION CONTEXT ===
+Turn 1: User requested a full audit of the job-chunking supervisor. The primary job identifier is ID_ALPHA_719, which is scheduled on the default queue with maxRounds set to 8.
+Turn 2: Investigation of the host-bridge revealed that checkpoint ID_BRAVO_402 was written before the worker paused. The checkpoint contains the serialized state of the workspace and the current git HEAD.
+Turn 3: During the second chunk, the supervisor detected a transient network error on endpoint ID_CHARLIE_885, which triggered an automatic retry after 5 seconds without losing the active worktree.
+Turn 4: The test suite ran against build artifact ID_DELTA_163 and verified that all 14 unit tests in the gate passed without any uncovered files or typecheck errors.
+Turn 5: Finally, the PR was prepared under tracking token ID_ECHO_941, with all commits squashed cleanly onto the feature branch ready for reviewer inspection.

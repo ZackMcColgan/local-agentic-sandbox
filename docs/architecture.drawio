@@ -1,103 +1,123 @@
-<mxfile host="app.diagrams.net" modified="2026-10-02T07:58:00.000Z" agent="Local-Agentic-Sandbox" version="24.0.0" type="device">
-  <diagram id="arch-v2" name="local-agentic-sandbox Architecture v2">
-    <mxGraphModel dx="1420" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+<?xml version="1.0" ?>
+<mxfile host="app.diagrams.net" modified="2026-11-17T00:00:00.000Z" agent="drawio" version="24.0.0">
+  <diagram id="arch" name="Architecture">
+    <mxGraphModel dx="1320" dy="728" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1320" pageHeight="728" math="0" shadow="0" background="#ffffff">
       <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-        
-        <!-- Header -->
-        <mxCell id="2" value="&lt;b style='font-size: 20px; color: #0369a1;'&gt;local-agentic-sandbox: Autonomous Platform v2 Architecture&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #475569; font-size: 13px;'&gt;Zero-Trust Kubernetes Topology | Air-Gapped Code Execution | Tri-Mode Dispatcher | OpenTelemetry&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="40" y="20" width="800" height="50" as="geometry" />
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="cluster" value="&lt;b&gt;kind cluster&lt;/b&gt; (local-agentic-sandbox)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;strokeWidth=2;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#0f172a;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="400" y="196" width="880" height="452" as="geometry"/>
         </mxCell>
-
-        <!-- Ingress & Client Layer -->
-        <mxCell id="10" value="&lt;b&gt;CLIENT &amp;amp; INGRESS LAYER&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#f8fafc;strokeColor=#cbd5e1;fontColor=#475569;rounded=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="90" width="1320" height="90" as="geometry" />
+        <mxCell id="cluster_pill" value="credential-free · egress blocked (NetworkPolicy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="906" y="210" width="346" height="27" as="geometry"/>
         </mxCell>
-        <mxCell id="11" value="&lt;b style='color: #0f172a;'&gt;Mobile Phone / Workstation Browser&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #0284c7; font-weight: 600;'&gt;LAN / Localhost (Direct HTTP)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontColor=#0f172a;" vertex="1" parent="10">
-          <mxGeometry x="30" y="35" width="280" height="42" as="geometry" />
+        <mxCell id="hostzone" value="&lt;b&gt;host&lt;/b&gt; — Windows PC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=2;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#0f172a;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="40" y="196" width="312" height="452" as="geometry"/>
         </mxCell>
-        <mxCell id="12" value="&lt;b style='color: #0369a1;'&gt;LAN Reverse Proxy Bridge&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;scripts/lan-bridge.js (0.0.0.0:80 / :3000)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f9ff;strokeColor=#0284c7;fontColor=#0f172a;" vertex="1" parent="10">
-          <mxGeometry x="390" y="35" width="360" height="42" as="geometry" />
+        <mxCell id="hostzone_note" value="outside the cluster" style="text;html=1;align=right;fontColor=#64748b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="208" y="216" width="120" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="13" value="&lt;b style='color: #b45309;'&gt;Public Internet &amp;amp; External Docs&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;DuckDuckGo &amp;amp; Documentation Scrapes&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;" vertex="1" parent="10">
-          <mxGeometry x="880" y="35" width="400" height="42" as="geometry" />
+        <mxCell id="operator" value="&lt;b&gt;Operator&lt;/b&gt;&lt;br/&gt;phone + desktop browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="40" y="44" width="240" height="88" as="geometry"/>
         </mxCell>
-
-        <!-- K8s Namespace Group -->
-        <mxCell id="20" value="&lt;b&gt;KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#ffffff;strokeColor=#94a3b8;fontColor=#0284c7;rounded=1;strokeWidth=1.5;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="210" width="1320" height="430" as="geometry" />
+        <mxCell id="bridge" value="&lt;b&gt;LAN / tailnet bridge&lt;/b&gt;&lt;br/&gt;serves the UI on LAN + tailnet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="340" y="44" width="240" height="88" as="geometry"/>
         </mxCell>
-
-        <!-- Web UI Pod -->
-        <mxCell id="21" value="&lt;b style='font-size: 14px; color: #0369a1;'&gt;web-ui: Orchestrator Pod&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #64748b; font-size: 11px;'&gt;Port 3000 (NodePort 30300)&lt;/span&gt;&lt;hr/&gt;• &lt;b style='color: #6d28d9;'&gt;Tri-Mode Dispatcher:&lt;/b&gt; Auto | Flash | Pro&lt;br/&gt;• &lt;b style='color: #0284c7;'&gt;Multimodal Vision:&lt;/b&gt; Gemma 4 Ingestion&lt;br/&gt;• &lt;b style='color: #059669;'&gt;Persistence:&lt;/b&gt; Chat History (v1) in LocalStorage&lt;br/&gt;• &lt;b style='color: #e11d48;'&gt;OTEL Tracer SDK:&lt;/b&gt; Distributed Spans&lt;br/&gt;• &lt;b style='color: #0369a1;'&gt;Lease:&lt;/b&gt; keep_alive = '24h' (Hot VRAM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#0284c7;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
-          <mxGeometry x="380" y="45" width="420" height="190" as="geometry" />
+        <mxCell id="gateway" value="&lt;b&gt;kind Gateway (nginx)&lt;/b&gt;&lt;br/&gt;routes / and /jaeger/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="640" y="44" width="260" height="88" as="geometry"/>
         </mxCell>
-
-        <!-- MCP Runner Pod -->
-        <mxCell id="22" value="&lt;b style='font-size: 14px; color: #047857;'&gt;mcp-runner: Tool Boundary&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #065f46; font-size: 10px;'&gt;ClusterIP: 8080 | uid: 10001 | read_only rootfs&lt;/span&gt;&lt;hr/&gt;&lt;b style='color: #0f172a;'&gt;8 Autonomous Tools:&lt;/b&gt;&lt;br/&gt;• workspace_get_tree, read_file, write_file&lt;br/&gt;• workspace_grep (ReDoS complexity guard)&lt;br/&gt;• workspace_run_command (Isolated Bash)&lt;br/&gt;• git_status, git_checkout, git_commit (Argv-safe)&lt;br/&gt;• execute_sandboxed_python &amp;amp; Attestation&lt;br/&gt;&lt;br/&gt;&lt;span style='color: #047857; font-weight: bold;'&gt;NetworkPolicy: Zero Egress Deny-All&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#059669;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
-          <mxGeometry x="30" y="45" width="310" height="210" as="geometry" />
+        <mxCell id="webui" value="&lt;b&gt;Web UI / orchestrator&lt;/b&gt;&lt;br/&gt;Next.js · namespace: local-agentic-sandbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+          <mxGeometry x="424" y="252" width="500" height="224" as="geometry"/>
         </mxCell>
-
-        <!-- Browser MCP Pod -->
-        <mxCell id="23" value="&lt;b style='font-size: 14px; color: #b45309;'&gt;browser-mcp: Scraper Pod&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #92400e; font-size: 10px;'&gt;ClusterIP: 8081 | uid: 10002&lt;/span&gt;&lt;hr/&gt;• search_web (DuckDuckGo Search)&lt;br/&gt;• fetch_webpage_markdown (Scraper)&lt;br/&gt;• SSRF Guard (Private IP Filter)&lt;br/&gt;• NetworkPolicy: Egress Allowed (80/443)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
-          <mxGeometry x="870" y="45" width="410" height="130" as="geometry" />
+        <mxCell id="webui_chat" value="chat threads + thread store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="448" y="338" width="142" height="42" as="geometry"/>
         </mxCell>
-
-        <!-- OTEL Collector Pod -->
-        <mxCell id="24" value="&lt;b style='font-size: 14px; color: #be123c;'&gt;otel-collector: Jaeger Tracing&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #9f1239; font-size: 10px;'&gt;Ports: 4318 (HTTP), 4317 (gRPC), 16686 (UI)&lt;/span&gt;&lt;hr/&gt;• Distributed Trace Spans: Turn -&gt; Tool -&gt; Exec&lt;br/&gt;• Real-time Waterfall Telemetry Feed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
-          <mxGeometry x="870" y="195" width="410" height="95" as="geometry" />
+        <mxCell id="webui_sup" value="supervisor / scheduler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="602" y="338" width="142" height="42" as="geometry"/>
         </mxCell>
-
-        <!-- Workspace PVC -->
-        <mxCell id="25" value="&lt;b style='font-size: 13px; color: #0f172a;'&gt;workspace-pvc: Persistent Volume Claim (/workspace)&lt;/b&gt; — Host Mount: ./workspace:rw (RWO 10Gi)&lt;br/&gt;&lt;span style='color: #475569;'&gt;• Shared Git Repo &amp;amp; Feature Branches | .agent/skills/*.md (Hermes Loop) | Isolated Test Caches&lt;br/&gt;&lt;b style='color: #b45309;'&gt;Host Trust Boundary:&lt;/b&gt; Writes allowed in /workspace; path traversal outside strictly rejected.&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;strokeWidth=1.5;fontColor=#0f172a;align=left;spacingLeft=12;" vertex="1" parent="20">
-          <mxGeometry x="30" y="310" width="770" height="95" as="geometry" />
+        <mxCell id="webui_board" value="work board" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="756" y="338" width="142" height="42" as="geometry"/>
         </mxCell>
-
-        <!-- Inference Boundary -->
-        <mxCell id="30" value="&lt;b&gt;HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB Dedicated VRAM)&lt;/b&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=28;fillColor=#faf5ff;strokeColor=#7c3aed;fontColor=#6d28d9;rounded=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="670" width="1320" height="180" as="geometry" />
+        <mxCell id="webui_deploy" value="self-deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="448" y="392" width="142" height="42" as="geometry"/>
         </mxCell>
-        <mxCell id="31" value="&lt;b style='color: #6d28d9;'&gt;ollama-service (K8s Service)&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size: 11px; color: #475569;'&gt;Type: ExternalName (host.docker.internal:11434)&lt;br/&gt;Air-Gapped PCIe ROCm Inference&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#a855f7;strokeWidth=1.4;fontColor=#0f172a;" vertex="1" parent="30">
-          <mxGeometry x="30" y="45" width="310" height="110" as="geometry" />
+        <mxCell id="webui_gate" value="test gate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="602" y="392" width="142" height="42" as="geometry"/>
         </mxCell>
-        <mxCell id="32" value="&lt;b style='color: #581c87; font-size: 13px;'&gt;Primary Orchestrator: qwen3.8:27b-q3_k_m&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #6d28d9;'&gt;Dedicated VRAM: ~13.3 GB (100% GPU Offloaded, 29 Layers)&lt;/span&gt;&lt;hr/&gt;• Flash Attention Enabled | Native Function Calling (tools)&lt;br/&gt;• Deep Architectural Planning, Code Synthesis, &amp;amp; Debugging&lt;br/&gt;&lt;b style='color: #047857;'&gt;Active Lease: 24h keep_alive (Zero Cold Start / Sub-second latency)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=10;" vertex="1" parent="30">
-          <mxGeometry x="380" y="45" width="440" height="110" as="geometry" />
+        <mxCell id="webui_compact" value="compaction + checkpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="756" y="392" width="142" height="42" as="geometry"/>
         </mxCell>
-        <mxCell id="33" value="&lt;b style='color: #581c87; font-size: 13px;'&gt;Vision &amp;amp; Sub-Agent: gemma4:e4b&lt;/b&gt;&lt;br/&gt;&lt;span style='color: #6d28d9;'&gt;Parameter Size: 7.5B | Speed: ~80 tok/s&lt;/span&gt;&lt;hr/&gt;• Multimodal Vision: Whiteboards, draw.io XML, diagrams&lt;br/&gt;• Triage Router: Fast complexity classification (&amp;lt;250ms)&lt;br/&gt;• Extracted spec feeds structured markdown into Qwen loop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;strokeWidth=1.8;fontColor=#0f172a;align=left;spacingLeft=10;" vertex="1" parent="30">
-          <mxGeometry x="860" y="45" width="420" height="110" as="geometry" />
+        <mxCell id="otel" value="&lt;b&gt;OpenTelemetry collector&lt;/b&gt;&lt;br/&gt;a span for every agent turn" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="948" y="252" width="308" height="96" as="geometry"/>
         </mxCell>
-
-        <!-- Connectors -->
-        <mxCell id="40" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="1" source="11" target="12">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="jaeger" value="&lt;b&gt;Jaeger&lt;/b&gt;&lt;br/&gt;trace UI via /jaeger/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="948" y="380" width="308" height="96" as="geometry"/>
         </mxCell>
-        <mxCell id="41" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;" edge="1" parent="1" source="12" target="21">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="mcp" value="&lt;b&gt;MCP runner&lt;/b&gt;&lt;br/&gt;sandboxed pod · read-only rootfs&lt;br/&gt;cap_drop ALL · egress denied" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="424" y="508" width="500" height="112" as="geometry"/>
         </mxCell>
-        <mxCell id="42" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;fontColor=#059669;" edge="1" parent="1" source="21" target="22">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="browser" value="&lt;b&gt;Browser MCP&lt;/b&gt;&lt;br/&gt;isolated pod · web egress&lt;br/&gt;with SSRF guards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="948" y="508" width="308" height="112" as="geometry"/>
         </mxCell>
-        <mxCell id="43" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=2;fontColor=#d97706;" edge="1" parent="1" source="21" target="23">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="strata" value="&lt;b&gt;Strata inference engine&lt;/b&gt;&lt;br/&gt;host process · RX 9070 XT · ROCm/HIP&lt;br/&gt;resident ~125B-class MoE&lt;br/&gt;27B fallback · 128K context&lt;br/&gt;served locally on :8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="64" y="244" width="264" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="44" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=2;" edge="1" parent="1" source="23" target="13">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="hostbridge" value="&lt;b&gt;Host bridge&lt;/b&gt;&lt;br/&gt;host process&lt;br/&gt;sole external boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="64" y="408" width="264" height="100" as="geometry"/>
         </mxCell>
-        <mxCell id="45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e11d48;strokeWidth=2;" edge="1" parent="1" source="21" target="24">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="hostos" value="&lt;b&gt;Host OS&lt;/b&gt;&lt;br/&gt;git / GitHub · internet via host&lt;br/&gt;credentials in host OS keyring only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="64" y="540" width="264" height="92" as="geometry"/>
         </mxCell>
-        <mxCell id="46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;" edge="1" parent="1" source="22" target="25">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="footer" value="Local-only by design — inference, tools, and data never leave this machine. The host bridge is the single, approval-gated boundary." style="text;html=1;align=center;fontColor=#64748b;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+          <mxGeometry x="160" y="676" width="1000" height="24" as="geometry"/>
         </mxCell>
-        <mxCell id="47" value="Inference /api/chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;fontColor=#6d28d9;fillColor=#ffffff;" edge="1" parent="1" source="21" target="31">
+        <mxCell id="e_op_bridge" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#10b981;strokeWidth=2;" parent="1" source="operator" target="bridge" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_bridge_gw" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#10b981;strokeWidth=2;" parent="1" source="bridge" target="gateway" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_gw_webui" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#10b981;strokeWidth=2;" parent="1" source="gateway" target="webui" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_gw_jaeger" value="/jaeger/" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" source="gateway" target="jaeger" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="880" y="470" />
-              <mxPoint x="880" y="648" />
-              <mxPoint x="225" y="648" />
+              <mxPoint x="1268" y="88"/>
+              <mxPoint x="1268" y="428"/>
             </Array>
           </mxGeometry>
+        </mxCell>
+        <mxCell id="e_webui_otel" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;" parent="1" source="webui" target="otel" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_otel_jaeger" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;" parent="1" source="otel" target="jaeger" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_webui_mcp" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;" parent="1" source="webui" target="mcp" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_webui_browser" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;" parent="1" source="webui" target="browser" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="936" y="420"/>
+              <mxPoint x="936" y="564"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_webui_strata" value="local inference — no cloud" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#10b981;strokeWidth=2;fontColor=#065f46;fontFamily=Helvetica;fontSize=11;" parent="1" source="webui" target="strata" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_webui_hostbridge" value="tool calls" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" source="webui" target="hostbridge" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="378" y="420"/>
+              <mxPoint x="378" y="458"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_hostbridge_hostos" value="approval gate (destructive actions)" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;strokeColor=#64748b;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" source="hostbridge" target="hostos" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>
     </mxGraphModel>

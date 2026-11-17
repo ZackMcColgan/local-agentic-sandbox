@@ -24,6 +24,11 @@ import {
   loadPendingQueue
 } from "../web-ui/lib/subagents/skillGate.ts";
 
+setTimeout(() => {
+  console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
+  process.exit(1);
+}, 180_000).unref();
+
 console.log("[Phase D] Running Behavioral Acceptance Experiments 7–12...\n");
 
 async function runExperiments() {
@@ -62,7 +67,7 @@ async function runExperiments() {
   assert.equal(emptyRes.contextSnippet, "");
   console.log("   Empty recall returned 0 citations.");
   // Cleanup empty test collection
-  await fetch(`http://127.0.0.1:6333/collections/${emptyCol}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`http://127.0.0.1:6333/collections/${emptyCol}`, { method: "DELETE", signal: AbortSignal.timeout(15000) }).catch(() => {});
   console.log("✅ Experiment 8 PASSED: Docs recall cites file:line; empty Qdrant yields zero citations.\n");
 
   // Experiment 9: Eval is real (golden-set prints score; empty-Qdrant control scores ~0)
@@ -139,6 +144,7 @@ async function runExperiments() {
   console.log("=======================================================");
   console.log("✅ ALL PHASE D BEHAVIORAL ACCEPTANCE EXPERIMENTS PASSED (7–12)");
   console.log("=======================================================\n");
+  process.exit(0);
 }
 
 runExperiments().catch((err) => {

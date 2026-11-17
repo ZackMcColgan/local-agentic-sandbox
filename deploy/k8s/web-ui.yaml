@@ -25,12 +25,14 @@ spec:
       securityContext:
         runAsUser: 1001
         runAsGroup: 1001
+        fsGroup: 1001
+        supplementalGroups: [10001]
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: web-ui
-          image: local-agentic-sandbox-web-ui:v1.0.0
+          image: local-agentic-sandbox-web-ui:v-d63c477
           imagePullPolicy: Never
           ports:
             - containerPort: 3000
@@ -38,12 +40,18 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: AGENT_CHECKPOINT_DIR
+              value: "/workspace/.agent/checkpoints"
             - name: PORT
               value: "3000"
+            - name: LLM_BASE_URL
+              value: "http://strata-service:8080"
+            - name: LLM_HOST
+              value: "http://strata-service:8080"
             - name: OLLAMA_BASE_URL
-              value: "http://ollama-service:11434"
+              value: "http://llm-service:11434"
             - name: OLLAMA_HOST
-              value: "http://ollama-service:11434"
+              value: "http://llm-service:11434"
             - name: MCP_SERVER_URL
               value: "http://mcp-runner:8080/sse"
             - name: BROWSER_MCP_URL
@@ -51,15 +59,45 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME
-              value: "enterprise-ai-portal"
+              value: "local-agentic-sandbox"
             - name: MODEL_NAME
-              value: "swift-15-27b-mtp"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: PLANNER_MODEL
-              value: "swift-15-27b-mtp"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
             - name: SUBAGENT_MODEL
-              value: "swift-15-27b-mtp"
+              value: "qwen3.8-flash-next-gyro-gyro-s"
+            - name: LLM_ENGINE
+              value: "strata"
+            - name: LLAMACPP_BASE_URL
+              value: "http://strata-service:8080"
+            - name: LLM_CONCURRENCY
+              value: "1"
+            - name: LLM_SUPERVISOR_TOKEN
+              value: "local-sandbox-token-2026"
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
+            - name: THREADS_DIR
+              value: "/workspace/.agent/threads"
+            - name: HOST_RUNNER_URL
+              value: "http://host-runner-service:8765"
+            - name: HOST_RUNNER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-host-runner
+                  key: shared-secret
+                  optional: true
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-telegram
+                  key: bot-token
+                  optional: true
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-telegram
+                  key: chat-id
+                  optional: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -67,11 +105,11 @@ spec:
                 - ALL
           resources:
             limits:
-              cpu: "2000m"
-              memory: "1024Mi"
+              cpu: "1000m"
+              memory: "1Gi"
             requests:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "128Mi"
           volumeMounts:
             - name: workspace-volume
               mountPath: /workspace

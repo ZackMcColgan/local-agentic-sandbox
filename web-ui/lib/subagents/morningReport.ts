@@ -39,6 +39,7 @@ export interface OvernightTaskEntry {
   goal: string;
   status: "completed" | "parked" | "failed" | "cancelled" | "stopped" | "active";
   branch: string;
+  pushStatus?: string;
   gitHeadSha: string;
   startedAt: string;
   completedAt?: string;
@@ -47,10 +48,15 @@ export interface OvernightTaskEntry {
   artifacts: MorningReportArtifact[];
   parkedReason?: string;
   errorSummary?: string;
+  errorDetails?: string;
   milestones: MorningReportMilestone[];
   ambiguityFlags: AmbiguityFlag[];
   testsPassed: number;
   testsFailed: number;
+  projectId?: string;
+  projectName?: string;
+  projectRoot?: string;
+  reviewUrl?: string;
 }
 
 export interface OvernightAttentionItem {
@@ -60,6 +66,9 @@ export interface OvernightAttentionItem {
   status: "parked" | "failed";
   reason: string;
   threadUrl?: string;
+  projectId?: string;
+  projectName?: string;
+  reviewUrl?: string;
 }
 
 export interface OvernightMorningReport {
@@ -82,6 +91,7 @@ export interface MorningReportInput {
   taskId: string;
   goal: string;
   branch: string;
+  pushStatus?: string;
   gitHeadSha: string;
   status: "completed" | "parked" | "failed" | "cancelled" | "active";
   startedAt: string;
@@ -133,26 +143,8 @@ function calculateDuration(start: string, end?: string): string {
   return formatDurationSeconds(calculateDurationSeconds(start, end));
 }
 
-/**
- * Checks if a given ISO timestamp falls within the overnight window (default 10pm / 22:00 to 7am / 07:00 UTC or local).
- */
-export function isWithinOvernightWindow(
-  timestampIso: string,
-  windowStartHour: number = 22,
-  windowEndHour: number = 7
-): boolean {
-  const date = new Date(timestampIso);
-  if (Number.isNaN(date.getTime())) return false;
-  const utcHour = date.getUTCHours();
-  const localHour = date.getHours();
-
-  const inRange = (h: number) =>
-    windowStartHour > windowEndHour
-      ? h >= windowStartHour || h < windowEndHour
-      : h >= windowStartHour && h < windowEndHour;
-
-  return inRange(utcHour) || inRange(localHour);
-}
+import { isWithinOvernightWindow } from "./morningReportUtils";
+export { isWithinOvernightWindow };
 
 /**
  * Extracts produced file artifacts and builds working preview URLs for a task.
@@ -207,10 +199,14 @@ export function extractTaskArtifacts(task: TaskManifest): MorningReportArtifact[
  * Normalizes a task manifest's outcome into completed / parked / failed / active
  * and extracts parkedReason or errorSummary.
  */
+import { summarizeTaskFailureReason } from "./failureSummary";
+export { summarizeTaskFailureReason };
+
 function resolveTaskOutcome(task: TaskManifest): {
   status: OvernightTaskEntry["status"];
   parkedReason?: string;
   errorSummary?: string;
+  errorDetails?: string;
 } {
   if (task.status === "completed") {
     return { status: "completed" };
@@ -230,14 +226,15 @@ function resolveTaskOutcome(task: TaskManifest): {
     const journalErr = [...(task.journal || [])]
       .reverse()
       .find((j) => /crash|error|fail/i.test(j.message))?.message;
-    const errorSummary =
+    const rawError =
       task.errorSummary ||
       failedM?.criticCritique ||
       failedM?.criticNotes?.[0] ||
       journalErr ||
       task.parkedReason ||
       "Execution failed during milestone verification.";
-    return { status: "failed", errorSummary };
+    const { summary, details } = summarizeTaskFailureReason(rawError);
+    return { status: "failed", errorSummary: summary, errorDetails: details };
   }
 
   if (task.status === "stopped" || task.status === "cancelled") {
@@ -258,15 +255,23 @@ export function generateOvernightMorningReport(
   tasks: TaskManifest[],
   options?: {
     filterOvernightWindow?: boolean;
+    windowFilter?: "overnight" | "24h" | "all";
     windowStartHour?: number;
     windowEndHour?: number;
   }
 ): OvernightMorningReport {
   const startHour = options?.windowStartHour ?? 22;
   const endHour = options?.windowEndHour ?? 7;
+  const windowFilter = options?.windowFilter || (options?.filterOvernightWindow ? "overnight" : undefined);
 
   let candidateTasks = Array.isArray(tasks) ? [...tasks] : [];
-  if (options?.filterOvernightWindow) {
+  if (windowFilter === "24h") {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    candidateTasks = candidateTasks.filter((t) => {
+      const ts = new Date(t.startedAt || t.updatedAt || "").getTime();
+      return !Number.isNaN(ts) && ts >= oneDayAgo;
+    });
+  } else if (windowFilter === "overnight" || options?.filterOvernightWindow) {
     const windowFiltered = candidateTasks.filter((t) =>
       isWithinOvernightWindow(t.startedAt || t.updatedAt || new Date().toISOString(), startHour, endHour)
     );
@@ -354,6 +359,7 @@ export function generateOvernightMorningReport(
       goal: task.goal,
       status: outcome.status,
       branch: task.branch || task.branchName || "feat/overnight",
+      pushStatus: task.pushStatus,
       gitHeadSha: lastCheckpoint?.gitHeadSha || "HEAD",
       startedAt: task.startedAt || new Date().toISOString(),
       completedAt: task.completedAt || task.updatedAt,
@@ -362,10 +368,15 @@ export function generateOvernightMorningReport(
       artifacts,
       parkedReason: outcome.parkedReason,
       errorSummary: outcome.errorSummary,
+      errorDetails: outcome.errorDetails,
       milestones,
       ambiguityFlags: task.ambiguityFlags || [],
       testsPassed,
-      testsFailed
+      testsFailed,
+      projectId: task.projectId,
+      projectName: task.projectName,
+      projectRoot: task.projectRoot,
+      reviewUrl: task.reviewUrl || (task.projectId ? `/projects?projectId=${task.projectId}&tab=diffs` : undefined)
     };
 
     entries.push(entry);
@@ -429,14 +440,15 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
   ];
 
   for (const t of report.tasks) {
+    const pushSuffix = t.pushStatus ? `<br/>*(${t.pushStatus})*` : "";
     const statusBadge =
       t.status === "completed"
-        ? "✅ Completed"
+        ? `✅ Completed${pushSuffix}`
         : t.status === "parked"
-        ? "⚠️ Parked"
+        ? `⚠️ Parked${pushSuffix}`
         : t.status === "failed"
-        ? "❌ Failed"
-        : `🔄 ${t.status}`;
+        ? `❌ Failed${pushSuffix}`
+        : `🔄 ${t.status}${pushSuffix}`;
     const artLinks =
       t.artifacts.length > 0
         ? t.artifacts.map((a) => `[${a.name}](${a.previewUrl})`).join(", ")
@@ -486,6 +498,7 @@ export function getCanonicalCheckpointDir(): string {
   }
 
   const candidates = [
+    fs.existsSync("/workspace") ? path.resolve("/workspace/.agent/checkpoints") : null,
     fs.existsSync(path.resolve(process.cwd(), "../workspace"))
       ? path.resolve(process.cwd(), "../workspace/.agent/checkpoints")
       : null,
@@ -579,17 +592,18 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
     report.status === "completed"
       ? "✅ **Status: COMPLETED**"
       : report.status === "parked"
-      ? "⚠️ **Status: PARKED (Requires Zack's Review)**"
+      ? "⚠️ **Status: PARKED (Requires operator review)**"
       : report.status === "failed"
       ? "❌ **Status: FAILED**"
       : report.status === "cancelled"
       ? "🛑 **Status: CANCELLED**"
       : "🔄 **Status: ACTIVE**";
 
+  const pushDisplay = report.pushStatus ? ` | Push: \`${report.pushStatus}\`` : "";
   const lines: string[] = [
     `# Autonomous Morning Report: ${report.taskId}`,
     "",
-    `${statusBadge} | Branch: \`${report.branch}\` | Duration: ${report.durationFormatted}`,
+    `${statusBadge} | Branch: \`${report.branch}\`${pushDisplay} | Duration: ${report.durationFormatted}`,
     `Git HEAD: \`${report.gitHeadSha}\` | Started: ${report.startedAt}${report.completedAt ? ` | Finished: ${report.completedAt}` : ""}`,
     "",
     `### Goal`,

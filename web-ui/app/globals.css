@@ -1,3 +1,4 @@
+@import "./design-tokens.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,7 +11,7 @@
   --card-foreground: 222 47% 11%;
   --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
-  --accent: 250 89% 65%;
+  --accent: 160 84% 39%;
   --accent-foreground: 0 0% 100%;
   --muted: 220 14% 96%;
   --muted-foreground: 215 16% 47%;
@@ -19,13 +20,13 @@
 
 .dark, [data-theme="dark"] {
   color-scheme: dark;
-  --background: 240 10% 4%;
+  --background: 0 0% 0%;
   --foreground: 0 0% 98%;
   --card: 240 6% 10%;
   --card-foreground: 0 0% 98%;
   --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
-  --accent: 250 89% 65%;
+  --accent: 160 84% 39%;
   --accent-foreground: 0 0% 100%;
   --muted: 240 4% 16%;
   --muted-foreground: 240 5% 65%;
@@ -46,7 +47,7 @@ html[data-theme="dark"],
 html.dark body,
 html[data-theme="dark"] body {
   color-scheme: dark !important;
-  background-color: #09090b !important;
+  background-color: #000000 !important;
   color: #f4f4f5 !important;
 }
 
@@ -77,6 +78,24 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.4);
+}
+
+/* Live Activity Header (UI-017): indeterminate pulse — travels the track,
+   signals work continuing without claiming a completion percentage. */
+@keyframes live-activity-pulse-slide {
+  0% { left: -33%; }
+  100% { left: 100%; }
+}
+.live-activity-pulse {
+  animation: live-activity-pulse-slide 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-activity-pulse {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.75;
+  }
 }
 
 /* Touch-friendly horizontal scroller hiding ugly scrollbars */

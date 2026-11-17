@@ -6,6 +6,8 @@ import fsSync from "fs";
 import path from "path";
 import { z } from "zod";
 import ts from "typescript";
+import { workspacePatchFile } from "./patchCore.js";
+export { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -60,8 +62,12 @@ async function ensureWorkspaceInitialized() {
 
 // Ensure safe path resolution within WORKSPACE_DIR
 export function resolveSafePath(userPath: string): string {
-  const normalized = path.normalize(userPath).replace(/^(\/|\\)/, "");
-  const resolved = path.resolve(WORKSPACE_DIR, normalized);
+  if (userPath.includes("..")) {
+    throw new Error(`Security Violation: Path traversal outside /workspace is forbidden (${userPath})`);
+  }
+  const normalized = path.normalize(userPath).replace(/^(\/|\\)+/, "");
+  const stripped = normalized.replace(/^workspace(?:[\/\\]+|$)/i, "");
+  const resolved = path.resolve(WORKSPACE_DIR, stripped);
   const rootResolved = path.resolve(WORKSPACE_DIR);
 
   if (!resolved.startsWith(rootResolved)) {
@@ -356,17 +362,19 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       path: z.string().describe("File path relative to /workspace"),
       start_line: z.number().optional().describe("Optional start line (1-indexed)"),
-      end_line: z.number().optional().describe("Optional end line (1-indexed)")
+      end_line: z.number().optional().describe("Optional end line (1-indexed)"),
+      offset: z.number().optional().describe("Optional line offset (if start_line not provided)"),
+      limit: z.number().optional().describe("Optional line count limit")
     },
-    async ({ path: filePath, start_line, end_line }) => {
+    async ({ path: filePath, start_line, end_line, offset, limit }) => {
       await ensureWorkspaceInitialized();
 
       try {
         const safePath = resolveSafePath(filePath);
         const raw = await fs.readFile(safePath, "utf8");
         const allLines = raw.split(/\r?\n/);
-        const start = start_line ? Math.max(1, start_line) : 1;
-        const end = end_line ? Math.min(allLines.length, end_line) : allLines.length;
+        const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
+        const end = end_line ? Math.min(allLines.length, end_line) : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
 
         const slice = allLines.slice(start - 1, end);
         const formatted = slice
@@ -380,7 +388,10 @@ export function registerWorkspaceTools(mcp: McpServer) {
               status: "SUCCESS",
               path: filePath,
               total_lines: allLines.length,
+              total_bytes: Buffer.byteLength(raw, "utf8"),
               showing_lines: `${start}-${end}`,
+              has_more: end < allLines.length,
+              next_start_line: end < allLines.length ? end + 1 : null,
               content: formatted
             }, null, 2)
           }]
@@ -453,6 +464,43 @@ export function registerWorkspaceTools(mcp: McpServer) {
             text: JSON.stringify({
               status: "EXECUTION_ERROR",
               error: `Failed to write file ${filePath}: ${err.message}`
+            }, null, 2)
+          }]
+        };
+      }
+    }
+  );
+
+  // 4b. workspace_patch_file
+  mcp.tool(
+    "workspace_patch_file",
+    "Surgically applies search-and-replace patches to a file in /workspace. Rejects path traversal and missing targets.",
+    {
+      path: z.string().describe("File path relative to /workspace"),
+      patches: z.array(
+        z.object({
+          search: z.string().describe("Exact string to search for"),
+          replace: z.string().describe("Replacement string")
+        })
+      ).describe("Array of search-and-replace patches to apply in order")
+    },
+    async ({ path: filePath, patches }) => {
+      await ensureWorkspaceInitialized();
+      try {
+        const result = await workspacePatchFile(WORKSPACE_DIR, filePath, patches);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: `Failed to patch file ${filePath}: ${err.message}`
             }, null, 2)
           }]
         };
@@ -552,6 +600,46 @@ export function registerWorkspaceTools(mcp: McpServer) {
             text: JSON.stringify({
               status: "EXECUTION_ERROR",
               error: `git_status error: ${err.message}`
+            }, null, 2)
+          }]
+        };
+      }
+    }
+  );
+
+  // 6b. git_diff
+  mcp.tool(
+    "git_diff",
+    "Show changes between commits, commit and working tree, or staged changes in /workspace.",
+    {
+      target: z.string().optional().describe("Optional commit, branch, or file path to diff against"),
+      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
+    },
+    async ({ target, cached = false }) => {
+      await ensureWorkspaceInitialized();
+
+      try {
+        const diffArgs = ["diff"];
+        if (cached) diffArgs.push("--cached");
+        if (target) diffArgs.push(target);
+        const diffRes = await execGit(diffArgs, WORKSPACE_DIR);
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "SUCCESS",
+              diff: diffRes.stdout.trim()
+            }, null, 2)
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              status: "EXECUTION_ERROR",
+              error: `git diff error: ${err.message}`
             }, null, 2)
           }]
         };

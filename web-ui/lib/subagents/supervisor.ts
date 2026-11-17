@@ -40,6 +40,63 @@ export {
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
+import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
+import { resolveSupervisorChunkResume } from "../jobChunking";
+import {
+  verifyCompletionClaims,
+  stampCompletion,
+  type CompletionClaims,
+  type VerificationAdapters
+} from "../finishVerification";
+import { evaluatePrePrGate } from "../prePrPipeline";
+import { executeInSandboxTier } from "../sandbox/tierRunner";
+import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
+import { WorkerGitOps } from "../git/workerGitOps";
+import { SelfDeployPipeline } from "../deploy/selfDeploy";
+import { notify } from "../notifications";
+
+export function buildVerificationAdapters(repoRoot: string): VerificationAdapters {
+  return {
+    resolveCommit: async (sha: string) => {
+      try {
+        execFileSync("git", ["rev-parse", "--verify", `${sha}^{commit}`], {
+          cwd: repoRoot,
+          stdio: "ignore"
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    branchExists: async (branch: string) => {
+      try {
+        execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+          cwd: repoRoot,
+          stdio: "ignore"
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    fileExists: async (filePath: string) => {
+      const resolved = path.isAbsolute(filePath) ? filePath : path.join(repoRoot, filePath);
+      return fs.existsSync(resolved);
+    },
+    checkPr: async (prNumber: number) => {
+      try {
+        const out = execFileSync(
+          "gh",
+          ["pr", "view", String(prNumber), "--json", "state", "--jq", ".state"],
+          { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+        ).trim();
+        return { exists: true, state: out || null };
+      } catch {
+        return { exists: false, state: null };
+      }
+    }
+  };
+}
 
 let sycophancyProbeExecuted = false;
 
@@ -690,6 +747,7 @@ export interface StepExecutorResult {
   criticRounds?: number;
   builderModel?: string;
   targetFile?: string;
+  modifiedFiles?: string[];
   deliverableContent?: string;
   thinking?: string;
   reason?: string;
@@ -702,6 +760,10 @@ export type StepExecutor = (
 
 export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
+  gitOps?: WorkerGitOps;
+  gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  repoRoot?: string;
+  signal?: AbortSignal;
 }
 
 export interface ProductionStepExecutorOptions {
@@ -709,12 +771,100 @@ export interface ProductionStepExecutorOptions {
   repoRoot?: string;
   model?: string;
   scope?: string;
+  signal?: AbortSignal;
   onThinkingChunk?: (chunk: string, totalThinking: string) => void;
   testRunner?: (
     milestone: Milestone,
     targetFile: string,
     repoRoot: string
-  ) => Promise<{ exitCode: number; passed: number; failed: number; output: string }>;
+  ) => Promise<{ exitCode: number | null; passed: number; failed: number; testsRun?: number; output: string }>;
+}
+
+export interface MilestoneTestRunResult {
+  passed: number;
+  failed: number;
+  testsRun: number;
+  exitCode: number | null;
+  output: string;
+}
+
+/**
+ * Honest milestone acceptance criteria test runner.
+ * If no command is defined on criteria, runs milestone.testFile.
+ * If zero commands can be run, returns exitCode: null, testsRun: 0 (banning dishonest exitCode: 0 passes).
+ */
+export async function runMilestoneTestRunner(
+  m: Milestone,
+  workspaceDir?: string
+): Promise<MilestoneTestRunResult> {
+  const root = workspaceDir || process.cwd();
+  let passed = 0;
+  let failed = 0;
+  let combinedOutput = "";
+  let finalExitCode: number | null = 0;
+
+  const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) => Boolean(c.command && c.command.trim()));
+
+  if (criteriaWithCmd.length === 0) {
+    if (m.testFile) {
+      const testCmd = `npx tsx --test ${m.testFile}`;
+      try {
+        const res = await executeInSandboxTier({
+          tier: "build",
+          command: testCmd,
+          workspaceDir: root,
+          toolchain: m.toolchain
+        });
+        combinedOutput += `[${m.testFile}] $ ${testCmd}\n${res.stdout}\n${res.stderr}\n`;
+        if (res.exitCode === 0) {
+          passed++;
+          finalExitCode = 0;
+        } else {
+          failed++;
+          finalExitCode = res.exitCode || 1;
+        }
+      } catch (err: any) {
+        failed++;
+        finalExitCode = 1;
+        combinedOutput += `[${m.testFile}] Error: ${err.message}\n`;
+      }
+      return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+    }
+
+    // No automated tests configured: honest null exitCode and 0 testsRun
+    return {
+      passed: 0,
+      failed: 0,
+      testsRun: 0,
+      exitCode: null,
+      output: "No automated test commands configured for this milestone."
+    };
+  }
+
+  for (const criterion of criteriaWithCmd) {
+    if (!criterion.command) continue;
+    try {
+      const res = await executeInSandboxTier({
+        tier: "build",
+        command: criterion.command,
+        workspaceDir: root,
+        toolchain: m.toolchain
+      });
+      combinedOutput += `[${criterion.id}] $ ${criterion.command}\n${res.stdout}\n${res.stderr}\n`;
+      if (res.exitCode === (criterion.expectedExitCode ?? 0)) {
+        passed++;
+      } else {
+        failed++;
+        finalExitCode = res.exitCode || 1;
+      }
+    } catch (err: any) {
+      failed++;
+      finalExitCode = 1;
+      combinedOutput += `[${criterion.id}] Error: ${err.message}\n`;
+    }
+  }
+
+  return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
 }
 
 /**
@@ -734,7 +884,7 @@ export interface ProductionStepExecutorOptions {
 export function createProductionStepExecutor(
   options?: ProductionStepExecutorOptions
 ): StepExecutor {
-  const modelToUse = options?.model || "swift-15-27b-mtp";
+  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp";
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
@@ -767,14 +917,14 @@ export function createProductionStepExecutor(
       const builder = createBuilderWorker({
         model: builderModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(builderModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(builderModel) : "24h",
         scope: effectiveScope
       });
 
       const critic = createCriticWorker({
         model: criticModel,
         generate: workerPool.generate,
-        keepAlive: workerPool.keepAliveFor(criticModel),
+        keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(criticModel) : "24h",
         scope: effectiveScope
       });
 
@@ -803,6 +953,7 @@ export function createProductionStepExecutor(
           builderRes = await workerPool.executeJob({
             role: "builder",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await builder.executeMilestoneWork(milestone, {
                 repoRoot,
@@ -834,22 +985,38 @@ export function createProductionStepExecutor(
           };
         }
 
-        let testExitCode = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : 0;
+        let testExitCode: number | null = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : null;
         let testOutput = "";
 
-        if (options?.testRunner) {
-          try {
-            console.log(`[executor] running testRunner for milestone ${milestone.id}`);
-            const testRes = await options.testRunner(milestone, lastTargetFile, repoRoot);
-            milestone.testsPassed = testRes.passed;
-            milestone.testsFailed = testRes.failed;
-            testExitCode = testRes.exitCode;
-            testOutput = testRes.output;
-            console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}`);
-          } catch (tErr: any) {
-            console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
-            testExitCode = 1;
-            milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+        // Task 1 (Sprint A2): Default testRunner executes milestone.acceptanceCriteria commands in sandbox tier
+        const effectiveTestRunner = options?.testRunner || (async (m: Milestone, _targetFile?: string, rRoot?: string) => {
+          return await runMilestoneTestRunner(m, rRoot || repoRoot);
+        });
+
+        try {
+          console.log(`[executor] running testRunner for milestone ${milestone.id}`);
+          const testRes = await effectiveTestRunner(milestone, lastTargetFile, repoRoot);
+          milestone.testsPassed = testRes.passed;
+          milestone.testsFailed = testRes.failed;
+          milestone.testsRun = (testRes as any).testsRun ?? (testRes.passed + testRes.failed);
+          milestone.testExitCode = testRes.exitCode;
+          testExitCode = testRes.exitCode;
+          testOutput = testRes.output;
+          console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}, testsRun=${milestone.testsRun}`);
+        } catch (tErr: any) {
+          console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
+          testExitCode = 1;
+          milestone.testsFailed = (milestone.testsFailed || 0) + 1;
+          milestone.testExitCode = 1;
+        }
+
+        // Task 2 (Sprint A2): When testExitCode !== 0 and testExitCode !== null, format failure via workerCiFeedback.ts and inject into milestone.lastError & criticFeedback
+        if (testExitCode !== null && testExitCode !== 0) {
+          const failingCmd = (milestone.acceptanceCriteria || []).find((c) => c.command)?.command || (milestone.testFile ? `npx tsx --test ${milestone.testFile}` : "test");
+          const formattedFailure = formatTestFailureForBuilder(failingCmd, testExitCode, testOutput);
+          milestone.lastError = formattedFailure;
+          if (!criticFeedback.includes(formattedFailure)) {
+            criticFeedback.push(formattedFailure);
           }
         }
 
@@ -864,13 +1031,14 @@ export function createProductionStepExecutor(
           const criticRes = await workerPool.executeJob({
             role: "critic",
             taskId: milestone.id,
+            abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await critic.evaluateMilestoneDiff(
                 milestone,
                 {
                   diff: builderRes.diff,
                   filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
-                  testExitCode,
+                  testExitCode: testExitCode ?? undefined,
                   testOutput,
                   noChangeReason: milestone.diffSummary
                 },
@@ -970,11 +1138,24 @@ interface GlobalSupervisorState {
 }
 
 const globalSupervisorState: GlobalSupervisorState =
-  (globalThis as any).__argonSupervisorState ||
-  ((globalThis as any).__argonSupervisorState = {
+  (globalThis as any).__supervisorGlobalState ||
+  ((globalThis as any).__supervisorGlobalState = {
     pausedTasks: new Set<string>(),
     abortControllers: new Map<string, AbortController>()
   });
+
+/**
+ * Aborts an active task execution and evicts its AbortController from memory.
+ */
+export function cancelTask(taskId: string): boolean {
+  const controller = globalSupervisorState.abortControllers.get(taskId);
+  if (controller) {
+    controller.abort();
+    globalSupervisorState.abortControllers.delete(taskId);
+    return true;
+  }
+  return false;
+}
 
 /**
  * Overnight Supervisor / Watchdog
@@ -982,7 +1163,15 @@ const globalSupervisorState: GlobalSupervisorState =
  * handles automatic crash recovery, and performs stall detection.
  */
 export class OvernightSupervisor {
-  readonly checkpointDirectory: string;
+  private customCheckpointDirectory?: string;
+  get checkpointDirectory(): string {
+    return (
+      this.customCheckpointDirectory ||
+      process.env.AGENT_CHECKPOINT_DIR ||
+      process.env.CHECKPOINT_DIR ||
+      getCanonicalCheckpointDir()
+    );
+  }
   readonly stallTimeoutMs: number;
   readonly checkpointer: FileCheckpointSaver;
   readonly tracer?: TelemetryTracer;
@@ -1010,11 +1199,7 @@ export class OvernightSupervisor {
   }
 
   constructor(options?: SupervisorOptions) {
-    this.checkpointDirectory =
-      options?.checkpointDirectory ||
-      process.env.AGENT_CHECKPOINT_DIR ||
-      process.env.CHECKPOINT_DIR ||
-      getCanonicalCheckpointDir();
+    this.customCheckpointDirectory = options?.checkpointDirectory;
     // Default stall detection threshold: 20 minutes (configurable)
     this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
@@ -1115,6 +1300,9 @@ export class OvernightSupervisor {
       recoveryAttempted: false
     };
 
+    if (!task.checkpoints) {
+      task.checkpoints = [];
+    }
     task.checkpoints.push(checkpoint);
     task.updatedAt = new Date().toISOString();
 
@@ -1188,6 +1376,8 @@ export class OvernightSupervisor {
       const model =
         task.milestones?.find((m) => m.builderModel)?.builderModel ||
         process.env.CODER_MODEL ||
+        process.env.BUILDER_MODEL ||
+        process.env.MODEL_NAME ||
         "swift-15-27b-mtp";
 
       ledger.recordRunStart({
@@ -1326,43 +1516,157 @@ export class OvernightSupervisor {
       throw new Error("No stepExecutor provided; refusing to fake completion.");
     }
 
-    while (task.currentMilestoneIndex < task.milestones.length) {
-      if (task.status === "paused" || this.isPaused(task.taskId)) {
-        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+    const repoCandidates = [
+      process.env.WORKSPACE_DIR,
+      "/workspace",
+      process.cwd(),
+      path.resolve(process.cwd(), "..")
+    ].filter(Boolean) as string[];
+    let repoRoot = repoCandidates[0];
+    for (const d of repoCandidates) {
+      if (fs.existsSync(path.join(d, ".git"))) {
+        repoRoot = d;
         break;
       }
-      const mIdx = task.currentMilestoneIndex;
-      const milestone = task.milestones[mIdx];
-      let attempt = 0;
-      let milestoneCompleted = false;
+    }
 
-      while (!milestoneCompleted && attempt < 3) {
-        attempt++;
-        try {
-          if (executor) {
-            console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
-            const res = await executor(milestone, attempt);
-            if (task.status === "paused" || this.isPaused(task.taskId)) {
-              console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+    const gitOps =
+      options?.gitOps ||
+      new WorkerGitOps({
+        runId: task.taskId,
+        repoDir: repoRoot
+      });
+
+    const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
+    const shouldRunGitOps =
+      options?.gitOps !== undefined ||
+      (!isTestEnv && process.env.DISABLE_GITOPS !== "true" && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
+
+    if (shouldRunGitOps && !task.gitOpsBranchCreated) {
+      const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
+      try {
+        await gitOps.createAndSwitchBranch(branchToUse);
+        task.gitOpsBranchCreated = true;
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: `Created and switched to isolated task branch \`${branchToUse}\``
+        });
+        console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
+      } catch (gErr: any) {
+        const errMsg = gErr?.message || String(gErr);
+        console.error(`[supervisor] GitOps bootstrap failed:`, errMsg);
+        task.status = "failed";
+        task.errorSummary = errMsg;
+        task.completedAt = new Date().toISOString();
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: errMsg
+        });
+        this.saveCheckpoint(task);
+        return task;
+      }
+    }
+
+    const controller = this.getAbortController(task.taskId) || new AbortController();
+    this.setAbortController(task.taskId, controller);
+    const signal = options?.signal || controller.signal;
+    const isPaused = () => Boolean(task.status === "paused" || this.isPaused(task.taskId));
+    const isAbortedOrCancelled = () => Boolean(!isPaused() && (signal?.aborted || (task.status as TaskStatus) === "cancelled"));
+
+    try {
+      while (task.currentMilestoneIndex < task.milestones.length) {
+        if (isPaused()) {
+          task.status = "paused";
+          console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+          break;
+        }
+        if (isAbortedOrCancelled()) {
+          task.status = "cancelled";
+          console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`);
+          break;
+        }
+        const mIdx = task.currentMilestoneIndex;
+        const milestone = task.milestones[mIdx];
+        let attempt = 0;
+        const handoffPath = path.join(this.checkpointDirectory, `${task.taskId}.handoff.json`);
+        const priorHandoff = readMilestoneHandoff(handoffPath);
+        if (priorHandoff) {
+          if (priorHandoff.chunkComplete) {
+            const currentResumes = (task as any).chunkResumeCount ?? 0;
+            const decision = resolveSupervisorChunkResume(currentResumes);
+            if (decision.action === "needs-attention") {
+              task.status = "parked";
+              task.parkedReason = "needs-attention: exceeded max auto-resumes for chunk-complete job";
+              this.saveCheckpoint(task);
               break;
             }
+            (task as any).chunkResumeCount = decision.nextResumeCount;
+          }
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            message: `Resumed with handoff from ${priorHandoff.nextMilestone || priorHandoff.jobId}`
+          });
+        }
+        let milestoneCompleted = false;
+
+        while (!milestoneCompleted && attempt < 3) {
+          if (isPaused()) {
+            task.status = "paused";
+            break;
+          }
+          if (isAbortedOrCancelled()) {
+            task.status = "cancelled";
+            break;
+          }
+          attempt++;
+          try {
+            if (executor) {
+              console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
+              const res = await executor(milestone, attempt);
+              if (isPaused()) {
+                task.status = "paused";
+                console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+                break;
+              }
+              if (isAbortedOrCancelled()) {
+                task.status = "cancelled";
+                console.log(`[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`);
+                break;
+              }
             console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
             if (res.status === "completed") {
               milestone.status = "completed";
               if (res.gitSha) milestone.commitSha = res.gitSha;
               if (res.diff) milestone.diffSummary = res.diff;
+              if (res.modifiedFiles) milestone.modifiedFiles = res.modifiedFiles;
               if (res.builderIterations !== undefined) milestone.builderIterations = res.builderIterations;
               if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
               if (res.builderModel) milestone.builderModel = res.builderModel;
               milestone.completedAt = new Date().toISOString();
               milestoneCompleted = true;
 
+              if (gitOps && res.targetFile) {
+                try {
+                  const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+                  const commitRes = await gitOps.stageAndCommit([res.targetFile], commitMsg);
+                  if (commitRes.commitSha) {
+                    milestone.commitSha = commitRes.commitSha;
+                  }
+                } catch (cErr: any) {
+                  console.warn(`[supervisor] GitOps milestone commit warning:`, cErr?.message || cErr);
+                }
+              }
+
               if (res.thinking) {
-                const sample = res.thinking.slice(0, 180).replace(/\r?\n/g, " ");
+                milestone.builderThinking = res.thinking;
+                task.builderThinking = res.thinking;
                 task.journal.push({
                   timestamp: new Date().toISOString(),
                   role: "builder",
-                  message: `Builder reasoning: ${sample}${res.thinking.length > 180 ? "..." : ""}`
+                  message: `Builder reasoning: ${res.thinking}`
                 });
               }
 
@@ -1376,8 +1680,14 @@ export class OvernightSupervisor {
             throw new Error("No stepExecutor provided; refusing to fake completion.");
           }
         } catch (err: any) {
-          if (task.status === "paused" || this.isPaused(task.taskId) || err.name === "AbortError") {
-            console.log(`[supervisor] Task ${task.taskId} caught abort/pause during milestone ${milestone.id}. Halting.`);
+          if (isPaused() || isAbortedOrCancelled() || err.name === "AbortError") {
+            if (isPaused()) {
+              task.status = "paused";
+              console.log(`[supervisor] Task ${task.taskId} caught pause during milestone ${milestone.id}. Halting.`);
+            } else {
+              task.status = "cancelled";
+              console.log(`[supervisor] Task ${task.taskId} caught abort during milestone ${milestone.id}. Halting.`);
+            }
             break;
           }
           console.error(`[supervisor] stepExecutor threw for milestone ${milestone.id}:`, err?.stack || err);
@@ -1405,12 +1715,26 @@ export class OvernightSupervisor {
         }
       }
 
-      if (task.status === "paused" || this.isPaused(task.taskId)) {
+      if (isPaused()) {
+        task.status = "paused";
         console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop.`);
         break;
       }
 
+      if (isAbortedOrCancelled()) {
+        task.status = "cancelled";
+        console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`);
+        break;
+      }
+
       if (milestoneCompleted) {
+        writeMilestoneHandoff(handoffPath, {
+          jobId: task.taskId,
+          completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
+          nextMilestone: task.milestones[mIdx + 1]?.id ?? null,
+          summary: milestone.title,
+          updatedAt: milestone.completedAt || new Date().toISOString()
+        });
         task.currentMilestoneIndex = mIdx + 1;
         this.saveCheckpoint(task, milestone.commitSha);
       } else {
@@ -1435,19 +1759,215 @@ export class OvernightSupervisor {
       }
     }
 
-    if (task.status === "paused" || this.isPaused(task.taskId)) {
+    if (isPaused()) {
       task.status = "paused";
       this.saveCheckpoint(task);
       return task;
     }
 
+    if (isAbortedOrCancelled()) {
+      task.status = "cancelled";
+      this.saveCheckpoint(task);
+      return task;
+    }
+
     if (task.currentMilestoneIndex >= task.milestones.length) {
-      task.status = "completed";
+      const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
+      const finishVerification = verifyJobCompletion({
+        workspaceRoot: options?.repoRoot || process.cwd(),
+        expectedArtifacts,
+        gatePassed: task.milestones.every((m) => m.status === "completed")
+      });
+      if (!finishVerification.ok) {
+        task.status = "failed";
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "supervisor",
+          action: "Finish verification gate blocked completion",
+          message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
+        });
+      } else {
+        const repoRoot = options?.repoRoot || process.cwd();
+        const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(repoRoot);
+        const milestoneCommits = task.milestones
+          .map((m) => (m as any).commitSha as string | undefined)
+          .filter((sha): sha is string => Boolean(sha));
+        const claims: CompletionClaims = (options as any)?.completionClaims || {
+          commits: milestoneCommits,
+          files: expectedArtifacts,
+          gatePassed: task.gatePassed
+        };
+        const claimVerification = await verifyCompletionClaims(claims, adapters);
+        const stamped = stampCompletion(task, claimVerification);
+        task.completionStamp = stamped.completionStamp;
+        task.verificationGaps = stamped.verificationGaps;
+        task.status = "completed";
+        if (claimVerification.status === "completed-unverified") {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "supervisor",
+            action: "Completion stamped completed-unverified",
+            message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`
+          });
+        }
+      }
       task.completedAt = new Date().toISOString();
+
+      if (shouldRunGitOps) {
+        console.log(`[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`);
+        task.journal.push({
+          timestamp: new Date().toISOString(),
+          role: "gitops",
+          message: "Running pre-merge test:gate verification (<90s budget)..."
+        });
+
+        let gateExitCode = 0;
+        let gateOut = "";
+
+        if (options?.gateRunner) {
+          try {
+            const gateRes = await options.gateRunner();
+            gateExitCode = gateRes.exitCode;
+            gateOut = gateRes.stdout || gateRes.stderr;
+          } catch (gErr: any) {
+            gateExitCode = 1;
+            gateOut = gErr?.message || String(gErr);
+          }
+        } else {
+          try {
+            const gateRes = await gitOps.runGateTest();
+            gateExitCode = gateRes.exitCode;
+            gateOut = gateRes.stdout || gateRes.stderr;
+          } catch (gateErr: any) {
+            console.error(`[supervisor] test:gate run failed:`, gateErr);
+            gateExitCode = 1;
+            gateOut = gateErr?.message || String(gateErr);
+          }
+        }
+
+        task.gatePassed = gateExitCode === 0;
+        task.gateOutput = gateOut;
+
+        if (gateExitCode === 0) {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
+          });
+
+          const prePr = evaluatePrePrGate({
+            flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
+            reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
+            gatePassed: true
+          });
+          if (!prePr.ready) {
+            task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
+            });
+          } else {
+            // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+            const pushCheck = await gitOps.isPushConfigured();
+          if (!pushCheck.configured) {
+            task.pushStatus = "completed — local only, push not configured";
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: "completed — local only, push not configured"
+            });
+            console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
+          } else {
+            try {
+              const pushRes = await gitOps.pushBranch(task.branchName);
+              if (pushRes && pushRes.success) {
+                task.pushStatus = "pushed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
+                });
+              } else {
+                task.pushStatus = "completed — local only, push failed";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: "completed — local only, push failed"
+                });
+              }
+            } catch (pErr: any) {
+              const pErrMsg = pErr?.message || String(pErr);
+              task.pushStatus = `failed: ${pErrMsg}`;
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "gitops",
+                message: `failed: ${pErrMsg}`
+              });
+              console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
+            }
+          }
+          }
+
+          // Check if autoDeployOnGreen is enabled
+          if (task.autoDeployOnGreen) {
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "deploy",
+              message: "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout..."
+            });
+
+            try {
+              const pipeline = new SelfDeployPipeline();
+              const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
+              const deployRec = await pipeline.executeDeploy({
+                branchName: task.branchName,
+                previousSha: "develop",
+                newSha: lastSha,
+                skipPreRollout: true
+              });
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "deploy",
+                message: `Self-deploy finished with status: ${deployRec.status}`
+              });
+            } catch (dErr: any) {
+              console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "deploy",
+                message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`
+              });
+            }
+          }
+        } else {
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`
+          });
+        }
+      }
+
+      if (task.gatePassed === false) {
+        notify("task.failed", {
+          title: `Task Failed: ${task.taskId}`,
+          body: `Pre-merge gate test failed: ${task.goal?.slice(0, 100)}`
+        }).catch(() => {});
+      } else {
+        notify("task.completed", {
+          title: `Task Completed: ${task.taskId}`,
+          body: `All ${task.milestones.length} milestones completed: ${task.goal?.slice(0, 100)}`
+        }).catch(() => {});
+      }
+
       this.saveCheckpoint(task);
     }
     return task;
+  } finally {
+    this.deleteAbortController(task.taskId);
   }
+}
 
   /**
    * Stall detection: checks if no forward progress has been made for stallTimeoutMs.
@@ -1484,7 +2004,7 @@ export class OvernightSupervisor {
         milestoneId: currentMilestone ? currentMilestone.id : "GLOBAL",
         question: `Execution stalled with no forward progress on ${currentMilestone ? currentMilestone.title : "task"}.`,
         judgmentCall: "Parked task and recorded snapshot state for morning inspection.",
-        reasoning: "Autonomy policy: never spin forever; snapshot state and await Zack's review.",
+        reasoning: "Autonomy policy: never spin forever; snapshot state and await operator review.",
         revertAction: {
           type: "re_plan",
           target: currentMilestone ? currentMilestone.id : "all"

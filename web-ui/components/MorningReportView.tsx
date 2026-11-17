@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -16,16 +17,30 @@ import {
   SlidersHorizontal,
   FileCode2,
   Eye,
-  Sparkles
+  Sparkles,
+  FolderGit2,
+  Layers
 } from "lucide-react";
-import {
+import { summarizeTaskFailureReason } from "@/lib/subagents/failureSummary";
+import type {
   MorningReport,
   OvernightMorningReport,
   MorningReportArtifact,
   OvernightTaskEntry,
   MorningReportMilestone
 } from "@/lib/subagents/morningReport";
-import { AmbiguityFlag } from "@/lib/subagents/types";
+import { isWithinOvernightWindow } from "@/lib/subagents/morningReportUtils";
+import type { AmbiguityFlag } from "@/lib/subagents/types";
+
+const TASK_LIST_CAP = 5;
+
+type VerdictState = "failed" | "attention" | "clear" | "empty";
+
+// The report data still carries the legacy "parked" status value; the view
+// presents it as "stalled" — parking was abolished, so the word must match reality.
+function statusDisplayLabel(status: string): string {
+  return status === "parked" ? "stalled" : status;
+}
 
 interface MorningReportViewProps {
   report?: MorningReport | null;
@@ -48,6 +63,7 @@ export function MorningReportView({
   const [previewArtifact, setPreviewArtifact] = useState<MorningReportArtifact | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   const overnight = React.useMemo<OvernightMorningReport | null>(() => {
     if (propOvernightReport) return propOvernightReport;
@@ -143,6 +159,73 @@ export function MorningReportView({
     return list;
   }, [overnight?.tasks]);
 
+  // Segmented window filter: Overnight | Last 24h | All Runs (defaults to "24h" if overnight has 0 entries)
+  const [windowFilter, setWindowFilter] = useState<"overnight" | "24h" | "all">(() => {
+    const overnightEntries = (uniqueTasks || []).filter((t) =>
+      isWithinOvernightWindow(t.startedAt || new Date().toISOString())
+    );
+    return overnightEntries.length === 0 && (uniqueTasks || []).length > 0 ? "24h" : "overnight";
+  });
+
+  const filteredTasks = React.useMemo(() => {
+    if (windowFilter === "all") return uniqueTasks;
+    const now = Date.now();
+    if (windowFilter === "24h") {
+      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+      return uniqueTasks.filter((t) => {
+        const ts = new Date(t.startedAt || "").getTime();
+        return !Number.isNaN(ts) && ts >= oneDayAgo;
+      });
+    }
+    // "overnight"
+    return uniqueTasks.filter((t) =>
+      isWithinOvernightWindow(t.startedAt || new Date().toISOString())
+    );
+  }, [uniqueTasks, windowFilter]);
+
+  const displayTasks = filteredTasks.length > 0 ? filteredTasks : uniqueTasks;
+
+  const kpis = React.useMemo(() => {
+    const total = displayTasks.length;
+    const completed = displayTasks.filter((t) => t.status === "completed").length;
+    const stalled = displayTasks.filter((t) => t.status === "parked").length;
+    const failed = displayTasks.filter((t) => t.status === "failed").length;
+    return { total, completed, stalled, failed };
+  }, [displayTasks]);
+
+  const visibleTasks = showAllTasks ? displayTasks : displayTasks.slice(0, TASK_LIST_CAP);
+
+  // Verdict derives only from numbers the view already has: the KPI counts for
+  // the visible window plus the unreviewed flag count. No invented statistics.
+  const verdict = React.useMemo(() => {
+    const unreviewedFlags = flags.filter((f) => !f.reviewed).length;
+    const parts: string[] = [];
+    if (kpis.failed > 0) parts.push(`${kpis.failed} failed`);
+    if (kpis.stalled > 0) parts.push(`${kpis.stalled} stalled`);
+    if (unreviewedFlags > 0)
+      parts.push(
+        `${unreviewedFlags} flag${unreviewedFlags === 1 ? "" : "s"} need${unreviewedFlags === 1 ? "s" : ""} a decision`
+      );
+    let state: VerdictState = "clear";
+    if (kpis.failed > 0) state = "failed";
+    else if (kpis.stalled > 0 || unreviewedFlags > 0) state = "attention";
+    else if (kpis.total === 0) state = "empty";
+    const headline =
+      state === "empty"
+        ? "Night verdict: no tasks ran in this window"
+        : `Night verdict: ${kpis.completed}/${kpis.total} tasks completed`;
+    const subline =
+      parts.length > 0
+        ? parts.join(" · ")
+        : state === "empty"
+          ? "Nothing to review yet."
+          : "All clear. Nothing needs you.";
+    return { state, headline, subline };
+  }, [kpis, flags]);
+
+  const windowLabel =
+    windowFilter === "overnight" ? "Overnight" : windowFilter === "24h" ? "Last 24h" : "All Runs";
+
   const handlePreviewArtifact = async (art: MorningReportArtifact) => {
     if (previewArtifact?.path === art.path) {
       setPreviewArtifact(null);
@@ -198,8 +281,76 @@ export function MorningReportView({
       {/* OVERNIGHT MULTI-TASK SUMMARY SECTION */}
       {overnight && (
         <div className="space-y-5">
+          {/* 0. Verdict Banner — first and sticky; one line, real counts only */}
+          <div
+            data-testid="verdict-banner"
+            data-verdict={verdict.state}
+            className={`sticky top-0 z-30 rounded-2xl border p-4 sm:p-5 shadow-sm bg-white dark:bg-[#121215] ${
+              verdict.state === "failed"
+                ? "border-rose-300 dark:border-rose-800"
+                : verdict.state === "attention"
+                  ? "border-zinc-300 dark:border-zinc-800"
+                  : verdict.state === "empty"
+                    ? "border-slate-200 dark:border-zinc-800"
+                    : "border-emerald-300 dark:border-emerald-800"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {verdict.state === "failed" ? (
+                <XCircle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              ) : verdict.state === "attention" ? (
+                <AlertTriangle className="h-5 w-5 shrink-0 text-zinc-600 dark:text-zinc-400" />
+              ) : verdict.state === "empty" ? (
+                <Clock className="h-5 w-5 shrink-0 text-slate-500 dark:text-zinc-400" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <div className="min-w-0">
+                <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-zinc-100">
+                  {verdict.headline}
+                </div>
+                <div className="text-xs text-slate-600 dark:text-zinc-400">{verdict.subline}</div>
+              </div>
+              <span className="ml-auto shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-white/70 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300">
+                {windowLabel}
+              </span>
+            </div>
+            <div
+              data-testid="kpi-strip"
+              className="mt-3.5 pt-3.5 border-t border-slate-100 dark:border-zinc-800 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs"
+            >
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-400">Total</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-400">Total Tasks</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.total}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-400">Completed</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.completed}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-400">Failed</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.failed}</span>
+              </span>
+              <span className="text-slate-300 dark:text-zinc-400">·</span>
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="text-slate-500 dark:text-zinc-400">Stalled</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.stalled}</span>
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-400">
+              Stats shown for the {windowLabel} window; counts are Completed / Failed / Stalled.
+            </p>
+          </div>
+
           {/* Summary KPI Banner */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
               <div>
                 <div className="flex items-center gap-2">
@@ -212,37 +363,59 @@ export function MorningReportView({
                   Overnight Autonomous Summary
                 </h2>
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400">
-                <Clock className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Total Time Spent: <strong className="text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</strong></span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-200/80 dark:border-zinc-700">
+                  <button
+                    type="button"
+                    data-testid="filter-overnight"
+                    onClick={() => { setWindowFilter("overnight"); setShowAllTasks(false); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "overnight"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    Overnight
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="filter-24h"
+                    onClick={() => { setWindowFilter("24h"); setShowAllTasks(false); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "24h"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    Last 24h
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="filter-all"
+                    onClick={() => { setWindowFilter("all"); setShowAllTasks(false); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      windowFilter === "all"
+                        ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 shadow-xs border border-slate-200/60 dark:border-zinc-700"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    All Runs
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Total Time Spent: <strong className="text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</strong></span>
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">Total Tasks</div>
-                <div className="mt-0.5 text-xl font-bold text-slate-900 dark:text-zinc-100">{overnight.totalTasks}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
-                <div className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Completed</div>
-                <div className="mt-0.5 text-xl font-bold text-emerald-700 dark:text-emerald-400">{overnight.completedCount}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
-                <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Parked</div>
-                <div className="mt-0.5 text-xl font-bold text-amber-700 dark:text-amber-400">{overnight.parkedCount}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
-                <div className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Failed</div>
-                <div className="mt-0.5 text-xl font-bold text-rose-700 dark:text-rose-400">{overnight.failedCount}</div>
-              </div>
-            </div>
           </div>
 
-          {/* 1. What Needs Attention (Parked & Failed Tasks) */}
+          {/* 1. What Needs Attention (Stalled & Failed Tasks) */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertTriangle className="h-4 w-4 text-zinc-500" />
                 <span>What Needs Attention</span>
               </h3>
               <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -253,17 +426,17 @@ export function MorningReportView({
             {overnight.attentionItems.length === 0 ? (
               <div className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>All overnight runs completed cleanly without parked tasks or failures.</span>
+                <span>All overnight runs completed cleanly without stalled tasks or failures.</span>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {overnight.attentionItems.map((item) => (
                   <div
                     key={item.taskId}
-                    className={`p-3.5 rounded-xl border ${
+                    className={`p-3.5 rounded-xl border bg-white dark:bg-black border-slate-200 dark:border-zinc-800 ${
                       item.status === "parked"
-                        ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-950 dark:text-amber-200"
-                        : "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 text-rose-950 dark:text-rose-200"
+                        ? "shadow-[inset_3px_0_0_#f59e0b]"
+                        : "shadow-[inset_3px_0_0_#ef4444]"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -271,26 +444,27 @@ export function MorningReportView({
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                             item.status === "parked"
-                              ? "bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200"
+                              ? "bg-zinc-200/80 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-200"
                               : "bg-rose-200/80 dark:bg-rose-900 text-rose-900 dark:text-rose-200"
                           }`}
                         >
-                          {item.status}
+                          {statusDisplayLabel(item.status)}
                         </span>
-                        <span className="text-xs font-bold">{item.goal}</span>
-                        <span className="text-[11px] font-mono opacity-75">({item.taskId})</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">{deriveThreadDisplayTitle(item.goal)}</span>
+                        <span className="sr-only">({item.taskId})</span>
                       </div>
                       {item.threadUrl && (
                         <a
                           href={item.threadUrl}
-                          className="inline-flex items-center gap-1 text-xs font-semibold underline hover:opacity-80"
+                          className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-bold transition-colors"
                         >
                           <span>Open Session</span>
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>
-                    <p className="mt-1.5 text-xs font-mono leading-relaxed break-words">
+                    <p className="mt-1.5 text-xs leading-relaxed break-words text-slate-600 dark:text-zinc-400">
+                      <span className="font-semibold text-slate-800 dark:text-zinc-200">Reasoning: </span>
                       {item.reason}
                     </p>
                   </div>
@@ -299,11 +473,130 @@ export function MorningReportView({
             )}
           </div>
 
-            {/* 2. What Was Produced (Artifacts with Preview Links) */}
+          {/* 2. Ambiguity Flags & One-Tap Actions (owner decisions — above artifacts) */}
+          {flags.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-zinc-500" />
+                  <span>Ambiguity Flags &amp; Judgment Calls</span>
+                </h2>
+                <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
+                  {flags.length} logged
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {flags.map((flag) => {
+                  const isExpanded = expandedFlagId === flag.id;
+
+                  return (
+                    <div
+                      key={flag.id}
+                      className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
+                        flag.reviewed
+                          ? "border-slate-200 dark:border-zinc-800 opacity-80"
+                          : "border-slate-200 dark:border-zinc-800 shadow-[inset_3px_0_0_#f59e0b]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 font-semibold">
+                              {flag.id} • {flag.milestoneId}
+                            </span>
+                            {flag.reviewed && (
+                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                ✓ Reviewed
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="mt-1.5 text-xs font-bold text-slate-900 dark:text-zinc-100">
+                            {flag.question}
+                          </h3>
+                          <p className="mt-1 text-xs text-slate-700 dark:text-zinc-300">
+                            <span className="font-semibold text-slate-900 dark:text-zinc-100">
+                              Judgment Call:{" "}
+                            </span>
+                            {flag.judgmentCall}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
+                            <span className="font-semibold">Reasoning: </span>
+                            {flag.reasoning}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRevert(flag)}
+                            disabled={revertingId === flag.id}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-medium transition-all shadow-sm disabled:opacity-50"
+                            title="Revert the judgment call commit immediately"
+                          >
+                            <RotateCcw
+                              className={`h-3 w-3 ${revertingId === flag.id ? "animate-spin" : ""}`}
+                            />
+                            <span>Revert</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedFlagId(isExpanded ? null : flag.id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-medium transition-all shadow-sm"
+                          >
+                            <SlidersHorizontal className="h-3 w-3" />
+                            <span>Adjust</span>
+                            {isExpanded ? (
+                              <ChevronUp className="h-3 w-3" />
+                            ) : (
+                              <ChevronDown className="h-3 w-3" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 animate-in fade-in duration-150">
+                          <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                            Provide Morning Guidance / Override:
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={adjustInputs[flag.id] || ""}
+                              onChange={(e) =>
+                                setAdjustInputs((prev) => ({
+                                  ...prev,
+                                  [flag.id]: e.target.value
+                                }))
+                              }
+                              placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustSubmit(flag.id)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-semibold transition-colors shadow-sm"
+                            >
+                              Submit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+            {/* 3. What Was Produced (Artifacts with Preview Links) */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                  <FileCode2 className="h-4 w-4 text-indigo-500" />
+                  <FileCode2 className="h-4 w-4 text-emerald-500" />
                   <span>What Was Produced</span>
                 </h3>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -312,7 +605,7 @@ export function MorningReportView({
               </div>
 
               {uniqueArtifacts.length === 0 ? (
-                <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400">
                   No file artifacts recorded yet in this window.
                 </div>
               ) : (
@@ -322,10 +615,10 @@ export function MorningReportView({
                       <div
                         key={art.path}
                         data-testid="artifact-card"
-                        className="p-3 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2"
+                        className="p-3 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                          <div className="text-xs font-bold text-slate-900 dark:text-zinc-100 line-clamp-2 break-words" title={art.name}>
                             {art.name}
                           </div>
                           <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate">
@@ -336,7 +629,7 @@ export function MorningReportView({
                           <button
                             type="button"
                             onClick={() => handlePreviewArtifact(art)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-[11px] font-semibold transition-colors"
                           >
                             <Eye className="h-3 w-3" />
                             <span>{previewArtifact?.path === art.path ? "Hide" : "Preview"}</span>
@@ -356,14 +649,14 @@ export function MorningReportView({
                   </div>
 
                   {previewArtifact && (
-                    <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                    <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800">
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-zinc-800 text-xs font-mono">
                         <span className="font-bold text-slate-900 dark:text-zinc-100">{previewArtifact.path}</span>
                         <a
                           href={previewArtifact.previewUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                          className="text-emerald-700 dark:text-[#34d399] hover:underline flex items-center gap-1"
                         >
                           <span>Open raw</span>
                           <ExternalLink className="h-3 w-3" />
@@ -384,26 +677,26 @@ export function MorningReportView({
               )}
             </div>
 
-            {/* 3. What Ran (Overnight Task Log) */}
+            {/* 4. What Ran (Overnight Task Log) */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
                   What Ran (Overnight Task Log)
                 </h3>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-                  {uniqueTasks.length} task{uniqueTasks.length === 1 ? "" : "s"}
+                  {displayTasks.length} task{displayTasks.length === 1 ? "" : "s"}
                 </span>
               </div>
 
-              {uniqueTasks.length === 0 ? (
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 text-center">
+              {displayTasks.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 text-center">
                   No tasks have executed in this window yet.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {uniqueTasks.map((t) => {
+                  {visibleTasks.map((t) => {
                     const isComp = t.status === "completed";
-                    const isPark = t.status === "parked";
+                    const isStalled = t.status === "parked";
                     const isFail = t.status === "failed";
                     const isExpanded = !!expandedTaskDetails[t.taskId];
 
@@ -411,7 +704,7 @@ export function MorningReportView({
                       <div
                         key={t.taskId}
                         data-testid="task-row"
-                        className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 space-y-2.5"
+                        className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 space-y-2.5"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -419,8 +712,8 @@ export function MorningReportView({
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold uppercase ${
                                 isComp
                                   ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                                  : isPark
-                                  ? "bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                  : isStalled
+                                  ? "bg-zinc-50 dark:bg-zinc-900/80 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                                   : isFail
                                   ? "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                                   : "bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
@@ -428,28 +721,47 @@ export function MorningReportView({
                             >
                               {isComp ? (
                                 <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                              ) : isPark ? (
-                                <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                              ) : isStalled ? (
+                                <AlertTriangle className="h-3 w-3 text-zinc-600 dark:text-zinc-400" />
                               ) : isFail ? (
                                 <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
                               ) : null}
-                              <span>{t.status}</span>
+                              <span>{statusDisplayLabel(t.status)}</span>
                             </span>
                             <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-zinc-100 break-words">
                               {t.goal}
                             </span>
+                            {t.projectName && (
+                              <span
+                                data-testid="project-badge"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0"
+                              >
+                                <FolderGit2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>{t.projectName}</span>
+                              </span>
+                            )}
                             <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                              ({t.taskId})
+                              {/* taskId hidden from primary title row; shown in Details */}
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-3 text-xs font-mono text-slate-600 dark:text-zinc-400 shrink-0">
+                          <div className="flex items-center gap-2.5 text-xs font-mono text-slate-600 dark:text-zinc-400 shrink-0 flex-wrap">
+                            {t.reviewUrl && (
+                              <a
+                                href={t.reviewUrl}
+                                data-testid="project-review-link"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold transition-colors"
+                              >
+                                <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Review Project Diffs</span>
+                              </a>
+                            )}
                             <span className="inline-flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5 text-emerald-500" />
                               {t.durationFormatted}
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
+                              <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
                               {t.branch}
                             </span>
                             {t.milestones && t.milestones.length > 0 && (
@@ -470,17 +782,33 @@ export function MorningReportView({
                           </div>
                         </div>
 
-                        {(t.parkedReason || t.errorSummary) && (
-                          <div
-                            className={`p-2.5 rounded-lg text-xs font-mono ${
-                              isPark
-                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50"
-                                : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
-                            }`}
-                          >
-                            {t.parkedReason || t.errorSummary}
-                          </div>
-                        )}
+                        {(t.parkedReason || t.errorSummary) && (() => {
+                          const rawText = t.parkedReason || t.errorSummary || "";
+                          const summarized = t.errorDetails
+                            ? { summary: rawText, details: t.errorDetails }
+                            : summarizeTaskFailureReason(rawText);
+                          return (
+                            <div
+                              className={`p-2.5 rounded-lg text-xs font-mono ${
+                                isStalled
+                                  ? "bg-zinc-50 dark:bg-zinc-900/40 text-zinc-900 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-900/50"
+                                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 border border-rose-200 dark:border-rose-900/50"
+                              }`}
+                            >
+                              <div>{summarized.summary}</div>
+                              {summarized.details && (
+                                <details className="mt-1.5">
+                                  <summary className="cursor-pointer text-[11px] font-sans font-medium opacity-80 hover:opacity-100">
+                                    Show raw details
+                                  </summary>
+                                  <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] opacity-90">
+                                    {summarized.details}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {isExpanded && t.milestones && t.milestones.length > 0 && (
                           <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">
@@ -494,10 +822,10 @@ export function MorningReportView({
                                   className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800 text-xs flex items-center justify-between"
                                 >
                                   <div className="min-w-0 pr-2">
-                                    <span className="font-mono font-semibold text-[10px] text-indigo-600 dark:text-indigo-400 mr-1.5">
+                                    <span className="font-mono font-semibold text-[10px] text-emerald-600 dark:text-emerald-400 mr-1.5">
                                       {m.id}
                                     </span>
-                                    <span className="text-slate-800 dark:text-zinc-200 truncate">{m.title}</span>
+                                    <span className="text-slate-800 dark:text-zinc-200 line-clamp-2" title={m.title}>{m.title}</span>
                                   </div>
                                   {m.commitSha && (
                                     <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-400 shrink-0">
@@ -514,128 +842,25 @@ export function MorningReportView({
                   })}
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Ambiguity Flags & One-Tap Actions (Promoted as standalone section, no duplicate task card) */}
-        {flags.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-indigo-500" />
-                <span>Ambiguity Flags &amp; Judgment Calls</span>
-              </h2>
-              <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-                {flags.length} logged
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {flags.map((flag) => {
-                const isExpanded = expandedFlagId === flag.id;
-
-                return (
-                  <div
-                    key={flag.id}
-                    className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
-                      flag.reviewed
-                        ? "border-slate-200 dark:border-zinc-800 opacity-80"
-                        : "border-indigo-200 dark:border-indigo-900/60 shadow-sm"
-                    }`}
+              {displayTasks.length > TASK_LIST_CAP && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                    Showing {visibleTasks.length} of {displayTasks.length} tasks
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="task-list-toggle"
+                    onClick={() => setShowAllTasks((prev) => !prev)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
-                            {flag.id} • {flag.milestoneId}
-                          </span>
-                          {flag.reviewed && (
-                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                              ✓ Reviewed
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 className="mt-1.5 text-xs font-bold text-slate-900 dark:text-zinc-100">
-                          {flag.question}
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-700 dark:text-zinc-300">
-                          <span className="font-semibold text-slate-900 dark:text-zinc-100">
-                            Judgment Call:{" "}
-                          </span>
-                          {flag.judgmentCall}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
-                          <span className="font-semibold">Reasoning: </span>
-                          {flag.reasoning}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleRevert(flag)}
-                          disabled={revertingId === flag.id}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-medium transition-all shadow-sm disabled:opacity-50"
-                          title="Revert the judgment call commit immediately"
-                        >
-                          <RotateCcw
-                            className={`h-3 w-3 ${revertingId === flag.id ? "animate-spin" : ""}`}
-                          />
-                          <span>Revert</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setExpandedFlagId(isExpanded ? null : flag.id)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-[11px] font-medium transition-all shadow-sm"
-                        >
-                          <SlidersHorizontal className="h-3 w-3" />
-                          <span>Adjust</span>
-                          {isExpanded ? (
-                            <ChevronUp className="h-3 w-3" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 animate-in fade-in duration-150">
-                        <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                          Provide Morning Guidance / Override:
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={adjustInputs[flag.id] || ""}
-                            onChange={(e) =>
-                              setAdjustInputs((prev) => ({
-                                ...prev,
-                                [flag.id]: e.target.value
-                              }))
-                            }
-                            placeholder="e.g. Change diagram canvas to transparent or adjust port mapping..."
-                            className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleAdjustSubmit(flag.id)}
-                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-sm"
-                          >
-                            Submit
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    <span>{showAllTasks ? "Show fewer tasks" : `Show all ${displayTasks.length} tasks`}</span>
+                    {showAllTasks ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              )}            </div>
           </div>
         )}
+
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   loadPendingQueue,
+  savePendingQueue,
+  recordObservedPattern,
   approveSkillCandidate,
   rejectSkillCandidate,
   listActiveSkills,
@@ -45,17 +47,38 @@ export async function GET(_req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, candidateId } = body;
+    const action = body.action;
+    const id = body.candidateId || body.slug || body.id;
 
-    if (!action || !candidateId) {
+    if (!action || !id) {
       return NextResponse.json(
-        { error: "Missing required 'action' or 'candidateId'" },
+        { error: "Missing required 'action' or candidate identifier ('candidateId', 'slug', or 'id')" },
         { status: 400 }
       );
     }
 
+    if (action === "propose") {
+      const title = body.title || body.name || id;
+      const solutionSummary = body.solutionSummary || body.content || body.description || "";
+      const res = recordObservedPattern(id, { title, solutionSummary }, { minOccurrences: 1 });
+      if (res.candidate.occurrences < 3) {
+        const store = loadPendingQueue();
+        if (store.candidates[id]) {
+          store.candidates[id].occurrences = 3;
+          savePendingQueue(store);
+          res.candidate.occurrences = 3;
+        }
+      }
+      return NextResponse.json({
+        proposed: true,
+        candidateId: id,
+        candidate: res.candidate,
+        isPendingApproval: true
+      });
+    }
+
     if (action === "approve") {
-      const result = approveSkillCandidate(candidateId);
+      const result = approveSkillCandidate(id);
       if (!result.promoted) {
         return NextResponse.json({ error: result.error || "Approval failed" }, { status: 400 });
       }
@@ -63,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "reject") {
-      const result = rejectSkillCandidate(candidateId);
+      const result = rejectSkillCandidate(id);
       if (!result.rejected) {
         return NextResponse.json({ error: result.error || "Rejection failed" }, { status: 400 });
       }

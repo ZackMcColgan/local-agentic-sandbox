@@ -24,29 +24,47 @@ export const AGENT_MODES: Record<AgentMode, AgentModeConfig> = {
     label: "Auto",
     badgeLabel: "Auto (Hierarchical)",
     description: "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
-    defaultModel: "swift-15-27b-mtp"
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   },
   flash: {
     id: "flash",
     label: "Flash",
-    badgeLabel: "Flash ~80 t/s",
-    description: "Ultra-fast execution and multimodal diagram ingestion via Gemma 4 E4B (~80 tok/s).",
-    defaultModel: "swift-15-27b-mtp"
+    badgeLabel: "Flash-Next (Gyro-S)",
+    description: "Ultra-fast execution and native multimodal vision via Flash-Next (Gyro-S).",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   },
   pro: {
     id: "pro",
     label: "Pro",
-    badgeLabel: "Pro (27B)",
-    description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Qwen 3.8 27B / Hermes 3.",
-    defaultModel: "swift-15-27b-mtp"
+    badgeLabel: "Pro (Flash-Next)",
+    description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Flash-Next (Gyro-S).",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
   }
 };
 
 export const DEFAULT_AGENT_MODE: AgentMode = "auto";
-export const DEFAULT_PRIMARY_MODEL = "swift-15-27b-mtp";
-export const DEFAULT_SUBAGENT_MODEL = "swift-15-27b-mtp";
+export const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
+export const DEFAULT_SUBAGENT_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
 export const PRESET_MODEL_PROFILES: ModelProfile[] = [
+  {
+    id: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
+    name: "Swift 1.5 (27B Qwen 3.8 IQ3_XS)",
+    role: "orchestrator",
+    recommendedVRAM: "~12.8 GB",
+    supportsReasoningEffort: true,
+    defaultReasoningEffort: "low",
+    description: "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning."
+  },
+  {
+    id: "qwen3.8-flash-next-gyro-gyro-s",
+    name: "Flash-Next (Gyro-S)",
+    role: "orchestrator",
+    recommendedVRAM: "~16.0 GB",
+    supportsReasoningEffort: true,
+    defaultReasoningEffort: "low",
+    description: "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning."
+  },
   {
     id: "gemma4:e4b",
     name: "Gemma 4 E4B (Flash Multimodal)",
@@ -62,7 +80,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~13.8 GB",
     supportsReasoningEffort: true,
-    defaultReasoningEffort: "medium",
+    defaultReasoningEffort: "low",
     description: "Artificial Analysis #1 Open Model. Deep reasoning, code generation & agentic planning."
   },
   {
@@ -85,13 +103,14 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
 
 export function isReasoningEffortSupported(modelId?: string): boolean {
   if (!modelId) return false;
-  const profile = PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  const lower = modelId.toLowerCase();
+  const profile = PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
   if (profile) return profile.supportsReasoningEffort;
-  return modelId.includes("qwen") || modelId.includes("gemma");
+  return lower.includes("qwen") || lower.includes("gemma") || lower.includes("swift") || lower.includes("flash");
 }
 
 export function getModelProfile(modelId?: string): ModelProfile | undefined {
   if (!modelId) return undefined;
-  return PRESET_MODEL_PROFILES.find((p) => p.id === modelId);
+  const lower = modelId.toLowerCase();
+  return PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
 }
-

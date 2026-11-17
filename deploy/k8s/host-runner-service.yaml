@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: host-runner-service
+  namespace: local-agentic-sandbox
+  labels:
+    app: host-runner-service
+    app.kubernetes.io/name: local-agentic-sandbox
+    app.kubernetes.io/component: host-runner
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 8765
+      targetPort: 8765
+      protocol: TCP
+      name: host-runner-api

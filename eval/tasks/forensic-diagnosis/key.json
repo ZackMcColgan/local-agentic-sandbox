@@ -1,0 +1,5 @@
+{
+  "rootCauseSummary": "writeSseEvent calls controller.enqueue() after controller.close() has already been invoked (or without guarding closed state).",
+  "requiredKeywords": ["close", "enqueue", "controller"],
+  "forbiddenClaims": ["already fixed", "no bug found"]
+}
