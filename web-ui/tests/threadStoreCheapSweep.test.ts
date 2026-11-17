@@ -169,8 +169,12 @@ test("A3: message-level streaming on a non-active thread is still detected and e
 
 test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and handles ghost tasks", async () => {
   const dir = makeTempDir("sweep-a4-");
+  const checkpointDir = path.join(dir, "checkpoints");
+  fs.mkdirSync(checkpointDir, { recursive: true });
   const prevEnv = process.env.THREADS_DIR;
+  const prevCheckpointEnv = process.env.AGENT_CHECKPOINT_DIR;
   process.env.THREADS_DIR = dir;
+  process.env.AGENT_CHECKPOINT_DIR = checkpointDir;
   const origListThreads = ThreadStore.prototype.listThreads;
   try {
     const nowIso = new Date().toISOString();
@@ -184,14 +188,13 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     });
 
     // Checkpoint-task ghost fixture (supervisor task with no thread file)
-    const tasksDir = path.join(dir, "tasks", "ghost-task-1");
-    fs.mkdirSync(tasksDir, { recursive: true });
     fs.writeFileSync(
-      path.join(tasksDir, "checkpoint.json"),
+      path.join(checkpointDir, "ghost-task-1-checkpoint.json"),
       JSON.stringify({
         taskId: "ghost-task-1",
+        goal: "Ghost supervisor task goal",
         status: "running",
-        createdAt: nowIso,
+        startedAt: nowIso,
         updatedAt: nowIso,
       }),
       "utf8",
@@ -207,10 +210,17 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     const item = merged.find((i) => i.id === "t-board-1");
     assert.equal(item?.status, "working");
     assert.equal(item?.title, "Board Thread");
+
+    assert.ok(ids.includes("thread-ghost-task-1"), "ghost task must be synthesized into board");
+    const ghostItem = merged.find((i) => i.id === "thread-ghost-task-1");
+    assert.equal(ghostItem?.title, "Ghost supervisor task goal");
+    assert.equal(ghostItem?.status, "queued");
   } finally {
     ThreadStore.prototype.listThreads = origListThreads;
     if (prevEnv === undefined) delete process.env.THREADS_DIR;
     else process.env.THREADS_DIR = prevEnv;
+    if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
+    else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
