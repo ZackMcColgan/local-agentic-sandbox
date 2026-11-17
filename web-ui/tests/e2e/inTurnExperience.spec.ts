@@ -46,12 +46,14 @@ for (const width of PHONE_WIDTHS) {
       const fill = page.getByTestId("context-meter-fill");
       await expect(fill).toBeVisible();
 
-      const lowTrackBox = await track.boundingBox();
-      const lowFillBox = await fill.boundingBox();
-      expect(lowTrackBox).not.toBeNull();
-      expect(lowFillBox).not.toBeNull();
-      expect(lowFillBox!.width).toBeGreaterThanOrEqual(3);
-      expect(lowTrackBox!.width).toBeGreaterThanOrEqual(100);
+      await expect(async () => {
+        const lowTrackBox = await track.boundingBox();
+        const lowFillBox = await fill.boundingBox();
+        expect(lowTrackBox).not.toBeNull();
+        expect(lowFillBox).not.toBeNull();
+        expect(lowFillBox!.width).toBeGreaterThanOrEqual(4);
+        expect(lowTrackBox!.width).toBeGreaterThanOrEqual(100);
+      }).toPass();
 
       // Second turn at 72.4K
       await composer.fill("second");
