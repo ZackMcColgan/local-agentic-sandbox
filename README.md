@@ -21,7 +21,7 @@
 - **Full observability** — every agent turn is an OpenTelemetry trace (a real 51-span turn is shown below), viewable in Jaeger.
 - **Local inference** — **Strata** inference engine on the host GPU (AMD RX 9070 XT, ROCm/HIP), serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`), 128K context, with `swift-15-27b-mtp` fallback. Nothing leaves the machine.
 
-![A real agent turn as a Jaeger trace: 51 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
+![A real agent turn as a Jaeger trace: 28 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
 
 ---
 
@@ -62,7 +62,7 @@ Full specification: [ARCHITECTURE.md](ARCHITECTURE.md) · Governance mapping: [d
 1. **Intake** — a task arrives as a thread (typed, or filed on the board).
 2. **Plan** — the supervisor decomposes it into milestones with checkable acceptance criteria.
 3. **Build in patches** — the builder lands small per-file patches, each committed as it lands; checkpoints persist at every transition.
-4. **Verify** — the change-aware test gate runs the affected tests; CI runs the full five jobs (typecheck, unit, coverage, container, Playwright) plus the invariant net.
+4. **Verify** — the change-aware test gate runs the affected tests; CI runs seven checks (typecheck, unit, coverage, container, three Playwright shards) plus the invariant net.
 5. **Ship** — green work merges to `develop` by pull request, the platform deploys itself to the local cluster, and the deploy is verified live (pod health, gateway, API) before the item is called done.
 6. **Report** — a morning report summarizes milestones, commits, test evidence, and anything flagged for human review.
 
