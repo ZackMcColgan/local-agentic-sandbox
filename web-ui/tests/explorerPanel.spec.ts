@@ -47,6 +47,20 @@ const MOCK_TREE = {
   },
 };
 
+async function openExplorerFromDrawer(page: import("@playwright/test").Page) {
+  await expect(page.getByTestId("explorer-toggle-btn")).toHaveCount(0);
+  const hamburger = page.locator('button[aria-label="Open navigation menu"]').first();
+  await expect(hamburger).toBeVisible();
+  await hamburger.click();
+
+  const drawerEntry = page.getByTestId("explorer-drawer-entry");
+  await expect(drawerEntry).toBeVisible();
+  const entryBox = await drawerEntry.boundingBox();
+  expect(entryBox).not.toBeNull();
+  expect(entryBox!.height).toBeGreaterThanOrEqual(44);
+  await drawerEntry.click();
+}
+
 test.describe("Explorer Panel (P2-P4)", () => {
   test("P2: nested expand/collapse, 44px targets, and no horizontal overflow at 390px", async ({
     page,
@@ -57,14 +71,7 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
 
     await page.goto("/");
-    const toggleBtn = page.getByTestId("explorer-toggle-btn");
-    await expect(toggleBtn).toBeVisible();
-    const toggleBox = await toggleBtn.boundingBox();
-    expect(toggleBox).not.toBeNull();
-    expect(toggleBox!.height).toBeGreaterThanOrEqual(44);
-    expect(toggleBox!.width).toBeGreaterThanOrEqual(44);
-
-    await toggleBtn.click();
+    await openExplorerFromDrawer(page);
     const panel = page.getByTestId("explorer-panel");
     await expect(panel).toBeVisible();
 
@@ -103,7 +110,7 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
 
     await page.goto("/");
-    await page.getByTestId("explorer-toggle-btn").click();
+    await openExplorerFromDrawer(page);
     await expect(page.getByTestId("explorer-empty-state")).toContainText("This directory is empty.");
   });
 
@@ -125,7 +132,7 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
 
     await page.goto("/");
-    await page.getByTestId("explorer-toggle-btn").click();
+    await openExplorerFromDrawer(page);
 
     // Tap file -> preview in place
     await page.getByTestId("explorer-file-README.md").click();
@@ -153,7 +160,7 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
 
     await page.goto("/");
-    await page.getByTestId("explorer-toggle-btn").click();
+    await openExplorerFromDrawer(page);
     await expect(page.getByTestId("explorer-revoked-state")).toContainText(
       "Project access is currently revoked."
     );
@@ -167,7 +174,7 @@ test.describe("Explorer Panel (P2-P4)", () => {
     await page.goto("/");
     const urlBefore = page.url();
 
-    await page.getByTestId("explorer-toggle-btn").click();
+    await openExplorerFromDrawer(page);
     await expect(page.getByTestId("explorer-panel")).toBeVisible();
     expect(page.url()).toBe(urlBefore);
 
