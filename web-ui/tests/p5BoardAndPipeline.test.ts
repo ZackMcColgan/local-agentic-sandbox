@@ -26,7 +26,7 @@ describe("P5.1 & P5.2: /api/board (UI-051) & Pre-PR FlowMonitor/ReviewerGate", (
 
   it("P5.1 (UI-051): /api/board returns thread-backed items when threads exist", async () => {
     const store = new ThreadStore(tmpThreadsDir);
-    const t = await store.createThread({ title: "Active build thread" });
+    const t = await store.createThread({ title: "Active build thread", taskId: "task-p5-1" });
 
     const resp = await getBoard();
     assert.equal(resp.status, 200);
