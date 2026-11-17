@@ -1,175 +1,102 @@
 # local-agentic-sandbox
 
-Overnight autonomous AI coding system for local hardware. Hand it an engineering task or goal, go to sleep, and wake up to a verifiable git trail, completed deliverables, and a comprehensive morning report. Designed to run entirely on local, air-gapped consumer hardware with zero cloud API limits, zero per-token inference charges, and complete data privacy.
+**A local autonomous AI coding platform.** Hand it an engineering task in the evening, and it plans the work, writes the code in small verified patches, runs the tests, opens the pull request, deploys itself, and proves the result — overnight, on one consumer PC, with no cloud inference, no API keys in the cluster, and no per-token meter.
+
+![Web UI on desktop](docs/images/ui-desktop.png)
+
+| Mobile chat | Navigation | Work board |
+| :---: | :---: | :---: |
+| ![Mobile chat](docs/images/ui-mobile-chat.png) | ![Mobile drawer](docs/images/ui-mobile-drawer.png) | ![Work board](docs/images/ui-mobile-board.png) |
 
 ---
 
-## What It Is
+## What it is
 
-`local-agentic-sandbox` is an autonomous software engineering appliance. It orchestrates local LLM inference via Ollama, Model Context Protocol (MCP) tool servers, and hardened execution sandboxes to plan, implement, review, and verify multi-milestone code tasks autonomously.
+`local-agentic-sandbox` is a self-hosted agentic engineering system built around one idea: **an AI that does real work must be verifiable.** Every job runs as a chat thread, is decomposed into small per-file patches that are committed as they land, and is gated by tests and CI before anything merges. The cluster that runs it holds no credentials and has no internet egress; the only path out is a host-side bridge with approval gates for destructive actions.
 
-- **Overnight Autonomy**: Dispatches tasks to a multi-subagent supervisor loop that works through milestones independently.
-- **Verifiable Git Trail**: Every completed milestone produces real git commits with scoped diffs, explicit target files, and commit hashes.
-- **Fail-Closed Resilience**: Strict contract assertions, automated test gates, and durable checkpointing ensure flawed code is rejected rather than committed.
-- **Zero Cloud Dependencies**: Powered locally by `swift-15-27b-mtp` (Swift 1.5 Qwen3.8-27B Q3_K_M with Multi-Token Prediction `draft_num_predict 3` on AMD Radeon RX 9070 XT 16GB VRAM) via Ollama with active VRAM lease management (`keep_alive: "24h"`).
+- **Threads are the job container** — a conversation is the unit of work: prompt, plan, patches, checkpoints, and deliverables all live in one durable thread that survives restarts and streams live to phone and desktop at the same time.
+- **Patches, not blobs** — long jobs are chunked into small, individually committed patches with durable checkpoints and handoffs, so a killed session resumes instead of restarting.
+- **Fail-closed verification** — a change-aware local test gate, a five-job CI pipeline, an invariant test net, and an adversarial "chaos" battery (overflow inputs, stop/start abuse, unhappy paths) stand between a model's output and `develop`.
+- **A work board, not a black box** — queued, working, and done items are visible and editable in the UI; the operator can steer, stop (stop aborts the server-side turn), and inspect everything from a phone.
+- **Full observability** — every agent turn is an OpenTelemetry trace (a real 51-span turn is shown below), viewable in Jaeger.
+- **Local inference** — a ~125B-class MoE model served on the host GPU (AMD RX 9070 XT, ROCm/HIP) with a 27B fallback; 128K context. Nothing leaves the machine.
+
+![A real agent turn as a Jaeger trace: 51 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
 
 ---
 
-## Architecture Topology
+## Architecture
 
-![Architecture Diagram](./docs/architecture.drawio.svg)
+![Architecture diagram](docs/architecture.drawio.svg)
 
-### Key Engineering Proofs (Code Map)
-
-| System Subsystem | Implementation Proof | Key Capabilities |
+| Component | Where | Role |
 | :--- | :--- | :--- |
-| **Fail-Closed Supervisor** | [`web-ui/lib/subagents/supervisor.ts`](./web-ui/lib/subagents/supervisor.ts) | LangGraph checkpoint engine, crash recovery, crash-to-disk sync, and multi-subagent orchestration |
-| **Pre-Validation & Gates** | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts) | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback |
-| **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts) | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser |
-| **Durable Run Ledger** | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts) | SQLite-backed task state, pause/resume lifecycle, and restart lineage |
-| **Safe Git Operations** | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts) | Argv-safe git commands, branch isolation, and commit validation immune to shell injection |
-| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, image push, Kubernetes rollout wait, and rollback on failure |
-| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary, path traversal guards, and ReDoS-safe workspace inspection |
-| **Enterprise AI Governance** | [`docs/AI_GOVERNANCE.md`](./docs/AI_GOVERNANCE.md) | Deterministic runtime enforcement, NIST AI RMF 1.0 mapping, and OWASP Agentic Top 10 controls |
+| **Web UI / orchestrator** | `web-ui/` (Next.js, kind cluster) | Chat threads, supervisor and scheduler, the work board, self-deploy, the test gate (`web-ui/lib/testGate.ts`) |
+| **Supervisor** | `web-ui/lib/subagents/supervisor.ts` | Checkpointed multi-agent loop: plan → build → verify, crash recovery from durable checkpoints |
+| **Thread store** | `web-ui/lib/threads/threadStore.ts` | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads |
+| **Host bridge** | `host-bridge/` (host process) | The sole external boundary: host tools, git/GitHub, internet access — behind an approval classifier; credentials live only in the host OS keyring |
+| **MCP runner** | `mcp-server/` (sandboxed pod) | Filesystem/command/test tools in a read-only, capability-dropped, egress-denied container |
+| **Browser MCP** | `browser-mcp/` (isolated pod) | Web retrieval with SSRF guards (RFC 1918 blocked) |
+| **Observability** | `deploy/k8s/observability.yaml` | OpenTelemetry collector + Jaeger; every turn, tool call, and model round is a span |
+| **Eval pack** | `eval/` | Graded task suite used as the end-to-end regression for chunked job execution |
+
+### Security boundary
+
+- The Kubernetes cluster is **credential-free and egress-blocked** by NetworkPolicy. It cannot reach the internet and holds no tokens.
+- The **host bridge is the only way out**, and destructive host actions require explicit approval through its classifier.
+- The web UI is a single-tenant LAN appliance by design (no auth on API routes); it is not exposed to the public internet.
+
+Full specification: [ARCHITECTURE.md](ARCHITECTURE.md) · Governance mapping: [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md)
 
 ---
 
-## The Autonomy Loop
+## How a job runs
 
+1. **Intake** — a task arrives as a thread (typed, or filed on the board).
+2. **Plan** — the supervisor decomposes it into milestones with checkable acceptance criteria.
+3. **Build in patches** — the builder lands small per-file patches, each committed as it lands; checkpoints persist at every transition.
+4. **Verify** — the change-aware test gate runs the affected tests; CI runs the full five jobs (typecheck, unit, coverage, container, Playwright) plus the invariant net.
+5. **Ship** — green work merges to `develop` by pull request, the platform deploys itself to the local cluster, and the deploy is verified live (pod health, gateway, API) before the item is called done.
+6. **Report** — a morning report summarizes milestones, commits, test evidence, and anything flagged for human review.
 
-The core architecture follows an iterative, fail-closed supervisor pipeline:
+## Running it
 
-```
-                  ┌───────────────────────────────┐
-                  │            PLANNER            │
-                  │  (Decomposes goal into SPEC)  │
-                  └──────────────┬────────────────┘
-                                 │
-                                 ▼
-                    ┌───────────────────────────┐
-       ┌───────────►│          BUILDER          │
-       │            │  (Implements code diffs)  │
-       │            └────────────┬──────────────┘
-       │                         │
-  needs_fix                      ▼
-(max 5 retries)     ┌───────────────────────────┐
-       │            │          CRITIC           │
-       └────────────┤ (Adversarial verification)│
-                    └────────────┬──────────────┘
-                                 │ approved
-                                 ▼
-                    ┌───────────────────────────┐
-                    │         RECORDER          │
-                    │ (Promotes reusable skills)│
-                    └────────────┬──────────────┘
-                                 │
-                                 ▼
-                    ┌───────────────────────────┐
-                    │      GIT COMMIT &         │
-                    │   DURABLE CHECKPOINT      │
-                    └───────────────────────────┘
-```
-
-1. **Planner**: Analyzes the user's task prompt or goal and decomposes it into an ordered list of concrete, verifiable milestones (`M1`, `M2`, ...) with machine-checkable acceptance criteria and target deliverable contracts.
-2. **Builder ⇄ Critic Loop**:
-   - **Builder**: Writes targeted code diffs for the active milestone, adhering strictly to scoped file boundaries and compiler AST validation.
-   - **Critic**: An adversarial review agent that evaluates builder diffs against ground-truth test suite exit codes and acceptance criteria. It operates on a **fail-closed design**: if tests fail, if no diff is produced, or if evidence is missing, the critic rejects the iteration with actionable feedback or abstains. Never self-grades or approves broken code.
-3. **Recorder**: Identifies patterns in complex, multi-iteration fixes and promotes them into modular skills for future tasks.
-4. **Checkpointing & Crash Recovery**: At every milestone transition, the supervisor persists durable checkpoints to disk (`chk-*`). If a worker container crashes or the host process receives `SIGKILL`, the supervisor restarts from the last valid checkpoint and resumes forward progress without corrupting git state.
-
----
-
-## Architecture & Security Boundary
-
-| Pod / Container | Namespace | Security Context | Network Policy | Role |
-| :--- | :--- | :--- | :--- | :--- |
-| **`mcp-runner`** | `local-agentic-sandbox` | `read_only: true`, `cap_drop: ALL`, UID `10001` | Deny-All Egress (Air-Gapped) | Sandboxed filesystem operations, command execution, and test runs in `/workspace`. |
-| **`browser-mcp`** | `local-agentic-sandbox` | Read-only rootfs, unprivileged UID `10002` | Egress-Mesh Only | Isolated web scraper for documentation retrieval and DuckDuckGo searches (`search_web`). Blocks RFC 1918 private subnets. |
-| **`web-ui`** | `local-agentic-sandbox` | Non-root, Next.js 15 | Cluster Internal | Interactive portal, chat streaming, thread management, and LiveRunBlock supervisor dashboard. |
-| **`ollama`** | Host Passthrough | Native GPU / ROCm | Host Only (Port 11434) | GPU inference engine hosting `swift-15-27b-mtp`. |
-
-> **LAN Appliance Security Notice**: API routes have no auth — this is a LAN appliance design decision, not an oversight. The sandbox is built as a single-tenant appliance within an isolated local network, deliberately eliminating authentication overhead. Do not expose these ports directly to the public internet without a secure reverse proxy.
-
----
-
-## Running the Platform
-
-### Primary Deployment: Kubernetes (Docker Desktop / Production)
-
-Kubernetes is the primary, production-grade deployment mode:
+Prerequisites: Docker Desktop with Kubernetes (kind), Node 22, and a local inference server on the host GPU.
 
 ```bash
-# Deploy all services to local-agentic-sandbox namespace
-make k8s-deploy
+# Deploy the web UI to the local cluster (builds, imports, rolls out, verifies)
+node scripts/deploy-cluster.js web-ui
 
-# Verify pod status and health
+# Cluster state
 kubectl get pods -n local-agentic-sandbox
 ```
 
-Once deployed, access the Web UI at http://localhost:3000 (or NodePort `30300`).
+The UI is served on the LAN through the cluster gateway; the same session is live on phone and desktop simultaneously.
 
-### Legacy Deployment: Docker Compose
-
-Docker Compose is maintained for legacy local testing:
+## Testing
 
 ```bash
-# Launch via Docker Compose
-make up
-# Or directly:
-docker compose up -d
+cd web-ui
+npm test            # 1,600+ unit and contract tests
+npm run test:gate   # change-aware gate: runs exactly the tests a change touches
+npm run test:e2e    # Playwright suite (75 spec files, 4 projects)
 ```
 
-### Running Test Verification
-
-The repository enforces a change-aware test gate (<90s budget) ensuring zero regression:
-
-```bash
-# Run the test suite via npm
-npm test
-
-# Run the strict change-aware test gate
-npm run test:gate
-```
+The gate is strict on purpose: a changed file with no test coverage is rejected outright, and e2e specs run under the real Playwright runner. CI additionally runs an invariant net and a chaos battery that hammers the unhappy paths — mid-stream stops, overflow inputs, type-confused payloads.
 
 ---
 
-## Sample Morning Report
+## Project layout
 
-When an overnight task completes, a structured morning report is generated summarizing milestones, git commits, test verification tiers, and any ambiguity flags flagged for human review:
+| Path | Contents |
+| :--- | :--- |
+| `web-ui/` | Next.js operator UI + orchestration engine |
+| `host-bridge/` | Host-side tool bridge (the external boundary) |
+| `mcp-server/`, `browser-mcp/` | Sandboxed tool servers |
+| `deploy/` | Kubernetes manifests + Helm chart |
+| `eval/` | Graded evaluation tasks |
+| `docs/` | Architecture source, ADRs, governance, deployment notes |
 
-```markdown
-# Autonomous Morning Report: task-1728284400-w3ath
+## Status
 
-✅ **Status: COMPLETED** | Branch: `feat/v2.5-overnight` | Duration: 42m 15s
-Git HEAD: `7a9b1c2` | Started: 2026-10-06T23:00:00.000Z | Finished: 2026-10-06T23:42:15.000Z
-
-### Goal
-> Create a standalone SVG weather visualization component with dynamic sun and cloud glyphs
-
----
-
-## 1. Milestones & Test Verification
-
-| Milestone | Status | Commit SHA | Tests Passed | Tests Failed | Diff Summary |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **M1: Scaffold SVG canvas** | completed | `3d4e5f6` | 8 passed | 0 failed | + web-ui/components/WeatherSvg.tsx |
-| **M2: Implement weather glyphs** | completed | `5a6b7c8` | 14 passed | 0 failed | + web-ui/lib/weatherGlyphs.ts |
-| **M3: Add forecast metadata styling** | completed | `7a9b1c2` | 22 passed | 0 failed | + web-ui/tests/weatherSvg.test.ts |
-
-**Total Test Suite Result**: **44 passed**, **0 failed**.
-
----
-
-## 2. Test Verification Tiers (Phase C)
-
-| Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1: Change Gate** | `npm run test:gate` | ✅ Passed | 14.2s | <90s | 44 | 0 | All affected unit & contract suites clean |
-| **Tier 2: Full Suite** | `npm test` | ✅ Passed | 38.6s | — | 182 | 0 | Full regression suite clean |
-
----
-
-## 3. Ambiguity Flags & Judgment Calls (0)
-
-No ambiguities encountered. Execution adhered strictly to the specification and deliverable contracts.
-```
+v1.0.0 — in daily use as both a working system and a portfolio piece. Designed, directed, and reviewed end-to-end by the author; implementation was AI-assisted under a test-first process (failing test first, explicit acceptance criteria, every diff audited before merge). See [LICENSE](LICENSE).
