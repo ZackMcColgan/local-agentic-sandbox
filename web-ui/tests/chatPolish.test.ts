@@ -638,10 +638,8 @@ Use \`run_command\` for shell actions.
         })
       );
 
-      assert.ok(html.includes('data-testid="chat-diff-card"'), "Must render chat-diff-card");
-      assert.ok(html.includes("web-ui/lib/newHelper.ts"), "Must render file path web-ui/lib/newHelper.ts");
-      assert.ok(html.includes("+2"), "Must render +2 added lines badge");
-      assert.ok(html.includes("Copy path"), "Must render Copy path button");
+      assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
+      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
     });
   });
   // -------------------------------------------------------------
@@ -755,10 +753,13 @@ Use \`run_command\` for shell actions.
         })
       );
 
-      assert.ok(html.includes('data-testid="chat-diff-card"'), "Must render chat-diff-card");
-      assert.ok(html.includes("web-ui/lib/persistedHelper.ts"), "Must render branch/path for DiffViewer");
-      assert.ok(html.includes("+1"), "Must render +1 badge");
-      assert.ok(html.includes("-1"), "Must render -1 badge");
+      assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
+      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
+      const text = html.replace(/<!--[\s\S]*?-->/g, "");
+      assert.ok(text.includes("+1"), "Must render +1 added-lines count");
+      assert.ok(text.includes("−1"), "Must render −1 removed-lines count");
+
+
     });
   });
 });

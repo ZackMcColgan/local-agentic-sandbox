@@ -208,6 +208,27 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
     assert.equal(jobNeedsAttention.get("job-cap"), true);
   });
 
+  it("strips prior (Resume N/M) suffix before appending new resume marker", () => {
+    const now = Date.now();
+    const thread = makeThread({
+      id: "t-resume-1",
+      title: "Fix login bug (Resume 1/2)",
+      taskId: "job-title",
+      status: "active",
+      updatedAt: new Date(now - STALL_WINDOW_MS - 5_000).toISOString(),
+    });
+    const { createdThreads, threadAdapter, jobStore } = makeMemoryAdapters(
+      [thread],
+      new Set(["job-title"])
+    );
+    jobStore.incrementAutoResumeCount("job-title");
+
+    const outcome = superviseStalledThread(thread, { now, threadAdapter, jobStore });
+    assert.equal(outcome.action, "resumed");
+    assert.equal(createdThreads.length, 1);
+    assert.equal(createdThreads[0].title, "Fix login bug (Resume 2/2)");
+  });
+
   it("does not auto-resume when there is no banked state and surfaces needsAttention", () => {
     const now = Date.now();
     const thread = makeThread({

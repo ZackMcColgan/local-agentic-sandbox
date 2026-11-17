@@ -97,7 +97,9 @@ test.describe("Explorer Panel (P2-P4)", () => {
     expect(overflow).toBe(false);
   });
 
-  test("P2: empty-repo state renders honestly", async ({ page }) => {
+  test("P2: empty-repo state renders honestly", async ({ page }, testInfo) => {
+    // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
+    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({
         status: 200,
@@ -114,7 +116,9 @@ test.describe("Explorer Panel (P2-P4)", () => {
     await expect(page.getByTestId("explorer-empty-state")).toContainText("This directory is empty.");
   });
 
-  test("P3: tap-to-preview in place, filename search/clear, and revoked state", async ({ page }) => {
+  test("P3: tap-to-preview in place, filename search/clear, and revoked state", async ({ page }, testInfo) => {
+    // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
+    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TREE) })
     );
@@ -150,7 +154,9 @@ test.describe("Explorer Panel (P2-P4)", () => {
     await expect(page.getByTestId("explorer-file-README.md")).toBeVisible();
   });
 
-  test("P3: revoked project access renders honest 403 state", async ({ page }) => {
+  test("P3: revoked project access renders honest 403 state", async ({ page }, testInfo) => {
+    // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
+    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({
         status: 403,
@@ -166,7 +172,9 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
   });
 
-  test("P4: open/close explorer preserves chat surface without leaving thread", async ({ page }) => {
+  test("P4: open/close explorer preserves chat surface without leaving thread", async ({ page }, testInfo) => {
+    // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
+    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TREE) })
     );

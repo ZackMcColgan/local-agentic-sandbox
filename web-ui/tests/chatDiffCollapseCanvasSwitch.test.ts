@@ -112,11 +112,8 @@ describe("UI-023/UI-024 — source wiring", () => {
     assert.match(diffViewerSrc, /useState\(defaultOpen\)/, "open state initializes from the prop");
   });
 
-  it("ChatStream renders chat diff cards collapsed by default", () => {
-    const i = chatStreamSrc.indexOf('data-testid="chat-diff-card"');
-    assert.ok(i >= 0, "chat diff card block present");
-    const block = chatStreamSrc.slice(i, i + 1600);
-    assert.ok(block.includes("defaultOpen={false}"), "chat DiffViewer starts collapsed");
+  it("ChatStream renders chat diff cards via CanvasDiffCard", () => {
+    assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
   });
 
   it("ChatStream hands the canvas the full diff, not the capped preview", () => {
@@ -255,5 +252,20 @@ describe("UI-023/UI-024 — rendered UI", () => {
     assert.ok(container.textContent?.includes("FILE-TWO-MARKER"), "switching shows file B's own line 76");
     assert.ok(!container.textContent?.includes("FILE-ONE-MARKER"), "file A's content is replaced, not merged");
     assert.ok(container.textContent?.includes("shared line 90"), "the switched diff is complete to the last line");
+  });
+
+  it("ChatStream consolidates to a single diff surface (CanvasDiffCard only, no duplicate DiffViewer)", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const chatStreamSrc = fs.readFileSync(
+      path.join(process.cwd(), "components", "ChatStream.tsx"),
+      "utf8"
+    );
+    assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
+    assert.equal(
+      chatStreamSrc.includes("<DiffViewer"),
+      false,
+      "ChatStream must not render a duplicate DiffViewer alongside CanvasDiffCard"
+    );
   });
 });

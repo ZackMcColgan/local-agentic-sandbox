@@ -62,6 +62,12 @@ describe("UI-055 — DiffViewer exposes a Canvas affordance on mobile and deskto
     assert.ok(diffViewer.includes("useCanvas"), "DiffViewer should call useCanvas");
     assert.ok(diffViewer.includes("openCanvas("), "DiffViewer should call canvas.openCanvas");
     assert.ok(diffViewer.includes("Open in Canvas"), "DiffViewer should have an accessible Open in Canvas label/title");
+    assert.equal(
+      diffViewer.includes('<span className="hidden sm:inline">Canvas</span>'),
+      false,
+      "DiffViewer Canvas label must be visible on mobile (not hidden sm:inline)"
+    );
+    assert.ok(diffViewer.includes("<span>Canvas</span>"), "DiffViewer Canvas button must render visible Canvas text label");
   });
 });
 

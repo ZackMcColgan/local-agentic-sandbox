@@ -164,8 +164,9 @@ export function superviseStalledThread(
   }
 
   const attempt = deps.jobStore.incrementAutoResumeCount(jobId);
+  const baseTitle = thread.title.replace(/\s*\(Resume \d+\/\d+\)\s*$/i, "").trimEnd();
   const fresh = deps.threadAdapter.createFreshThread({
-    title: `${thread.title} (Resume ${attempt}/${MAX_AUTO_RESUMES})`,
+    title: `${baseTitle} (Resume ${attempt}/${MAX_AUTO_RESUMES})`,
     taskId: jobId,
     resumedFromThreadId: thread.id,
   });
