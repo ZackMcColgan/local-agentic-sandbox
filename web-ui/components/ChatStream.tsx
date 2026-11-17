@@ -2632,7 +2632,7 @@ export function ChatStream({
                     );
                     if (!shouldRenderThinking && !showDoneChip) return null;
 
-                    const rawThought = m.thought || (isStreamingThis && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
+                    const rawThought = m.thought || "";
 
                     // uir-1 (UI-017): activity header inputs. The phase is the
                     // latest observed tool in words; the round comes only from

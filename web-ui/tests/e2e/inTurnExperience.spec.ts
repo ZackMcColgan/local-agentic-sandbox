@@ -336,4 +336,74 @@ for (const width of PHONE_WIDTHS) {
       await expect(disconnectedBanner).toHaveClass(/amber/);
     });
   });
+
+  test.describe(`P6 — Real reasoning in Thinking card (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("never renders canned fallback prose and renders streamed thought verbatim", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page);
+
+      let releaseThought!: () => void;
+      const thoughtGate = new Promise<void>((r) => {
+        releaseThought = r;
+      });
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(`data: ${JSON.stringify({ type: "status", status: "Thinking..." })}\n\n`);
+        thoughtGate.then(() => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "thinking",
+              content: "Checking the exact database schema before editing.",
+            })}\n\n`
+          );
+        });
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "Done." })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: "done", roundPromptTokens: [1200] })}\n\n`);
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("think real");
+      await composer.press("Enter");
+
+      await expect(page.getByTestId("live-activity-header")).toBeVisible();
+      await expect(page.locator("body")).not.toContainText("formulating execution plan");
+
+      releaseThought();
+      await expect(
+        page.getByText("Checking the exact database schema before editing.")
+      ).toBeVisible();
+
+      releaseDone();
+      await expect(page.getByText("Done.")).toBeVisible();
+      server.close();
+    });
+  });
 }
