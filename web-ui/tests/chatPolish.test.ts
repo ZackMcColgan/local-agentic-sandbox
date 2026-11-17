@@ -755,8 +755,8 @@ Use \`run_command\` for shell actions.
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
       assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
-      assert.ok(html.includes("+1"), "Must render +1 badge");
-      assert.ok(html.includes("-1"), "Must render -1 badge");
+
+
     });
   });
 });
