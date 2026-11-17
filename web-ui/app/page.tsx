@@ -972,8 +972,9 @@ export default function Home() {
 
           {/* Center Main Stage */}
           <main
-            className="app-main flex flex-1 min-h-0 flex-row h-full overflow-hidden bg-white dark:bg-black relative"
+            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
           >
+            <div className="flex flex-1 min-h-0 flex-row relative">
             <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
               {!isExplorerOpen && (
                 <button
@@ -1051,6 +1052,7 @@ export default function Home() {
               open={isExplorerOpen}
               onClose={() => setIsExplorerOpen(false)}
             />
+            </div>
           </main>
 
           {/* Right Workspace Inspector Panel */}
