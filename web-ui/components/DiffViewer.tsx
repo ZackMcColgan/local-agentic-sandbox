@@ -108,7 +108,7 @@ export function DiffViewer({
               aria-label="Open in Canvas"
             >
               <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden sm:inline">Canvas</span>
+              <span>Canvas</span>
             </button>
           )}
 
