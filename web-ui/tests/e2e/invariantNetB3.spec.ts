@@ -36,7 +36,7 @@ test.describe("Phase B3 — Unhappy paths", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: 'data: {"type":"token","text":"Single effect"}\n\ndata: {"type":"done"}\n\n',
+        body: 'data: {"type":"token","content":"Single effect"}\n\ndata: {"type":"done"}\n\n',
       });
     });
 
