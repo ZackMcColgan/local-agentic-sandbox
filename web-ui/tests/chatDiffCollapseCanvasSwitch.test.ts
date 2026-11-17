@@ -256,4 +256,19 @@ describe("UI-023/UI-024 — rendered UI", () => {
     assert.ok(!container.textContent?.includes("FILE-ONE-MARKER"), "file A's content is replaced, not merged");
     assert.ok(container.textContent?.includes("shared line 90"), "the switched diff is complete to the last line");
   });
+
+  it("ChatStream consolidates to a single diff surface (CanvasDiffCard only, no duplicate DiffViewer)", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const chatStreamSrc = fs.readFileSync(
+      path.join(process.cwd(), "components", "ChatStream.tsx"),
+      "utf8"
+    );
+    assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
+    assert.equal(
+      chatStreamSrc.includes("<DiffViewer"),
+      false,
+      "ChatStream must not render a duplicate DiffViewer alongside CanvasDiffCard"
+    );
+  });
 });

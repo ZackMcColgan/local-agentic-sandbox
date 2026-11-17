@@ -3170,36 +3170,6 @@ export function ChatStream({
                             removedLines: d.removedLines
                           }))}
                         />
-                        {fileDiffs.map((diffItem, diffIdx) => (
-                          <div
-                            key={`${m.id}-diff-${diffIdx}-${diffItem.path}`}
-                            data-testid="chat-diff-card"
-                            className="w-full max-w-xl space-y-1"
-                          >
-                            <div className="flex items-center justify-end px-1">
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(diffItem.path, `${m.id}-${diffIdx}`)}
-                                className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition-colors"
-                                title="Copy path"
-                              >
-                                <Copy className="h-3 w-3" />
-                                <span>Copy path</span>
-                              </button>
-                            </div>
-                            <DiffViewer
-                              branch={diffItem.path}
-                              diff={diffItem.diff}
-                              modifiedFiles={[diffItem.path]}
-                              defaultOpen={false}
-                            />
-                            {diffItem.truncated && (diffItem.omittedLines ?? 0) > 0 ? (
-                              <div className="px-3 py-1.5 text-[11px] font-mono rounded-lg bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20">
-                                Truncated: showing {MAX_DIFF_LINES_CAP} of {diffItem.totalDiffLines} diff lines ({diffItem.omittedLines} omitted)
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
                       </div>
                     );
                   })()}

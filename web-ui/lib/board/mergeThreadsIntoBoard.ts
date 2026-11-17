@@ -28,6 +28,9 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
   const merged = [...boardItems];
   const now = new Date().toISOString();
   for (const thread of threads) {
+    if (!thread.taskId) {
+      continue;
+    }
     const threadLink = `/?thread=${thread.id}`;
     if (existingIds.has(thread.id) || existingLinks.has(threadLink)) {
       continue;
