@@ -1,194 +1,249 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 880" width="100%" height="100%" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" class="drawio-svg" viewBox="0 -20 1400 1035" width="100%" height="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff;">
   <defs>
-    <!-- Crisp Shadow Filter for Elevation -->
-    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="108%" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.07" />
+    <filter id="drawio-shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
     </filter>
-
-    <!-- Header Gradient for Crisp White Surface -->
-    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0284c7" />
-      <stop offset="50%" stop-color="#6d28d9" />
-      <stop offset="100%" stop-color="#059669" />
-    </linearGradient>
-
-    <!-- Arrow Markers -->
-    <marker id="arrowCyan" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#0284c7" />
+    <marker id="drawio-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#3b82f6" />
     </marker>
-    <marker id="arrowEmerald" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#059669" />
+    <marker id="drawio-arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#10b981" />
     </marker>
-    <marker id="arrowPurple" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#7c3aed" />
-    </marker>
-    <marker id="arrowAmber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#d97706" />
-    </marker>
-    <marker id="arrowRose" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#e11d48" />
+    <marker id="drawio-arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#64748b" />
     </marker>
   </defs>
-
-  <!-- Title & Subtitle -->
-  <text x="50" y="44" font-size="24" font-weight="800" fill="url(#headerGrad)">local-agentic-sandbox: Autonomous Platform v2 Architecture</text>
-  <text x="50" y="68" font-size="13" font-weight="500" fill="#475569">Zero-Trust Local Kubernetes Topology | Air-Gapped Code Execution | Tri-Mode Inference | OpenTelemetry</text>
-
-  <!-- LAYER 1: Ingress & Client Boundaries -->
-  <rect x="50" y="95" width="1260" height="90" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
-  <text x="70" y="118" font-size="11" font-weight="800" fill="#64748b" letter-spacing="1">CLIENT &amp; INGRESS LAYER</text>
-
-  <!-- Client Devices Box -->
-  <rect x="70" y="128" width="310" height="44" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" filter="url(#cardShadow)" />
-  <text x="85" y="150" font-size="13" font-weight="700" fill="#0f172a">Mobile Phone / Workstation Browser</text>
-  <text x="85" y="164" font-size="11" font-weight="600" fill="#0284c7">LAN / Localhost (Direct HTTP)</text>
-
-  <!-- LAN Reverse Proxy Bridge -->
-  <rect x="440" y="128" width="410" height="44" rx="6" fill="#f0f9ff" stroke="#0284c7" stroke-width="1.4" filter="url(#cardShadow)" />
-  <text x="455" y="148" font-size="13" font-weight="700" fill="#0369a1">LAN Reverse Proxy Bridge (scripts/lan-bridge.js)</text>
-  <text x="455" y="163" font-size="11" fill="#334155">Binds 0.0.0.0:80 &amp; :3000 | Transparent Forwarding | Unauthenticated Home LAN</text>
-
-  <!-- External Traffic / Internet -->
-  <rect x="910" y="128" width="380" height="44" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.4" filter="url(#cardShadow)" />
-  <text x="925" y="148" font-size="13" font-weight="700" fill="#b45309">Public Internet / External Docs</text>
-  <text x="925" y="163" font-size="11" fill="#475569">DuckDuckGo Web Search &amp; Documentation Scrapes (Via browser-mcp ONLY)</text>
-
-  <!-- Ingress Flow Connectors -->
-  <path d="M 380 150 L 434 150" fill="none" stroke="#0284c7" stroke-width="1.8" marker-end="url(#arrowCyan)" />
-  <path d="M 645 172 L 645 224" fill="none" stroke="#0284c7" stroke-width="1.8" marker-end="url(#arrowCyan)" />
-
-  <!-- LAYER 2: Kubernetes Cluster & Pod Isolation -->
-  <rect x="50" y="210" width="1260" height="430" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4" />
-  <text x="70" y="235" font-size="12" font-weight="800" fill="#0284c7" letter-spacing="1">KUBERNETES CLUSTER (Namespace: local-agentic-sandbox | Context: docker-desktop)</text>
-
-  <!-- 2.1 Web UI Orchestrator Pod -->
-  <rect x="420" y="250" width="440" height="202" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="435" y="275" font-size="15" font-weight="800" fill="#0369a1">web-ui: Service &amp; Orchestrator Pod</text>
-  <text x="710" y="275" font-size="11" font-weight="600" fill="#64748b">Port 3000 (NodePort 30300)</text>
-  
-  <rect x="435" y="290" width="410" height="24" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
-  <text x="445" y="306" font-size="11" fill="#0f172a"><tspan font-weight="700" fill="#6d28d9">Tri-Mode Dispatcher:</tspan> Auto (Triage) | Flash (Gemma 4) | Pro (Qwen 3.8)</text>
-
-  <rect x="435" y="320" width="410" height="24" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
-  <text x="445" y="336" font-size="11" fill="#0f172a"><tspan font-weight="700" fill="#0284c7">Multimodal Vision Pipeline:</tspan> Gemma 4 Diagram Ingestion (draw.io / PNG)</text>
-
-  <rect x="435" y="350" width="410" height="24" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
-  <text x="445" y="366" font-size="11" fill="#0f172a"><tspan font-weight="700" fill="#059669">Persistence &amp; Engine:</tspan> Local Storage History (v1) | Self-Correcting Test Loop</text>
-
-  <rect x="435" y="380" width="410" height="24" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
-  <text x="445" y="396" font-size="11" fill="#0f172a"><tspan font-weight="700" fill="#e11d48">Observability:</tspan> OpenTelemetry Distributed Tracer SDK | Hardware Gauges</text>
-
-  <rect x="435" y="410" width="410" height="26" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.2" />
-  <text x="445" y="427" font-size="11" font-weight="700" fill="#0369a1">Keep-Alive Lease: keep_alive = '24h' (Hot VRAM Cache Protection)</text>
-
-  <!-- 2.2 Hardened MCP Runner Pod (Air-Gapped) -->
-  <rect x="70" y="250" width="310" height="220" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="85" y="275" font-size="14" font-weight="800" fill="#047857">mcp-runner: Tool Boundary</text>
-  <text x="85" y="292" font-size="10" font-weight="600" fill="#065f46">ClusterIP: 8080/TCP | uid: 10001 | read_only rootfs</text>
-
-  <text x="85" y="315" font-size="11" font-weight="700" fill="#0f172a">8 Autonomous Workspace Tools:</text>
-  <text x="85" y="332" font-size="11" fill="#334155">• workspace_get_tree, read_file, write_file</text>
-  <text x="85" y="348" font-size="11" fill="#334155">• workspace_grep (ReDoS Complexity Guard)</text>
-  <text x="85" y="364" font-size="11" fill="#334155">• workspace_run_command (Isolated Bash/Tests)</text>
-  <text x="85" y="380" font-size="11" fill="#334155">• git_status, git_checkout, git_commit (Argv-Safe)</text>
-  <text x="85" y="396" font-size="11" fill="#334155">• execute_sandboxed_python &amp; Attestation</text>
-
-  <rect x="85" y="412" width="280" height="48" rx="4" fill="#dcfce7" stroke="#059669" stroke-width="1.2" />
-  <text x="95" y="426" font-size="10" font-weight="800" fill="#047857">NetworkPolicy: mcp-runner-zero-egress (ai-mesh)</text>
-  <text x="95" y="440" font-size="9.5" font-weight="700" fill="#065f46">Isolated Air-Gap Network: ai-mesh (Zero Egress)</text>
-  <text x="95" y="454" font-size="9" font-weight="500" fill="#047857">Default Deny Egress | Internal Inter-Pod Routing Only</text>
-
-  <!-- 2.3 Isolated Browser MCP Scraper Pod -->
-  <rect x="910" y="250" width="380" height="150" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="925" y="275" font-size="14" font-weight="800" fill="#b45309">browser-mcp: Web Scraper</text>
-  <text x="925" y="292" font-size="10" font-weight="600" fill="#92400e">ClusterIP: 8081/TCP | uid: 10002 | Isolated Scraper</text>
-
-  <text x="925" y="315" font-size="11" font-weight="700" fill="#0f172a">Web Search &amp; Documentation Tools:</text>
-  <text x="925" y="332" font-size="11" fill="#334155">• search_web (DuckDuckGo Search &amp; Top Result)</text>
-  <text x="925" y="348" font-size="11" fill="#334155">• fetch_webpage_markdown (HTML-to-Markdown)</text>
-  <text x="925" y="364" font-size="11" fill="#334155">• SSRF Guard (Blocks 10.0.0.0/8, 192.168.0.0/16, etc.)</text>
-  <rect x="925" y="372" width="350" height="24" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1" />
-  <text x="935" y="388" font-size="9.5" font-weight="700" fill="#92400e">NetworkPolicy: egress-mesh (Port 80/443 Outbound Allowed)</text>
-
-  <!-- 2.4 OpenTelemetry Collector & Jaeger Pod -->
-  <rect x="910" y="420" width="380" height="100" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="925" y="445" font-size="14" font-weight="800" fill="#be123c">otel-collector: Jaeger Tracing Pod</text>
-  <text x="925" y="462" font-size="10" font-weight="600" fill="#9f1239">ClusterIP: 4318 (HTTP), 4317 (gRPC), 16686 (UI)</text>
-  <text x="925" y="482" font-size="11" fill="#334155">• Distributed Trace Waterfall: LLM Turn -&gt; MCP -&gt; Command</text>
-  <text x="925" y="498" font-size="11" fill="#334155">• Live span telemetry synchronized to Web UI Dashboard</text>
-
-  <!-- 2.5 Persistent Workspace Volume (PVC) -->
-  <rect x="70" y="490" width="790" height="130" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.5" filter="url(#cardShadow)" />
-  <text x="85" y="515" font-size="14" font-weight="800" fill="#0f172a">workspace-pvc: Persistent Volume Claim (/workspace)</text>
-  <text x="560" y="515" font-size="11" font-weight="600" fill="#64748b">Host Mount: ./workspace:rw | RWO 10Gi</text>
-  
-  <text x="85" y="538" font-size="11" fill="#334155">• Shared Work Area: Autonomous feature branch checkouts, diffs, commits, and file generation</text>
-  <text x="85" y="556" font-size="11" fill="#334155">• Hermes Skill Loop Directory: .agent/skills/*.md (Learned self-improving agent skills persist here)</text>
-  <text x="85" y="574" font-size="11" fill="#334155">• Test Execution Caches: Isolated per-run artifacts (.pytest_cache, node_modules)</text>
-  <text x="85" y="596" font-size="11" font-weight="700" fill="#b45309">Host Trust Boundary: Read/Write authorized exclusively inside ./workspace; path traversal strictly rejected</text>
-
-  <!-- Network Mesh Isolation Layer -->
-  <g id="network-mesh-badges">
-    <rect x="70" y="215" width="220" height="22" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1" />
-    <circle cx="82" cy="226" r="4" fill="#10b981" />
-    <text x="92" y="230" font-size="9.5" font-weight="700" fill="#047857">Network Domain: ai-mesh (Zero-Trust)</text>
-
-    <rect x="910" y="215" width="230" height="22" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1" />
-    <circle cx="922" cy="226" r="4" fill="#f59e0b" />
-    <text x="932" y="230" font-size="9.5" font-weight="700" fill="#b45309">Egress Gateway: egress-mesh (Public)</text>
+  <!-- Node: 20 -->
+  <g id="node-20" class="drawio-node">
+    <rect x="40" y="210" width="1320" height="430" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 3" />
+    <text x="700" y="232" text-anchor="middle" dominant-baseline="central" fill="#0284c7" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="700" dy="0">KUBERNETES CLUSTER (Namespace: local-agentic-sandbox)</tspan>
+    </text>
   </g>
-
-  <!-- Flow Arrows inside K8s -->
-  <!-- Web UI -> MCP Runner -->
-  <path d="M 420 330 L 388 330" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrowEmerald)" />
-  <text x="392" y="322" font-size="10" font-weight="700" fill="#059669">SSE</text>
-
-  <!-- Web UI -> Browser MCP -->
-  <path d="M 860 330 L 902 330" fill="none" stroke="#d97706" stroke-width="1.8" marker-end="url(#arrowAmber)" />
-  <text x="868" y="322" font-size="10" font-weight="700" fill="#d97706">SSE</text>
-
-  <!-- Browser MCP -> Internet -->
-  <path d="M 1100 250 L 1100 180" fill="none" stroke="#d97706" stroke-width="1.8" marker-end="url(#arrowAmber)" />
-
-  <!-- Web UI -> OTEL Collector -->
-  <path d="M 860 410 L 885 410 L 885 450 L 902 450" fill="none" stroke="#e11d48" stroke-width="1.8" marker-end="url(#arrowRose)" />
-
-  <!-- MCP Runner -> Workspace PVC -->
-  <path d="M 225 470 L 225 482" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrowEmerald)" />
-
-  <!-- LAYER 3: Inference Engine & Host Hardware -->
-  <rect x="50" y="660" width="1260" height="190" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" />
-  <text x="420" y="685" font-size="12" font-weight="800" fill="#6d28d9" letter-spacing="1">HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB Dedicated VRAM)</text>
-
-  <!-- LLM Service Bridge -->
-  <rect x="70" y="700" width="310" height="130" rx="8" fill="#ffffff" stroke="#a855f7" stroke-width="1.4" filter="url(#cardShadow)" />
-  <text x="85" y="725" font-size="13" font-weight="800" fill="#6d28d9">llm-service (K8s Service)</text>
-  <text x="85" y="742" font-size="11" font-weight="600" fill="#475569">Type: ExternalName -&gt; host.docker.internal</text>
-  <text x="85" y="760" font-size="11" font-weight="600" fill="#475569">Port: 11434/TCP (LLM REST API)</text>
-  <text x="85" y="785" font-size="11" fill="#0f172a">• Air-Gapped Inference Path</text>
-  <text x="85" y="803" font-size="11" fill="#0f172a">• Bypasses container network virtualization</text>
-  <text x="85" y="821" font-size="11" fill="#0f172a">• 100% Direct PCIe ROCm Compute</text>
-
-  <!-- Primary Reasoning Model: Qwen 3.8 -->
-  <rect x="420" y="700" width="410" height="130" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="435" y="725" font-size="14" font-weight="800" fill="#581c87">Primary Orchestrator: qwen3.8:27b-q3_k_m</text>
-  <text x="435" y="745" font-size="11" font-weight="700" fill="#6d28d9">Dedicated VRAM: ~13.3 GB (100% GPU Offloaded, 29/29 Layers)</text>
-  <text x="435" y="765" font-size="11" fill="#0f172a">• Flash Attention Enabled | Native Function Calling (tools array)</text>
-  <text x="435" y="785" font-size="11" fill="#0f172a">• Deep Architectural Planning, Code Synthesis, &amp; Debugging</text>
-  <rect x="435" y="794" width="380" height="24" rx="4" fill="#dcfce7" stroke="#059669" stroke-width="1" />
-  <text x="445" y="810" font-size="10" font-weight="700" fill="#047857">Active Lease: 24h keep_alive (Zero Inactivity Eviction / Sub-second Response)</text>
-
-  <!-- Multimodal Sub-Agent Model: Gemma 4 -->
-  <rect x="850" y="700" width="440" height="130" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.8" filter="url(#cardShadow)" />
-  <text x="865" y="725" font-size="14" font-weight="800" fill="#581c87">Vision &amp; Sub-Agent: gemma4:e4b</text>
-  <text x="865" y="745" font-size="11" font-weight="700" fill="#6d28d9">Parameter Size: 7.5B | Quantization: Q4_K_M | Speed: ~80 tok/s</text>
-  <text x="865" y="765" font-size="11" fill="#0f172a">• Vision Processor: Whiteboard drawings, draw.io XML, system diagrams</text>
-  <text x="865" y="785" font-size="11" fill="#0f172a">• Router Classifier: Fast triage complexity routing (&lt;250ms)</text>
-  <rect x="865" y="794" width="410" height="24" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="1" />
-  <text x="875" y="810" font-size="10" font-weight="700" fill="#0369a1">Multimodal Spec Extractor -&gt; Feeds structured markdown into Qwen loop</text>
-
-  <!-- Web UI -> Ollama Service Flow Arrow (Routes cleanly through the gutter at x=885 down to y=648, completely outside workspace-pvc) -->
-  <path d="M 645 452 L 645 470 L 880 470 L 880 648 L 225 648 L 225 692" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrowPurple)" />
-  <rect x="360" y="636" width="280" height="20" rx="4" fill="#ffffff" stroke="#e9d5ff" stroke-width="1" />
-  <text x="370" y="650" font-size="10" font-weight="700" fill="#6d28d9">Inference Dispatch: /api/chat (keep_alive: 24h)</text>
+  <!-- Node: 30 -->
+  <g id="node-30" class="drawio-node">
+    <rect x="40" y="670" width="1320" height="180" rx="8" ry="8" fill="#faf5ff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="2"  />
+    <text x="700" y="692" text-anchor="middle" dominant-baseline="central" fill="#6d28d9" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="700" dy="0">HOST INFERENCE BOUNDARY (AMD Radeon RX 9070 XT 16GB Dedicated VRAM)</tspan>
+    </text>
+  </g>
+  <!-- Node: 10 -->
+  <g id="node-10" class="drawio-node">
+    <rect x="40" y="90" width="1320" height="90" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#cbd5e1" stroke-width="2"  />
+    <text x="700" y="112" text-anchor="middle" dominant-baseline="central" fill="#475569" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="700" dy="0">CLIENT &amp; INGRESS LAYER</tspan>
+    </text>
+  </g>
+  <!-- Node: 21 -->
+  <g id="node-21" class="drawio-node">
+    <rect x="420" y="255" width="420" height="190" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#0284c7" stroke-width="1.8"  />
+    <text x="630" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="630" dy="0">web-ui Orchestrator Pod</tspan>
+      <tspan x="630" dy="15">Port 3000 (NodePort 30300)</tspan>
+      <tspan x="630" dy="15">•  Tri-Mode Dispatcher:  Auto | Flash | Pro</tspan>
+      <tspan x="630" dy="15">•  Multimodal Vision:  Gemma 4 Ingestion</tspan>
+      <tspan x="630" dy="15">•  Persistence:  Chat History (v1) in LocalStorage</tspan>
+      <tspan x="630" dy="15">•  OTEL Tracer SDK:  Distributed Spans</tspan>
+      <tspan x="630" dy="15">•  Lease:  keep_alive = &apos;24h&apos; (Hot VRAM)</tspan>
+    </text>
+  </g>
+  <!-- Node: 25 -->
+  <g id="node-25" class="drawio-node">
+    <rect x="70" y="520" width="770" height="95" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#64748b" stroke-width="1.5"  />
+    <text x="455" y="542" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="455" dy="0">workspace-pvc Persistent Volume Claim (/workspace)  — Host Mount: ./workspace:rw (RWO 10Gi)</tspan>
+      <tspan x="455" dy="15">• Shared Git Repo &amp; Feature Branches | .agent/skills/*.md (Hermes Loop) | Isolated Test Caches</tspan>
+      <tspan x="455" dy="15">Host Trust Boundary:  Writes allowed in /workspace; path traversal outside strictly rejected.</tspan>
+    </text>
+  </g>
+  <!-- Node: 22 -->
+  <g id="node-22" class="drawio-node">
+    <rect x="70" y="255" width="310" height="210" rx="8" ry="8" fill="#f0fdf4" fill-opacity="0.35" stroke="#059669" stroke-width="1.8"  />
+    <text x="225" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="225" dy="0">mcp-runner Tool Boundary</tspan>
+      <tspan x="225" dy="15">ClusterIP: 8080 | uid: 10001 | read_only rootfs</tspan>
+      <tspan x="225" dy="15">8 Autonomous Tools:</tspan>
+      <tspan x="225" dy="15">• workspace_get_tree, read_file, write_file</tspan>
+      <tspan x="225" dy="15">• workspace_grep (ReDoS complexity guard)</tspan>
+      <tspan x="225" dy="15">• workspace_run_command (Isolated Bash)</tspan>
+      <tspan x="225" dy="15">• git_status, git_checkout, git_commit (Argv-safe)</tspan>
+      <tspan x="225" dy="15">• execute_sandboxed_python &amp; Attestation</tspan>
+      <tspan x="225" dy="15">NetworkPolicy Zero Egress Deny-All</tspan>
+    </text>
+  </g>
+  <!-- Node: 23 -->
+  <g id="node-23" class="drawio-node">
+    <rect x="910" y="255" width="410" height="130" rx="8" ry="8" fill="#fffbeb" fill-opacity="0.35" stroke="#d97706" stroke-width="1.8"  />
+    <text x="1115" y="277" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1115" dy="0">browser-mcp Scraper Pod</tspan>
+      <tspan x="1115" dy="15">ClusterIP: 8081 | uid: 10002</tspan>
+      <tspan x="1115" dy="15">• search_web (DuckDuckGo Search)</tspan>
+      <tspan x="1115" dy="15">• fetch_webpage_markdown (Scraper)</tspan>
+      <tspan x="1115" dy="15">• SSRF Guard (Private IP Filter)</tspan>
+      <tspan x="1115" dy="15">• NetworkPolicy: Egress Allowed (80/443)</tspan>
+    </text>
+  </g>
+  <!-- Node: 32 -->
+  <g id="node-32" class="drawio-node">
+    <rect x="420" y="715" width="440" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="1.8"  />
+    <text x="640" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="640" dy="0">Primary Orchestrator: qwen3.8:27b-q3_k_m</tspan>
+      <tspan x="640" dy="15">Dedicated VRAM: ~13.3 GB (100% GPU Offloaded, 29 Layers)</tspan>
+      <tspan x="640" dy="15">• Flash Attention Enabled | Native Function Calling (tools)</tspan>
+      <tspan x="640" dy="15">• Deep Architectural Planning, Code Synthesis, &amp; Debugging</tspan>
+      <tspan x="640" dy="15">Active Lease: 24h keep_alive (Zero Cold Start / Sub-second latency)</tspan>
+    </text>
+  </g>
+  <!-- Node: 33 -->
+  <g id="node-33" class="drawio-node">
+    <rect x="900" y="715" width="420" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#7c3aed" stroke-width="1.8"  />
+    <text x="1110" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1110" dy="0">Vision &amp; Sub-Agent: gemma4:e4b</tspan>
+      <tspan x="1110" dy="15">Parameter Size: 7.5B | Speed: ~80 tok/s</tspan>
+      <tspan x="1110" dy="15">• Multimodal Vision: Whiteboards, draw.io XML, diagrams</tspan>
+      <tspan x="1110" dy="15">• Triage Router: Fast complexity classification (&lt;250ms)</tspan>
+      <tspan x="1110" dy="15">• Extracted spec feeds structured markdown into Qwen loop</tspan>
+    </text>
+  </g>
+  <!-- Node: 2 -->
+  <g id="node-2" class="drawio-node">
+    <rect x="40" y="20" width="800" height="50" rx="4" ry="4" fill="none" fill-opacity="1" stroke="none" stroke-width="1.5"  filter="url(#drawio-shadow)"/>
+    <text x="440" y="38" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="11.5" font-weight="600" letter-spacing="-0.01em">
+      <tspan x="440" dy="0">local-agentic-sandbox Autonomous Platform v2 Architecture</tspan>
+      <tspan x="440" dy="15">Zero-Trust Kubernetes Topology | Air-Gapped Code Execution | Tri-Mode Dispatcher | OpenTelemetry</tspan>
+    </text>
+  </g>
+  <!-- Node: 50 -->
+  <g id="node-50" class="drawio-node">
+    <rect x="40" y="880" width="420" height="95" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#7c3aed" stroke-width="1.5"  />
+    <text x="250" y="902" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="250" dy="0">Strata inference engine</tspan>
+      <tspan x="250" dy="15">host process · AMD RX 9070 XT · ROCm/HIP</tspan>
+      <tspan x="250" dy="15">resident ~125B-class MoE · 27B fallback · 128K ctx</tspan>
+    </text>
+  </g>
+  <!-- Node: 52 -->
+  <g id="node-52" class="drawio-node">
+    <rect x="940" y="880" width="420" height="95" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#64748b" stroke-width="1.5"  />
+    <text x="1150" y="902" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1150" dy="0">Host OS</tspan>
+      <tspan x="1150" dy="15">git / GitHub · internet via host</tspan>
+      <tspan x="1150" dy="15">credentials in host OS keyring only</tspan>
+    </text>
+  </g>
+  <!-- Node: 24 -->
+  <g id="node-24" class="drawio-node">
+    <rect x="910" y="405" width="410" height="95" rx="8" ry="8" fill="#fff1f2" fill-opacity="0.35" stroke="#e11d48" stroke-width="1.8"  />
+    <text x="1115" y="427" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1115" dy="0">otel-collector Jaeger Tracing</tspan>
+      <tspan x="1115" dy="15">Ports: 4318 (HTTP), 4317 (gRPC), 16686 (UI)</tspan>
+      <tspan x="1115" dy="15">• Distributed Trace Spans: Turn -&gt; Tool -&gt; Exec</tspan>
+      <tspan x="1115" dy="15">• Real-time Waterfall Telemetry Feed</tspan>
+    </text>
+  </g>
+  <!-- Node: 51 -->
+  <g id="node-51" class="drawio-node">
+    <rect x="500" y="880" width="400" height="95" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#64748b" stroke-width="1.5"  />
+    <text x="700" y="902" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="700" dy="0">Host bridge</tspan>
+      <tspan x="700" dy="15">host process · sole external boundary</tspan>
+      <tspan x="700" dy="15">approval gate (destructive actions)</tspan>
+    </text>
+  </g>
+  <!-- Node: 31 -->
+  <g id="node-31" class="drawio-node">
+    <rect x="70" y="715" width="310" height="110" rx="8" ry="8" fill="#ffffff" fill-opacity="0.35" stroke="#a855f7" stroke-width="1.4"  />
+    <text x="225" y="737" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="225" dy="0">llm-service (K8s Service)</tspan>
+      <tspan x="225" dy="15">Type ExternalName (host.docker.internal:11434)</tspan>
+      <tspan x="225" dy="15">Air-Gapped PCIe ROCm Inference</tspan>
+    </text>
+  </g>
+  <!-- Node: 56 -->
+  <g id="node-56" class="drawio-node">
+    <rect x="870" y="550" width="450" height="40" rx="8" ry="8" fill="#f8fafc" fill-opacity="0.35" stroke="#94a3b8" stroke-width="1"  />
+    <text x="1095" y="572" text-anchor="middle" dominant-baseline="central" fill="#475569" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1095" dy="0">NetworkPolicy:  ai-mesh (internal) | egress-mesh (browser-mcp 80/443)</tspan>
+    </text>
+  </g>
+  <!-- Node: 13 -->
+  <g id="node-13" class="drawio-node">
+    <rect x="920" y="125" width="400" height="42" rx="8" ry="8" fill="#fffbeb" fill-opacity="0.35" stroke="#d97706" stroke-width="2"  />
+    <text x="1120" y="147" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="1120" dy="0">Public Internet &amp; External Docs</tspan>
+      <tspan x="1120" dy="15">DuckDuckGo &amp; Documentation Scrapes</tspan>
+    </text>
+  </g>
+  <!-- Node: 12 -->
+  <g id="node-12" class="drawio-node">
+    <rect x="430" y="125" width="360" height="42" rx="8" ry="8" fill="#f0f9ff" fill-opacity="0.35" stroke="#0284c7" stroke-width="2"  />
+    <text x="610" y="147" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="13" font-weight="700" letter-spacing="-0.01em">
+      <tspan x="610" dy="0">LAN Reverse Proxy Bridge</tspan>
+      <tspan x="610" dy="15">scripts/lan-bridge.js (0.0.0.0:80 / :3000)</tspan>
+    </text>
+  </g>
+  <!-- Node: 11 -->
+  <g id="node-11" class="drawio-node">
+    <rect x="70" y="125" width="280" height="42" rx="8" ry="8" fill="#ffffff" fill-opacity="1" stroke="#cbd5e1" stroke-width="1.5"  filter="url(#drawio-shadow)"/>
+    <text x="210" y="139" text-anchor="middle" dominant-baseline="central" fill="#0f172a" font-size="11.5" font-weight="600" letter-spacing="-0.01em">
+      <tspan x="210" dy="0">Mobile Phone / Workstation Browser</tspan>
+      <tspan x="210" dy="15">LAN / Localhost (Direct HTTP)</tspan>
+    </text>
+  </g>
+  <!-- Edge: 40 -->
+  <g id="edge-40" class="drawio-edge">
+    <path d="M 210 146 L 610 146" fill="none" stroke="#0284c7" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+  </g>
+  <!-- Edge: 41 -->
+  <g id="edge-41" class="drawio-edge">
+    <path d="M 610 146 L 630 350" fill="none" stroke="#0284c7" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+  </g>
+  <!-- Edge: 42 -->
+  <g id="edge-42" class="drawio-edge">
+    <path d="M 630 350 L 225 360" fill="none" stroke="#059669" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+    <rect x="410.75" y="345" width="33.5" height="18" rx="4" fill="#ffffff" stroke="#059669" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="427.5" y="355" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">SSE</text>
+  </g>
+  <!-- Edge: 43 -->
+  <g id="edge-43" class="drawio-edge">
+    <path d="M 630 350 L 1115 320" fill="none" stroke="#d97706" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+    <rect x="855.75" y="325" width="33.5" height="18" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="872.5" y="335" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">SSE</text>
+  </g>
+  <!-- Edge: 44 -->
+  <g id="edge-44" class="drawio-edge">
+    <path d="M 1115 320 L 1120 146" fill="none" stroke="#d97706" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+  </g>
+  <!-- Edge: 45 -->
+  <g id="edge-45" class="drawio-edge">
+    <path d="M 630 350 L 1115 452.5" fill="none" stroke="#e11d48" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+  </g>
+  <!-- Edge: 46 -->
+  <g id="edge-46" class="drawio-edge">
+    <path d="M 225 360 L 455 567.5" fill="none" stroke="#059669" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+  </g>
+  <!-- Edge: 47 -->
+  <g id="edge-47" class="drawio-edge">
+    <path d="M 630 350 L 880 470 L 880 648 L 225 648 L 225 770" fill="none" stroke="#7c3aed" stroke-width="2"  marker-end="url(#drawio-arrow)"/>
+    <rect x="811.25" y="638" width="137.5" height="18" rx="4" fill="#ffffff" stroke="#7c3aed" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="880" y="648" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">Inference /api/chat</text>
+  </g>
+  <!-- Edge: 53 -->
+  <g id="edge-53" class="drawio-edge">
+    <path d="M 225 770 L 250 927.5" fill="none" stroke="#7c3aed" stroke-width="1.5"  marker-end="url(#drawio-arrow)"/>
+    <rect x="181.75" y="838.75" width="111.5" height="18" rx="4" fill="#ffffff" stroke="#7c3aed" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="237.5" y="848.75" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">local inference</text>
+  </g>
+  <!-- Edge: 54 -->
+  <g id="edge-54" class="drawio-edge">
+    <path d="M 630 350 L 700 927.5" fill="none" stroke="#64748b" stroke-width="1.5"  marker-end="url(#drawio-arrow-slate)"/>
+    <rect x="638.5" y="628.75" width="53" height="18" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="665" y="638.75" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">bridge</text>
+  </g>
+  <!-- Edge: 55 -->
+  <g id="edge-55" class="drawio-edge">
+    <path d="M 700 927.5 L 1150 927.5" fill="none" stroke="#64748b" stroke-width="1.5"  marker-end="url(#drawio-arrow-slate)"/>
+    <rect x="875.75" y="917.5" width="98.5" height="18" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1" filter="url(#drawio-shadow)"/>
+    <text x="925" y="927.5" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#1e293b">approval gate</text>
+  </g>
 </svg>

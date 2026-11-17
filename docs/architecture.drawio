@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" modified="2026-10-02T07:58:00.000Z" agent="Local-Agentic-Sandbox" version="24.0.0" type="device">
   <diagram id="arch-v2" name="local-agentic-sandbox Architecture v2">
-    <mxGraphModel dx="1420" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+    <mxGraphModel dx="1420" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1080" background="#ffffff" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -98,6 +98,29 @@
               <mxPoint x="225" y="648" />
             </Array>
           </mxGeometry>
+        </mxCell>
+
+        <!-- Host Bridge & Strata Extensions -->
+        <mxCell id="50" value="&lt;b&gt;Strata inference engine&lt;/b&gt;&lt;br/&gt;host process · AMD RX 9070 XT · ROCm/HIP&lt;br/&gt;resident ~125B-class MoE · 27B fallback · 128K ctx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="880" width="420" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="51" value="&lt;b&gt;Host bridge&lt;/b&gt;&lt;br/&gt;host process · sole external boundary&lt;br/&gt;approval gate (destructive actions)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="880" width="400" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="52" value="&lt;b&gt;Host OS&lt;/b&gt;&lt;br/&gt;git / GitHub · internet via host&lt;br/&gt;credentials in host OS keyring only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="880" width="420" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="53" value="local inference" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#6d28d9;" edge="1" parent="1" source="31" target="50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="54" value="bridge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748b;strokeWidth=1.5;fontColor=#334155;" edge="1" parent="1" source="21" target="51">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="55" value="approval gate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748b;strokeWidth=1.5;fontColor=#334155;" edge="1" parent="1" source="51" target="52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="56" value="&lt;b&gt;NetworkPolicy:&lt;/b&gt; ai-mesh (internal) | egress-mesh (browser-mcp 80/443)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" vertex="1" parent="20">
+          <mxGeometry x="830" y="340" width="450" height="40" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
