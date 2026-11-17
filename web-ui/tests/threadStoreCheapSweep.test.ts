@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ThreadStore } from "../lib/threads/threadStore";
+import { ThreadStore, markTurnActive, clearTurnActive } from "../lib/threads/threadStore";
 import { mergeThreadsIntoBoard } from "../lib/board/mergeThreadsIntoBoard";
 import { STALL_WINDOW_MS } from "../lib/threads/inAppSupervisor";
 
@@ -54,11 +54,12 @@ test("A1: sweepStalledThreads with no candidates does not call listThreads or ge
       return origGet(id);
     };
 
-    const acted = await store.sweepStalledThreads(now);
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
     assert.equal(acted, 0);
     assert.equal(listCalls, 0, "sweepStalledThreads must not call listThreads");
     assert.equal(getCalls, 0, "sweepStalledThreads must not call getThread when there are no candidates");
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -90,6 +91,9 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
 
     const store = new ThreadStore(dir);
     await store.listThreadSummaries();
+    markTurnActive("t-job-stale");
+    markTurnActive("t-msg-streaming");
+    markTurnActive("t-stale-active");
 
     let listCalls = 0;
     const getIds: string[] = [];
@@ -103,7 +107,7 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
       return origGet(id);
     };
 
-    const acted = await store.sweepStalledThreads(now);
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
     assert.equal(acted, 1);
     assert.equal(listCalls, 0, "sweepStalledThreads must not call listThreads");
     assert.deepEqual(getIds, ["t-stale-active"]);
@@ -114,6 +118,7 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
     assert.ok(updated.stalledReason);
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -137,6 +142,9 @@ test("A3: message-level streaming on a non-active thread is still detected and e
 
     const store = new ThreadStore(dir);
     await store.listThreadSummaries();
+    markTurnActive("t-job-stale");
+    markTurnActive("t-msg-streaming");
+    markTurnActive("t-stale-active");
 
     let listCalls = 0;
     store.listThreads = async () => {
@@ -144,7 +152,7 @@ test("A3: message-level streaming on a non-active thread is still detected and e
       return [];
     };
 
-    const acted = await store.sweepStalledThreads(now);
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
     assert.equal(acted, 1);
     assert.equal(listCalls, 0);
 
@@ -154,6 +162,7 @@ test("A3: message-level streaming on a non-active thread is still detected and e
     assert.ok(updated.stalledReason);
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -266,6 +275,7 @@ test("A5: listThreadSummaries(query) matches title, preview, and body without ca
     assert.equal(results[1].matchSnippet, "last message has needle here");
     assert.equal(results[2].matchSnippet, "early message with needle inside body");
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -289,6 +299,9 @@ test("A6: sweepStalledThreads does not block the event loop (>1000ms) on large s
 
     const store = new ThreadStore(dir);
     await store.listThreadSummaries();
+    markTurnActive("t-job-stale");
+    markTurnActive("t-msg-streaming");
+    markTurnActive("t-stale-active");
 
     let timerLagMs = 0;
     const start = Date.now();
@@ -303,6 +316,7 @@ test("A6: sweepStalledThreads does not block the event loop (>1000ms) on large s
     await Promise.all([timerPromise, sweepPromise]);
     assert.ok(timerLagMs < 1000, `Expected event-loop timer lag < 1000ms, got ${timerLagMs}ms`);
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -333,8 +347,11 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
 
     const store = new ThreadStore(dir);
     await store.listThreadSummaries();
+    markTurnActive("t-job-stale");
+    markTurnActive("t-msg-streaming");
+    markTurnActive("t-stale-active");
 
-    const acted = await store.sweepStalledThreads(now);
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
     assert.equal(acted, 1);
 
     const oldThread = await store.getThread("t-job-stale");
@@ -344,6 +361,7 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
     const allSummaries = await store.listThreadSummaries();
     assert.equal(allSummaries.length, 2, "auto-resume should have created a fresh thread");
   } finally {
+    clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -233,6 +233,7 @@ export interface ThreadSummary {
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;
+  hasStreamingMessage: boolean;
   matchSnippet?: string;
 }
 
@@ -690,8 +691,18 @@ export class ThreadStore {
    */
   async sweepStalledThreads(now: number = Date.now()): Promise<number> {
     let acted = 0;
-    const threads = await this.listThreads();
-    for (const thread of threads) {
+    const summaries = await this.listThreadSummaries();
+    for (const s of summaries) {
+      const isStreaming = s.status === "active" || s.status === "running" || s.hasStreamingMessage;
+      const updatedAtMs = Date.parse(s.updatedAt);
+      const isStale = Number.isFinite(updatedAtMs) && now - updatedAtMs > TURN_STALL_WINDOW_MS;
+      if (!isStreaming || !isStale) {
+        continue;
+      }
+      const thread = await this.getThread(s.id);
+      if (!thread) {
+        continue;
+      }
       const outcome = superviseStalledThread(thread, {
         now,
         threadAdapter: {
@@ -998,7 +1009,7 @@ export class ThreadStore {
           continue;
         }
         const cached = this.summaryCache.get(file);
-        if (cached && cached.mtimeMs === stat.mtimeMs) {
+        if (cached && cached.mtimeMs === stat.mtimeMs && typeof cached.summary.hasStreamingMessage === "boolean") {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
         }
@@ -1010,6 +1021,7 @@ export class ThreadStore {
           const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
           const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
           const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
+          const hasStreamingMessage = msgs.some((m) => m.role === "assistant" && m.status === "streaming");
           const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
           const title =
             t.title && t.title !== "New session"
@@ -1029,6 +1041,7 @@ export class ThreadStore {
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,
+            hasStreamingMessage,
           };
           this.summaryCache.set(file, { mtimeMs: stat.mtimeMs, summary });
           indexDirty = true;
