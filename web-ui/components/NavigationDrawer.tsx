@@ -212,7 +212,7 @@ export function NavigationDrawer({
         aria-hidden="true"
       />
 
-      {/* Drawer Surface - Gemini Mobile Menu Pattern */}
+      {/* Drawer Surface - Mobile Menu Pattern */}
       <div
         data-testid="navigation-drawer"
         role="dialog"

@@ -6,7 +6,7 @@ import path from "path";
 describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
   const repoRoot = path.resolve(__dirname, "../..");
   const scriptsDir = path.join(repoRoot, "scripts");
-  const argonDir = path.join(repoRoot, "argon-cto", "task3");
+  const task3Dir = path.join(repoRoot, "scripts", "task3");
 
   const requiredScriptFiles = [
     "scripts/capture-svg-render.js",
@@ -37,12 +37,12 @@ describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
       }
     }
 
-    // Collect all .js files in argon-cto/task3 if exists
-    if (fs.existsSync(argonDir)) {
-      const entries = fs.readdirSync(argonDir, { withFileTypes: true });
+    // Collect all .js files in scripts/task3 if exists
+    if (fs.existsSync(task3Dir)) {
+      const entries = fs.readdirSync(task3Dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isFile() && entry.name.endsWith(".js")) {
-          filesToCheck.push(path.join(argonDir, entry.name));
+          filesToCheck.push(path.join(task3Dir, entry.name));
         }
       }
     }
