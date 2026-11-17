@@ -54,6 +54,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/explorerFs.test.ts"],
   },
   {
+    match: (p) => p.includes("explorerPanel.spec.ts"),
+    tests: ["tests/explorerPanel.spec.ts"],
+  },
+  {
     match: (p) =>
       p.includes("inTurnExperience.spec.ts") ||
       p.includes("ChatStream.tsx") ||
