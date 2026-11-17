@@ -208,7 +208,7 @@ function createProxyServer(listenPort) {
             <head><title>502 Bad Gateway - Sandbox Starting</title></head>
             <body style="background:#020617;color:#f8fafc;font-family:sans-serif;padding:2rem;text-align:center;">
               <h2 style="color:#f43f5e;">Sandbox Container Initializing (502)</h2>
-              <p style="color:#94a3b8;">The enterprise-ai-portal container is currently building or starting up.</p>
+              <p style="color:#94a3b8;">The local-agentic-sandbox container is currently building or starting up.</p>
               <p style="color:#64748b;font-family:monospace;font-size:0.85rem;">Target: ${TARGET_HOST}:${TARGET_PORT} | Error: ${err.message}</p>
               <button onclick="location.reload()" style="background:#10b981;color:#fff;border:none;padding:0.6rem 1.2rem;border-radius:6px;cursor:pointer;margin-top:1rem;">Retry</button>
             </body>
