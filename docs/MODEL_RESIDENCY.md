@@ -2,7 +2,7 @@
 
 ## Hardware Context & Budget
 - **GPU**: AMD Radeon RX 9070 XT (16GB VRAM, ROCm on Linux / Windows DirectML/ROCm host)
-- **Ollama Host**: Local daemon on `0.0.0.0:11434`
+- **Strata Inference Engine**: Local daemon on the host GPU (AMD RX 9070 XT, ROCm/HIP) serving a resident ~125B-class MoE model with a 27B fallback and 128K context.
 - **Total VRAM**: 16,384 MiB (~16 GB)
 - **Context & KV Cache Headroom**: 10% (~1.6 GB)
 - **Usable Budget**: ~14.4 GB
