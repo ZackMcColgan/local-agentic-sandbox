@@ -3501,6 +3501,26 @@ export function ChatStream({
           );
         })()}
 
+        {isLoading && (
+          <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
+            <div
+              data-testid="running-pill"
+              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-xs font-mono font-medium text-emerald-300 shadow-lg backdrop-blur-sm"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                {`RUNNING${
+                  (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
+                    ? ` · Round ${messages[messages.length - 1]?.roundPromptTokens?.length}`
+                    : ""
+                } · ${formatElapsedDuration(
+                  Math.max(0, Math.floor((Date.now() - (turnStartedAtRef.current ?? Date.now())) / 1000))
+                )}`}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
             drops mid-turn, RECOVERED when the detached turn is reconciled.
             Both render at the interruption point so the drop and the

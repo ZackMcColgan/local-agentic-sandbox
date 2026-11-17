@@ -238,4 +238,72 @@ for (const width of PHONE_WIDTHS) {
       server.close();
     });
   });
+
+  test.describe(`P4 — RUNNING pill (${width}px dark)`, () => {
+    test.use({
+      viewport: { width, height: 844 },
+      colorScheme: "dark",
+      hasTouch: true,
+      isMobile: true,
+    });
+
+    test("persistent RUNNING pill stays visible while streaming and is replaced by DONE on completion", async ({
+      page,
+    }) => {
+      await setupStubbedEngineRoutes(page);
+
+      let releaseDone!: () => void;
+      const doneGate = new Promise<void>((r) => {
+        releaseDone = r;
+      });
+
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.write(
+          `data: ${JSON.stringify({
+            type: "trace",
+            trace: { id: "tr-p4", tool: "read_file", status: "completed", durationMs: 42 },
+            roundPromptTokens: [1000, 2000],
+          })}\n\n`
+        );
+        doneGate.then(() => {
+          res.write(`data: ${JSON.stringify({ type: "token", content: "Finished P4." })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: "done", roundPromptTokens: [1000, 2000] })}\n\n`
+          );
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await page.route("**/api/chat", async (route) => {
+        await route.continue({ url: `http://127.0.0.1:${port}/api/chat` });
+      });
+
+      await page.goto("/");
+      const composer = page.getByPlaceholder(/Ask anything|Message/i).first();
+      await composer.fill("run p4");
+      await composer.press("Enter");
+
+      const runningPill = page.getByTestId("running-pill");
+      await expect(runningPill).toBeVisible();
+      await expect(runningPill).toContainText("RUNNING");
+
+      // Scroll message list and verify pill remains visible
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(runningPill).toBeVisible();
+
+      releaseDone();
+      await expect(page.getByText("Finished P4.")).toBeVisible();
+      await expect(runningPill).toBeHidden();
+      await expect(page.getByTestId("turn-done-chip")).toBeVisible();
+      server.close();
+    });
+  });
 }
