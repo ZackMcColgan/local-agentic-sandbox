@@ -83,7 +83,7 @@
 <rect x="64" y="244" width="264" height="140" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2" filter="url(#soft)"/>
 <text x="88" y="277" font-size="15" font-weight="700" fill="#064e3b">Strata inference engine</text>
 <text x="88" y="299" font-size="11.5" fill="#065f46">host process · RX 9070 XT · ROCm/HIP</text>
-<text x="88" y="319" font-size="11.5" fill="#065f46">resident ~125B-class MoE</text>
+<text x="88" y="319" font-size="11.5" fill="#065f46">Qwen3.8-Flash-Next (125B MoE)</text>
 <text x="88" y="339" font-size="11.5" fill="#065f46">27B fallback · 128K context</text>
 <text x="88" y="359" font-size="11.5" fill="#065f46">served locally on :8080</text>
 <rect x="64" y="408" width="264" height="100" rx="12" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>

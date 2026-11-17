@@ -9,7 +9,7 @@
 ### 1.1 Hardware Baseline & Allocation
 - **GPU**: AMD Radeon RX 9070 XT (16 GB GDDR6 VRAM).
 - **Driver / Runtime**: AMD ROCm runtime with direct host passthrough to the Strata inference engine (`:8080`) and host-bridge (`:8765`).
-- **Model Roster**: User-managed via configuration (e.g. Qwen 3.8 / Gemma 4). The platform reads model names dynamically from config and does not prescribe hardcoded rosters.
+- **Model Roster**: User-managed via configuration (e.g. Qwen3.8-Flash-Next 125B-class MoE / swift-15-27b-mtp 27B fallback). The platform reads model names dynamically from config and does not prescribe hardcoded rosters.
 
 ### 1.2 Concurrency & Headroom
 - Concurrency cap is derived dynamically at runtime from available VRAM headroom.

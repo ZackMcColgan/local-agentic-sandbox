@@ -90,7 +90,7 @@ The UI is served on the LAN through the cluster gateway; the same session is liv
 cd web-ui
 npm test            # 1,600+ unit and contract tests
 npm run test:gate   # change-aware gate: runs exactly the tests a change touches
-npm run test:e2e    # Playwright suite (252 tests across 11 spec files and 4 projects)
+npm run test:e2e    # Playwright suite (272 tests across 12 spec files and 4 projects)
 ```
 
 The gate is strict on purpose: a changed file with no test coverage is rejected outright, and e2e specs run under the real Playwright runner. CI additionally runs an invariant net and a chaos battery that hammers the unhappy paths — mid-stream stops, overflow inputs, type-confused payloads.

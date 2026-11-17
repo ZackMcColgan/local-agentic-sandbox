@@ -2,8 +2,8 @@
 
 **Status**: Accepted  
 **Date**: 2026-10-02  
-**Author**: Zack McColgan / Autonomous Platform Team  
-**Context**: local-agentic-sandbox v2.5 (Mode A: Overnight Builder + Mode B: Local Oracle)
+**Author**: Autonomous Platform Architecture  
+**Context**: local-agentic-sandbox v2.0 (Mode A: Overnight Builder + Mode B: Local Oracle)
 
 ---
 

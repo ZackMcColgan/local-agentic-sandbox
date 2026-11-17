@@ -41,6 +41,16 @@ The repo includes `deploy/k8s/ingress.yaml` (nginx, SSL redirect off).
 
 ## Deploy
 
+Recommended (builds from repo root, imports into the `desktop-control-plane` containerd node, updates the deployment image, and verifies rollout):
+
+```bash
+node scripts/deploy-cluster.js web-ui
+# Or deploy all three container images (mcp-server, browser-mcp, web-ui):
+node scripts/deploy-cluster.js all
+```
+
+Or via `make`:
+
 ```bash
 # From repo root:
 git checkout develop
@@ -48,12 +58,9 @@ git pull origin develop
 make k8s-deploy
 ```
 
-This builds the Docker image locally and rollout-restarts the K8s deployment.
-(`imagePullPolicy: Never` picks up the local image directly.)
-
-Manual equivalent (no `make` on Windows):
+Manual equivalent (no `make` on Windows — run from repo root so workspace `COPY` paths resolve):
 ```powershell
-docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile web-ui
+docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile .
 kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
 kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
 ```
@@ -62,6 +69,7 @@ kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
 
 | Method | URL | Notes |
 |--------|-----|-------|
+| LAN / Gateway bridge (recommended) | `http://<host-ip>/` | Run `.\scripts\kind-gateway\start-gateway.ps1` + `node scripts/lan-bridge.js`; see [access-path.md](./access-path.md) |
 | Ingress (with controller) | `http://<host-ip>/` | No port needed |
 | Port-forward | `kubectl port-forward svc/web-ui 3001:3000 -n local-agentic-sandbox --address 0.0.0.0` | Then `http://<host-ip>:3001` |
 | NodePort direct | `http://<host-ip>:30300` | Unreliable on Docker Desktop |
@@ -72,8 +80,8 @@ Scheduled Task that runs the port-forward command at logon.
 ## Fresh install
 
 ```bash
-# Build image first (imagePullPolicy: Never requires it locally)
-docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile web-ui
+# Build image from repo root first (imagePullPolicy: Never requires it locally)
+docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile .
 
 # Deploy everything
 kubectl apply -k deploy/k8s
