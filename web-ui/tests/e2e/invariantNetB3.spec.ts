@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 
-test.describe("Phase B3 — Unhappy paths", () => {
+test.describe("Phase B3 — Unhappy paths @chaos", () => {
   test.use({
     viewport: { width: 390, height: 844 },
     colorScheme: "dark",

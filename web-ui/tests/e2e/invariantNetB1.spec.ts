@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 
-test.describe("Phase B1 — Saturation and overflow", () => {
+test.describe("Phase B1 — Saturation and overflow @chaos", () => {
   test.use({
     viewport: { width: 390, height: 844 },
     colorScheme: "dark",

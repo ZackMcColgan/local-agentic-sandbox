@@ -16,7 +16,7 @@ async function assertNoHorizontalOverflow(page: Page, label: string) {
 }
 
 for (const width of PHONE_WIDTHS) {
-  test.describe(`Phase A1 — Geometry containment (${width}px dark)`, () => {
+  test.describe(`Phase A1 — Geometry containment (${width}px dark) @chaos`, () => {
     test.use({
       viewport: { width, height: 844 },
       colorScheme: "dark",

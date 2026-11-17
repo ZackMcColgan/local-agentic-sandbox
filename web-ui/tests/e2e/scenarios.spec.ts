@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 import { assertLayoutInvariants } from "./helpers/layoutInvariants";
 
-test.describe("Simulation Mode & State Invariants Suite", () => {
+test.describe("Simulation Mode & State Invariants Suite @chaos", () => {
   let forbiddenCalls: string[] = [];
 
   test.beforeEach(async ({ page }) => {
