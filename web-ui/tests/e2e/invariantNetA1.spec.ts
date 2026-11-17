@@ -173,8 +173,7 @@ for (const width of PHONE_WIDTHS) {
       const cards = Array.from({ length: 26 }, (_, i) => ({
         id: `card-${i}`,
         title: `Card ${i} ${"UnbrokenWord".repeat(4)}`,
-        column: "todo",
-        status: "todo",
+        status: "queued",
         priority: "medium",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -196,6 +195,7 @@ for (const width of PHONE_WIDTHS) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
       await page.locator('[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")').first().click();
       await page.waitForTimeout(400);
+      await expect(page.getByText("Card 0").first()).toBeVisible();
       await assertNoHorizontalOverflow(page, `Board 26 cards ${width}px`);
     });
   });
