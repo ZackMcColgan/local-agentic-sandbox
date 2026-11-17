@@ -48,17 +48,17 @@ The local agentic sandbox web UI is accessible over the local area network (LAN)
 
 ## Configuration & Assets
 
-- **Nginx Configuration**: [`scripts/kind-gateway/nginx.conf`](file:///C:/Users/zackm/Desktop/repos/local-agentic-sandbox/scripts/kind-gateway/nginx.conf)
+- **Nginx Configuration**: [`scripts/kind-gateway/nginx.conf`](../scripts/kind-gateway/nginx.conf)
   - HTTP/1.1 reverse proxy to `$node_upstream http://desktop-control-plane:30300`.
   - Dynamic DNS resolution using Docker's embedded DNS (`127.0.0.11 valid=5s`).
   - Buffering fully disabled (`proxy_buffering off; proxy_request_buffering off; chunked_transfer_encoding on; add_header X-Accel-Buffering no;`).
   - Stream timeouts set to `86400s` (24h) to prevent proxy severance during long-running reasoning tasks.
   - Upstream connect timeout set to `3s`.
-- **Gateway Launcher Script**: [`scripts/kind-gateway/start-gateway.ps1`](file:///C:/Users/zackm/Desktop/repos/local-agentic-sandbox/scripts/kind-gateway/start-gateway.ps1)
+- **Gateway Launcher Script**: [`scripts/kind-gateway/start-gateway.ps1`](../scripts/kind-gateway/start-gateway.ps1)
   - Idempotent container lifecycle manager. Runs `nginx:alpine` named `kind-gateway` attached to network `kind`.
   - Mounts `nginx.conf` as read-only.
   - Automatically redeploys if container is missing or configuration hash changes.
-- **Gateway Teardown Script**: [`scripts/kind-gateway/stop-gateway.ps1`](file:///C:/Users/zackm/Desktop/repos/local-agentic-sandbox/scripts/kind-gateway/stop-gateway.ps1)
+- **Gateway Teardown Script**: [`scripts/kind-gateway/stop-gateway.ps1`](../scripts/kind-gateway/stop-gateway.ps1)
   - Forcibly removes container (`docker rm -f kind-gateway`).
 
 ---
@@ -86,7 +86,7 @@ C:\AI\ai-control\AI-OFF.ps1 -AccessPathMode legacy-port-forward
 
 ## Gateway Watchdog & Auto-Healing
 
-[`scripts/lan-bridge.js`](file:///C:/Users/zackm/Desktop/repos/local-agentic-sandbox/scripts/lan-bridge.js) includes an active `GatewayWatchdog` class:
+[`scripts/lan-bridge.js`](../scripts/lan-bridge.js) includes an active `GatewayWatchdog` class:
 - **Active Only in Gateway Mode**: Ignored when `ACCESS_PATH_MODE=legacy-port-forward`.
 - **Health Probing**: Sends an HTTP HEAD request to `http://127.0.0.1:<TARGET_PORT>/` every 5 seconds with a 3-second timeout.
 - **Healing Trigger**: Triggered after **2 consecutive failures** (total detection budget ≤ 11 seconds).

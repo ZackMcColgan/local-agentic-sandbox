@@ -592,7 +592,7 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
     report.status === "completed"
       ? "✅ **Status: COMPLETED**"
       : report.status === "parked"
-      ? "⚠️ **Status: PARKED (Requires Zack's Review)**"
+      ? "⚠️ **Status: PARKED (Requires operator review)**"
       : report.status === "failed"
       ? "❌ **Status: FAILED**"
       : report.status === "cancelled"

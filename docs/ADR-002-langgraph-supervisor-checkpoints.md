@@ -9,7 +9,7 @@
 
 ## 1. Context & Problem Statement
 
-In Mode A (Overnight Builder), the agent operates autonomously over multi-hour runs without real-time human intervention ("Zack hands it one sentence at night: 'build X'"). 
+In Mode A (Overnight Builder), the agent operates autonomously over multi-hour runs without real-time human intervention ("The operator hands it one sentence at night: 'build X'"). 
 
 Traditional autonomous agent loops suffer from catastrophic failure modes:
 1. **Unrecoverable Process Termination**: If a worker or supervisor container crashes mid-run (e.g. OOM, uncaught runtime exception, Kubernetes rescheduling at 2 AM), an uncheckpointed loop restarts from step zero, losing hours of build computation and thrashing git history.

@@ -2004,7 +2004,7 @@ export class OvernightSupervisor {
         milestoneId: currentMilestone ? currentMilestone.id : "GLOBAL",
         question: `Execution stalled with no forward progress on ${currentMilestone ? currentMilestone.title : "task"}.`,
         judgmentCall: "Parked task and recorded snapshot state for morning inspection.",
-        reasoning: "Autonomy policy: never spin forever; snapshot state and await Zack's review.",
+        reasoning: "Autonomy policy: never spin forever; snapshot state and await operator review.",
         revertAction: {
           type: "re_plan",
           target: currentMilestone ? currentMilestone.id : "all"
