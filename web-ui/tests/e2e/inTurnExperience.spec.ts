@@ -322,6 +322,36 @@ for (const width of PHONE_WIDTHS) {
     }) => {
       await setupStubbedEngineRoutes(page, { threads: [] });
 
+      let threadPollCount = 0;
+      let releaseSecondPoll!: () => void;
+      const secondPollGate = new Promise<void>((resolve) => {
+        releaseSecondPoll = resolve;
+      });
+      await page.route("**/api/threads/**", async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        threadPollCount += 1;
+        if (threadPollCount === 3) {
+          await secondPollGate;
+        }
+        const status = threadPollCount >= 3 ? "complete" : "streaming";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            thread: {
+              id: "thread-p5",
+              messages: [
+                { id: "u1", role: "user", content: "test disconnect" },
+                { id: "a1", role: "assistant", content: "Reconciled reply", status },
+              ],
+            },
+          }),
+        });
+      });
+
       await page.route("**/api/chat", async (route) => {
         await route.abort("failed");
       });
@@ -336,6 +366,14 @@ for (const width of PHONE_WIDTHS) {
       await expect(disconnectedBanner).toContainText("DISCONNECTED");
       await expect(disconnectedBanner).toContainText("Auto-retrying");
       await expect(disconnectedBanner).toHaveClass(/amber/);
+      await expect(disconnectedBanner).toContainText("(2/12)");
+      releaseSecondPoll();
+
+      const recoveredBanner = page.getByTestId("stream-recovered-banner");
+      await expect(recoveredBanner).toBeVisible();
+      await expect(recoveredBanner).toContainText("RECOVERED");
+      await expect(recoveredBanner).toHaveClass(/emerald/);
+      await expect(recoveredBanner).toContainText(/Reconnected after [2-9]\d*s/);
     });
   });
 

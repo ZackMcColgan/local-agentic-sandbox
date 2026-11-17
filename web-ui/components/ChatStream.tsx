@@ -43,7 +43,11 @@ import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
-import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
+import {
+  RECONCILE_POLL_MAX_ATTEMPTS,
+  reconcilePollDelayMs,
+  shouldStopReconcilePoll
+} from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
@@ -759,6 +763,7 @@ export function ChatStream({
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
     const startedAt = Date.now();
+    setReconnectAttempt(1);
 
     const pollDetachedTurn = async () => {
       try {
@@ -779,7 +784,12 @@ export function ChatStream({
               setHasResolvedDetachedTurn(true);
               // uir-1: surface the RECOVERED banner where the DISCONNECTED
               // banner stood, so the drop and the recovery are both visible.
-              setRecoveredAtMs(Date.now());
+              const now = Date.now();
+              setRecoveredAtMs(now);
+              setRecoveredAfterSec(
+                Math.max(1, Math.round((now - (disconnectedAtMs ?? startedAt)) / 1000))
+              );
+              setDisconnectedAtMs(null);
               return;
             }
           }
@@ -796,6 +806,7 @@ export function ChatStream({
           isActiveView
         })
       ) {
+        setReconnectAttempt(attempts + 1);
         pollTimer = setTimeout(pollDetachedTurn, reconcilePollDelayMs(attempts));
       }
     };
@@ -1477,6 +1488,7 @@ export function ChatStream({
       } else {
         console.error("[ChatStream] Stream interrupted mid-approval:", err);
         if (targetThreadId && err.isTerminalServerError !== true) {
+          setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(targetThreadId);
           setStreamStatus("Connection interrupted — turn continuing server-side...");
@@ -1906,6 +1918,7 @@ export function ChatStream({
         // offline simulations must render the error banner + Retry surface instead.
         if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
           // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
+          setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(currentTid);
           setStreamStatus("Connection interrupted — turn continuing server-side...");
@@ -3541,7 +3554,7 @@ export function ChatStream({
                 className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
               >
                 <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/3)`}</span>
+                <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/${RECONCILE_POLL_MAX_ATTEMPTS})`}</span>
               </div>
             );
           }
