@@ -2230,7 +2230,7 @@ export function ChatStream({
                     displayContextTokens > 85000
                       ? "text-rose-600 dark:text-rose-400"
                       : displayContextTokens > 70000
-                      ? "text-zinc-600 dark:text-zinc-400"
+                      ? "text-amber-600 dark:text-amber-400"
                       : "text-slate-700 dark:text-zinc-100"
                   }`}
                 >
@@ -2247,18 +2247,20 @@ export function ChatStream({
                 the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[6px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
+                data-testid="context-meter-fill"
                 className={`h-full rounded-full transition-all ${
                   displayContextTokens > 85000
                     ? "bg-rose-500"
                     : displayContextTokens > 70000
-                    ? "bg-zinc-500"
+                    ? "bg-amber-500"
                     : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
                 }`}
                 style={{
-                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`
+                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`,
+                  minWidth: displayContextTokens > 0 ? "4px" : "0px",
                 }}
               />
               <span
