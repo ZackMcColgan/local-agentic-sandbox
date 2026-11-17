@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 
-test.describe("Real User Interaction Flows", () => {
+test.describe("Real User Interaction Flows @chaos", () => {
   test.beforeEach(async ({ page }) => {
     await setupStubbedEngineRoutes(page);
   });
