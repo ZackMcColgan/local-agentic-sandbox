@@ -19,7 +19,7 @@
 - **Fail-closed verification** — a change-aware local test gate, a five-job CI pipeline, an invariant test net, and an adversarial "chaos" battery (overflow inputs, stop/start abuse, unhappy paths) stand between a model's output and `develop`.
 - **A work board, not a black box** — queued, working, and done items are visible and editable in the UI; the operator can steer, stop (stop aborts the server-side turn), and inspect everything from a phone.
 - **Full observability** — every agent turn is an OpenTelemetry trace (a real 51-span turn is shown below), viewable in Jaeger.
-- **Local inference** — a ~125B-class MoE model served on the host GPU (AMD RX 9070 XT, ROCm/HIP) with a 27B fallback; 128K context. Nothing leaves the machine.
+- **Local inference** — a ~125B-class MoE model served on the host GPU (AMD RX 9070 XT, ROCm/HIP) with a `swift-15-27b-mtp` (27B Q3_K_M with Multi-Token Prediction) fallback; 128K context. Nothing leaves the machine.
 
 ![A real agent turn as a Jaeger trace: 51 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
 
@@ -28,6 +28,19 @@
 ## Architecture
 
 ![Architecture diagram](docs/architecture.drawio.svg)
+
+### Key Engineering Proofs (Code Map)
+
+| System Subsystem | Implementation Proof | Key Capabilities |
+| :--- | :--- | :--- |
+| **Fail-Closed Supervisor** | [`web-ui/lib/subagents/supervisor.ts`](./web-ui/lib/subagents/supervisor.ts) | LangGraph checkpoint engine, crash recovery, crash-to-disk sync, and multi-subagent orchestration |
+| **Pre-Validation & Gates** | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts) | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback |
+| **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts) | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser |
+| **Durable Run Ledger** | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts) | SQLite-backed task state, pause/resume lifecycle, and restart lineage |
+| **Safe Git Operations** | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts) | Argv-safe git commands, branch isolation, and commit validation immune to shell injection |
+| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, image push, Kubernetes rollout wait, and rollback on failure |
+| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary, path traversal guards, and ReDoS-safe workspace inspection |
+| **Enterprise AI Governance** | [`docs/AI_GOVERNANCE.md`](./docs/AI_GOVERNANCE.md) | Deterministic runtime enforcement, NIST AI RMF 1.0 mapping, and OWASP Agentic Top 10 controls |
 
 | Component | Where | Role |
 | :--- | :--- | :--- |
