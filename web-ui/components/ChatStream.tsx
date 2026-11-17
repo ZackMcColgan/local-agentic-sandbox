@@ -43,7 +43,11 @@ import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
-import { reconcilePollDelayMs, shouldStopReconcilePoll } from "../lib/reconcilePollPolicy";
+import {
+  RECONCILE_POLL_MAX_ATTEMPTS,
+  reconcilePollDelayMs,
+  shouldStopReconcilePoll
+} from "../lib/reconcilePollPolicy";
 import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
 import { ThinkingPanel } from "./ThinkingPanel";
@@ -436,6 +440,9 @@ export function ChatStream({
   const turnStartedAtRef = useRef<number | null>(null);
   const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
   const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
+  const [disconnectedAtMs, setDisconnectedAtMs] = useState<number | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState<number>(1);
+  const [recoveredAfterSec, setRecoveredAfterSec] = useState<number>(1);
   const [completedTurnMsgId, setCompletedTurnMsgId] = useState<string | null>(null);
 
   // Any stream-visible change counts as activity for the freshness readout.
@@ -756,6 +763,7 @@ export function ChatStream({
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
     const startedAt = Date.now();
+    setReconnectAttempt(1);
 
     const pollDetachedTurn = async () => {
       try {
@@ -776,7 +784,12 @@ export function ChatStream({
               setHasResolvedDetachedTurn(true);
               // uir-1: surface the RECOVERED banner where the DISCONNECTED
               // banner stood, so the drop and the recovery are both visible.
-              setRecoveredAtMs(Date.now());
+              const now = Date.now();
+              setRecoveredAtMs(now);
+              setRecoveredAfterSec(
+                Math.max(1, Math.round((now - (disconnectedAtMs ?? startedAt)) / 1000))
+              );
+              setDisconnectedAtMs(null);
               return;
             }
           }
@@ -793,6 +806,7 @@ export function ChatStream({
           isActiveView
         })
       ) {
+        setReconnectAttempt(attempts + 1);
         pollTimer = setTimeout(pollDetachedTurn, reconcilePollDelayMs(attempts));
       }
     };
@@ -1474,6 +1488,7 @@ export function ChatStream({
       } else {
         console.error("[ChatStream] Stream interrupted mid-approval:", err);
         if (targetThreadId && err.isTerminalServerError !== true) {
+          setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(targetThreadId);
           setStreamStatus("Connection interrupted — turn continuing server-side...");
@@ -1903,6 +1918,7 @@ export function ChatStream({
         // offline simulations must render the error banner + Retry surface instead.
         if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
           // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
+          setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(currentTid);
           setStreamStatus("Connection interrupted — turn continuing server-side...");
@@ -2230,7 +2246,7 @@ export function ChatStream({
                     displayContextTokens > 85000
                       ? "text-rose-600 dark:text-rose-400"
                       : displayContextTokens > 70000
-                      ? "text-zinc-600 dark:text-zinc-400"
+                      ? "text-amber-600 dark:text-amber-400"
                       : "text-slate-700 dark:text-zinc-100"
                   }`}
                 >
@@ -2247,18 +2263,20 @@ export function ChatStream({
                 the redline. */}
             <div
               data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
+              className="relative h-[6px] w-[128px] @lg/chat:w-[240px] rounded-full bg-slate-200 dark:bg-zinc-800 shrink-0"
             >
               <div
+                data-testid="context-meter-fill"
                 className={`h-full rounded-full transition-all ${
                   displayContextTokens > 85000
                     ? "bg-rose-500"
                     : displayContextTokens > 70000
-                    ? "bg-zinc-500"
+                    ? "bg-amber-500"
                     : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
                 }`}
                 style={{
-                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`
+                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`,
+                  minWidth: displayContextTokens > 0 ? "4px" : "0px",
                 }}
               />
               <span
@@ -2627,7 +2645,7 @@ export function ChatStream({
                     );
                     if (!shouldRenderThinking && !showDoneChip) return null;
 
-                    const rawThought = m.thought || (isStreamingThis && !m.content ? "Analyzing prompt and formulating execution plan..." : "");
+                    const rawThought = m.thought || "";
 
                     // uir-1 (UI-017): activity header inputs. The phase is the
                     // latest observed tool in words; the round comes only from
@@ -2659,6 +2677,7 @@ export function ChatStream({
                             lastActivityAtMs={lastActivityAtMs}
                             round={m.roundPromptTokens?.length}
                             traceCount={traceCount}
+                            traces={isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces}
                             phaseLabel={phaseLabel}
                             activityLabel={statusTool ? null : streamStatus}
                             isStreaming={isStreamingThis}
@@ -3498,6 +3517,26 @@ export function ChatStream({
           );
         })()}
 
+        {isLoading && (
+          <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
+            <div
+              data-testid="running-pill"
+              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-xs font-mono font-medium text-emerald-300 shadow-lg backdrop-blur-sm"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                {`RUNNING${
+                  (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
+                    ? ` · Round ${messages[messages.length - 1]?.roundPromptTokens?.length}`
+                    : ""
+                } · ${formatElapsedDuration(
+                  Math.max(0, Math.floor((Date.now() - (turnStartedAtRef.current ?? Date.now())) / 1000))
+                )}`}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
             drops mid-turn, RECOVERED when the detached turn is reconciled.
             Both render at the interruption point so the drop and the
@@ -3512,10 +3551,10 @@ export function ChatStream({
             return (
               <div
                 data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium w-full max-w-xl"
+                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
               >
-                <Loader2 className="h-4 w-4 animate-spin text-zinc-600 dark:text-zinc-400 shrink-0" />
-                <span>⚠ DISCONNECTED · Connection interrupted — turn continuing server-side, reconnecting…</span>
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/${RECONCILE_POLL_MAX_ATTEMPTS})`}</span>
               </div>
             );
           }
@@ -3525,7 +3564,7 @@ export function ChatStream({
                 data-testid="stream-recovered-banner"
                 className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium w-full max-w-xl"
               >
-                <span>↻ RECOVERED · Reconnected — turn state restored from the record</span>
+                <span>{`↻ RECOVERED · Reconnected after ${recoveredAfterSec}s`}</span>
               </div>
             );
           }

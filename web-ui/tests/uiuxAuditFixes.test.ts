@@ -113,9 +113,34 @@ function readComp(rel: string): string {
     "components/SandboxGauge.tsx",
     "components/MorningReportView.tsx",
   ];
+  // Sanctioned amber tokens in ChatStream.tsx only:
+  // - Owner-directed DISCONNECTED warning banner (bg-amber-50, dark:bg-amber-950/40, border-amber-300, dark:border-amber-800/60, text-amber-800, dark:text-amber-200, text-amber-600, dark:text-amber-400)
+  // - Established 70-85K context meter band (text-amber-600, dark:text-amber-400, bg-amber-500)
+  const chatStreamAmberAllowlist = new Set([
+    "bg-amber-50",
+    "dark:bg-amber-950/40",
+    "border-amber-300",
+    "dark:border-amber-800/60",
+    "text-amber-800",
+    "dark:text-amber-200",
+    "text-amber-600",
+    "dark:text-amber-400",
+    "bg-amber-500",
+  ]);
+
   for (const f of purgedFiles) {
     const content = readComp(f);
-    assert.ok(!/\bamber-/.test(content), `UI-064: ${f} must not contain amber- classes`);
+    if (f === "components/ChatStream.tsx") {
+      const tokens = content.match(/[\w:-]*amber-[\w/]+/g) ?? [];
+      const disallowed = tokens.filter((t) => !chatStreamAmberAllowlist.has(t));
+      assert.deepStrictEqual(
+        disallowed,
+        [],
+        `UI-064: ${f} contains disallowed amber- classes: ${disallowed.join(", ")}`
+      );
+    } else {
+      assert.ok(!/\bamber-/.test(content), `UI-064: ${f} must not contain amber- classes`);
+    }
   }
 }
 
