@@ -118,11 +118,54 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
           });
           getThreadStore().saveThread(currentThread);
         }
+      } else {
+        const currentThread = await getThreadStore().getThread(activeThreadId);
+        if (currentThread) {
+          currentThread.status =
+            result.status === "failed" || (result.status as string) === "crashed"
+              ? "failed"
+              : result.status === "paused"
+                ? "paused"
+                : "stopped";
+          const lastJournalReason =
+            Array.isArray(result.journal) && result.journal.length > 0
+              ? [...result.journal].reverse().find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)?.message
+              : undefined;
+          const reason =
+            result.errorSummary ||
+            result.parkedReason ||
+            lastJournalReason ||
+            result.ambiguityFlags?.[0]?.question ||
+            "Task did not reach completion.";
+          currentThread.messages.push({
+            id: `msg-${Date.now()}-term`,
+            role: "assistant",
+            content: `Task ${result.status}: ${reason}`,
+            taskId,
+            timestamp: new Date().toISOString()
+          });
+          getThreadStore().saveThread(currentThread);
+        }
       }
     } catch (err: any) {
       console.error(`[threads/[id]] Task ${taskId} execution failed:`, err?.message || err);
+      const errReason = err?.message || String(err);
       try {
-        supervisor.parkTask(manifest, `Execution failure: ${err?.message || err}`);
+        supervisor.parkTask(manifest, `Execution failure: ${errReason}`);
+      } catch {}
+      try {
+        const currentThread = await getThreadStore().getThread(activeThreadId);
+        if (currentThread) {
+          currentThread.status = "failed";
+          currentThread.messages.push({
+            id: `msg-${Date.now()}-err`,
+            role: "assistant",
+            content: `Task failed: ${errReason}`,
+            taskId,
+            timestamp: new Date().toISOString()
+          });
+          getThreadStore().saveThread(currentThread);
+        }
       } catch {}
     } finally {
       activeExecutionSet.delete(taskId);

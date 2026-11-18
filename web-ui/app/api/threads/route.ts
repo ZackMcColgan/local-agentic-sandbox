@@ -342,7 +342,15 @@ export async function POST(req: Request) {
             const currentThread = await threadStore.getThread(activeThreadId);
             if (currentThread) {
               currentThread.status = result.status === "failed" || (result.status as string) === "crashed" ? "failed" : result.status === "paused" ? "paused" : "stopped";
-              const reason = result.parkedReason || (result.ambiguityFlags?.[0]?.question) || "Task did not reach completion.";
+              const lastJournalReason = Array.isArray(result.journal) && result.journal.length > 0
+                ? [...result.journal].reverse().find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)?.message
+                : undefined;
+              const reason =
+                result.errorSummary ||
+                result.parkedReason ||
+                lastJournalReason ||
+                result.ambiguityFlags?.[0]?.question ||
+                "Task did not reach completion.";
               currentThread.messages.push({
                 id: `msg-${Date.now()}-term`,
                 role: "assistant",
