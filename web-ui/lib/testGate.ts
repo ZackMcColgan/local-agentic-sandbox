@@ -232,8 +232,9 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/threads/route") ||
       p.includes("app/api/threads/[id]/route") ||
       p.includes("lib/subagents/workerPool") ||
-      p.includes("slotScheduler.test.ts"),
-    tests: ["tests/slotScheduler.test.ts"]
+      p.includes("slotScheduler.test.ts") ||
+      p.includes("slotUtilizationMetrics.test.ts"),
+    tests: ["tests/slotScheduler.test.ts", "tests/slotUtilizationMetrics.test.ts"]
   },
   {
     match: (p) =>

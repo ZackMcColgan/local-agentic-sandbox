@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { AmbiguityFlag, TaskManifest } from "./types.js";
+import { getSharedSlotScheduler, SlotUtilizationMetrics } from "../slotScheduler";
 
 export interface MorningReportMilestone {
   id: string;
@@ -84,6 +85,7 @@ export interface OvernightMorningReport {
   tasks: OvernightTaskEntry[];
   artifactsProduced: MorningReportArtifact[];
   attentionItems: OvernightAttentionItem[];
+  slotMetrics?: SlotUtilizationMetrics;
   summaryMarkdown: string;
 }
 
@@ -100,6 +102,7 @@ export interface MorningReportInput {
   ambiguityFlags: AmbiguityFlag[];
   parkedItems: string[];
   testTiers?: TestTierSummary[];
+  slotMetrics?: SlotUtilizationMetrics;
 }
 
 export interface MorningReport extends MorningReportInput {
@@ -415,6 +418,7 @@ export function generateOvernightMorningReport(
     tasks: entries,
     artifactsProduced: allArtifacts,
     attentionItems,
+    slotMetrics: getSharedSlotScheduler().getMetrics(),
     summaryMarkdown: ""
   };
 
@@ -477,6 +481,17 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
       const icon = item.status === "parked" ? "⚠️ **PARKED**" : "❌ **FAILED**";
       lines.push(`- ${icon} (\`${item.taskId}\` — *${item.goal}*): ${item.reason}`);
     }
+  }
+
+  if (report.slotMetrics) {
+    const m = report.slotMetrics;
+    lines.push("");
+    lines.push("## 4. Slot Utilization & Preemption");
+    lines.push("");
+    lines.push(`- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`);
+    lines.push(`- **Preemptions**: ${m.preemptionsCount}`);
+    lines.push(`- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`);
+    lines.push(`- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`);
   }
 
   return lines.join("\n");
