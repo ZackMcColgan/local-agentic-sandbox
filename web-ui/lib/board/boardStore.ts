@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { BOARD_SEED_ITEMS } from "./boardSeed";
 
-export type BoardStatus = "queued" | "working" | "pr-open" | "parked" | "done";
+export type BoardStatus = "queued" | "working" | "pr-open" | "parked" | "needs-attention" | "done";
 export type BoardSource = "assistant" | "manual";
 
 export interface BoardEvidence {
@@ -23,6 +23,7 @@ export interface BoardItem {
   author: "Owner";
   source: BoardSource;
   parkedReason?: string;
+  needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
   sprint?: string;
@@ -40,6 +41,7 @@ export interface CreateBoardItemInput {
   author: "Owner";
   source: BoardSource;
   parkedReason?: string;
+  needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
   sprint?: string;
@@ -52,6 +54,7 @@ export interface UpdateBoardItemInput {
   dependencies?: string[];
   status?: BoardStatus;
   parkedReason?: string;
+  needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
   sprint?: string;

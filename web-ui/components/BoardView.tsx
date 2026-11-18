@@ -15,7 +15,7 @@ const COLUMNS: { status: BoardStatus; label: string }[] = [
   { status: "queued", label: "QUEUED" },
   { status: "working", label: "WORKING" },
   { status: "pr-open", label: "PR OPEN" },
-  { status: "parked", label: "PARKED" },
+  { status: "parked", label: "ATTENTION / PARKED" },
   { status: "done", label: "DONE" },
 ];
 
@@ -48,10 +48,15 @@ export function BoardView({
       working: [],
       "pr-open": [],
       parked: [],
+      "needs-attention": [],
       done: [],
     };
     for (const item of filteredItems) {
-      map[item.status]?.push(item);
+      if (item.status === "needs-attention") {
+        map.parked.push(item);
+      } else {
+        map[item.status]?.push(item);
+      }
     }
     return map;
   }, [filteredItems]);
@@ -135,7 +140,7 @@ export function BoardView({
           </div>
         )}
 
-        {item.status === "parked" && item.parkedReason && (
+        {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
           <div className="pt-2 text-[12px] text-zinc-400">
             {item.parkedReason}
           </div>
@@ -150,6 +155,11 @@ export function BoardView({
         )}
 
         <div className="flex flex-wrap gap-1.5 pt-2">
+          {(item.needsAttention || item.status === "needs-attention") && (
+            <span className="rounded-full border border-zinc-600 bg-zinc-900 px-2 py-0.5 text-[10.5px] font-medium text-zinc-200">
+              needs attention
+            </span>
+          )}
           {deps.length > 0 && !allDepsDone && (
             <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
               waits on <b className="font-semibold text-zinc-300">{waitingOn}</b>

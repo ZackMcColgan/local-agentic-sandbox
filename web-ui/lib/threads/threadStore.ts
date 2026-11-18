@@ -105,6 +105,8 @@ export interface ThreadMessage {
   };
   timestamp: string;
   taskId?: string;
+  error?: string;
+  parkedReason?: string;
   isStopped?: boolean;
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
@@ -231,6 +233,8 @@ export interface ThreadSummary {
   model?: string;
   reasoningEffort?: Thread["reasoningEffort"];
   taskId?: string;
+  error?: string;
+  parkedReason?: string;
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;
@@ -251,6 +255,8 @@ export interface Thread {
   compaction?: ThreadCompactionBoundary;
   hostAccess?: boolean;
   taskId?: string;
+  error?: string;
+  parkedReason?: string;
   scope?: TaskScope;
   workerInfo?: string;
   timeLabel?: string;
@@ -886,14 +892,20 @@ export class ThreadStore {
           const isActivelyRunning = activeExecutionSet.has(task.taskId);
           const honestStatus = isActivelyRunning
             ? "active"
-            : (task.status === "paused"
-                ? "paused"
-                : (task.status === "active" ? "stopped" : (task.status === "completed" ? "completed" : "stopped")));
+            : task.status === "paused"
+              ? "paused"
+              : task.status === "parked"
+                ? "parked"
+                : task.status === "failed"
+                  ? "failed"
+                  : task.status === "completed"
+                    ? "completed"
+                    : "stopped";
 
           const newThread: Thread = {
             id: `thread-${task.taskId}`,
             title: deriveThreadTitle(task.goal),
-            status: honestStatus,
+            status: honestStatus as Thread["status"],
             createdAt: task.startedAt || new Date().toISOString(),
             updatedAt: task.updatedAt || task.startedAt || new Date().toISOString(),
             model: "swift-15-27b-mtp",
@@ -1039,6 +1051,8 @@ export class ThreadStore {
             ...(t.model !== undefined ? { model: t.model } : {}),
             ...(t.reasoningEffort !== undefined ? { reasoningEffort: t.reasoningEffort } : {}),
             ...(t.taskId !== undefined ? { taskId: t.taskId } : {}),
+            ...((t as { error?: string }).error !== undefined ? { error: (t as { error?: string }).error } : {}),
+            ...((t as { parkedReason?: string }).parkedReason !== undefined ? { parkedReason: (t as { parkedReason?: string }).parkedReason } : {}),
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,
@@ -1194,6 +1208,8 @@ export class ThreadStore {
     initialPrompt?: string;
     attachments?: ThreadAttachment[];
     taskId?: string;
+  error?: string;
+  parkedReason?: string;
     scope?: TaskScope;
     isTest?: boolean;
   isSubagent?: boolean;
