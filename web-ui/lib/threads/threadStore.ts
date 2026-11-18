@@ -12,7 +12,8 @@ import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconom
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
-import { superviseStalledThread } from "./inAppSupervisor";
+import { superviseStalledThread, STALL_WINDOW_MS } from "./inAppSupervisor";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
@@ -139,7 +140,7 @@ export interface ThreadMessage {
 export type ThreadLiveness = "alive" | "stalled" | "settled";
 
 /** How long a live turn may go without a record touch before it reads as stalled. */
-export const TURN_STALL_WINDOW_MS = 600000;
+export const TURN_STALL_WINDOW_MS = STALL_WINDOW_MS;
 
 /**
  * qa-6 / UI-001 + UI-002: hard cap on zombie live signals. A turn-presence
@@ -1220,7 +1221,7 @@ export class ThreadStore {
       status: params.taskId ? "active" : "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      model: params.model || "swift-15-27b-mtp",
+      model: params.model || DEFAULT_PRIMARY_MODEL,
       reasoningEffort: params.reasoningEffort || "medium",
       hostAccess,
       taskId: params.taskId,

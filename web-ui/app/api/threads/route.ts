@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { ThreadStore, activeExecutionSet, Thread } from "@/lib/threads/threadStore";
+import { ThreadStore, activeExecutionSet, Thread, resolveThreadsDir } from "@/lib/threads/threadStore";
 import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
@@ -9,11 +9,12 @@ import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import type { ChunkBudgetConfig } from "@/lib/jobChunking";
 
-const threadStore = new ThreadStore();
-const supervisor = new OvernightSupervisor();
+const getThreadStore = () => new ThreadStore(resolveThreadsDir());
+const getSupervisor = () => new OvernightSupervisor();
 
 export async function GET(req: Request) {
   try {
+    const threadStore = getThreadStore();
     const url = new URL(req.url);
     const full = url.searchParams.get("full") === "1";
     const q = url.searchParams.get("q")?.trim() || undefined;
@@ -28,6 +29,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const threadStore = getThreadStore();
+    const supervisor = getSupervisor();
     const body = await req.json();
 
     // 1. Action: Launch engineering builder task inside a thread
@@ -151,13 +154,26 @@ export async function POST(req: Request) {
       }
 
       const activeThreadId = thread.id;
+      (manifest as any).threadId = activeThreadId;
+      if (chunkBudget !== undefined) {
+        (manifest as any).chunkBudget = chunkBudget;
+      }
 
       // Kick off actual execution — fire-and-forget so the API returns immediately.
       let lastThinkingUpdate = 0;
       let lastRecordedLength = 0;
 
       const executor = createProductionStepExecutor({
-        workerPool: new WorkerPool({ scope }),
+        workerPool: new WorkerPool({
+          scope,
+          modelRoster: {
+            planner: effectiveModel,
+            builder: effectiveModel,
+            critic: effectiveModel,
+            explorer: effectiveModel,
+            recorder: effectiveModel
+          }
+        }),
         model: effectiveModel,
         scope,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
@@ -271,6 +287,7 @@ export async function POST(req: Request) {
               }
 
               const repoCandidates = [
+                (result as any).worktreePath,
                 process.env.WORKSPACE_DIR,
                 "/workspace",
                 process.cwd(),

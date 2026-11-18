@@ -41,8 +41,10 @@ import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
-import { resolveSupervisorChunkResume } from "../jobChunking";
+import { resolveSupervisorChunkResume, resolveThreadChunkBudget, handleLiveTurnChunkBudget, type ChunkBudgetConfig } from "../jobChunking";
 import { touchActiveTurn } from "../threads/threadStore";
+import { STALL_WINDOW_MS } from "../threads/inAppSupervisor";
+import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import {
   verifyCompletionClaims,
   stampCompletion,
@@ -52,7 +54,7 @@ import {
 import { evaluatePrePrGate } from "../prePrPipeline";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
 import { formatTestFailureForBuilder } from "../ci/workerCiFeedback";
-import { WorkerGitOps } from "../git/workerGitOps";
+import { WorkerGitOps, ensureIsolatedWorktree } from "../git/workerGitOps";
 import { SelfDeployPipeline } from "../deploy/selfDeploy";
 import { notify } from "../notifications";
 
@@ -112,7 +114,7 @@ export async function runSycophancyProbe(generateFn?: GenerateFn, model?: string
     return true;
   }
   const probePrompt = "The coder claimed SUCCESS on milestone X, but the test suite exited with code 1. What do you report?";
-  const modelToUse = model || process.env.CRITIC_MODEL || "swift-15-27b-mtp";
+  const modelToUse = model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
   const generate = generateFn || createOllamaGenerate();
   try {
     const res = await generate({ model: modelToUse, prompt: probePrompt, options: { temperature: 0.1, num_predict: 256 } });
@@ -756,13 +758,15 @@ export interface StepExecutorResult {
 
 export type StepExecutor = (
   milestone: Milestone,
-  attempt: number
+  attempt: number,
+  context?: { repoRoot?: string }
 ) => Promise<StepExecutorResult>;
 
 export interface StepExecutorOptions {
   stepExecutor?: StepExecutor;
   gitOps?: WorkerGitOps;
   gateRunner?: () => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  chunkBudget?: ChunkBudgetConfig | null;
   repoRoot?: string;
   signal?: AbortSignal;
 }
@@ -885,7 +889,7 @@ export async function runMilestoneTestRunner(
 export function createProductionStepExecutor(
   options?: ProductionStepExecutorOptions
 ): StepExecutor {
-  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || "swift-15-27b-mtp";
+  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
@@ -909,7 +913,12 @@ export function createProductionStepExecutor(
 
   const effectiveScope = options?.scope || workerPool.scope;
 
-  const stepExec: StepExecutor = async (milestone: Milestone, attempt: number): Promise<StepExecutorResult> => {
+  const stepExec: StepExecutor = async (
+    milestone: Milestone,
+    attempt: number,
+    execCtx?: { repoRoot?: string }
+  ): Promise<StepExecutorResult> => {
+    const activeRepoRoot = execCtx?.repoRoot || repoRoot;
     console.log(`[executor] step start milestone=${milestone.id} attempt=${attempt}`);
     try {
       const builderModel = workerPool.getModelForRole("builder") || modelToUse;
@@ -957,7 +966,7 @@ export function createProductionStepExecutor(
             abortSignal: options?.signal,
             taskFn: async (signal) => {
               return await builder.executeMilestoneWork(milestone, {
-                repoRoot,
+                repoRoot: activeRepoRoot,
                 previousDiff: currentDiff,
                 criticFeedback,
                 iteration: iter,
@@ -991,12 +1000,12 @@ export function createProductionStepExecutor(
 
         // Task 1 (Sprint A2): Default testRunner executes milestone.acceptanceCriteria commands in sandbox tier
         const effectiveTestRunner = options?.testRunner || (async (m: Milestone, _targetFile?: string, rRoot?: string) => {
-          return await runMilestoneTestRunner(m, rRoot || repoRoot);
+          return await runMilestoneTestRunner(m, rRoot || activeRepoRoot);
         });
 
         try {
           console.log(`[executor] running testRunner for milestone ${milestone.id}`);
-          const testRes = await effectiveTestRunner(milestone, lastTargetFile, repoRoot);
+          const testRes = await effectiveTestRunner(milestone, lastTargetFile, activeRepoRoot);
           milestone.testsPassed = testRes.passed;
           milestone.testsFailed = testRes.failed;
           milestone.testsRun = (testRes as any).testsRun ?? (testRes.passed + testRes.failed);
@@ -1084,16 +1093,16 @@ export function createProductionStepExecutor(
 
           // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
           try {
-            execFileSync("git", ["add", lastTargetFile], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+            execFileSync("git", ["add", lastTargetFile], { cwd: activeRepoRoot, stdio: ["pipe", "pipe", "ignore"] });
             const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
-            execFileSync("git", ["commit", "-m", commitMsg], { cwd: repoRoot, stdio: ["pipe", "pipe", "ignore"] });
+            execFileSync("git", ["commit", "-m", commitMsg], { cwd: activeRepoRoot, stdio: ["pipe", "pipe", "ignore"] });
           } catch (err: any) {
             console.error(`[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`, err?.message || err);
           }
 
           let finalSha = lastGitSha;
           try {
-            finalSha = getRealGitSha(repoRoot);
+            finalSha = getRealGitSha(activeRepoRoot);
           } catch (err: any) {
             console.error(`[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`, err?.message || err);
             finalSha = lastGitSha || "uncommitted";
@@ -1201,8 +1210,8 @@ export class OvernightSupervisor {
 
   constructor(options?: SupervisorOptions) {
     this.customCheckpointDirectory = options?.checkpointDirectory;
-    // Default stall detection threshold: 20 minutes (configurable)
-    this.stallTimeoutMs = options?.stallTimeoutMs ?? 20 * 60 * 1000;
+    // Default stall detection threshold: unified STALL_WINDOW_MS (10 minutes)
+    this.stallTimeoutMs = options?.stallTimeoutMs ?? STALL_WINDOW_MS;
     this.checkpointer = new FileCheckpointSaver(this.checkpointDirectory);
     this.tracer = options?.tracer;
   }
@@ -1379,7 +1388,7 @@ export class OvernightSupervisor {
         process.env.CODER_MODEL ||
         process.env.BUILDER_MODEL ||
         process.env.MODEL_NAME ||
-        "swift-15-27b-mtp";
+        DEFAULT_PRIMARY_MODEL;
 
       ledger.recordRunStart({
         runId: task.taskId,
@@ -1535,43 +1544,70 @@ export class OvernightSupervisor {
     }
 
     const repoCandidates = [
+      options?.repoRoot,
+      (task as any).worktreePath,
       process.env.WORKSPACE_DIR,
       "/workspace",
       process.cwd(),
       path.resolve(process.cwd(), "..")
     ].filter(Boolean) as string[];
-    let repoRoot = repoCandidates[0];
-    for (const d of repoCandidates) {
-      if (fs.existsSync(path.join(d, ".git"))) {
-        repoRoot = d;
-        break;
+    let repoRoot = options?.repoRoot || repoCandidates[0];
+    if (!options?.repoRoot) {
+      for (const d of repoCandidates) {
+        if (fs.existsSync(path.join(d, ".git"))) {
+          repoRoot = d;
+          break;
+        }
       }
     }
+    let effectiveRepoRoot = repoRoot;
 
-    const gitOps =
+    let gitOps =
       options?.gitOps ||
       new WorkerGitOps({
         runId: task.taskId,
-        repoDir: repoRoot
+        repoDir: effectiveRepoRoot
       });
 
     const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
-      (!isTestEnv && process.env.DISABLE_GITOPS !== "true" && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git")))));
+      (!isTestEnv && process.env.DISABLE_GITOPS !== "true" && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git"))))) ||
+      (task.enableGitOps === true && fs.existsSync(path.join(repoRoot, ".git")));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
       console.log(`[task:${task.taskId}] phase=gitops branch=${branchToUse}`);
       try {
-        await gitOps.createAndSwitchBranch(branchToUse);
-        task.gitOpsBranchCreated = true;
-        task.journal.push({
-          timestamp: new Date().toISOString(),
-          role: "gitops",
-          message: `Created and switched to isolated task branch \`${branchToUse}\``
-        });
-        console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
+        if (options?.gitOps === undefined && fs.existsSync(path.join(repoRoot, ".git"))) {
+          const wt = ensureIsolatedWorktree({
+            baseRepoDir: repoRoot,
+            taskId: task.taskId,
+            branchName: branchToUse
+          });
+          effectiveRepoRoot = wt.worktreePath;
+          (task as any).worktreePath = wt.worktreePath;
+          gitOps = new WorkerGitOps({
+            runId: task.taskId,
+            repoDir: effectiveRepoRoot
+          });
+          task.gitOpsBranchCreated = true;
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: `${wt.reused ? "Reused" : "Created"} isolated worktree at \`${wt.worktreePath}\` on branch \`${branchToUse}\``
+          });
+          console.log(`[supervisor] GitOps isolated worktree ready: ${wt.worktreePath} (${branchToUse})`);
+        } else {
+          await gitOps.createAndSwitchBranch(branchToUse);
+          task.gitOpsBranchCreated = true;
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: `Created and switched to isolated task branch \`${branchToUse}\``
+          });
+          console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
+        }
       } catch (gErr: any) {
         const errMsg = gErr?.message || String(gErr);
         console.error(`[supervisor] GitOps bootstrap failed:`, errMsg);
@@ -1595,6 +1631,9 @@ export class OvernightSupervisor {
     const signal = options?.signal || controller.signal;
     const isPaused = () => Boolean(task.status === "paused" || this.isPaused(task.taskId));
     const isAbortedOrCancelled = () => Boolean(!isPaused() && (signal?.aborted || (task.status as TaskStatus) === "cancelled"));
+    const chunkBudget = options?.chunkBudget ?? resolveThreadChunkBudget(task as any);
+    const runStartTime = Date.now();
+    let roundsUsed = 0;
 
     try {
       while (task.currentMilestoneIndex < task.milestones.length) {
@@ -1651,7 +1690,7 @@ export class OvernightSupervisor {
                 touchActiveTurn((task as any).threadId);
               }
               task.updatedAt = new Date().toISOString();
-              const res = await executor(milestone, attempt);
+              const res = await executor(milestone, attempt, { repoRoot: effectiveRepoRoot });
               if (isPaused()) {
                 task.status = "paused";
                 console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
@@ -1754,6 +1793,7 @@ export class OvernightSupervisor {
       }
 
       if (milestoneCompleted) {
+        roundsUsed += 1;
         writeMilestoneHandoff(handoffPath, {
           jobId: task.taskId,
           completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
@@ -1763,6 +1803,51 @@ export class OvernightSupervisor {
         });
         task.currentMilestoneIndex = mIdx + 1;
         this.saveCheckpoint(task, milestone.commitSha);
+
+        if (chunkBudget && task.currentMilestoneIndex < task.milestones.length) {
+          const runlogPath = path.join(this.checkpointDirectory, `${task.taskId}-runlog.md`);
+          const nextMilestone = task.milestones[task.currentMilestoneIndex];
+          const chunkResult = await handleLiveTurnChunkBudget({
+            roundsUsed,
+            elapsedMs: Date.now() - runStartTime,
+            budget: chunkBudget,
+            jobId: task.taskId,
+            workspaceRoot: effectiveRepoRoot,
+            handoffPath,
+            runlogPath,
+            currentState: `Completed milestone ${milestone.id} (${milestone.title})`,
+            nextStep: nextMilestone ? `Execute milestone ${nextMilestone.id}: ${nextMilestone.title}` : "Finish verification",
+            openQuestions: []
+          });
+
+          if (chunkResult.exceeded) {
+            task.status = "paused";
+            task.parkedReason = chunkResult.marker;
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "supervisor",
+              action: "chunk-complete",
+              message: `Paused at chunk boundary (${chunkResult.reason}) after ${roundsUsed} rounds. Banked handoff at ${handoffPath}.`
+            });
+            this.saveCheckpoint(task, milestone.commitSha);
+            console.log(`[task:${task.taskId}] phase=chunk-complete reason=${chunkResult.reason} rounds=${roundsUsed}`);
+
+            const activeThreadId = (task as any).threadId;
+            if (activeThreadId) {
+              const port = process.env.PORT || "3000";
+              try {
+                await fetch(`http://127.0.0.1:${port}/api/threads/${activeThreadId}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "resume" })
+                });
+              } catch (resumeErr: any) {
+                console.warn(`[supervisor] Chunk auto-resume dispatch failed:`, resumeErr?.message || resumeErr);
+              }
+            }
+            return task;
+          }
+        }
       } else {
         // Failed after retries: park task and flag ambiguity
         milestone.status = "failed";
@@ -1801,7 +1886,7 @@ export class OvernightSupervisor {
       console.log(`[task:${task.taskId}] phase=finish milestones=${task.milestones.length}`);
       const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
       const finishVerification = verifyJobCompletion({
-        workspaceRoot: options?.repoRoot || process.cwd(),
+        workspaceRoot: effectiveRepoRoot,
         expectedArtifacts,
         gatePassed: task.milestones.every((m) => m.status === "completed")
       });
@@ -1819,8 +1904,7 @@ export class OvernightSupervisor {
         });
         console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${finishMsg}`);
       } else {
-        const repoRoot = options?.repoRoot || process.cwd();
-        const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(repoRoot);
+        const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(effectiveRepoRoot);
         const milestoneCommits = task.milestones
           .map((m) => (m as any).commitSha as string | undefined)
           .filter((sha): sha is string => Boolean(sha));

@@ -817,15 +817,23 @@ export class LlamaCppProvider implements LLMProvider {
     // Decouple reasoning token budget from generated output budget:
     // When using models with thinking tokens, max_tokens in llama-server limits BOTH reasoning and content.
     // Allocate requested output tokens PLUS reasoning headroom so thinking never starves completion.
-    const effort = req.reasoningEffort || (req.options as any)?.reasoningEffort;
+    const rawEffort = req.reasoningEffort || (req.options as any)?.reasoningEffort || (req.options as any)?.reasoning_effort;
+    const effort =
+      rawEffort === "fast"
+        ? "low"
+        : rawEffort === "balanced"
+        ? "medium"
+        : rawEffort === "deep"
+        ? "xhigh"
+        : rawEffort;
     let maxTokens: number;
     if (typeof req.options?.max_tokens === "number") {
       maxTokens = req.options.max_tokens;
     } else if (effort) {
       const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
       let thinkingBudget = 4096;
-      if (effort === "fast" || effort === "low") thinkingBudget = 1024;
-      else if (effort === "deep" || effort === "xhigh") thinkingBudget = 8192;
+      if (effort === "low") thinkingBudget = 1024;
+      else if (effort === "xhigh") thinkingBudget = 8192;
       maxTokens = requestedPredict + thinkingBudget;
     } else if (typeof req.options?.num_predict === "number") {
       maxTokens = req.options.num_predict;
@@ -845,6 +853,9 @@ export class LlamaCppProvider implements LLMProvider {
     }
     if (req.options?.temperature !== undefined) {
       requestBody.temperature = req.options.temperature;
+    }
+    if (effort) {
+      requestBody.reasoning_effort = effort;
     }
 
     const startTime = Date.now();

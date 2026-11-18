@@ -756,8 +756,22 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/productionTestRunnerWiring.test.ts",
       "tests/threadsResumeRestartExecution.test.ts",
       "tests/supervisorGitOpsIntegration.test.ts",
-      "tests/taskPathObservability.test.ts"
+      "tests/taskPathObservability.test.ts",
+      "tests/taskPathExecutionFix.test.ts"
     ]
+  },
+  {
+    match: (p) =>
+      p.includes("taskPathExecutionFix.test.ts") ||
+      p.includes("lib/git/workerGitOps") ||
+      p.includes("lib/subagents/planner") ||
+      p.includes("lib/subagents/workerPool") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("lib/jobChunking") ||
+      p.includes("app/api/threads/route") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("lib/threads/threadStore"),
+    tests: ["tests/taskPathExecutionFix.test.ts"]
   },
   {
     match: (p) =>
