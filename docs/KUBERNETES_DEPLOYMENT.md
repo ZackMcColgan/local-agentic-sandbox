@@ -7,7 +7,7 @@ Docker Compose is **not** used for the live deployment.
 
 | Component | Location | Notes |
 |-----------|----------|-------|
-| web-ui | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v1.0.0` with `imagePullPolicy: Never` |
+| web-ui | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v-<sha>-<timestamp>` (built & imported by `scripts/deploy-cluster.js`) with `imagePullPolicy: Never` |
 | browser-mcp | K8s | Web search + page fetch |
 | mcp-runner | K8s | Sandboxed code execution |
 | qdrant | K8s | Semantic memory |
@@ -58,10 +58,16 @@ git pull origin develop
 make k8s-deploy
 ```
 
-Manual equivalent (no `make` on Windows — run from repo root so workspace `COPY` paths resolve):
+Manual equivalent (Windows — run from repo root so workspace `COPY` paths resolve, then import into the `desktop-control-plane` containerd node because `imagePullPolicy: Never` reads from `k8s.io` containerd storage):
 ```powershell
-docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile .
-kubectl rollout restart deployment/web-ui -n local-agentic-sandbox
+docker build -t local-agentic-sandbox-web-ui:manual -f web-ui/Dockerfile .
+docker save local-agentic-sandbox-web-ui:manual -o web-ui.tar
+docker exec desktop-control-plane mkdir -p /images
+docker cp web-ui.tar desktop-control-plane:/images/image.tar
+docker exec desktop-control-plane ctr -n k8s.io images import /images/image.tar
+docker exec desktop-control-plane rm -f /images/image.tar
+Remove-Item web-ui.tar
+kubectl set image deployment/web-ui web-ui=local-agentic-sandbox-web-ui:manual -n local-agentic-sandbox
 kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
 ```
 
@@ -80,11 +86,11 @@ Scheduled Task that runs the port-forward command at logon.
 ## Fresh install
 
 ```bash
-# Build image from repo root first (imagePullPolicy: Never requires it locally)
-docker build -t local-agentic-sandbox-web-ui:v1.0.0 -f web-ui/Dockerfile .
-
-# Deploy everything
+# 1. Apply namespaces, services, PVCs, and deployments
 kubectl apply -k deploy/k8s
+
+# 2. Build all three images (mcp-server, browser-mcp, web-ui), import into containerd, and roll out
+node scripts/deploy-cluster.js all
 ```
 
 ## Troubleshooting
