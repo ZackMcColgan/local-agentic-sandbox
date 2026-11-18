@@ -517,7 +517,7 @@ export function NavigationDrawer({
 
           {/* Footer info */}
           <div className="pt-2 pb-1 px-3 text-[11px] text-slate-400 dark:text-zinc-400 font-mono">
-            Local Agentic Sandbox v1.0.0
+            Local Agentic Sandbox
           </div>
         </div>
       </div>
