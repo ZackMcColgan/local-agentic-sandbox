@@ -40,6 +40,7 @@ import { SettingsView } from "@/components/SettingsView";
 import { BuildsView } from "@/components/BuildsView";
 import { BoardView } from "@/components/BoardView";
 import type { BoardItem } from "@/lib/board/boardStore";
+import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
@@ -89,6 +90,9 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [boardItems, setBoardItems] = useState<BoardItem[]>([]);
+  const [boardControlState, setBoardControlState] = useState<BoardControlState>("stopped");
+  const [boardStopAtBoundary, setBoardStopAtBoundary] = useState<boolean>(false);
+  const [isBoardControlPending, setIsBoardControlPending] = useState<boolean>(false);
   const [activeNavView, setActiveNavView] = useState<NavView>("sessions");
   const [draftComposerPrompt, setDraftComposerPrompt] = useState<string | null>(null);
 
@@ -102,7 +106,38 @@ export default function Home() {
         }
       })
       .catch(() => {});
+    fetch("/api/board/control")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.control?.state) {
+          setBoardControlState(data.control.state);
+          setBoardStopAtBoundary(Boolean(data.control.stopAtBoundary));
+        }
+      })
+      .catch(() => {});
   }, [activeNavView]);
+
+  const handleBoardControlAction = async (action: BoardControlAction) => {
+    setIsBoardControlPending(true);
+    try {
+      const res = await fetch("/api/board/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.control?.state) {
+          setBoardControlState(data.control.state);
+          setBoardStopAtBoundary(Boolean(data.control.stopAtBoundary));
+        }
+      }
+    } catch {
+      // Best-effort control update
+    } finally {
+      setIsBoardControlPending(false);
+    }
+  };
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
   const [deployHistory, setDeployHistory] = useState<any[]>([]);
@@ -1249,6 +1284,10 @@ export default function Home() {
             items={boardItems}
             onOpenDrawer={() => setIsDrawerOpen(true)}
             onItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
+            controlState={boardControlState}
+            stopAtBoundary={boardStopAtBoundary}
+            isControlPending={isBoardControlPending}
+            onControlAction={handleBoardControlAction}
             onAskAssistant={(draftPrompt) => {
               setDraftComposerPrompt(draftPrompt);
               setActiveNavView("sessions");
