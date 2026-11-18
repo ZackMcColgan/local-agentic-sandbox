@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { AmbiguityFlag, TaskManifest } from "./types.js";
 import { getSharedSlotScheduler, SlotUtilizationMetrics } from "../slotScheduler";
+import type { DrainReport } from "../board/boardOrchestrator";
 
 export interface MorningReportMilestone {
   id: string;
@@ -697,6 +698,62 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
     }
     lines.push("");
   }
+
+  return lines.join("\n");
+}
+
+/**
+ * Formats a BoardOrchestrator DrainReport as Markdown, reusing ITEM-5 slot
+ * utilization metrics.
+ */
+export function formatDrainReportMarkdown(report: DrainReport): string {
+  const durationFormatted = formatDurationSeconds(Math.round(report.durationMs / 1000));
+  const lines: string[] = [
+    `# Board Drain Report (${report.drainId})`,
+    "",
+    `**Completed**: ${report.completedCount} | **Failed**: ${report.failedCount} | **In Progress**: ${report.inProgressCount} | **Requeued**: ${report.requeuedCount} | **Stop Reason**: \`${report.stopReason}\` | **Duration**: ${durationFormatted}`,
+    "",
+    "## Per-Item Outcomes",
+    "",
+  ];
+
+  if (report.outcomes.length === 0) {
+    lines.push("No board items were executed during this drain.");
+  } else {
+    lines.push("| Key | Title | Outcome | Thread | Reason |");
+    lines.push("| :--- | :--- | :--- | :--- | :--- |");
+    for (const o of report.outcomes) {
+      lines.push(
+        `| \`${o.key}\` | ${o.title} | \`${o.outcome}\` | ${o.threadId ? `\`${o.threadId}\`` : "—"} | ${o.reason || "—"} |`
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push("## Surfaced Issues");
+  lines.push("");
+  if (report.surfacedIssues.length === 0) {
+    lines.push("No surfaced issues.");
+  } else {
+    for (const issue of report.surfacedIssues) {
+      lines.push(`- **${issue.key}** (\`${issue.code}\`): ${issue.message}`);
+    }
+  }
+
+  const m = report.slotUtilization;
+  lines.push("");
+  lines.push("## Slot Utilization & Preemption");
+  lines.push("");
+  lines.push(
+    `- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`
+  );
+  lines.push(`- **Preemptions**: ${m.preemptionsCount}`);
+  lines.push(
+    `- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`
+  );
+  lines.push(
+    `- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`
+  );
 
   return lines.join("\n");
 }
