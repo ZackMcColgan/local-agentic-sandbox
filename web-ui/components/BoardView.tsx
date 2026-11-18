@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import type { BoardItem, BoardStatus } from "@/lib/board/boardStore";
+import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
 import { BoardAddSheet } from "./BoardAddSheet";
 
 export interface BoardViewProps {
@@ -9,6 +10,10 @@ export interface BoardViewProps {
   onOpenDrawer: () => void;
   onItemCreated: (item: BoardItem) => void;
   onAskAssistant: (draftPrompt: string) => void;
+  controlState?: BoardControlState;
+  stopAtBoundary?: boolean;
+  isControlPending?: boolean;
+  onControlAction?: (action: BoardControlAction) => void | Promise<void>;
 }
 
 const COLUMNS: { status: BoardStatus; label: string }[] = [
@@ -24,6 +29,10 @@ export function BoardView({
   onOpenDrawer,
   onItemCreated,
   onAskAssistant,
+  controlState = "stopped",
+  stopAtBoundary = false,
+  isControlPending = false,
+  onControlAction,
 }: BoardViewProps) {
   const [activeColIndex, setActiveColIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -229,7 +238,7 @@ export function BoardView({
       }}
     >
       {/* Header */}
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-zinc-800 bg-black px-4 md:px-6">
+      <header className="flex flex-wrap shrink-0 items-center gap-2 border-b border-zinc-800 bg-black px-4 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-6 md:py-0">
         <button
           type="button"
           onClick={onOpenDrawer}
@@ -240,8 +249,80 @@ export function BoardView({
           <span className="block h-0.5 w-5 rounded bg-zinc-300" />
           <span className="block h-0.5 w-5 rounded bg-zinc-300" />
         </button>
-        <div className="flex-1 text-[19px] font-semibold tracking-[-0.2px] md:text-[21px]">
+        <div className="flex-1 text-[19px] font-semibold tracking-[-0.2px] md:flex-none md:text-[21px]">
           Board
+        </div>
+        <span
+          data-testid="board-control-pill"
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+            controlState === "running"
+              ? "border-[#10b981]/60 bg-[#10b981]/10 text-[#10b981]"
+              : controlState === "paused"
+              ? "border-zinc-600 bg-zinc-900 text-zinc-200"
+              : "border-zinc-700 bg-zinc-900 text-zinc-300"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              controlState === "running"
+                ? "bg-[#10b981]"
+                : controlState === "paused"
+                ? "bg-zinc-300"
+                : "bg-zinc-400"
+            }`}
+          />
+          {controlState === "running"
+            ? "Running"
+            : controlState === "paused"
+            ? stopAtBoundary
+              ? "Paused · boundary"
+              : "Paused"
+            : "Stopped"}
+        </span>
+        <div
+          role="group"
+          aria-label="Board drain controls"
+          className="flex w-full items-center gap-1.5 md:ml-auto md:w-auto"
+        >
+          <button
+            type="button"
+            disabled={isControlPending || controlState === "running"}
+            onClick={() => onControlAction?.("start")}
+            aria-pressed={controlState === "running"}
+            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+              controlState === "running"
+                ? "border-[#10b981] bg-[#10b981] text-[#04150e]"
+                : "border-[#10b981]/70 text-[#10b981] hover:bg-[#10b981]/10"
+            }`}
+          >
+            Start
+          </button>
+          <button
+            type="button"
+            disabled={isControlPending || controlState === "paused"}
+            onClick={() => onControlAction?.("pause")}
+            aria-pressed={controlState === "paused"}
+            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+              controlState === "paused"
+                ? "border-zinc-300 bg-zinc-200 text-black"
+                : "border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+            }`}
+          >
+            Pause
+          </button>
+          <button
+            type="button"
+            disabled={isControlPending || controlState === "stopped"}
+            onClick={() => onControlAction?.("stop")}
+            aria-pressed={controlState === "stopped"}
+            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+              controlState === "stopped"
+                ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+                : "border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+            }`}
+          >
+            Stop
+          </button>
         </div>
         <button
           type="button"
