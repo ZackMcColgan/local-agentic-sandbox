@@ -99,17 +99,47 @@ export class PrioritySlotScheduler {
   /**
    * Acquires the slot, runs `fn` with the lease bound in AsyncLocalStorage, and
    * guarantees release in `finally`.
+   *
+   * Uses a synchronous fast path when the slot is free and the wait queue is
+   * empty so `fn` starts in the caller's tick (preserving immediate abort
+   * listener registration).
    */
-  async runWithSlot<T>(
+  runWithSlot<T>(
     options: AcquireSlotOptions,
     fn: (lease: SlotLease) => Promise<T>
   ): Promise<T> {
-    const lease = await this.acquire(options);
-    try {
-      return await leaseStorage.run(lease, () => fn(lease));
-    } finally {
-      lease.release();
+    if (options.signal?.aborted) {
+      return Promise.reject(new Error("Slot acquisition aborted before acquire"));
     }
+
+    if (!this.activeHolder && this.waitQueue.length === 0) {
+      const id = `slot-${++this.leaseSeq}`;
+      const state: LeaseState = {
+        id,
+        priority: options.priority,
+        label: options.label,
+        signal: options.signal,
+        holding: true,
+      };
+      this.activeHolder = state;
+      const lease = this.createLease(state);
+      try {
+        return Promise.resolve(leaseStorage.run(lease, () => fn(lease))).finally(() => {
+          lease.release();
+        });
+      } catch (err) {
+        lease.release();
+        return Promise.reject(err);
+      }
+    }
+
+    return this.acquire(options).then(async (lease) => {
+      try {
+        return await leaseStorage.run(lease, () => fn(lease));
+      } finally {
+        lease.release();
+      }
+    });
   }
 
   /**
