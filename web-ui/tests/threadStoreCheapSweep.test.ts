@@ -215,7 +215,7 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     assert.ok(ids.includes("thread-ghost-task-1"), "ghost task must be synthesized into board");
     const ghostItem = merged.find((i) => i.id === "thread-ghost-task-1");
     assert.equal(ghostItem?.title, "Ghost supervisor task goal");
-    assert.equal(ghostItem?.status, "queued");
+    assert.equal(ghostItem?.status, "needs-attention");
   } finally {
     ThreadStore.prototype.listThreads = origListThreads;
     if (prevEnv === undefined) delete process.env.THREADS_DIR;

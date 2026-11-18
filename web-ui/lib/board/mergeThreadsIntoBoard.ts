@@ -6,10 +6,16 @@ export function mapThreadStatusToBoardStatus(status: string | undefined): BoardS
   if (status === "active" || status === "running" || status === "streaming") {
     return "working";
   }
-  if (status === "completed") {
+  if (status === "completed" || status === "done") {
     return "done";
   }
-  return "queued";
+  if (status === "paused" || status === "parked") {
+    return "parked";
+  }
+  if (status === "queued") {
+    return "queued";
+  }
+  return "needs-attention";
 }
 
 /**
@@ -35,13 +41,20 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
     if (existingIds.has(thread.id) || existingLinks.has(threadLink)) {
       continue;
     }
+    const status = mapThreadStatusToBoardStatus(thread.status);
+    const parkedReason =
+      thread.parkedReason ||
+      thread.error ||
+      (status === "needs-attention" ? `Task ${thread.status ?? "stopped"}` : undefined);
     merged.push({
       id: thread.id,
       key: thread.id,
       title: thread.title,
       brief: "",
       dependencies: [],
-      status: mapThreadStatusToBoardStatus(thread.status),
+      status,
+      ...(status === "needs-attention" ? { needsAttention: true } : {}),
+      ...(parkedReason ? { parkedReason } : {}),
       author: "Owner",
       source: "manual",
       threadLink,
@@ -69,18 +82,30 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
       const honestStatus =
         task.status === "paused"
           ? "paused"
-          : task.status === "active"
-            ? "stopped"
-            : task.status === "completed"
-              ? "completed"
-              : "stopped";
+          : task.status === "parked"
+            ? "parked"
+            : task.status === "failed"
+              ? "failed"
+              : task.status === "active"
+                ? "stopped"
+                : task.status === "completed"
+                  ? "completed"
+                  : "stopped";
+      const status = mapThreadStatusToBoardStatus(honestStatus);
+      const taskRecord = task as { parkedReason?: string; error?: string };
+      const parkedReason =
+        taskRecord.parkedReason ||
+        taskRecord.error ||
+        (status === "needs-attention" ? `Task ${honestStatus}` : undefined);
       merged.push({
         id: ghostId,
         key: ghostId,
         title: deriveThreadTitle(task.goal),
         brief: "",
         dependencies: [],
-        status: mapThreadStatusToBoardStatus(honestStatus),
+        status,
+        ...(status === "needs-attention" ? { needsAttention: true } : {}),
+        ...(parkedReason ? { parkedReason } : {}),
         author: "Owner",
         source: "manual",
         threadLink,

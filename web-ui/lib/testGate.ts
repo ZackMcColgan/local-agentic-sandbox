@@ -163,6 +163,12 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/mergeThreadsIntoBoard") ||
+      p.includes("boardGhostStatus.test.ts"),
+    tests: ["tests/boardGhostStatus.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/") ||
       p.includes("app/api/board/") ||
       p.includes("BoardView.tsx") ||
