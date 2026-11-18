@@ -755,7 +755,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/plannerScope.test.ts",
       "tests/productionTestRunnerWiring.test.ts",
       "tests/threadsResumeRestartExecution.test.ts",
-      "tests/supervisorGitOpsIntegration.test.ts"
+      "tests/supervisorGitOpsIntegration.test.ts",
+      "tests/taskPathObservability.test.ts"
     ]
   },
   {

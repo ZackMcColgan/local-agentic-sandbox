@@ -42,6 +42,7 @@ import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
 import { resolveSupervisorChunkResume } from "../jobChunking";
+import { touchActiveTurn } from "../threads/threadStore";
 import {
   verifyCompletionClaims,
   stampCompletion,
@@ -1510,6 +1511,23 @@ export class OvernightSupervisor {
     options?: StepExecutorOptions
   ): Promise<TaskManifest> {
     console.log(`[supervisor] executeTaskWithRecovery start taskId=${task.taskId} milestones=${task.milestones.length}`);
+    console.log(`[task:${task.taskId}] phase=start milestones=${task.milestones.length}`);
+    if (!Array.isArray(task.milestones) || task.milestones.length === 0) {
+      const emptyMsg = "Task has no milestones to execute (milestones: []).";
+      task.status = "failed";
+      task.errorSummary = emptyMsg;
+      task.parkedReason = emptyMsg;
+      task.completedAt = new Date().toISOString();
+      task.journal.push({
+        timestamp: new Date().toISOString(),
+        role: "supervisor",
+        action: "Empty milestones guard",
+        message: emptyMsg
+      });
+      this.saveCheckpoint(task);
+      console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${emptyMsg}`);
+      return task;
+    }
     const executor = options?.stepExecutor;
     const hasPending = task.milestones.slice(task.currentMilestoneIndex).some((m) => m.status !== "completed");
     if (!executor && hasPending) {
@@ -1544,6 +1562,7 @@ export class OvernightSupervisor {
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
+      console.log(`[task:${task.taskId}] phase=gitops branch=${branchToUse}`);
       try {
         await gitOps.createAndSwitchBranch(branchToUse);
         task.gitOpsBranchCreated = true;
@@ -1558,6 +1577,7 @@ export class OvernightSupervisor {
         console.error(`[supervisor] GitOps bootstrap failed:`, errMsg);
         task.status = "failed";
         task.errorSummary = errMsg;
+        task.parkedReason = errMsg;
         task.completedAt = new Date().toISOString();
         task.journal.push({
           timestamp: new Date().toISOString(),
@@ -1565,6 +1585,7 @@ export class OvernightSupervisor {
           message: errMsg
         });
         this.saveCheckpoint(task);
+        console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${errMsg}`);
         return task;
       }
     }
@@ -1625,6 +1646,11 @@ export class OvernightSupervisor {
           try {
             if (executor) {
               console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
+              console.log(`[task:${task.taskId}] phase=step milestone=${milestone.id} attempt=${attempt}`);
+              if ((task as any).threadId) {
+                touchActiveTurn((task as any).threadId);
+              }
+              task.updatedAt = new Date().toISOString();
               const res = await executor(milestone, attempt);
               if (isPaused()) {
                 task.status = "paused";
@@ -1772,6 +1798,7 @@ export class OvernightSupervisor {
     }
 
     if (task.currentMilestoneIndex >= task.milestones.length) {
+      console.log(`[task:${task.taskId}] phase=finish milestones=${task.milestones.length}`);
       const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
       const finishVerification = verifyJobCompletion({
         workspaceRoot: options?.repoRoot || process.cwd(),
@@ -1779,13 +1806,18 @@ export class OvernightSupervisor {
         gatePassed: task.milestones.every((m) => m.status === "completed")
       });
       if (!finishVerification.ok) {
+        const finishMsg = `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`;
         task.status = "failed";
+        task.errorSummary = finishMsg;
+        task.parkedReason = finishMsg;
+        task.completedAt = new Date().toISOString();
         task.journal.push({
           timestamp: new Date().toISOString(),
           role: "supervisor",
           action: "Finish verification gate blocked completion",
-          message: `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`
+          message: finishMsg
         });
+        console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${finishMsg}`);
       } else {
         const repoRoot = options?.repoRoot || process.cwd();
         const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(repoRoot);
@@ -1802,6 +1834,7 @@ export class OvernightSupervisor {
         task.completionStamp = stamped.completionStamp;
         task.verificationGaps = stamped.verificationGaps;
         task.status = "completed";
+        console.log(`[task:${task.taskId}] phase=terminal status=completed`);
         if (claimVerification.status === "completed-unverified") {
           task.journal.push({
             timestamp: new Date().toISOString(),

@@ -150,6 +150,13 @@ export async function runJobMode({
   const lastAssistant = [...messages]
     .reverse()
     .find((m) => m?.role === "assistant" && typeof m?.content === "string" && m.content.trim().length > 0);
+
+  if (lastThread?.status === "failed" || lastThread?.status === "stopped") {
+    writeFailureTrace();
+    const detail = lastAssistant?.content ? `: ${lastAssistant.content.slice(0, 300)}` : "";
+    throw new Error(`Sandbox job ${threadId} ended with status ${lastThread.status}${detail}`);
+  }
+
   if (!lastAssistant) {
     writeFailureTrace();
     throw new Error(`Sandbox job ${threadId} finished (${lastThread?.status}) with no assistant message content`);
