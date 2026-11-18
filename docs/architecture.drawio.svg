@@ -11,7 +11,7 @@
 <rect x="40" y="196" width="312" height="452" rx="16" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7,5"/>
 <text x="428" y="231" font-size="14.5" fill="#0f172a"><tspan font-weight="700">kind cluster</tspan><tspan fill="#334155"> (local-agentic-sandbox)</tspan></text>
 <rect x="906" y="210" width="346" height="27" rx="13.5" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="1079" y="228" text-anchor="middle" font-size="11.5" fill="#475569">credential-free · egress blocked (NetworkPolicy)</text>
+<text x="1079" y="228" text-anchor="middle" font-size="11.5" fill="#475569">credential-free · default-deny egress (NetworkPolicy)</text>
 <text x="64" y="231" font-size="14.5" fill="#0f172a"><tspan font-weight="700">host</tspan><tspan fill="#334155"> — Windows PC</tspan></text>
 <text x="328" y="231" text-anchor="end" font-size="11.5" fill="#64748b">outside the cluster</text>
 
@@ -44,7 +44,7 @@
 <!-- ======= Web UI / orchestrator ======= -->
 <rect x="424" y="252" width="500" height="224" rx="14" fill="#ffffff" stroke="#10b981" stroke-width="2" filter="url(#soft)"/>
 <text x="448" y="285" font-size="16.5" font-weight="700" fill="#064e3b">Web UI / orchestrator</text>
-<text x="448" y="307" font-size="12" fill="#475569">Next.js · namespace: local-agentic-sandbox</text>
+<text x="448" y="307" font-size="12" fill="#475569">Next.js · zero internet egress · ns: local-agentic-sandbox</text>
 <line x1="448" y1="322" x2="900" y2="322" stroke="#e2e8f0"/>
 <rect x="448" y="338" width="142" height="42" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
 <text x="519" y="356" text-anchor="middle" font-size="11.5" fill="#1e293b">chat threads</text>
@@ -73,7 +73,7 @@
 <rect x="424" y="508" width="500" height="112" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
 <text x="448" y="540" font-size="14.5" font-weight="700" fill="#0f172a">MCP runner</text>
 <text x="448" y="562" font-size="12" fill="#475569">sandboxed pod · read-only rootfs</text>
-<text x="448" y="582" font-size="12" fill="#475569">cap_drop ALL · egress denied</text>
+<text x="448" y="582" font-size="12" fill="#475569">cap_drop ALL · GitHub :443 only</text>
 <rect x="948" y="508" width="308" height="112" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
 <text x="972" y="540" font-size="14.5" font-weight="700" fill="#0f172a">Browser MCP</text>
 <text x="972" y="562" font-size="12" fill="#475569">isolated pod · web egress</text>
