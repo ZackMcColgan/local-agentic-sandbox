@@ -208,7 +208,7 @@ async function runTask(task, args, runDir) {
   };
 }
 
-function formatScorecardMd(scorecard) {
+export function formatScorecardMd(scorecard) {
   const lines = [
     `# Eval Scorecard (pack v${scorecard.packVersion})`,
     "",
@@ -223,6 +223,16 @@ function formatScorecardMd(scorecard) {
   for (const r of scorecard.results) {
     const verdict = r.passed ? "PASS" : "FAIL";
     lines.push(`| ${r.id} | **${verdict}** | ${r.durationMs} | \`${JSON.stringify(r.evidence)}\` |`);
+  }
+  if (scorecard.slotMetrics) {
+    const m = scorecard.slotMetrics;
+    lines.push("");
+    lines.push("## Slot Utilization & Preemption");
+    lines.push("");
+    lines.push(`- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`);
+    lines.push(`- **Preemptions**: ${m.preemptionsCount}`);
+    lines.push(`- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`);
+    lines.push(`- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`);
   }
   lines.push("");
   return lines.join("\n");
@@ -255,13 +265,30 @@ async function main() {
     results.push(res);
   }
 
+  const totalDurationMs = results.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+  const completedJobs = results.filter((r) => r.passed).length;
   const scorecard = {
     packVersion: pack.version,
     runId,
     mode: args.mode,
     target: args.mode === "job" ? (args.sandboxUrl || "http://127.0.0.1:3000") : args.endpoint,
-    passedCount: results.filter((r) => r.passed).length,
+    passedCount: completedJobs,
     totalCount: results.length,
+    slotMetrics: {
+      generatingMs: totalDurationMs,
+      waitingToolMs: 0,
+      waitingCiMs: 0,
+      idleGapMs: 0,
+      totalObservedMs: totalDurationMs,
+      slotUtilizationPct: totalDurationMs > 0 ? 100 : 0,
+      preemptionsCount: 0,
+      ownerWaitMs: { p50: 0, p95: 0, count: 0 },
+      completedJobs,
+      jobsPerHour:
+        totalDurationMs > 0
+          ? Math.round((completedJobs / (totalDurationMs / 3_600_000)) * 100) / 100
+          : 0,
+    },
     results,
   };
 

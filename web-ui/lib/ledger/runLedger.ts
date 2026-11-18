@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import { createRequire } from "module";
 import { MORNING_REPORT_CHECKPOINT_DIR, getCanonicalCheckpointDir } from "../subagents/morningReport";
+import type { SlotUtilizationMetrics } from "../slotScheduler";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -39,6 +40,7 @@ export interface RunLedgerEntry {
   checkpointPath?: string;
   resumable: boolean;
   errorMessage?: string;
+  slotMetrics?: SlotUtilizationMetrics;
 }
 
 export interface RecordRunStartInput {
@@ -57,6 +59,7 @@ export interface RecordRunStartInput {
   checkpointPath?: string;
   resumable?: boolean;
   errorMessage?: string;
+  slotMetrics?: SlotUtilizationMetrics;
 }
 
 export interface UpdateRunProgressInput {
@@ -70,6 +73,7 @@ export interface UpdateRunProgressInput {
   checkpointPath?: string;
   resumable?: boolean;
   errorMessage?: string;
+  slotMetrics?: SlotUtilizationMetrics;
 }
 
 export interface RunLedgerOptions {
@@ -147,12 +151,18 @@ export class RunLedger {
         deployment_ref TEXT NOT NULL,
         checkpoint_path TEXT,
         resumable INTEGER NOT NULL DEFAULT 0,
-        error_message TEXT
+        error_message TEXT,
+        slot_metrics_json TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_runs_thread_id ON runs(thread_id);
       CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
       CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
     `);
+    try {
+      this.db.exec(`ALTER TABLE runs ADD COLUMN slot_metrics_json TEXT`);
+    } catch {
+      // Column already exists
+    }
   }
 
   private validateRequiredFields(input: RecordRunStartInput): void {
@@ -194,6 +204,15 @@ export class RunLedger {
       milestoneSummary = [];
     }
 
+    let slotMetrics: SlotUtilizationMetrics | undefined;
+    if (row.slot_metrics_json) {
+      try {
+        slotMetrics = JSON.parse(String(row.slot_metrics_json)) as SlotUtilizationMetrics;
+      } catch {
+        slotMetrics = undefined;
+      }
+    }
+
     return {
       runId: String(row.run_id),
       parentRunId: row.parent_run_id ? String(row.parent_run_id) : undefined,
@@ -210,7 +229,8 @@ export class RunLedger {
       deploymentRef: String(row.deployment_ref),
       checkpointPath: row.checkpoint_path ? String(row.checkpoint_path) : undefined,
       resumable: Number(row.resumable) === 1,
-      errorMessage: row.error_message ? String(row.error_message) : undefined
+      errorMessage: row.error_message ? String(row.error_message) : undefined,
+      slotMetrics
     };
   }
 
@@ -226,8 +246,8 @@ export class RunLedger {
         run_id, parent_run_id, thread_id, prompt, status,
         started_at, updated_at, completed_at, last_heartbeat_at,
         model, git_shas_json, milestone_summary_json, deployment_ref,
-        checkpoint_path, resumable, error_message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        checkpoint_path, resumable, error_message, slot_metrics_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(run_id) DO UPDATE SET
         parent_run_id = excluded.parent_run_id,
         thread_id = excluded.thread_id,
@@ -243,7 +263,8 @@ export class RunLedger {
         deployment_ref = excluded.deployment_ref,
         checkpoint_path = excluded.checkpoint_path,
         resumable = excluded.resumable,
-        error_message = excluded.error_message
+        error_message = excluded.error_message,
+        slot_metrics_json = excluded.slot_metrics_json
     `);
 
     stmt.run(
@@ -262,7 +283,8 @@ export class RunLedger {
       input.deploymentRef,
       input.checkpointPath ?? null,
       resumableInt,
-      input.errorMessage ?? null
+      input.errorMessage ?? null,
+      input.slotMetrics ? JSON.stringify(input.slotMetrics) : null
     );
 
     const saved = this.getRun(input.runId);
@@ -344,7 +366,8 @@ export class RunLedger {
         deployment_ref = ?,
         checkpoint_path = ?,
         resumable = ?,
-        error_message = ?
+        error_message = ?,
+        slot_metrics_json = ?
       WHERE run_id = ?
     `);
 
@@ -360,6 +383,9 @@ export class RunLedger {
       nextCheckpoint ?? null,
       nextResumable ? 1 : 0,
       nextError ?? null,
+      (update.slotMetrics ?? existing.slotMetrics)
+        ? JSON.stringify(update.slotMetrics ?? existing.slotMetrics)
+        : null,
       runId
     );
 

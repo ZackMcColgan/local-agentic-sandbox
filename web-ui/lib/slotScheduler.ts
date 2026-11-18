@@ -18,6 +18,29 @@ export interface AcquireSlotOptions {
   onQueued?: (position: number) => void;
 }
 
+export type SlotWaitKind = "tool" | "ci";
+
+export interface SlotUtilizationMetrics {
+  generatingMs: number;
+  waitingToolMs: number;
+  waitingCiMs: number;
+  idleGapMs: number;
+  totalObservedMs: number;
+  slotUtilizationPct: number;
+  preemptionsCount: number;
+  ownerWaitMs: {
+    p50: number;
+    p95: number;
+    count: number;
+  };
+  completedJobs: number;
+  jobsPerHour: number;
+}
+
+export interface SlotSchedulerOptions {
+  now?: () => number;
+}
+
 export interface SlotLease {
   readonly id: string;
   readonly priority: SlotPriority;
@@ -39,7 +62,7 @@ export interface SlotLease {
    * git/worktree commands, CI polls) so higher-or-equal priority work can use
    * the slot, then re-acquires before returning.
    */
-  releaseForWait<T>(fn: () => Promise<T> | T): Promise<T>;
+  releaseForWait<T>(fn: () => Promise<T> | T, waitKind?: SlotWaitKind): Promise<T>;
   /** Idempotently releases the slot if currently held by this lease. */
   release(): void;
 }
@@ -55,6 +78,7 @@ interface Waiter {
   priority: SlotPriority;
   label?: string;
   seq: number;
+  enqueuedAt: number;
   signal?: AbortSignal;
   onAbort?: () => void;
   grant: () => void;
@@ -66,6 +90,7 @@ interface LeaseState {
   label?: string;
   signal?: AbortSignal;
   holding: boolean;
+  acquiredAt?: number;
 }
 
 const GLOBAL_SCHEDULER_KEY = Symbol.for("local-agentic-sandbox.prioritySlotScheduler");
@@ -76,6 +101,18 @@ export class PrioritySlotScheduler {
   private readonly waitQueue: Waiter[] = [];
   private seq = 0;
   private leaseSeq = 0;
+  private readonly now: () => number;
+  private firstObservedAt: number | null = null;
+  private generatingMs = 0;
+  private waitingToolMs = 0;
+  private waitingCiMs = 0;
+  private preemptionsCount = 0;
+  private completedJobs = 0;
+  private readonly ownerWaitSamplesMs: number[] = [];
+
+  constructor(options: SlotSchedulerOptions = {}) {
+    this.now = options.now ?? (() => Date.now());
+  }
 
   /**
    * Acquires the single engine slot, queuing in strict priority order
@@ -114,17 +151,23 @@ export class PrioritySlotScheduler {
 
     if (!this.activeHolder && this.waitQueue.length === 0) {
       const id = `slot-${++this.leaseSeq}`;
+      const ts = this.now();
+      if (this.firstObservedAt === null) {
+        this.firstObservedAt = ts;
+      }
       const state: LeaseState = {
         id,
         priority: options.priority,
         label: options.label,
         signal: options.signal,
         holding: true,
+        acquiredAt: ts,
       };
       this.activeHolder = state;
       const lease = this.createLease(state);
       try {
         return Promise.resolve(leaseStorage.run(lease, () => fn(lease))).finally(() => {
+          this.completedJobs++;
           lease.release();
         });
       } catch (err) {
@@ -137,6 +180,7 @@ export class PrioritySlotScheduler {
       try {
         return await leaseStorage.run(lease, () => fn(lease));
       } finally {
+        this.completedJobs++;
         lease.release();
       }
     });
@@ -172,6 +216,48 @@ export class PrioritySlotScheduler {
     };
   }
 
+  getMetrics(): SlotUtilizationMetrics {
+    const currentNow = this.now();
+    const activeGeneratingMs =
+      this.activeHolder && this.activeHolder.acquiredAt !== undefined
+        ? Math.max(0, currentNow - this.activeHolder.acquiredAt)
+        : 0;
+    const generatingMs = this.generatingMs + activeGeneratingMs;
+    const totalObservedMs =
+      this.firstObservedAt !== null ? Math.max(0, currentNow - this.firstObservedAt) : 0;
+    const idleGapMs = Math.max(
+      0,
+      totalObservedMs - generatingMs - this.waitingToolMs - this.waitingCiMs
+    );
+    const slotUtilizationPct =
+      totalObservedMs > 0 ? Math.round((generatingMs / totalObservedMs) * 10000) / 100 : 0;
+    const jobsPerHour =
+      totalObservedMs > 0
+        ? Math.round((this.completedJobs / (totalObservedMs / 3_600_000)) * 100) / 100
+        : 0;
+
+    const sorted = [...this.ownerWaitSamplesMs].sort((a, b) => a - b);
+    const p50 = sorted.length > 0 ? sorted[Math.ceil(0.5 * sorted.length) - 1] : 0;
+    const p95 = sorted.length > 0 ? sorted[Math.ceil(0.95 * sorted.length) - 1] : 0;
+
+    return {
+      generatingMs,
+      waitingToolMs: this.waitingToolMs,
+      waitingCiMs: this.waitingCiMs,
+      idleGapMs,
+      totalObservedMs,
+      slotUtilizationPct,
+      preemptionsCount: this.preemptionsCount,
+      ownerWaitMs: {
+        p50,
+        p95,
+        count: sorted.length,
+      },
+      completedJobs: this.completedJobs,
+      jobsPerHour,
+    };
+  }
+
   private createLease(state: LeaseState): SlotLease {
     const lease: SlotLease = {
       id: state.id,
@@ -185,14 +271,19 @@ export class PrioritySlotScheduler {
         this.waitQueue[0].priority < state.priority,
       yieldIfPreempted: async () => {
         if (!lease.shouldPreempt()) return;
+        this.preemptionsCount++;
         this.releaseState(state);
         await this.acquireState(state);
       },
-      releaseForWait: async <T>(fn: () => Promise<T> | T): Promise<T> => {
+      releaseForWait: async <T>(
+        fn: () => Promise<T> | T,
+        waitKind: SlotWaitKind = "tool"
+      ): Promise<T> => {
         if (!lease.isHolding()) {
           return await fn();
         }
         this.releaseState(state);
+        const waitStart = this.now();
         let result!: T;
         let caught: unknown;
         let hasError = false;
@@ -201,6 +292,12 @@ export class PrioritySlotScheduler {
         } catch (err) {
           caught = err;
           hasError = true;
+        }
+        const waitElapsed = Math.max(0, this.now() - waitStart);
+        if (waitKind === "ci") {
+          this.waitingCiMs += waitElapsed;
+        } else {
+          this.waitingToolMs += waitElapsed;
         }
         await this.acquireState(state);
         if (hasError) {
@@ -223,8 +320,14 @@ export class PrioritySlotScheduler {
       return Promise.reject(new Error("Slot acquisition aborted before acquire"));
     }
 
+    const ts = this.now();
+    if (this.firstObservedAt === null) {
+      this.firstObservedAt = ts;
+    }
+
     if (this.activeHolder === null) {
       state.holding = true;
+      state.acquiredAt = ts;
       this.activeHolder = state;
       return Promise.resolve();
     }
@@ -235,12 +338,18 @@ export class PrioritySlotScheduler {
         priority: state.priority,
         label: state.label,
         seq: ++this.seq,
+        enqueuedAt: ts,
         signal: state.signal,
         grant: () => {
           if (waiter.signal && waiter.onAbort) {
             waiter.signal.removeEventListener("abort", waiter.onAbort);
           }
+          const grantTs = this.now();
+          if (waiter.priority === SlotPriority.P0_OWNER) {
+            this.ownerWaitSamplesMs.push(Math.max(0, grantTs - waiter.enqueuedAt));
+          }
           state.holding = true;
+          state.acquiredAt = grantTs;
           this.activeHolder = state;
           resolve();
         },
@@ -282,6 +391,10 @@ export class PrioritySlotScheduler {
   private releaseState(state: LeaseState): void {
     if (!state.holding || this.activeHolder !== state) {
       return;
+    }
+    if (state.acquiredAt !== undefined) {
+      this.generatingMs += Math.max(0, this.now() - state.acquiredAt);
+      state.acquiredAt = undefined;
     }
     state.holding = false;
     this.activeHolder = null;
