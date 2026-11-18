@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Builder
 # ==========================================
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 RUN apk add --no-cache git python3
 
@@ -26,7 +26,7 @@ RUN npm prune --production
 # ==========================================
 # Stage 2: Hardened Runtime Environment
 # ==========================================
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 
 # Upgrade Alpine packages (expat, zlib) and install runtime tools
 RUN apk update && \
