@@ -203,8 +203,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       max_depth: z.number().optional().default(3).describe("Maximum directory depth to traverse (default: 3)"),
       sub_path: z.string().optional().describe("Optional subdirectory to inspect (relative to /workspace)")
-    },
-    async ({ max_depth = 3, sub_path }) => {
+    } as any,
+    async ({ max_depth = 3, sub_path }: { max_depth?: number; sub_path?: string }) => {
       await ensureWorkspaceInitialized();
       const targetDir = sub_path ? resolveSafePath(sub_path) : WORKSPACE_DIR;
 
@@ -265,8 +265,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       pattern: z.string().describe("Regex or substring pattern to search for"),
       file_glob: z.string().optional().describe("Optional filename filter or extension (e.g. '*.ts', '*.py')")
-    },
-    async ({ pattern, file_glob }) => {
+    } as any,
+    async ({ pattern, file_glob }: { pattern: string; file_glob?: string }) => {
       await ensureWorkspaceInitialized();
 
       const validation = validateRegexPattern(pattern);
@@ -365,8 +365,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
       end_line: z.number().optional().describe("Optional end line (1-indexed)"),
       offset: z.number().optional().describe("Optional line offset (if start_line not provided)"),
       limit: z.number().optional().describe("Optional line count limit")
-    },
-    async ({ path: filePath, start_line, end_line, offset, limit }) => {
+    } as any,
+    async ({ path: filePath, start_line, end_line, offset, limit }: { path: string; start_line?: number; end_line?: number; offset?: number; limit?: number }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -418,8 +418,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
       path: z.string().describe("File path relative to /workspace"),
       content: z.string().describe("The text content, code, or SVG/XML diagram to write"),
       create_dirs: z.boolean().optional().default(true).describe("Create parent directories if they don't exist")
-    },
-    async ({ path: filePath, content, create_dirs = true }) => {
+    } as any,
+    async ({ path: filePath, content, create_dirs = true }: { path: string; content: string; create_dirs?: boolean }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -483,8 +483,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
           replace: z.string().describe("Replacement string")
         })
       ).describe("Array of search-and-replace patches to apply in order")
-    },
-    async ({ path: filePath, patches }) => {
+    } as any,
+    async ({ path: filePath, patches }: { path: string; patches: { search: string; replace: string }[] }) => {
       await ensureWorkspaceInitialized();
       try {
         const result = await workspacePatchFile(WORKSPACE_DIR, filePath, patches);
@@ -515,8 +515,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       command: z.string().describe("Shell command to execute inside /workspace (e.g. 'pytest tests/', 'python3 script.py')"),
       timeout_seconds: z.number().optional().default(30).describe("Timeout limit in seconds (default: 30)")
-    },
-    async ({ command, timeout_seconds = 30 }) => {
+    } as any,
+    async ({ command, timeout_seconds = 30 }: { command: string; timeout_seconds?: number }) => {
       await ensureWorkspaceInitialized();
       const startTime = performance.now();
 
@@ -567,8 +567,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Inspect current git branch, uncommitted files, and colored unified diff in /workspace.",
     {
       cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
-    },
-    async ({ cached = false }) => {
+    } as any,
+    async ({ cached = false }: { cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -614,8 +614,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       target: z.string().optional().describe("Optional commit, branch, or file path to diff against"),
       cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
-    },
-    async ({ target, cached = false }) => {
+    } as any,
+    async ({ target, cached = false }: { target?: string; cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -654,8 +654,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       branch_name: z.string().describe("Target branch name (e.g. 'agent/fix-tests')"),
       create_new: z.boolean().optional().default(true).describe("Whether to create a new branch (-b)")
-    },
-    async ({ branch_name, create_new = true }) => {
+    } as any,
+    async ({ branch_name, create_new = true }: { branch_name: string; create_new?: boolean }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -692,8 +692,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Stage all changes and commit with semantic commit message in /workspace.",
     {
       message: z.string().describe("Semantic commit message (e.g. 'feat(auth): add jwt token refresh')")
-    },
-    async ({ message }) => {
+    } as any,
+    async ({ message }: { message: string }) => {
       await ensureWorkspaceInitialized();
 
       try {
