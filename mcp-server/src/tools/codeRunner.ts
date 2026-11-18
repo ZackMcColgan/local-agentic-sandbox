@@ -13,8 +13,8 @@ export function registerCodeRunner(mcp: McpServer) {
     {
       code: z.string().describe("The Python script to execute"),
       test_code: z.string().optional().describe("Optional pytest or unit test assertions to run alongside the code")
-    },
-    async ({ code, test_code }) => {
+    } as any,
+    async ({ code, test_code }: { code: string; test_code?: string }) => {
       const runId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const scriptPath = `/tmp/script_${runId}.py`;
       const startTime = performance.now();
