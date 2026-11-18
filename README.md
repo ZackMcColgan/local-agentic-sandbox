@@ -8,9 +8,9 @@
 | :---: | :---: | :---: |
 | ![Mobile chat](docs/images/ui-mobile-chat.png) | ![Mobile drawer](docs/images/ui-mobile-drawer.png) | ![Work board](docs/images/ui-mobile-board.png) |
 
-| A turn, live | The board on desktop |
-| :---: | :---: |
-| ![A live agent turn with reasoning streaming](docs/images/ui-mobile-live.png) | ![Work board on desktop](docs/images/ui-desktop-board.png) |
+![A live agent turn with reasoning streaming](docs/images/ui-mobile-live.png)
+
+![Work board on desktop](docs/images/ui-desktop-board.png)
 
 ---
 
