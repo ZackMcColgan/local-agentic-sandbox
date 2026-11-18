@@ -8,6 +8,7 @@ import { TaskManifest } from "@/lib/subagents/types";
 import { unloadAllModels } from "@/lib/subagents/residency";
 import { getSharedRunLedger } from "@/lib/ledger/runLedger";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getSharedSlotScheduler } from "@/lib/slotScheduler";
 
 // Store is created per request so a runtime THREADS_DIR change (tests, container env
 // refresh) is always honored — mirrors the chat route's per-request store.
@@ -28,6 +29,8 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
 
   const executor = createProductionStepExecutor({
     workerPool: new WorkerPool({
+      maxConcurrency: 1,
+      scheduler: getSharedSlotScheduler(),
       scope,
       modelRoster: {
         planner: effectiveModel,

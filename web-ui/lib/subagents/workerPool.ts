@@ -14,6 +14,13 @@ import {
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
 import { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore";
+import {
+  getCurrentSlotLease,
+  getSharedSlotScheduler,
+  PrioritySlotScheduler,
+  releaseCurrentSlotForWait,
+  SlotPriority
+} from "../slotScheduler";
 export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
 export interface ModelRosterConfig {
@@ -33,12 +40,15 @@ export interface WorkerPoolOptions {
   residencyPlan?: ResidencyPlan;
   /** Task scope driving per-request context window (e.g. SNIPPET, SCRIPT, PROJECT). */
   scope?: string;
+  /** Optional priority slot scheduler override (defaults to globalThis shared arbiter). */
+  scheduler?: PrioritySlotScheduler;
 }
 
 export interface WorkerJob<T = any> {
   id?: string;
   role: WorkerRole;
   taskId?: string;
+  priority?: SlotPriority;
   abortSignal?: AbortSignal;
   worktreeRepoRoot?: string;
   onTerminalState?: (state: "completed" | "aborted" | "failed") => void;
@@ -599,6 +609,10 @@ Do not rewrite the entire file.`;
         return { content: patched, loadDurationMs: totalLoadDuration, thinking: lastThinking };
       }
       lastError = "Output was not valid { patches: [...] } or search string did not match";
+      const lease = getCurrentSlotLease();
+      if (lease?.shouldPreempt()) {
+        await lease.yieldIfPreempted();
+      }
     }
 
     const fenceMatch = lastText.match(/```(?:[a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/);
@@ -652,6 +666,10 @@ Do not rewrite the entire file.`;
       const priorFileContexts: Array<{ file: string; content: string }> = [];
 
       for (const targetRelPath of targets) {
+        const lease = getCurrentSlotLease();
+        if (lease?.shouldPreempt()) {
+          await lease.yieldIfPreempted();
+        }
         const fullPath = path.resolve(repoRoot, targetRelPath);
         const previousContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, "utf8") : "";
 
@@ -928,11 +946,13 @@ export async function recordTestBaseline(
   let failCount = 0;
   const failingTests: string[] = [];
 
-  try {
-    stdout = execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
-  } catch (err: any) {
-    stdout = err.stdout || err.message || "";
-  }
+  stdout = await releaseCurrentSlotForWait(() => {
+    try {
+      return execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
+    } catch (err: any) {
+      return err.stdout || err.message || "";
+    }
+  });
 
   const passMatch = stdout.match(/(\d+)\s+pass(?:ing|ed)/i);
   if (passMatch) passCount = parseInt(passMatch[1], 10);
@@ -1422,11 +1442,15 @@ export class WorkerPool {
   readonly generate?: GenerateFn;
   readonly residencyPlan?: ResidencyPlan;
   readonly scope?: string;
+  private readonly scheduler: PrioritySlotScheduler;
+  private readonly explicitMultiConcurrency: boolean;
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
-    this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : (process.env.LLM_ENGINE === "strata" ? 1 : 2));
+    this.explicitMultiConcurrency = typeof options?.maxConcurrency === "number" && options.maxConcurrency > 1;
+    this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : 1);
     this.semaphore = new Semaphore(this.maxConcurrency);
+    this.scheduler = options?.scheduler ?? getSharedSlotScheduler();
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
     this.generate = options?.generate;
     this.residencyPlan = options?.residencyPlan;
@@ -1462,6 +1486,13 @@ export class WorkerPool {
     return { model, generate: this.generate, keepAlive: this.keepAliveFor(model), scope: this.scope };
   }
 
+  private resolveJobPriority(job: WorkerJob<any>): SlotPriority {
+    if (job.priority !== undefined) return job.priority;
+    if (job.role === "builder") return SlotPriority.P1_BUILDER;
+    if (job.role === "recorder") return SlotPriority.P3_HOUSEKEEPING;
+    return SlotPriority.P2_ORCHESTRATOR;
+  }
+
   async executeJob<T>(job: WorkerJob<T>): Promise<T> {
     if (job.abortSignal?.aborted) {
       job.onTerminalState?.("aborted");
@@ -1474,7 +1505,7 @@ export class WorkerPool {
     });
     this.activeJobs.add(trackingPromise);
 
-    if (!this.semaphore.tryAcquire()) {
+    if (this.explicitMultiConcurrency && !this.semaphore.tryAcquire()) {
       try {
         await this.semaphore.acquire(job.abortSignal);
       } catch (err) {
@@ -1517,41 +1548,54 @@ export class WorkerPool {
         fs.rmSync(wtDir, { recursive: true, force: true });
         this.activeJobs.delete(trackingPromise);
         cleanupTracking();
-        this.semaphore.release();
+        if (this.explicitMultiConcurrency) this.semaphore.release();
         emitTerminal("failed");
         throw err;
       }
     }
 
     try {
-      const abortPromise = new Promise<never>((_, reject) => {
-        if (abortController.signal.aborted) {
-          emitTerminal("aborted");
-          reject(new Error("Worker execution aborted"));
-          return;
-        }
-        abortController.signal.addEventListener(
-          "abort",
-          () => {
-            setTimeout(() => { emitTerminal("aborted"); reject(new Error("Worker execution aborted")); }, 0);
-            // deferred to allow taskFn abort listener to settle first
+      const runJobBody = async () => {
+        const abortPromise = new Promise<never>((_, reject) => {
+          if (abortController.signal.aborted) {
+            emitTerminal("aborted");
+            reject(new Error("Worker execution aborted"));
+            return;
+          }
+          abortController.signal.addEventListener(
+            "abort",
+            () => {
+              setTimeout(() => { emitTerminal("aborted"); reject(new Error("Worker execution aborted")); }, 0);
+            },
+            { once: true }
+          );
+        });
+
+        const taskPromise = job.taskFn(abortController.signal, worktreePath).then(
+          (res) => {
+            emitTerminal("completed");
+            return res;
           },
-          { once: true }
+          (err) => {
+            emitTerminal(abortController.signal.aborted ? "aborted" : "failed");
+            throw err;
+          }
         );
-      });
 
-      const taskPromise = job.taskFn(abortController.signal, worktreePath).then(
-        (res) => {
-          emitTerminal("completed");
-          return res;
+        return await Promise.race([taskPromise, abortPromise]);
+      };
+
+      if (this.explicitMultiConcurrency) {
+        return await runJobBody();
+      }
+      return await this.scheduler.runWithSlot(
+        {
+          priority: this.resolveJobPriority(job),
+          label: `worker:${job.role}:${job.id || job.taskId || "job"}`,
+          signal: job.abortSignal,
         },
-        (err) => {
-          emitTerminal(abortController.signal.aborted ? "aborted" : "failed");
-          throw err;
-        }
+        runJobBody
       );
-
-      return await Promise.race([taskPromise, abortPromise]);
     } finally {
       if (job.abortSignal) {
         job.abortSignal.removeEventListener("abort", onParentAbort);
@@ -1574,7 +1618,7 @@ export class WorkerPool {
       }
       this.activeJobs.delete(trackingPromise);
       cleanupTracking();
-      this.semaphore.release();
+      if (this.explicitMultiConcurrency) this.semaphore.release();
     }
   }
 }

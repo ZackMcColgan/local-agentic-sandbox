@@ -8,6 +8,7 @@ import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import type { ChunkBudgetConfig } from "@/lib/jobChunking";
+import { getSharedSlotScheduler, SlotPriority } from "@/lib/slotScheduler";
 
 const getThreadStore = () => new ThreadStore(resolveThreadsDir());
 const getSupervisor = () => new OvernightSupervisor();
@@ -165,6 +166,8 @@ export async function POST(req: Request) {
 
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool({
+          maxConcurrency: 1,
+          scheduler: getSharedSlotScheduler(),
           scope,
           modelRoster: {
             planner: effectiveModel,
@@ -223,7 +226,10 @@ export async function POST(req: Request) {
       (async () => {
         console.log(`[threads] decomposing goal for task ${taskId}`);
         try {
-          const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel });
+          const planSpec = await getSharedSlotScheduler().runWithSlot(
+            { priority: SlotPriority.P2_ORCHESTRATOR, label: `planner:${taskId}` },
+            () => generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel })
+          );
           manifest.complexity = planSpec.complexity;
           manifest.milestones = planSpec.milestones;
           manifest.status = "active";

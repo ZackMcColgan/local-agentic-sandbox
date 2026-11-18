@@ -1,5 +1,11 @@
 import { JobQueue, QueuedJob } from "./jobQueue";
 import { createJobWorktree, removeJobWorktree, WorktreeHandle } from "./worktree";
+import {
+  getSharedSlotScheduler,
+  PrioritySlotScheduler,
+  SlotLease,
+  SlotPriority,
+} from "./slotScheduler";
 
 export interface TurnGateRequest {
   id: string;
@@ -11,7 +17,13 @@ export interface TurnGateOptions {
   /** Host checkout root. When provided, the turn runs against its OWN git worktree. */
   repoRoot?: string;
   /** The turn body: the orchestrator pipeline for this job. */
-  runTurn: (job: QueuedJob, worktree: WorktreeHandle | null) => Promise<void>;
+  runTurn: (job: QueuedJob, worktree: WorktreeHandle | null, lease?: SlotLease) => Promise<void>;
+  /** Priority for the shared single-slot arbiter (defaults to P0_OWNER). */
+  priority?: SlotPriority;
+  /** Optional scheduler override (defaults to globalThis-backed shared scheduler). */
+  scheduler?: PrioritySlotScheduler;
+  /** Optional abort signal for slot acquisition. */
+  signal?: AbortSignal;
   /** Fired once when this turn is queued behind another running turn (1-based queue position). */
   onQueued?: (position: number) => void;
   /** Fired when the turn settles ("done" | "failed"). */
@@ -60,7 +72,18 @@ export function serializeTurn(
       }
     }
     try {
-      await opts.runTurn(j, worktree);
+      const scheduler = opts.scheduler ?? getSharedSlotScheduler();
+      const priority = opts.priority ?? SlotPriority.P0_OWNER;
+      await scheduler.runWithSlot(
+        {
+          priority,
+          label: `chat:${j.threadId}`,
+          signal: opts.signal,
+        },
+        async (lease) => {
+          await opts.runTurn(j, worktree, lease);
+        }
+      );
     } finally {
       if (worktree && opts.repoRoot) {
         try {

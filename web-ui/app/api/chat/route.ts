@@ -95,6 +95,7 @@ import {
 } from "@/lib/hostMode";
 import { JobQueue } from "@/lib/jobQueue";
 import { serializeTurn } from "@/lib/chatTurnGate";
+import { getSharedSlotScheduler, SlotPriority } from "@/lib/slotScheduler";
 import { getHostSettings } from "@/lib/hostSettings";
 import { notify } from "@/lib/notifications";
 import {
@@ -644,6 +645,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // queues visibly (queue_position event) instead of contending for the slot.
     serializeTurn(chatJobQueue, { id: `${assistantMessageId}-${process.pid}-${++chatTurnWorktreeSeq}`, threadId: activeThreadId || clientSessionId, prompt: userPrompt }, {
       repoRoot: resolveJobRepoRoot(),
+      priority: SlotPriority.P0_OWNER,
+      scheduler: getSharedSlotScheduler(),
+      signal: turnAbortController.signal,
       onQueued: (position) => {
         sendEvent({ type: "status", status: `Queued (position ${position})`, queue_position: position });
       },
