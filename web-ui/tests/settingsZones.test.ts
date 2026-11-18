@@ -20,6 +20,7 @@ const ZONE_ORDER = [
   "settings-host-git-card",
   "settings-notifications-card",
   "settings-memory-card",
+  "settings-zone-about",
   "settings-zone-danger"
 ];
 
@@ -112,6 +113,14 @@ describe("uir-3 Settings zones", () => {
       assert.ok(idx > lastIdx, `zone ${testid} appears after the previous zone`);
       lastIdx = idx;
     }
+  });
+
+  it("About zone shows the app version sourced from web-ui package.json", async () => {
+    await render();
+    const about = zoneEl("settings-zone-about");
+    assert.ok(about, "about zone exists");
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
+    assert.ok(about.textContent.includes(`v${pkg.version}`), "about zone shows the package.json version");
   });
 
   it("Live Status Strip shows live engine, host, model, and last-deploy values", async () => {
