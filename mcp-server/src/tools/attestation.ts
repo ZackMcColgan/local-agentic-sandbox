@@ -52,8 +52,8 @@ export function registerAttestation(mcp: McpServer) {
     {
       image_uri: z.string().describe("Container image URI or digest (e.g. local-agentic-sandbox/mcp-server:latest)"),
       environment: z.enum(["dev", "staging", "prod"]).describe("Target deployment environment")
-    },
-    async ({ image_uri, environment }) => {
+    } as any,
+    async ({ image_uri, environment }: { image_uri: string; environment: "dev" | "staging" | "prod" }) => {
       const runtime = await probeRuntimeSecurity();
 
       // Check if image URI has an embedded SHA256 digest
@@ -108,8 +108,8 @@ export function registerAttestation(mcp: McpServer) {
       image_uri: z.string().describe("Target image to scan with Docker Scout (e.g. local-agentic-sandbox/mcp-server:latest)"),
       max_critical: z.number().default(0).describe("Maximum allowed critical CVEs (policy threshold)"),
       max_high: z.number().default(0).describe("Maximum allowed high CVEs (policy threshold)")
-    },
-    async ({ image_uri, max_critical, max_high }) => {
+    } as any,
+    async ({ image_uri, max_critical, max_high }: { image_uri: string; max_critical: number; max_high: number }) => {
       try {
         const { stdout } = await execFileAsync("docker", ["scout", "cves", "--format", "json", image_uri], {
           timeout: 30000
