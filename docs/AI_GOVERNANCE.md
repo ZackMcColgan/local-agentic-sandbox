@@ -51,7 +51,7 @@ The following governance control matrix maps enterprise compliance requirements 
                                        ▼
    ┌────────────────────────────────────────────────────────────────────────┐
    │  LAYER 2: BUILDER GENERATION & PRE-WRITE AST GATE                      │
-   │  • Code generation via Swift 1.5 Qwen3.8-27B (local GPU)               │
+   │  • Code generation via Strata local GPU (Qwen3.8-Flash-Next 125B MoE)  │
    │  • Pre-write AST compiler validation (TypeScript / Python / SVG)        │
    │  • 3-strike error-signature stuck detection (normalizeErrorSignature) │
    └───────────────────────────────────┬────────────────────────────────────┘

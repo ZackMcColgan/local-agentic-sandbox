@@ -48,9 +48,11 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
     assert.deepEqual(violating, [], "No tracked files should end with operator-memory.json");
   });
 
-  it("brand hygiene: no antigravity references in UI components, configs, or docs, and version is 1.0.0", () => {
+  it("brand hygiene: no antigravity references in UI components, configs, or docs, and version is 2.0.0", () => {
     const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-    assert.equal(rootPkg.version, "1.0.0", "Root package.json version must be 1.0.0");
+    assert.equal(rootPkg.version, "2.0.0", "Root package.json version must be 2.0.0");
+    const webUiPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "web-ui", "package.json"), "utf8"));
+    assert.equal(webUiPkg.version, rootPkg.version, "web-ui package.json version must match root package.json version (single version source)");
 
     const targets: string[] = [];
     // UI components

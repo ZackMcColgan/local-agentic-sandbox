@@ -8,9 +8,30 @@
 | :---: | :---: | :---: |
 | ![Mobile chat](docs/images/ui-mobile-chat.png) | ![Mobile drawer](docs/images/ui-mobile-drawer.png) | ![Work board](docs/images/ui-mobile-board.png) |
 
-| A turn, live | The board on desktop |
-| :---: | :---: |
-| ![A live agent turn with reasoning streaming](docs/images/ui-mobile-live.png) | ![Work board on desktop](docs/images/ui-desktop-board.png) |
+![A live agent turn with reasoning streaming](docs/images/ui-mobile-live.png)
+
+![Work board on desktop](docs/images/ui-desktop-board.png)
+
+---
+
+## Contents
+
+- [What it is](#what-it-is)
+- [Architecture](#architecture)
+  - [Key Engineering Proofs (Code Map)](#key-engineering-proofs-code-map)
+  - [Security boundary](#security-boundary)
+  - [Observability](#observability)
+- [How a job runs](#how-a-job-runs)
+- [Running it](#running-it)
+  - [Prerequisites](#prerequisites)
+  - [Deploy](#deploy)
+  - [Access](#access)
+- [Testing](#testing)
+  - [Local suites](#local-suites)
+  - [CI and the invariant net](#ci-and-the-invariant-net)
+- [Documentation](#documentation)
+- [Project layout](#project-layout)
+- [Status](#status)
 
 ---
 
@@ -59,6 +80,10 @@
 
 Full specification: [ARCHITECTURE.md](ARCHITECTURE.md) · Governance mapping: [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md)
 
+### Observability
+
+Every agent turn is an OpenTelemetry trace: the collector receives spans for each model round, tool call, and deploy step, and Jaeger renders the whole turn as one waterfall — a real 28-span turn is pictured above. The manifests live in [`deploy/k8s/observability.yaml`](./deploy/k8s/observability.yaml); the Jaeger UI is reachable on the LAN through the cluster gateway, never on the public internet.
+
 ---
 
 ## How a job runs
@@ -72,7 +97,11 @@ Full specification: [ARCHITECTURE.md](ARCHITECTURE.md) · Governance mapping: [d
 
 ## Running it
 
-Prerequisites: Docker Desktop with Kubernetes (kind), Node 22, and a local inference server on the host GPU.
+### Prerequisites
+
+Docker Desktop with Kubernetes (kind), Node 22, and a local inference server on the host GPU.
+
+### Deploy
 
 ```bash
 # Deploy the web UI to the local cluster (builds, imports, rolls out, verifies)
@@ -82,20 +111,33 @@ node scripts/deploy-cluster.js web-ui
 kubectl get pods -n local-agentic-sandbox
 ```
 
+### Access
+
 The UI is served on the LAN through the cluster gateway; the same session is live on phone and desktop simultaneously.
 
 ## Testing
+
+### Local suites
 
 ```bash
 cd web-ui
 npm test            # 1,600+ unit and contract tests
 npm run test:gate   # change-aware gate: runs exactly the tests a change touches
-npm run test:e2e    # Playwright suite (252 tests across 11 spec files and 4 projects)
+npm run test:e2e    # Playwright suite (272 tests across 12 spec files and 4 projects)
 ```
 
-The gate is strict on purpose: a changed file with no test coverage is rejected outright, and e2e specs run under the real Playwright runner. CI additionally runs an invariant net and a chaos battery that hammers the unhappy paths — mid-stream stops, overflow inputs, type-confused payloads.
+### CI and the invariant net
+
+Every pull request runs seven checks: typecheck, unit tests, coverage, container build, and three Playwright shards. On top of that sit an invariant net (cross-cutting properties the suite must always hold) and a chaos battery that hammers the unhappy paths — mid-stream stops, overflow inputs, type-confused payloads. The gate is strict on purpose: a changed file with no test coverage is rejected outright, and e2e specs run under the real Playwright runner.
 
 ---
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the full system specification.
+- [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md) — governance mapping: NIST AI RMF 1.0 and OWASP Agentic Top 10 controls, each tied to its enforcement code.
+- [docs/KUBERNETES_DEPLOYMENT.md](docs/KUBERNETES_DEPLOYMENT.md) — deployment notes for the local cluster.
+- Architecture decision records and further notes live under `docs/`.
 
 ## Project layout
 
