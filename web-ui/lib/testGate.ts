@@ -224,6 +224,18 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/jobQueueRoute.test.ts"]
   },
   {
+    // PrioritySlotScheduler single-slot arbiter & preemption wiring
+    match: (p) =>
+      p.includes("lib/slotScheduler") ||
+      p.includes("lib/chatTurnGate") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("app/api/threads/route") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("lib/subagents/workerPool") ||
+      p.includes("slotScheduler.test.ts"),
+    tests: ["tests/slotScheduler.test.ts"]
+  },
+  {
     match: (p) =>
       p.includes("app/api/threads/route") ||
       p.includes("lib/jobChunking") ||
