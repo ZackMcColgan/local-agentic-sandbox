@@ -270,6 +270,56 @@ export function setPlanSpecGenerator(fn: ((input: PlanSpecInput) => Promise<Plan
   customPlanSpecGenerator = fn;
 }
 
+function validateRelativePlanPath(filePath: string): boolean {
+  const trimmed = filePath.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/") || trimmed.startsWith("\\") || /^[a-zA-Z]:/.test(trimmed)) {
+    return false;
+  }
+  const segments = trimmed.split(/[\\/]+/);
+  if (segments.some((s) => s === "..")) {
+    return false;
+  }
+  return true;
+}
+
+export function validatePlanSpecMilestones(
+  milestones: Milestone[],
+  rawMilestones?: any[]
+): void {
+  if (!Array.isArray(milestones) || milestones.length === 0) {
+    throw new Error("Invalid PlanSpec: planner produced empty milestones.");
+  }
+  for (let i = 0; i < milestones.length; i++) {
+    const m = milestones[i];
+    const raw = rawMilestones?.[i];
+    if (Array.isArray(m.plannedFiles)) {
+      for (const f of m.plannedFiles) {
+        if (typeof f !== "string" || !validateRelativePlanPath(f)) {
+          throw new Error(`Invalid PlanSpec: milestone ${m.id} has invalid relative plannedFiles path "${String(f)}".`);
+        }
+      }
+    }
+    const explicitlyEmptyAc = raw && Array.isArray(raw.acceptanceCriteria) && raw.acceptanceCriteria.length === 0;
+    if (explicitlyEmptyAc) {
+      throw new Error(`Invalid PlanSpec: milestone ${m.id} has empty acceptanceCriteria.`);
+    }
+    if (Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0) {
+      const hasValidAssertion = m.acceptanceCriteria.some(
+        (ac) =>
+          Boolean(ac && typeof ac.assertion === "string" && ac.assertion.trim()) ||
+          Boolean(ac && ac.command && ac.command.trim()) ||
+          Boolean(ac && ac.fileMatch && ac.fileMatch.trim())
+      );
+      if (!hasValidAssertion) {
+        throw new Error(
+          `Invalid PlanSpec: milestone ${m.id} acceptanceCriteria must include a valid assertion, command, or fileMatch.`
+        );
+      }
+    }
+  }
+}
+
 export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> {
   if (customPlanSpecGenerator) {
     return customPlanSpecGenerator(input);
@@ -409,11 +459,13 @@ Respond strictly in valid JSON matching this schema:
     });
 
     const parsed = repairAndParsePlanJson(res.text);
+    let rawList: any[] | undefined;
     if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
       // Respect SCRIPT cap of 2 milestones max
-      const rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
+      rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
       milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
     }
+    validatePlanSpecMilestones(milestones, rawList);
   }
 
   if (milestones.length === 0) {

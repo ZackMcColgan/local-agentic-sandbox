@@ -231,7 +231,7 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
                 title: "Create weather SVG icon",
                 description: "SVG milestone",
                 plannedFiles: ["weather.svg"],
-                acceptanceCriteria: []
+                acceptanceCriteria: [{ assertion: "weather.svg exists" }]
               }
             ]
           })

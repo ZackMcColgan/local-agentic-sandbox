@@ -7,15 +7,19 @@ import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest } from "@/lib/subagents/types";
 import { unloadAllModels } from "@/lib/subagents/residency";
 import { getSharedRunLedger } from "@/lib/ledger/runLedger";
+import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 
 // Store is created per request so a runtime THREADS_DIR change (tests, container env
 // refresh) is always honored — mirrors the chat route's per-request store.
 const getThreadStore = () => new ThreadStore(resolveThreadsDir());
-const supervisor = new OvernightSupervisor();
+const getSupervisor = () => new OvernightSupervisor();
 
-function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
+function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, threadModel?: string) {
+  const supervisor = getSupervisor();
   const taskId = manifest.taskId;
   const scope = manifest.scope || "PROJECT";
+  const effectiveModel = threadModel || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+  (manifest as any).threadId = activeThreadId;
   let lastThinkingUpdate = 0;
   let lastRecordedLength = 0;
 
@@ -23,8 +27,17 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
   supervisor.setAbortController(taskId, controller);
 
   const executor = createProductionStepExecutor({
-    workerPool: new WorkerPool({ scope }),
-    model: "swift-15-27b-mtp",
+    workerPool: new WorkerPool({
+      scope,
+      modelRoster: {
+        planner: effectiveModel,
+        builder: effectiveModel,
+        critic: effectiveModel,
+        explorer: effectiveModel,
+        recorder: effectiveModel
+      }
+    }),
+    model: effectiveModel,
     scope,
     signal: controller.signal,
     onThinkingChunk: (_chunk: string, totalThinking: string) => {
@@ -79,6 +92,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
 
           if (targetFile) {
             const repoCandidates = [
+              (result as any).worktreePath,
               process.env.WORKSPACE_DIR,
               "/workspace",
               process.cwd(),
@@ -175,6 +189,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest) {
 
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const supervisor = getSupervisor();
     const { id } = await context.params;
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
@@ -207,6 +222,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const supervisor = getSupervisor();
     const { id } = await context.params;
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
@@ -289,7 +305,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           thread.status = "active";
           getThreadStore().saveThread(thread);
 
-          launchTaskExecution(thread.id, task);
+          if (thread.chunkBudget !== undefined && (task as any).chunkBudget === undefined) {
+            (task as any).chunkBudget = thread.chunkBudget;
+          }
+          launchTaskExecution(thread.id, task, thread.model);
 
           return NextResponse.json({ status: "running", thread, task });
         }
@@ -313,7 +332,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           activeExecutionSet.add(restarted.taskId);
           getThreadStore().saveThread(thread);
 
-          launchTaskExecution(thread.id, restarted);
+          if (thread.chunkBudget !== undefined && (restarted as any).chunkBudget === undefined) {
+            (restarted as any).chunkBudget = thread.chunkBudget;
+          }
+          launchTaskExecution(thread.id, restarted, thread.model);
 
           return NextResponse.json({ status: "running", thread, task: restarted });
         }

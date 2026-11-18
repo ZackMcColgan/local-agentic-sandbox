@@ -1,4 +1,6 @@
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
+import fs from "fs";
+import path from "path";
 import { promisify } from "util";
 import { RunLedger, getSharedRunLedger } from "../ledger/runLedger";
 
@@ -30,6 +32,76 @@ export interface WorkerGitOpsOptions {
 }
 
 const PROTECTED_BRANCHES = new Set(["main", "master", "develop", "production"]);
+
+export interface IsolatedWorktreeOptions {
+  baseRepoDir: string;
+  taskId: string;
+  branchName: string;
+}
+
+export interface IsolatedWorktreeResult {
+  worktreePath: string;
+  branchName: string;
+  baseSha?: string;
+  reused: boolean;
+}
+
+/**
+ * Provisions an isolated per-job git worktree from local refs (origin/develop,
+ * develop, or HEAD) without requiring outbound network fetch or a clean shared
+ * workspace. Idempotent when resuming an existing task worktree.
+ */
+export function ensureIsolatedWorktree(options: IsolatedWorktreeOptions): IsolatedWorktreeResult {
+  const { baseRepoDir, taskId, branchName } = options;
+  const safeId = taskId.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const worktreesRoot = path.join(baseRepoDir, ".worktrees");
+  const worktreePath = path.join(worktreesRoot, safeId);
+
+  if (fs.existsSync(path.join(worktreePath, ".git"))) {
+    let baseSha: string | undefined;
+    try {
+      baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: worktreePath,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    } catch {}
+    return { worktreePath, branchName, baseSha, reused: true };
+  }
+
+  fs.mkdirSync(worktreesRoot, { recursive: true });
+  try {
+    execFileSync("git", ["worktree", "prune"], {
+      cwd: baseRepoDir,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch {}
+
+  let localRef = "HEAD";
+  let baseSha: string | undefined;
+  for (const candidate of ["origin/develop", "develop", "HEAD"]) {
+    try {
+      const sha = execFileSync("git", ["rev-parse", "--verify", candidate], {
+        cwd: baseRepoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+      if (sha) {
+        localRef = candidate;
+        baseSha = sha;
+        break;
+      }
+    } catch {}
+  }
+
+  execFileSync("git", ["worktree", "add", "-B", branchName, worktreePath, localRef], {
+    cwd: baseRepoDir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return { worktreePath, branchName, baseSha, reused: false };
+}
 
 export class WorkerGitOps {
   private runId: string;
