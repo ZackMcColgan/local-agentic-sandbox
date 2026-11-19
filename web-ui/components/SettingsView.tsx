@@ -366,27 +366,32 @@ export function SettingsView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header Card: "< Settings" matching Mockup media_1791044464169.webp */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center gap-3">
+        {/* Top Header Card — Obsidian Atelier */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 atelier-card border border-stone-200/90 dark:border-white/[0.10] flex items-center gap-3">
           <button
             type="button"
             onClick={handleClose}
-            className="p-1 -ml-1 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 -ml-1 rounded-full text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors"
             title="Back to previous screen"
           >
-            <ChevronLeft className="h-7 w-7" />
+            <ChevronLeft className="h-6 w-6" />
           </button>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-            Settings
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
+              Settings
+            </h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-stone-500 dark:text-stone-400">
+              Obsidian Atelier · System &amp; Runtime
+            </p>
+          </div>
         </div>
 
         {/* Live Status Strip: pinned engine / host / model / prod summary */}
         <div
-          className="bg-white dark:bg-zinc-900 rounded-3xl px-4 py-3 shadow-sm border border-slate-200 dark:border-zinc-800"
+          className="bg-white dark:bg-[#0e0e12] rounded-3xl px-4 py-3 atelier-card border border-stone-200/90 dark:border-white/[0.10]"
           data-testid="settings-live-status-strip"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
