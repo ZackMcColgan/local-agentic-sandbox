@@ -21,18 +21,18 @@ function around(src: string, marker: string, before: number, after: number): str
   return src.slice(Math.max(0, i - before), i + after);
 }
 
-describe("parity PR3 — sessions panel chrome (board: bg-1 panel, emerald + button, bg-2 search)", () => {
-  it("panel root uses the board's bg-1 surface in dark mode", () => {
+describe("parity PR3 — sessions panel chrome (Obsidian Atelier: #0e0e12 panel, amber + button, search)", () => {
+  it("panel root uses the Obsidian Atelier bg-surface-1 in dark mode", () => {
     const root = segment(sidebar, "<aside", 220);
-    assert.ok(root.includes("dark:bg-[#121215]"), "board panel bg is #121215 (bg-1)");
+    assert.ok(root.includes("dark:bg-[#0e0e12]"), "Obsidian Atelier panel bg is #0e0e12");
   });
 
-  it("new-session button is the board's 30px emerald square with 9px radius", () => {
+  it("new-session button is the Obsidian Atelier 30px amber square with 9px radius", () => {
     const btn = around(sidebar, 'aria-label="New session"', 700, 120);
-    assert.ok(btn.includes("bg-emerald-500"), "board + button is solid emerald");
-    assert.ok(btn.includes("rounded-[9px]"), "board + button radius is 9px");
-    assert.ok(btn.includes("h-[30px] w-[30px]"), "board + button is 30px");
-    assert.ok(btn.includes("text-[#052e16]"), "board + glyph is dark on emerald");
+    assert.ok(btn.includes("dark:bg-amber-500"), "Obsidian Atelier + button is solid amber");
+    assert.ok(btn.includes("rounded-[9px]"), "+ button radius is 9px");
+    assert.ok(btn.includes("h-[30px] w-[30px]"), "+ button is 30px");
+    assert.ok(btn.includes("dark:text-stone-950"), "+ glyph is dark on amber");
   });
 
   it("search field uses bg-2 with the board's 11px radius", () => {
@@ -48,13 +48,13 @@ describe("parity PR3 — sessions panel chrome (board: bg-1 panel, emerald + but
   });
 });
 
-describe("parity PR3 — session cards (board: bg-2, 14px radius, mono meta, status chips)", () => {
-  it("card uses bg-2, 14px radius, and board padding", () => {
+describe("parity PR3 — session cards (Obsidian Atelier: #15151b, rounded-2xl, mono meta, status chips)", () => {
+  it("card uses Obsidian Atelier surface, rounded-2xl, and padding", () => {
     const card = segment(sidebar, "group relative overflow-hidden", 600);
-    assert.ok(card.includes("rounded-[14px]"), "board card radius is 14px");
-    assert.ok(card.includes("dark:bg-[#18181b]"), "board card bg is #18181b (bg-2)");
-    assert.ok(card.includes("px-[14px]"), "board card horizontal padding is 14px");
-    assert.ok(card.includes("py-[13px]"), "board card vertical padding is 13px");
+    assert.ok(card.includes("rounded-2xl"), "Obsidian Atelier card radius is rounded-2xl");
+    assert.ok(card.includes("dark:bg-[#15151b]"), "Obsidian Atelier card bg is #15151b");
+    assert.ok(card.includes("px-[14px]"), "card horizontal padding is 14px");
+    assert.ok(card.includes("py-[13px]"), "card vertical padding is 13px");
     assert.ok(!card.includes("rounded-3xl"), "the old 24px card radius is gone");
   });
 
@@ -77,35 +77,33 @@ describe("parity PR3 — session cards (board: bg-2, 14px radius, mono meta, sta
     assert.ok(chip.includes("rounded-full"), "status chip is a pill");
   });
 
-  it("running card gets the board's emerald border, inset bar, and actions", () => {
+  it("running card gets the Obsidian Atelier cyan border, inset bar, and actions", () => {
     assert.ok(
-      sidebar.includes("border-[rgba(16,185,129,0.45)]"),
-      "board running border rgba(16,185,129,.45)",
+      sidebar.includes("border-cyan-500/40"),
+      "Obsidian Atelier running border cyan-500/40",
     );
     assert.ok(
-      sidebar.includes("shadow-[inset_3px_0_0_#10b981]"),
-      "board running card has the inset 3px emerald left bar",
+      sidebar.includes("shadow-[inset_3px_0_0_#22d3ee]"),
+      "Obsidian Atelier running card has the inset 3px cyan left bar",
     );
-    const resume = around(sidebar, "thread-resume-", 120, 500);
-    assert.ok(resume.includes("bg-emerald-500"), "Resume is solid emerald");
-    assert.ok(sidebar.includes("Open settings"), "board ghost action label");
+    assert.ok(sidebar.includes("Open settings"), "ghost action label");
   });
 });
 
-describe("parity PR3 — drawer rows + rail (board language on the secondary surfaces)", () => {
-  it("drawer session rows use the board card surface and wrap titles", () => {
+describe("parity PR3 — drawer rows + rail (Obsidian Atelier on secondary surfaces)", () => {
+  it("drawer session rows use the Obsidian Atelier card surface and wrap titles", () => {
     const row = around(drawer, "data-testid={`thread-row-", 200, 900);
-    assert.ok(row.includes("rounded-[14px]"), "drawer rows take the board card radius");
-    assert.ok(row.includes("dark:bg-[#141418]"), "drawer rows use #141418 for elevation contrast");
+    assert.ok(row.includes("rounded-2xl"), "drawer rows take the Obsidian Atelier card radius");
+    assert.ok(row.includes("dark:bg-[#15151b]"), "drawer rows use #15151b for elevation contrast");
     const title = around(drawer, "title={thread.title}", 40, 220);
     assert.ok(title.includes("line-clamp-2"), "drawer titles wrap like board cards");
     assert.ok(!title.includes("truncate"), "drawer titles no longer single-line truncate");
   });
 
-  it("the selected rail button is the board's solid emerald with dark text", () => {
+  it("the selected rail button is Obsidian Atelier burnished amber with high-contrast text", () => {
     assert.ok(
-      page.includes("bg-emerald-500 text-[#052e16]"),
-      "board rail selection is solid emerald, dark text",
+      page.includes("bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950"),
+      "rail selection is burnished amber with high-contrast text",
     );
   });
 });

@@ -144,7 +144,7 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     assert.ok(!html.includes("Round "), "no Round segment when round is unknown");
   });
 
-  it("pulse track uses design-true emerald-500 to emerald-400 gradient with no emerald-600", () => {
+  it("pulse track uses Obsidian Atelier amber-500 to cyan-400 gradient", () => {
     const html = renderToString(
       React.createElement(LiveActivityHeader, {
         startedAtMs: NOW - 5_000,
@@ -156,9 +156,8 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
         isStreaming: true
       })
     );
-    assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
-    assert.ok(html.includes("to-emerald-400"), "pulse gradient ends at emerald-400");
-    assert.ok(!html.includes("emerald-600"), "no dark emerald-600 in pulse gradient");
+    assert.ok(html.includes("from-amber-500"), "pulse gradient starts at amber-500");
+    assert.ok(html.includes("to-cyan-400"), "pulse gradient ends at cyan-400");
   });
 });
 
@@ -233,12 +232,12 @@ describe("uir-0 — header diet in ChatStream", () => {
     assert.ok(page.includes("onOpenSettings"), "page wires onOpenSettings into ChatStream");
   });
 
-  it("LiveActivityHeader indeterminate bar reads emerald on mobile and handles reduced-motion", () => {
+  it("LiveActivityHeader indeterminate bar reads amber on mobile and handles reduced-motion", () => {
     const headerSrc = readSrc("components/LiveActivityHeader.tsx");
     const cssSrc = readSrc("app/globals.css");
     assert.ok(
-      headerSrc.includes("bg-emerald-500/20"),
-      "indeterminate track uses emerald tint instead of pure grey"
+      headerSrc.includes("bg-amber-500/20"),
+      "indeterminate track uses amber tint instead of pure grey"
     );
     assert.ok(
       headerSrc.includes("h-[3px]"),
