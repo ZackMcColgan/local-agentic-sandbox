@@ -202,22 +202,22 @@ export function ThreadsSidebar({
   };
 
   return (
-    <aside className="w-full flex flex-col h-full bg-white dark:bg-[#121215] border-r border-slate-200/80 dark:border-zinc-800 shrink-0 overflow-hidden">
-      {/* Top Header matching Mockup media_1791044464191.webp */}
-      <div className="h-12 px-4 bg-white dark:bg-[#121215] border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
+    <aside className="w-full flex flex-col h-full bg-stone-50 dark:bg-[#0e0e12] border-r border-stone-200/80 dark:border-white/[0.08] shrink-0 overflow-hidden">
+      {/* Top Header — Obsidian Atelier */}
+      <div className="h-12 px-4 bg-stone-50 dark:bg-[#0e0e12] border-b border-stone-200/80 dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           {onOpenDrawer && (
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-stone-700 dark:text-stone-300 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
           )}
-          <h1 className="text-[19px] font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+          <h1 className="text-[19px] font-bold tracking-tight text-stone-900 dark:text-stone-50">
             Sessions
           </h1>
         </div>
@@ -227,7 +227,7 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={() => setIsSearchOpen(!isSearchOpen)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
             title="Search sessions"
             aria-label="Search sessions"
           >
@@ -238,7 +238,7 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={onNewThread}
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-emerald-500 text-[#052e16] hover:bg-emerald-400 transition-colors shrink-0"
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 transition-colors shrink-0 shadow-xs"
             title="New session"
             aria-label="New session"
           >
@@ -343,14 +343,14 @@ export function ThreadsSidebar({
             const isRunning = statusLabel === "Running" || statusLabel === "Active";
             const statusChip = (() => {
               if (isRunning)
-                return { label: "● RUNNING", classes: "bg-emerald-500/15 text-emerald-700 dark:text-[#34d399]" };
+                return { label: "● RUNNING", classes: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300" };
               if (statusLabel === "Completed")
-                return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-[#34d399]" };
+                return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" };
               if (statusLabel === "Failed")
-                return { label: "✕ FAILED", classes: "bg-red-500/10 text-red-700 dark:text-[#fca5a5]" };
+                return { label: "✕ FAILED", classes: "bg-rose-500/10 text-rose-700 dark:text-rose-300" };
               if (statusLabel === "Needs Input")
-                return { label: "NEEDS INPUT", classes: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300" };
-              return { label: "NEW", classes: "bg-slate-500/10 text-slate-500 dark:text-zinc-400" };
+                return { label: "NEEDS INPUT", classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300" };
+              return { label: "NEW", classes: "bg-stone-500/10 text-stone-600 dark:text-stone-400" };
             })();
 
             return (
@@ -384,12 +384,12 @@ export function ThreadsSidebar({
                   }
                   onSelectThread(thread.id);
                 }}
-                className={`group relative overflow-hidden rounded-[14px] px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                className={`group relative overflow-hidden rounded-2xl px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 atelier-card ${
                   isRunning
-                    ? "bg-white dark:bg-[#18181b] border border-[rgba(16,185,129,0.45)] shadow-[inset_3px_0_0_#10b981]"
+                    ? "bg-white dark:bg-[#15151b] border border-cyan-500/40 shadow-[inset_3px_0_0_#22d3ee]"
                     : isSelected
-                    ? "bg-white dark:bg-[#18181b] ring-2 ring-emerald-500 shadow-md border border-transparent"
-                    : "bg-white dark:bg-[#18181b] hover:shadow-md shadow-xs border border-slate-200 dark:border-zinc-800"
+                    ? "bg-white dark:bg-[#15151b] ring-2 ring-amber-500 shadow-md border border-transparent"
+                    : "bg-white dark:bg-[#15151b] hover:shadow-md shadow-xs border border-stone-200/90 dark:border-white/[0.09]"
                 }`}
               >
                 <div className="min-w-0">
@@ -397,14 +397,14 @@ export function ThreadsSidebar({
                     <h2
                       className={`text-[14.5px] leading-snug line-clamp-2 break-words ${
                         isSelected
-                          ? "font-bold text-slate-900 dark:text-zinc-100"
-                          : "font-semibold text-slate-900 dark:text-zinc-100"
+                          ? "font-bold text-stone-900 dark:text-stone-50"
+                          : "font-semibold text-stone-900 dark:text-stone-100"
                       }`}
                     >
                       {deriveThreadDisplayTitle(thread.title)}
                     </h2>
                     {(thread as any).matchSnippet && (
-                      <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                      <p className="mt-0.5 text-[11px] leading-snug truncate text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
                       </p>
                     )}
