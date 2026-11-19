@@ -473,8 +473,8 @@ export function ProjectsView({
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header — Obsidian Atelier */}
-        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 atelier-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
+        {/* Top Header */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -486,7 +486,7 @@ export function ProjectsView({
               <Menu className="h-6 w-6" />
             </button>
             <div className="flex items-center gap-2">
-              <FolderGit2 className="h-6 w-6 text-amber-700 dark:text-amber-400" />
+              <FolderGit2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
                 Projects &amp; Folders
               </h1>
@@ -496,7 +496,7 @@ export function ProjectsView({
           <button
             type="button"
             onClick={() => setIsRegisterModalOpen(true)}
-            className="min-h-[44px] px-4 py-2 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-colors"
+            className="min-h-[44px] px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Register Folder</span>
@@ -506,20 +506,20 @@ export function ProjectsView({
 
         {/* Project Selector Chips / Cards */}
         {projects.length === 0 ? (
-          <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-8 text-center atelier-card border border-stone-200/90 dark:border-white/[0.10] space-y-3">
-            <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-stone-500 dark:text-stone-400">
+          <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-8 text-center surface-card border border-stone-200/90 dark:border-white/[0.10] space-y-3">
+            <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-zinc-600 dark:text-zinc-400">
               <Folder className="h-6 w-6" />
             </div>
             <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">
               No Projects Registered
             </h3>
-            <p className="text-xs text-stone-500 dark:text-stone-400 max-w-md mx-auto">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-md mx-auto">
               Register a local repository directory to enable overnight autonomous runs, read-only file exploration, and surgical git diff reviews.
             </p>
             <button
               type="button"
               onClick={() => setIsRegisterModalOpen(true)}
-              className="min-h-[44px] px-4 py-2 mt-2 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 font-semibold text-xs transition-colors"
+              className="min-h-[44px] px-4 py-2 mt-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-semibold text-xs transition-colors"
             >
               Register First Folder
             </button>

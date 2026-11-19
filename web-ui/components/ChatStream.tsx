@@ -2106,7 +2106,7 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar — Obsidian Atelier Frosted Header */}
+      {/* Top Bar — Frosted Header */}
       <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/90 dark:bg-black/85 backdrop-blur-xl flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
@@ -2141,7 +2141,7 @@ export function ChatStream({
               title="Open Projects"
               aria-label="Open Projects"
             >
-              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-amber-700 dark:text-amber-400" />
+              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="hidden 2xl:inline">Projects</span>
             </button>
           )}
@@ -2153,7 +2153,7 @@ export function ChatStream({
               onClick={onToggleSidebar}
               className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isSidebarOpen
-                  ? "border-amber-500/45 bg-amber-500/15 text-amber-900 dark:text-amber-300"
+                  ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
                   : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
               }`}
               title="Toggle Sessions Panel"
@@ -2171,7 +2171,7 @@ export function ChatStream({
               onClick={onToggleWorkspace}
               className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isWorkspaceOpen
-                  ? "border-amber-500/45 bg-amber-500/15 text-amber-900 dark:text-amber-300"
+                  ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
                   : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
               }`}
               title="Toggle Workspace Panel"
@@ -3713,13 +3713,13 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Unified Obsidian Atelier Two-Deck Composer Card */}
+        {/* Unified Two-Deck Composer Card */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#111116] border border-stone-200 dark:border-white/[0.11] atelier-card p-3 transition-all focus-within:ring-2 focus-within:ring-amber-500/25 focus-within:border-amber-500"
+          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#111116] border border-stone-200 dark:border-white/[0.11] surface-card p-3 transition-all focus-within:ring-2 focus-within:ring-emerald-500/25 focus-within:border-emerald-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea
@@ -3744,7 +3744,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="h-9 w-9 rounded-full text-stone-500 hover:text-amber-700 dark:text-stone-400 dark:hover:text-amber-400 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors shrink-0 flex items-center justify-center"
+              className="h-9 w-9 rounded-full text-zinc-600 hover:text-emerald-700 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors shrink-0 flex items-center justify-center"
               title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
               aria-label="Attach files"
             >
@@ -3766,7 +3766,7 @@ export function ChatStream({
                     onClick={() => handleSelectMidTurnAction("queue")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "queue"
-                        ? "bg-white dark:bg-[#0e0e12] text-amber-800 dark:text-amber-300 font-semibold shadow-xs"
+                        ? "bg-white dark:bg-[#0e0e12] text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
                         : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
                     }`}
                   >
@@ -3799,7 +3799,7 @@ export function ChatStream({
                     type="checkbox"
                     checked={autoDeployOnGreen}
                     onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
-                    className="rounded border-stone-300 dark:border-white/[0.16] text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
+                    className="rounded border-stone-300 dark:border-white/[0.16] text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
                   />
                   <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
                   <span className="sm:hidden">Auto-Deploy</span>
@@ -3829,7 +3829,7 @@ export function ChatStream({
                   className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
                     isGeneratingOrRunning && midTurnAction === "steer"
                       ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                      : "bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950"
+                      : "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black"
                   }`}
                   title={
                     isGeneratingOrRunning

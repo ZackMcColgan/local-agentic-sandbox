@@ -125,12 +125,12 @@ export function EngineStatusPill({
     return (
       <div
         onClick={onOpenSettings}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 text-xs font-semibold text-amber-900 dark:text-amber-300 shadow-2xs cursor-pointer min-h-[36px] sm:min-h-[32px] ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/15 text-xs font-semibold text-emerald-900 dark:text-emerald-300 shadow-2xs cursor-pointer min-h-[36px] sm:min-h-[32px] ${className}`}
         title="LLM Engine: Starting..."
         role="status"
         aria-label="Engine starting"
       >
-        <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
         <span className="text-xs">Starting...</span>
       </div>
     );
@@ -150,7 +150,7 @@ export function EngineStatusPill({
       <button
         type="button"
         onClick={handleStart}
-        className="min-h-[28px] sm:min-h-[24px] px-2.5 py-0.5 rounded-full bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
+        className="min-h-[28px] sm:min-h-[24px] px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
         title="Start LLM Engine"
         aria-label="Start LLM Engine"
       >

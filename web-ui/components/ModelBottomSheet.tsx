@@ -194,7 +194,7 @@ export function ModelBottomSheet({
                   onClick={() => onModelChange(item.id)}
                   className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all text-left ${
                     selected
-                      ? "bg-amber-50 dark:bg-amber-500/15 border-2 border-amber-500 shadow-sm"
+                      ? "bg-emerald-50 dark:bg-emerald-500/15 border-2 border-emerald-500 shadow-sm"
                       : "bg-white dark:bg-[#15151b] border border-stone-200 dark:border-white/[0.09] hover:border-stone-300 dark:hover:border-white/[0.18]"
                   }`}
                 >
@@ -202,7 +202,7 @@ export function ModelBottomSheet({
                     <div
                       className={`p-2.5 rounded-full flex items-center justify-center ${
                         selected
-                          ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
                           : "bg-stone-100 dark:bg-[#1f1f28] text-stone-600 dark:text-stone-400"
                       }`}
                     >
@@ -212,14 +212,14 @@ export function ModelBottomSheet({
                       <div className="text-sm font-bold text-stone-900 dark:text-stone-100">
                         {item.displayName}
                       </div>
-                      <div className="text-xs text-stone-500 dark:text-stone-400">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
                         {item.subtext}
                       </div>
                     </div>
                   </div>
 
                   {selected && (
-                    <div className="h-6 w-6 rounded-full bg-amber-600 dark:bg-amber-500 text-white dark:text-stone-950 flex items-center justify-center shadow-sm">
+                    <div className="h-6 w-6 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black flex items-center justify-center shadow-sm">
                       <Check className="h-4 w-4 stroke-[3]" />
                     </div>
                   )}
@@ -236,7 +236,7 @@ export function ModelBottomSheet({
               Thinking effort
             </span>
             {!reasoningSupported && (
-              <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
                 Not supported by model
               </span>
             )}
@@ -254,7 +254,7 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("low")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "low"
-                  ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 shadow-sm"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
                   : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
@@ -269,7 +269,7 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("medium")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "medium"
-                  ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 shadow-sm"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
                   : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
@@ -286,7 +286,7 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("xhigh")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "xhigh"
-                  ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 shadow-sm"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
                   : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
@@ -295,7 +295,7 @@ export function ModelBottomSheet({
             </button>
           </div>
 
-          <p className="text-xs text-stone-500 dark:text-stone-400 pl-1">
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 pl-1">
             {effortDescriptions[reasoningEffort]}
           </p>
 
@@ -306,7 +306,7 @@ export function ModelBottomSheet({
                 <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
                 <span className="text-xs font-bold text-stone-900 dark:text-stone-100">Standalone llama.cpp Engine (Strata)</span>
               </div>
-              <span className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+              <span className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
                 {engineStatus === "running" ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)" : "Stopped · 0 MB VRAM"}
               </span>
             </div>
@@ -315,7 +315,7 @@ export function ModelBottomSheet({
                 type="button"
                 onClick={handleToggleEngine}
                 disabled={engineLoading}
-                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white dark:text-stone-950 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 active:scale-95"
+                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white dark:text-black transition-all shadow-xs flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 active:scale-95"
               >
                 <Power className="h-3.5 w-3.5" />
                 <span>{engineLoading ? "Updating..." : "Start Engine"}</span>
@@ -332,7 +332,7 @@ export function ModelBottomSheet({
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-3.5 px-6 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 font-semibold text-sm shadow-md transition-all active:scale-[0.99]"
+            className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-semibold text-sm shadow-md transition-all active:scale-[0.99]"
           >
             Done
           </button>

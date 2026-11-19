@@ -68,7 +68,7 @@ export function LiveActivityHeader({
   return (
     <div
       data-testid="live-activity-header"
-      className="w-full max-w-2xl rounded-2xl bg-white/95 dark:bg-[#0e0e12] border border-stone-200/90 dark:border-white/[0.11] atelier-card px-4 py-3 space-y-2"
+      className="w-full max-w-2xl rounded-2xl bg-white/95 dark:bg-[#0e0e12] border border-stone-200/90 dark:border-white/[0.11] surface-card px-4 py-3 space-y-2"
     >
       {/* Phase in words + freshness */}
       <div className="flex items-center justify-between gap-2">
@@ -77,7 +77,7 @@ export function LiveActivityHeader({
           {phaseTool && (
             <span
               data-testid="live-activity-tool"
-              className="font-mono font-normal text-xs text-stone-500 dark:text-stone-400"
+              className="font-mono font-normal text-xs text-zinc-600 dark:text-zinc-400"
             >
               {" — "}
               {phaseTool}
@@ -96,9 +96,9 @@ export function LiveActivityHeader({
         {freshness.state === "idle" && (
           <span
             data-testid="live-activity-freshness"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 shrink-0"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0"
           >
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span>Last activity {freshness.secondsAgo}s ago</span>
           </span>
         )}
@@ -122,14 +122,14 @@ export function LiveActivityHeader({
 
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
-        <div className="relative h-[3px] rounded-full bg-amber-500/20 dark:bg-amber-500/20 overflow-hidden" aria-hidden="true">
-          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-amber-500 to-cyan-400" />
+        <div className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden" aria-hidden="true">
+          <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400" />
         </div>
       )}
 
       {/* Meta line */}
       {(metaParts.length > 0 || activityLabel) && (
-        <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-stone-500 dark:text-stone-400">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
           <span className="truncate">{activityLabel || metaParts.join(" · ")}</span>
           {activityLabel && metaParts.length > 0 && (
             <span className="shrink-0 tabular-nums">{metaParts.join(" · ")}</span>
@@ -180,9 +180,9 @@ export function LiveActivityHeader({
                     <span className="text-emerald-600 dark:text-emerald-400 shrink-0">✓</span>
                   )}
                   <span className="font-semibold truncate">{tr.tool}</span>
-                  {target && <span className="text-stone-500 dark:text-stone-400 truncate">{target}</span>}
+                  {target && <span className="text-zinc-600 dark:text-zinc-400 truncate">{target}</span>}
                 </div>
-                <span className="text-[11px] text-stone-500 dark:text-stone-400 tabular-nums shrink-0">
+                <span className="text-[11px] text-zinc-600 dark:text-zinc-400 tabular-nums shrink-0">
                   {tr.durationMs != null
                     ? `${tr.durationMs}ms`
                     : isInFlight

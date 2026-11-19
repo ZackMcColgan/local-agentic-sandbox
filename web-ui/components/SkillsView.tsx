@@ -120,7 +120,7 @@ export function SkillsView({
             </h1>
           </div>
           {pending.length > 0 && (
-            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300 border border-amber-300/60 dark:border-amber-500/30 tabular-nums">
+            <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-500/30 tabular-nums">
               {pending.length} <span className="hidden sm:inline">Pending Review</span><span className="sm:hidden">Pending</span>
             </span>
           )}
@@ -134,8 +134,8 @@ export function SkillsView({
 
         {/* Section 1: Pending Candidates for Human Approval or Empty State */}
         {pending.length === 0 ? (
-          <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-6 atelier-card border border-stone-200/90 dark:border-white/[0.10] text-center space-y-2">
-            <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-stone-500 dark:text-stone-400">
+          <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-6 surface-card border border-stone-200/90 dark:border-white/[0.10] text-center space-y-2">
+            <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-zinc-600 dark:text-zinc-400">
               <Wrench className="h-6 w-6" />
             </div>
             <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">No skills to review</h3>
@@ -146,7 +146,7 @@ export function SkillsView({
         ) : (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">
                 Pending Human Approval (Observed ≥ 3x)
               </h2>
@@ -155,7 +155,7 @@ export function SkillsView({
               {pending.map((candidate) => (
                 <div
                   key={candidate.id}
-                  className="bg-white dark:bg-[#0e0e12] rounded-3xl p-5 atelier-card border border-stone-200/90 dark:border-white/[0.10] space-y-3"
+                  className="bg-white dark:bg-[#0e0e12] rounded-3xl p-5 surface-card border border-stone-200/90 dark:border-white/[0.10] space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>

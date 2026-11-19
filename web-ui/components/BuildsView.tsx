@@ -78,8 +78,8 @@ export function BuildsView({
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header — Obsidian Atelier */}
-        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 atelier-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
+        {/* Top Header */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               data-testid="builds-menu-btn"
@@ -107,7 +107,7 @@ export function BuildsView({
         {/* Sub-Navigation: Builds Pipeline vs Projects & Folders */}
         {onNavigateToProjects && (
           <div className="flex items-center gap-2 px-1">
-            <span className="text-xs font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/15 px-3 py-1.5 rounded-xl border border-amber-300/60 dark:border-amber-500/30">
+            <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-300/60 dark:border-emerald-500/30">
               Builds Pipeline
             </span>
             <button
@@ -115,7 +115,7 @@ export function BuildsView({
               onClick={onNavigateToProjects}
               className="min-h-[44px] text-xs font-semibold text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
             >
-              <FolderGit2 className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+              <FolderGit2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span>Projects &amp; Folders</span>
             </button>
           </div>
@@ -124,7 +124,7 @@ export function BuildsView({
         {/* Active Build Run Section */}
         {activeTask ? (
           <div>
-            <h2 className="text-lg font-semibold text-amber-800 dark:text-amber-400 mb-3 px-1">
+            <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
               Active Build
             </h2>
             <LiveRunBlock

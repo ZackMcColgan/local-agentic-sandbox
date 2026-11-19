@@ -157,7 +157,7 @@ export function ThinkingPanel({
   return (
     <div
       data-testid="thinking-panel"
-      className={`w-full max-w-2xl rounded-2xl bg-stone-50/95 dark:bg-[#0e0e12] border border-stone-200/90 dark:border-white/[0.10] text-stone-800 dark:text-stone-200 atelier-card overflow-hidden transition-all duration-200 ${className}`}
+      className={`w-full max-w-2xl rounded-2xl bg-stone-50/95 dark:bg-[#0e0e12] border border-stone-200/90 dark:border-white/[0.10] text-stone-800 dark:text-stone-200 surface-card overflow-hidden transition-all duration-200 ${className}`}
     >
       {/* Compact 1-Line Header Bar */}
       <button
@@ -171,8 +171,8 @@ export function ThinkingPanel({
             aria-hidden="true"
             className={`h-2 w-2 rounded-full shrink-0 ${
               isStreaming
-                ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] animate-pulse"
-                : "bg-amber-500"
+                ? "bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)] animate-pulse"
+                : "bg-emerald-500"
             }`}
           />
           <span
@@ -182,15 +182,15 @@ export function ThinkingPanel({
             {headerTitle}
           </span>
           {isStreaming && streamStartMs !== null && (
-            <span className="font-mono tabular-nums text-[11px] text-stone-500 dark:text-stone-400 shrink-0">
+            <span className="font-mono tabular-nums text-[11px] text-zinc-600 dark:text-zinc-400 shrink-0">
               {formatElapsedDuration(Math.max(0, Math.floor((headerNowMs - streamStartMs) / 1000)))}
             </span>
           )}
           <span
             data-testid="streaming-badge"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-500/15 border border-amber-300/70 dark:border-amber-500/30 text-amber-900 dark:text-amber-300 shrink-0"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-300/70 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 shrink-0"
           >
-            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
+            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
             <span>
               {isStreaming ? (
                 <>
@@ -218,7 +218,7 @@ export function ThinkingPanel({
           )}
         </div>
 
-        <div className="flex items-center gap-1 text-[11px] font-medium text-stone-500 dark:text-stone-400 group-hover:text-stone-900 dark:group-hover:text-stone-100 shrink-0 ml-2">
+        <div className="flex items-center gap-1 text-[11px] font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-stone-900 dark:group-hover:text-stone-100 shrink-0 ml-2">
           <span>{isExpanded ? "Hide" : "Show"}</span>
           {isExpanded ? (
             <ChevronUp className="h-3.5 w-3.5" />
