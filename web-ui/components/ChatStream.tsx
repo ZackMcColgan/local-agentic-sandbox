@@ -2106,15 +2106,15 @@ export function ChatStream({
         </div>
       )}
 
-      {/* Top Bar matching Mockup 01 & Mobile Navigation Pattern */}
-      <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-slate-200/80 dark:border-zinc-800 bg-white/95 dark:bg-black/95 backdrop-blur-md flex items-center justify-between shrink-0">
+      {/* Top Bar — Obsidian Atelier Frosted Header */}
+      <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/90 dark:bg-black/85 backdrop-blur-xl flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
           {onOpenDrawer ? (
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-[10px] border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] transition-colors shrink-0"
               title="Open navigation menu"
               aria-label="Open navigation menu"
             >
@@ -2124,7 +2124,7 @@ export function ChatStream({
             <button
               type="button"
               onClick={onBackToList}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors shrink-0"
               title="Back to sessions"
               aria-label="Back to sessions"
             >
@@ -2137,11 +2137,11 @@ export function ChatStream({
             <button
               type="button"
               onClick={onOpenProjects}
-              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0"
+              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0"
               title="Open Projects"
               aria-label="Open Projects"
             >
-              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
+              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-amber-700 dark:text-amber-400" />
               <span className="hidden 2xl:inline">Projects</span>
             </button>
           )}
@@ -2153,8 +2153,8 @@ export function ChatStream({
               onClick={onToggleSidebar}
               className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isSidebarOpen
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                  ? "border-amber-500/45 bg-amber-500/15 text-amber-900 dark:text-amber-300"
+                  : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
               }`}
               title="Toggle Sessions Panel"
               aria-label="Toggle Sessions Panel"
@@ -2171,8 +2171,8 @@ export function ChatStream({
               onClick={onToggleWorkspace}
               className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
                 isWorkspaceOpen
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                  : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                  ? "border-amber-500/45 bg-amber-500/15 text-amber-900 dark:text-amber-300"
+                  : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
               }`}
               title="Toggle Workspace Panel"
               aria-label="Toggle Workspace Panel"
@@ -2183,7 +2183,7 @@ export function ChatStream({
           )}
 
           <h1
-            className="hidden 2xl:block text-base font-bold tracking-tight text-slate-900 dark:text-zinc-100 max-w-[320px] truncate"
+            className="hidden 2xl:block text-base font-bold tracking-tight text-stone-900 dark:text-stone-50 max-w-[320px] truncate"
             title={threadTitle || "New session"}
           >
             {threadTitle || "New session"}
@@ -3713,13 +3713,13 @@ export function ChatStream({
           </div>
         )}
 
-        {/* Unified Material 3 Two-Deck Composer Card */}
+        {/* Unified Obsidian Atelier Two-Deck Composer Card */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSend();
           }}
-          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#141418] border border-slate-200 dark:border-zinc-800 p-3 shadow-xs transition-all focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500"
+          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#111116] border border-stone-200 dark:border-white/[0.11] atelier-card p-3 transition-all focus-within:ring-2 focus-within:ring-amber-500/25 focus-within:border-amber-500"
         >
           {/* Top Deck: Auto-expanding Textarea */}
           <textarea
@@ -3735,16 +3735,16 @@ export function ChatStream({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
+            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
           />
 
           {/* Bottom Deck: Controls Bar */}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-200/50 dark:border-zinc-800/80">
+          <div className="flex items-center justify-between pt-2 mt-1 border-t border-stone-200/70 dark:border-white/[0.08]">
             {/* Paperclip Button on left */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="h-9 w-9 rounded-full text-slate-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors shrink-0 flex items-center justify-center"
+              className="h-9 w-9 rounded-full text-stone-500 hover:text-amber-700 dark:text-stone-400 dark:hover:text-amber-400 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors shrink-0 flex items-center justify-center"
               title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
               aria-label="Attach files"
             >
@@ -3757,7 +3757,7 @@ export function ChatStream({
                 <div
                   role="radiogroup"
                   aria-label="Mid-Turn Action Selector"
-                  className="inline-flex rounded-full p-0.5 bg-slate-200/60 dark:bg-zinc-850 text-[11px] font-medium select-none"
+                  className="inline-flex rounded-full p-0.5 bg-stone-200/70 dark:bg-[#1f1f28] text-[11px] font-medium select-none"
                 >
                   <button
                     type="button"
@@ -3766,8 +3766,8 @@ export function ChatStream({
                     onClick={() => handleSelectMidTurnAction("queue")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "queue"
-                        ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 font-semibold shadow-xs"
-                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                        ? "bg-white dark:bg-[#0e0e12] text-amber-800 dark:text-amber-300 font-semibold shadow-xs"
+                        : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
                     }`}
                   >
                     Queue
@@ -3779,8 +3779,8 @@ export function ChatStream({
                     onClick={() => handleSelectMidTurnAction("steer")}
                     className={`px-2.5 py-0.5 rounded-full transition-all ${
                       midTurnAction === "steer"
-                        ? "bg-white dark:bg-zinc-900 text-sky-700 dark:text-sky-300 font-semibold shadow-xs"
-                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                        ? "bg-white dark:bg-[#0e0e12] text-cyan-800 dark:text-cyan-300 font-semibold shadow-xs"
+                        : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
                     }`}
                   >
                     Steer
@@ -3794,12 +3794,12 @@ export function ChatStream({
                   is unchanged. The auto-deploy opt-in now also appears when the
                   draft itself starts with the /build prefix. */}
               {(composerMode === "build" || input.trim().toLowerCase().startsWith("/build ")) && (
-                <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-zinc-400 cursor-pointer select-none px-1">
+                <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600 dark:text-stone-400 cursor-pointer select-none px-1">
                   <input
                     type="checkbox"
                     checked={autoDeployOnGreen}
                     onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
-                    className="rounded border-slate-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                    className="rounded border-stone-300 dark:border-white/[0.16] text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
                   />
                   <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
                   <span className="sm:hidden">Auto-Deploy</span>
@@ -3812,7 +3812,7 @@ export function ChatStream({
                   type="button"
                   onClick={handleStop}
                   data-testid="stop-button"
-                  className="h-10 w-10 rounded-xl bg-zinc-900 hover:bg-black text-white flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
+                  className="h-10 w-10 rounded-xl bg-stone-900 dark:bg-stone-100 hover:bg-black dark:hover:bg-white text-white dark:text-stone-950 flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
                   title="Stop generation / halt workers"
                   aria-label="Stop generation"
                 >
@@ -3828,8 +3828,8 @@ export function ChatStream({
                   data-testid="send-button"
                   className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
                     isGeneratingOrRunning && midTurnAction === "steer"
-                      ? "bg-sky-600 hover:bg-sky-700 text-white"
-                      : "bg-emerald-500 hover:bg-emerald-400 text-[#04120c]"
+                      ? "bg-cyan-600 hover:bg-cyan-500 text-white"
+                      : "bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950"
                   }`}
                   title={
                     isGeneratingOrRunning

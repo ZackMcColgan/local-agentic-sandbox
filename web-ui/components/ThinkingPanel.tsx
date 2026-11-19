@@ -157,13 +157,13 @@ export function ThinkingPanel({
   return (
     <div
       data-testid="thinking-panel"
-      className={`w-full max-w-2xl rounded-2xl bg-slate-50/90 dark:bg-zinc-900/90 border border-slate-200/80 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 shadow-2xs overflow-hidden transition-all duration-200 ${className}`}
+      className={`w-full max-w-2xl rounded-2xl bg-stone-50/95 dark:bg-[#0e0e12] border border-stone-200/90 dark:border-white/[0.10] text-stone-800 dark:text-stone-200 atelier-card overflow-hidden transition-all duration-200 ${className}`}
     >
       {/* Compact 1-Line Header Bar */}
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 text-left group transition-colors hover:bg-slate-100/70 dark:hover:bg-zinc-855/60 focus:outline-none"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 text-left group transition-colors hover:bg-stone-100/80 dark:hover:bg-white/[0.04] focus:outline-none"
         aria-expanded={isExpanded}
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
@@ -171,26 +171,26 @@ export function ThinkingPanel({
             aria-hidden="true"
             className={`h-2 w-2 rounded-full shrink-0 ${
               isStreaming
-                ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse"
-                : "bg-emerald-500"
+                ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)] animate-pulse"
+                : "bg-amber-500"
             }`}
           />
           <span
             data-testid="thinking-panel-title"
-            className="text-[13px] font-bold text-slate-800 dark:text-zinc-100 shrink-0 whitespace-nowrap"
+            className="text-[13px] font-bold text-stone-900 dark:text-stone-100 shrink-0 whitespace-nowrap"
           >
             {headerTitle}
           </span>
           {isStreaming && streamStartMs !== null && (
-            <span className="font-mono tabular-nums text-[11px] text-slate-500 dark:text-zinc-400 shrink-0">
+            <span className="font-mono tabular-nums text-[11px] text-stone-500 dark:text-stone-400 shrink-0">
               {formatElapsedDuration(Math.max(0, Math.floor((headerNowMs - streamStartMs) / 1000)))}
             </span>
           )}
           <span
             data-testid="streaming-badge"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-500/15 border border-amber-300/70 dark:border-amber-500/30 text-amber-900 dark:text-amber-300 shrink-0"
           >
-            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
             <span>
               {isStreaming ? (
                 <>
@@ -209,16 +209,16 @@ export function ThinkingPanel({
           {isStreaming && turnPhaseLabel && (
             <span
               data-testid="turn-status-slot"
-              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 shrink-0"
+              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-cyan-50 dark:bg-cyan-500/15 border border-cyan-300/70 dark:border-cyan-500/30 text-cyan-900 dark:text-cyan-300 shrink-0"
               title={turnPhaseLabel}
             >
-              <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <Loader2 className="h-3 w-3 animate-spin text-cyan-600 dark:text-cyan-400 shrink-0" />
               <span className="hidden sm:inline truncate">{turnPhaseLabel}</span>
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-zinc-400 group-hover:text-slate-800 dark:group-hover:text-zinc-200 shrink-0 ml-2">
+        <div className="flex items-center gap-1 text-[11px] font-medium text-stone-500 dark:text-stone-400 group-hover:text-stone-900 dark:group-hover:text-stone-100 shrink-0 ml-2">
           <span>{isExpanded ? "Hide" : "Show"}</span>
           {isExpanded ? (
             <ChevronUp className="h-3.5 w-3.5" />
