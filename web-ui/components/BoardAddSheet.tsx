@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import type { BoardItem } from "@/lib/board/boardStore";
+import type { IntakeStackItem } from "@/lib/board/monsterIntake";
 
 export interface BoardAddSheetProps {
   isOpen: boolean;
   existingItems: BoardItem[];
   onClose: () => void;
-  onAskAssistant: (draftPrompt: string) => void;
+  onAskAssistant?: (draftPrompt: string) => void;
+  onItemsFiled?: (items: BoardItem[], startedDrain: boolean) => void;
   onCreateManual: (input: {
     title: string;
     brief: string;
@@ -19,10 +21,15 @@ export function BoardAddSheet({
   isOpen,
   existingItems,
   onClose,
-  onAskAssistant,
+  onItemsFiled,
   onCreateManual,
 }: BoardAddSheetProps) {
   const [assistantText, setAssistantText] = useState("");
+  const [stagedItems, setStagedItems] = useState<IntakeStackItem[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+
   const [showManualEditor, setShowManualEditor] = useState(false);
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
@@ -43,14 +50,74 @@ export function BoardAddSheet({
 
   if (!isOpen) return null;
 
-  const handleAssistantSubmit = () => {
-    const trimmed = assistantText.trim();
-    const prompt = trimmed
-      ? `Draft a board item for Queued: ${trimmed}`
-      : "Help me draft a new board item for Queued.";
-    onAskAssistant(prompt);
-    setAssistantText("");
+  const handleClose = () => {
+    setStagedItems(null);
+    setIntakeError(null);
     onClose();
+  };
+
+  const handlePreviewSubmit = async () => {
+    const trimmed = assistantText.trim();
+    if (!trimmed) {
+      setIntakeError("Describe what you want to build or paste a prompt first.");
+      return;
+    }
+    setIntakeError(null);
+    setPreviewLoading(true);
+    try {
+      const res = await fetch("/api/board/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "preview",
+          prompt: trimmed,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStagedItems(null);
+        setIntakeError(data.error || "Failed to generate intake preview");
+        return;
+      }
+      setStagedItems(Array.isArray(data.items) ? data.items : []);
+    } catch (err) {
+      setStagedItems(null);
+      setIntakeError(err instanceof Error ? err.message : "Failed to generate intake preview");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmStack = async (startDrain: boolean) => {
+    if (!stagedItems || stagedItems.length === 0) return;
+    setIntakeError(null);
+    setConfirmLoading(true);
+    try {
+      const res = await fetch("/api/board/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          items: stagedItems,
+          startDrain,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setIntakeError(data.error || "Failed to file stack");
+        return;
+      }
+      const filed: BoardItem[] = Array.isArray(data.items) ? data.items : [];
+      onItemsFiled?.(filed, startDrain);
+      setAssistantText("");
+      setStagedItems(null);
+      setIntakeError(null);
+      onClose();
+    } catch (err) {
+      setIntakeError(err instanceof Error ? err.message : "Failed to file stack");
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -92,7 +159,7 @@ export function BoardAddSheet({
       aria-modal="true"
       aria-label="Add to the board"
     >
-      <div className="w-full max-w-[390px] rounded-[20px] border border-[#26262b] bg-[#101013] p-5 text-zinc-100 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-[420px] overflow-y-auto rounded-[20px] border border-[#26262b] bg-[#101013] p-5 text-zinc-100 shadow-2xl">
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-zinc-700" />
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -105,7 +172,7 @@ export function BoardAddSheet({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close"
             className="rounded-lg px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
@@ -113,7 +180,7 @@ export function BoardAddSheet({
           </button>
         </div>
 
-        {/* Door 1: Ask the assistant */}
+        {/* Door 1: Ask the assistant (Monster-Prompt Single-Call Intake) */}
         <div className="mt-3.5 rounded-[14px] border border-[#10b981] p-3.5 shadow-[0_0_0_1px_#10b981_inset]">
           <h2 className="flex items-center gap-2 text-[14.5px] font-semibold text-zinc-100">
             Ask the assistant
@@ -122,22 +189,132 @@ export function BoardAddSheet({
             </span>
           </h2>
           <p className="pt-1.5 text-[12.5px] leading-relaxed text-zinc-400">
-            Say it in plain words. The assistant drafts the brief, files it in Queued, and stamps it as your request.
+            Paste a plain-words request or multi-item spec. Preview the ordered stack first, then confirm in one tap.
           </p>
-          <input
-            type="text"
-            value={assistantText}
-            onChange={(e) => setAssistantText(e.target.value)}
-            placeholder="Add an item: fix the settings toggle spacing…"
-            className="mt-2.5 w-full rounded-[11px] border border-[#2a2a30] bg-black px-3 py-2.5 text-[13.5px] text-zinc-200 placeholder:text-zinc-400 focus:border-[#10b981] focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAssistantSubmit}
-            className="mt-2.5 w-full rounded-[11px] bg-[#10b981] py-2.5 text-center text-[14px] font-bold text-[#04150e] transition hover:opacity-90"
-          >
-            Add via assistant
-          </button>
+
+          {!stagedItems ? (
+            <>
+              <textarea
+                value={assistantText}
+                onChange={(e) => setAssistantText(e.target.value)}
+                placeholder="Paste a task or multi-item prompt…"
+                rows={4}
+                data-testid="intake-prompt-input"
+                className="mt-2.5 w-full rounded-[11px] border border-[#2a2a30] bg-black px-3 py-2.5 text-[13.5px] text-zinc-200 placeholder:text-zinc-400 focus:border-[#10b981] focus:outline-none"
+              />
+              {intakeError && (
+                <p
+                  data-testid="intake-error"
+                  className="mt-2 rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1.5 text-[12px] text-red-300"
+                >
+                  {intakeError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handlePreviewSubmit}
+                disabled={previewLoading}
+                data-testid="intake-preview-btn"
+                className="mt-2.5 w-full rounded-[11px] bg-[#10b981] py-2.5 text-center text-[14px] font-bold text-[#04150e] transition hover:opacity-90 disabled:opacity-50"
+              >
+                {previewLoading ? "Drafting stack…" : "Preview stack"}
+              </button>
+            </>
+          ) : (
+            <div className="mt-3 space-y-2.5" data-testid="intake-preview-stack">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-zinc-200">
+                  Staged stack ({stagedItems.length}{" "}
+                  {stagedItems.length === 1 ? "item" : "items"})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStagedItems(null);
+                    setIntakeError(null);
+                  }}
+                  disabled={confirmLoading}
+                  data-testid="intake-discard-btn"
+                  className="text-[12px] font-medium text-zinc-400 underline hover:text-zinc-200"
+                >
+                  Edit prompt
+                </button>
+              </div>
+
+              <ol className="max-h-60 space-y-2 overflow-y-auto pr-0.5">
+                {stagedItems.map((item, idx) => (
+                  <li
+                    key={item.tempKey || idx}
+                    data-testid={`intake-staged-item-${idx}`}
+                    className="rounded-[11px] border border-[#26262b] bg-black p-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[13px] font-semibold text-zinc-100">
+                        {idx + 1}. {item.title}
+                      </span>
+                      {item.tempKey && (
+                        <span className="shrink-0 rounded bg-[#1d1d21] px-1.5 py-0.5 text-[10px] font-mono text-zinc-300">
+                          {item.tempKey}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[12px] leading-snug text-zinc-300">
+                      {item.brief}
+                    </p>
+                    {item.dependencies.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        <span className="text-[11px] text-zinc-400">Deps:</span>
+                        {item.dependencies.map((dep) => (
+                          <span
+                            key={dep}
+                            className="rounded-full border border-[#10b981]/50 bg-[#10b981]/10 px-2 py-0.5 text-[10.5px] text-[#10b981]"
+                          >
+                            {dep}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-1.5 text-[11px] text-zinc-400">
+                      {item.fileAllowlist.length} file
+                      {item.fileAllowlist.length === 1 ? "" : "s"} ·{" "}
+                      {item.acceptanceCriteria.length} acceptance check
+                      {item.acceptanceCriteria.length === 1 ? "" : "s"}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+
+              {intakeError && (
+                <p
+                  data-testid="intake-error"
+                  className="rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1.5 text-[12px] text-red-300"
+                >
+                  {intakeError}
+                </p>
+              )}
+
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleConfirmStack(false)}
+                  disabled={confirmLoading}
+                  data-testid="intake-confirm-queued-btn"
+                  className="w-full rounded-[11px] bg-[#10b981] py-2.5 text-center text-[13.5px] font-bold text-[#04150e] transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {confirmLoading ? "Filing…" : "Confirm & File to Queued"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmStack(true)}
+                  disabled={confirmLoading}
+                  data-testid="intake-confirm-drain-btn"
+                  className="w-full rounded-[11px] border border-[#10b981] bg-[#10b981]/15 py-2.5 text-center text-[13.5px] font-bold text-[#10b981] transition hover:bg-[#10b981]/25 disabled:opacity-50"
+                >
+                  {confirmLoading ? "Filing…" : "Confirm & Start Drain"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Door 2: Write it myself */}
@@ -153,7 +330,7 @@ export function BoardAddSheet({
             <button
               type="button"
               onClick={() => setShowManualEditor(true)}
-              className="mt-2.5 w-full rounded-[11px] border border-[#2a2a30] bg-transparent py-2.5 text-center text-[14px] font-bold text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
+              className="mt-2.5 w-full rounded-[11px] border border-[#2a2a30] bg-transparent py-2.5 text-center text-[14px] font-bold text-zinc-300 transition hover:border-zinc-400 hover:text-zinc-100"
             >
               Open the editor
             </button>

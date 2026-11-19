@@ -454,6 +454,14 @@ export function BoardView({
         existingItems={items}
         onClose={() => setIsAddOpen(false)}
         onAskAssistant={onAskAssistant}
+        onItemsFiled={(filedItems, startedDrain) => {
+          for (const item of filedItems) {
+            onItemCreated(item);
+          }
+          if (startedDrain && onControlAction && controlState !== "running") {
+            void onControlAction("start");
+          }
+        }}
         onCreateManual={handleCreateManual}
       />
     </div>
