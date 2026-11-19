@@ -470,24 +470,24 @@ export function ProjectsView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header matching M3 Principles */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+        {/* Top Header — Obsidian Atelier */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 atelier-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors"
               title="Open menu"
               aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
             <div className="flex items-center gap-2">
-              <FolderGit2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+              <FolderGit2 className="h-6 w-6 text-amber-700 dark:text-amber-400" />
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
                 Projects &amp; Folders
               </h1>
             </div>
@@ -496,7 +496,7 @@ export function ProjectsView({
           <button
             type="button"
             onClick={() => setIsRegisterModalOpen(true)}
-            className="min-h-[44px] px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-colors"
+            className="min-h-[44px] px-4 py-2 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Register Folder</span>
@@ -506,20 +506,20 @@ export function ProjectsView({
 
         {/* Project Selector Chips / Cards */}
         {projects.length === 0 ? (
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-slate-100 dark:border-zinc-800 space-y-3">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center mx-auto text-slate-400">
+          <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-8 text-center atelier-card border border-stone-200/90 dark:border-white/[0.10] space-y-3">
+            <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-stone-500 dark:text-stone-400">
               <Folder className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">
+            <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">
               No Projects Registered
             </h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-md mx-auto">
+            <p className="text-xs text-stone-500 dark:text-stone-400 max-w-md mx-auto">
               Register a local repository directory to enable overnight autonomous runs, read-only file exploration, and surgical git diff reviews.
             </p>
             <button
               type="button"
               onClick={() => setIsRegisterModalOpen(true)}
-              className="min-h-[44px] px-4 py-2 mt-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors"
+              className="min-h-[44px] px-4 py-2 mt-2 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 font-semibold text-xs transition-colors"
             >
               Register First Folder
             </button>
