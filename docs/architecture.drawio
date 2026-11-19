@@ -8,7 +8,7 @@
         <mxCell id="cluster" value="&lt;b&gt;kind cluster&lt;/b&gt; (local-agentic-sandbox)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;strokeWidth=2;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#0f172a;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
           <mxGeometry x="400" y="196" width="880" height="452" as="geometry"/>
         </mxCell>
-        <mxCell id="cluster_pill" value="credential-free · egress blocked (NetworkPolicy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
+        <mxCell id="cluster_pill" value="credential-free · default-deny egress (NetworkPolicy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
           <mxGeometry x="906" y="210" width="346" height="27" as="geometry"/>
         </mxCell>
         <mxCell id="hostzone" value="&lt;b&gt;host&lt;/b&gt; — Windows PC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=2;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#0f172a;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
@@ -26,7 +26,7 @@
         <mxCell id="gateway" value="&lt;b&gt;kind Gateway (nginx)&lt;/b&gt;&lt;br/&gt;routes / and /jaeger/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#10b981;strokeWidth=2;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
           <mxGeometry x="640" y="44" width="260" height="88" as="geometry"/>
         </mxCell>
-        <mxCell id="webui" value="&lt;b&gt;Web UI / orchestrator&lt;/b&gt;&lt;br/&gt;Next.js · namespace: local-agentic-sandbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
+        <mxCell id="webui" value="&lt;b&gt;Web UI / orchestrator&lt;/b&gt;&lt;br/&gt;Next.js · zero internet egress · ns: local-agentic-sandbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#064e3b;fontFamily=Helvetica;fontSize=13;" parent="1" vertex="1">
           <mxGeometry x="424" y="252" width="500" height="224" as="geometry"/>
         </mxCell>
         <mxCell id="webui_chat" value="chat threads + thread store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;fontColor=#1e293b;fontFamily=Helvetica;fontSize=11;" parent="1" vertex="1">
@@ -53,7 +53,7 @@
         <mxCell id="jaeger" value="&lt;b&gt;Jaeger&lt;/b&gt;&lt;br/&gt;trace UI via /jaeger/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
           <mxGeometry x="948" y="380" width="308" height="96" as="geometry"/>
         </mxCell>
-        <mxCell id="mcp" value="&lt;b&gt;MCP runner&lt;/b&gt;&lt;br/&gt;sandboxed pod · read-only rootfs&lt;br/&gt;cap_drop ALL · egress denied" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
+        <mxCell id="mcp" value="&lt;b&gt;MCP runner&lt;/b&gt;&lt;br/&gt;sandboxed pod · read-only rootfs&lt;br/&gt;cap_drop ALL · GitHub :443 only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">
           <mxGeometry x="424" y="508" width="500" height="112" as="geometry"/>
         </mxCell>
         <mxCell id="browser" value="&lt;b&gt;Browser MCP&lt;/b&gt;&lt;br/&gt;isolated pod · web egress&lt;br/&gt;with SSRF guards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;" parent="1" vertex="1">

@@ -2,6 +2,8 @@
 
 This directory contains tailored Ollama `Modelfile` definitions for the specialized subagent worker roster.
 
+> **Note:** Primary production inference runs on the host **Strata** engine (`Qwen3.8-Flash-Next`, 125B-class MoE on `:8080`), with `swift-15-27b-mtp` as the 27B fallback. These Ollama `Modelfile` definitions are retained for the `swift-15-27b-mtp` fallback and standalone Docker Compose harness.
+
 ## Modelfiles
 
 ### 1. `Modelfile.builder`

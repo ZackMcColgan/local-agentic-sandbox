@@ -21,8 +21,8 @@ Pass bars are fixed constants of the pack and are never tuned after seeing a can
 ### Endpoint Mode (all tasks or a single task)
 
 ```bash
-node eval/run.mjs --endpoint http://127.0.0.1:1234/v1 --all
-node eval/run.mjs --endpoint http://127.0.0.1:1234/v1 --task forensic-diagnosis
+node eval/run.mjs --endpoint http://127.0.0.1:8080/v1 --all
+node eval/run.mjs --endpoint http://127.0.0.1:8080/v1 --task forensic-diagnosis
 ```
 
 ### Sandbox Job Mode

@@ -17,7 +17,7 @@
 
 ### 1.3 Cancellation & Zero VRAM Leakage Guarantee
 - Every running worker session is bound to an `AbortController` cancellation token.
-- Triggering cancellation (e.g. via mobile Web UI kill switch or API `/api/tasks/cancel`) immediately signals Strata to abort streaming inference, halts child tool processes, and recovers active worker count to 0 (idle) in under 30 seconds.
+- Triggering cancellation (e.g. via mobile Web UI kill switch or API `/api/tasks` and `/api/threads/[id]`) immediately signals Strata to abort streaming inference, halts child tool processes, and recovers active worker count to 0 (idle) in under 30 seconds.
 
 ---
 
@@ -51,8 +51,8 @@ To reconcile security isolation with the practical necessity of software builds 
 │ • Toolchain declared in SPEC.md  │ • cap_drop: ALL linux capabilities  │
 │ • Writable /workspace volume     │ • tmpfs: /tmp (noexec, nosuid)      │
 │ • Named build-cache volume (20GB)│ • UID 10001 (unprivileged)          │
-│ • Egress allowlist strictly to   │ • Zero internet egress              │
-│   package registries (npm, PyPI, │   (internal: true, air-gapped)      │
+│ • Egress allowlist strictly to   │ • Deny-all egress except CoreDNS    │
+│   package registries (npm, PyPI, │   (:53) and GitHub (:443)           │
 │   Crates, Go proxy) & GitHub     │ • Blocks npm install, pip, compiler │
 │ • No secrets mounted             │ • Used for test running, code exec, │
 │ • No host access beyond workspace│   and untrusted evaluation          │

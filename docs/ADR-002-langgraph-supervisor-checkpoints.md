@@ -96,10 +96,10 @@ We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the pri
 ## 3. Consequences & Verification
 
 ### Positive:
-- **Resilience**: Verified by automated test suites (`tests/supervisor.test.ts`):
+- **Resilience**: Verified by automated test suites ([web-ui/tests/supervisor.test.ts](../web-ui/tests/supervisor.test.ts)):
   - Worker crash mid-milestone $\rightarrow$ supervisor reloads checkpoint and resumes.
   - Supervisor process kill $\rightarrow$ new supervisor instance resumes from step 2 without losing milestone 1.
-- **Auditability**: Morning report generation (`tests/morningReport.test.ts`) renders every judgment call with one-tap revert actions.
+- **Auditability**: Morning report generation ([web-ui/tests/morningReport.test.ts](../web-ui/tests/morningReport.test.ts)) renders every judgment call with one-tap revert actions.
 - **Portability**: Standardizes state graph topology using LangGraph primitives recognized in enterprise AI engineering.
 
 ### Negative / Trade-Offs:

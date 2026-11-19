@@ -13,7 +13,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 ### The Solution
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
 1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) with a 27B fallback (`swift-15-27b-mtp`) and 128K context window, keeping inference local with no cloud dependency.
-2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 8 autonomous developer tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
+2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 13 autonomous developer and attestation tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
 4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy, test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage.
 5. **Observability Engine (`otel-collector` / Jaeger)**: Real-time distributed trace collection across agent turns, tool dispatches, and command executions, with the Jaeger UI served through the gateway at `/jaeger/`.
@@ -24,7 +24,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 ## 2. System Architecture & Topology
 
 [![local-agentic-sandbox Architecture](./docs/architecture.drawio.svg)](./docs/architecture.drawio.svg)
-*Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, air-gapped MCP execution boundary, isolated browser scraper, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio).*
+*Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, sandboxed MCP execution boundary, isolated browser scraper, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio).*
 
 ### 2.1 Component Architecture Diagram
 
@@ -32,10 +32,10 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                CLIENT & INGRESS LAYER                                             │
 │                                                                                                   │
-│     Mobile / Tablet              Desktop Browser                LAN Reverse Proxy Bridge          │
-│    (192.168.50.254:80)         (localhost:3000/3001)             (scripts/lan-bridge.js)          │
-│            │                             │                        Binds 0.0.0.0:80 / :3000        │
-│            └─────────────────────────────┼───────────────────────────────────┘                    │
+│   Mobile / Desktop Operator ──► scripts/lan-bridge.js (:80 / :3000)                               │
+│                                      │                                                            │
+│                                      ▼                                                            │
+│                        kind-gateway (nginx :3001, routes / and /jaeger/)                          │
 └──────────────────────────────────────────┼────────────────────────────────────────────────────────┘
                                            │
 ┌──────────────────────────────────────────┼────────────────────────────────────────────────────────┐
@@ -44,24 +44,25 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 │   ┌───────────────────────────────────────────────────────────────────────────────────────────┐   │
 │   │   Web UI & Agent Orchestrator (Deployment / Service: web-ui:3000 / NodePort 30300)        │   │
 │   │   - Next.js 15 / React 19 / TypeScript / Tailwind CSS                                     │   │
-│   │   - Tri-Mode Model Dispatcher: [ ✨ Auto | ⚡ Flash | 🧠 Pro ]                             │   │
-│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> Strata vision)          │   │
-│   │   - Durable Server-Side Persistence (threadStore.ts + SQLite runLedger.ts)             │   │
-│   │   - OpenTelemetry Instrumentation SDK (telemetry.ts -> Jaeger trace waterfall)           │   │
-│   │   - Local Inference via Host Strata Engine (ROCm/HIP, 128K Context)                         │   │
+│   │   - Model & Thinking Effort: [ Flash-Next / Swift-1.5 · Fast / Balanced / Deep ]          │   │
+│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> Strata vision)            │   │
+│   │   - Durable Server-Side Persistence (threadStore.ts + SQLite runLedger.ts)                │   │
+│   │   - OpenTelemetry Instrumentation SDK (telemetry.ts -> Jaeger trace waterfall)            │   │
+│   │   - Local Inference via Host Strata Engine (ROCm/HIP, 128K Context)                       │   │
 │   └──────────────────────┬────────────────────────────────────┬───────────────────────────────┘   │
 │                          │                                    │                                   │
-│           NetworkPolicy: egress-mesh                          │   NetworkPolicy: ai-mesh          │
-│           (Allow HTTP/HTTPS Egress Only)                      │   (Deny All Internet Egress)      │
+│           NetworkPolicy: browser-mcp-policy                   │   NetworkPolicy: mcp-runner       │
+│           (Allow HTTP/HTTPS :80/:443; SSRF blocked)           │   (CoreDNS :53 + GitHub :443 only)│
 │                          │                                    │                                   │
 │                          ▼                                    ▼                                   │
 │   ┌──────────────────────────────────────────────┐     ┌──────────────────────────────────────┐   │
 │   │ Browser MCP Service (browser-mcp:8081)       │     │ MCP Runner Service (mcp-runner:8080) │   │
-│   │ - Isolated Web Scraper & DuckDuckGo Search   │     │ - 8 Autonomous Developer Tools       │   │
-│   │ - Built-in SSRF Guard (blocks RFC 1918)      │     │ - Argv-Safe Git Execution (No Shell) │   │
-│   │ - HTML-to-Clean-Markdown Processor           │     │ - ReDoS-Guarded Regex Search         │   │
-│   │ - user: 10002:10002 | read-only app          │     │ - user: 10001:10001 | cap_drop: ALL  │   │
-│   └──────────────────────┬───────────────────────┘     │ - read_only rootfs | tmpfs /tmp      │   │
+│   │ - Isolated Web Scraper & DuckDuckGo Search   │     │ - 13 Autonomous Developer &          │   │
+│   │ - Built-in SSRF Guard (blocks RFC 1918)      │     │   Attestation Tools                  │   │
+│   │ - HTML-to-Clean-Markdown Processor           │     │ - Argv-Safe Git Execution (No Shell) │   │
+│   │ - user: 10002:10002 | read-only app          │     │ - ReDoS-Guarded Regex Search         │   │
+│   └──────────────────────┬───────────────────────┘     │ - user: 10001:10001 | cap_drop: ALL  │   │
+│                          │                             │ - read_only rootfs | tmpfs /tmp      │   │
 │                          │                             └──────────────────┬───────────────────┘   │
 │                          ▼                                                │                       │
 │                   Public Internet                                         ▼                       │
@@ -169,6 +170,9 @@ local-agentic-sandbox/
 ├── host-bridge/                        # Host-side tool bridge (sole external boundary, :8765)
 ├── eval/                               # Graded evaluation suite for chunked job execution
 ├── scripts/
+│   ├── deploy-cluster.js               # Docker build, containerd import, K8s rollout & verify
+│   ├── test-gate.js                    # Change-aware local test gate CLI wrapper
+│   ├── kind-gateway/                   # nginx:alpine gateway container & SSE proxy config (:3001)
 │   ├── lan-bridge.js                   # Zero-auth LAN reverse proxy bridge (0.0.0.0:80 / :3000)
 │   └── test-ui-render.js               # Headless visual inspection test script
 ├── browser-mcp/
@@ -185,7 +189,8 @@ local-agentic-sandbox/
 │   │   └── tools/
 │   │       ├── codeRunner.ts           # Sandboxed Python execution & kernel attestation
 │   │       ├── attestation.ts          # Docker Scout & runtime boundary verification
-│   │       └── workspaceTools.ts       # 8 argv-safe git & filesystem tools (ReDoS guarded)
+│   │       ├── patchCore.ts            # Surgical file patch engine for workspace_patch_file
+│   │       └── workspaceTools.ts       # 10 argv-safe git & filesystem tools (ReDoS guarded; 13 MCP tools total)
 │   └── tests/                          # Unit & security integration tests
 ├── web-ui/
 │   ├── Dockerfile
@@ -196,13 +201,15 @@ local-agentic-sandbox/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx                    # Main portal: tabs, persistent state, live telemetry
 │   │   └── api/
-│   │       ├── chat/route.ts           # Tri-mode LLM dispatcher & 24h keep-alive lease
+│   │       ├── board/route.ts          # Persisted work board CRUD API
+│   │       ├── chat/route.ts           # Streaming agent turn orchestrator, MCP tool loop & compaction
 │   │       ├── tasks/route.ts          # Autonomous task decomposition & lifecycle API
 │   │       ├── threads/route.ts        # Durable thread persistence & execution dispatch
 │   │       └── sandbox-status/route.ts # Live container security health probe
 │   ├── components/
+│   │   ├── BoardView.tsx               # 5-column work board UI (Queued, Working, PR Open, Parked, Done)
 │   │   ├── ChatStream.tsx              # Interactive conversational chat interface
-│   │   ├── ModelBottomSheet.tsx        # Segmented M3 model bottom sheet control
+│   │   ├── ModelBottomSheet.tsx        # Model & thinking effort bottom sheet control
 │   │   ├── ExecutionTrace.tsx          # Real-time tool execution & agent steps
 │   │   ├── TraceWaterfall.tsx          # OpenTelemetry Jaeger distributed trace visualizer
 │   │   ├── SandboxGauge.tsx            # Visual security boundary posture indicator
@@ -210,6 +217,7 @@ local-agentic-sandbox/
 │   │   └── ThreadsSidebar.tsx          # Material 3 responsive sessions sidebar
 │   ├── lib/
 │   │   ├── agentEngine.ts              # Autonomous test-and-repair agent execution loop
+│   │   ├── testGate.ts                 # Change-aware local test gate & Playwright runner
 │   │   ├── threads/threadStore.ts      # Server-side durable thread store
 │   │   ├── fileParser.ts               # File ingestion & multimodal base64 extractor
 │   │   ├── ledger/runLedger.ts         # SQLite-backed durable run ledger & lifecycle tracking
@@ -219,7 +227,7 @@ local-agentic-sandbox/
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 1,693 workspace tests (1,659 in web-ui; 1,676 in Linux CI)
+│   └── tests/                          # 1,681 workspace tests (1,647 in web-ui; 1,677 in Linux CI)
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 
@@ -254,7 +262,7 @@ kubectl port-forward svc/web-ui -n local-agentic-sandbox 3001:3000 --address 0.0
 # 1. Typecheck web-ui
 npx tsc --noEmit -p web-ui/tsconfig.json
 
-# 2. Run workspace unit/contract suites (1,693 workspace tests locally / 1,676 in Linux CI)
+# 2. Run workspace unit/contract suites (1,681 workspace tests locally / 1,677 in Linux CI)
 npm test
 
 # 3. Run the change-aware local test gate or full Playwright suite (272 tests across 12 spec files and 4 projects)

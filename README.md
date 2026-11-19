@@ -2,15 +2,13 @@
 
 **A local autonomous AI coding platform.** Hand it an engineering task in the evening, and it plans the work, writes the code in small verified patches, runs the tests, opens the pull request, deploys itself, and proves the result — overnight, on one consumer PC, with no cloud inference, no API keys in the cluster, and no per-token meter.
 
-![Web UI on desktop](docs/images/ui-desktop.png)
+![Desktop operator UI showing a completed session, tool trace proofs, and source-cited explanation](docs/images/ui-desktop.png)
 
-| Mobile chat | Navigation | Work board |
-| :---: | :---: | :---: |
-| ![Mobile chat](docs/images/ui-mobile-chat.png) | ![Mobile drawer](docs/images/ui-mobile-drawer.png) | ![Work board](docs/images/ui-mobile-board.png) |
+| Mobile chat | Live turn | Navigation | Work board |
+| :---: | :---: | :---: | :---: |
+| ![Mobile chat view with completed tool steps and file citations](docs/images/ui-mobile-chat.png) | ![Live agent turn on mobile streaming reasoning and active tool execution](docs/images/ui-mobile-live.png) | ![Mobile navigation drawer showing sessions, board, file explorer, skills, and morning report](docs/images/ui-mobile-drawer.png) | ![Mobile work board showing completed and deployed pull requests](docs/images/ui-mobile-board.png) |
 
-![A live agent turn with reasoning streaming](docs/images/ui-mobile-live.png)
-
-![Work board on desktop](docs/images/ui-desktop-board.png)
+![Desktop work board across Queued, Working, PR Open, Parked, and Done columns](docs/images/ui-desktop-board.png)
 
 ---
 
@@ -121,7 +119,7 @@ The UI is served on the LAN through the cluster gateway; the same session is liv
 
 ```bash
 cd web-ui
-npm test            # 1,600+ unit and contract tests
+npm test            # 1,647 unit and contract tests in web-ui (1,681 across workspaces; 1,677 in Linux CI)
 npm run test:gate   # change-aware gate: runs exactly the tests a change touches
 npm run test:e2e    # Playwright suite (272 tests across 12 spec files and 4 projects)
 ```
@@ -134,10 +132,16 @@ Every pull request runs seven checks: typecheck, unit tests, coverage, container
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — the full system specification.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — full system specification, security isolation matrix, and repository layout.
 - [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md) — governance mapping: NIST AI RMF 1.0 and OWASP Agentic Top 10 controls, each tied to its enforcement code.
-- [docs/KUBERNETES_DEPLOYMENT.md](docs/KUBERNETES_DEPLOYMENT.md) — deployment notes for the local cluster.
-- Architecture decision records and further notes live under `docs/`.
+- [docs/KUBERNETES_DEPLOYMENT.md](docs/KUBERNETES_DEPLOYMENT.md) — deployment and cluster operations guide.
+- [docs/MODEL_RESIDENCY.md](docs/MODEL_RESIDENCY.md) — host Strata model roster and GPU residency policy.
+- [docs/topology-matrix.md](docs/topology-matrix.md) — component placement, port, and communication matrix.
+- [docs/access-path.md](docs/access-path.md) — LAN / tailnet bridge, `kind-gateway`, and auto-healing watchdog.
+- [docs/resource-budgets.md](docs/resource-budgets.md) — VRAM, build-cache, and two-tier sandbox budgets.
+- [docs/live-e2e.md](docs/live-e2e.md) — live cluster acceptance test battery (`L1`–`L8`).
+- [docs/ADR-001-sandboxed-mcp.md](docs/ADR-001-sandboxed-mcp.md) & [docs/ADR-002-langgraph-supervisor-checkpoints.md](docs/ADR-002-langgraph-supervisor-checkpoints.md) — architecture decision records.
+- [eval/README.md](eval/README.md) & [eval/CHUNKED-BASELINE.md](eval/CHUNKED-BASELINE.md) — versioned 5-task model evaluation pack and chunked job regression protocol.
 
 ## Project layout
 
