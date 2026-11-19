@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Bot,
   Plus,
   List,
   Hammer,
@@ -212,7 +211,7 @@ export function NavigationDrawer({
         aria-hidden="true"
       />
 
-      {/* Drawer Surface - Obsidian Atelier Mobile Menu */}
+      {/* Drawer Surface - Mobile Menu */}
       <div
         data-testid="navigation-drawer"
         role="dialog"
@@ -221,26 +220,16 @@ export function NavigationDrawer({
         className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-stone-50 dark:bg-[#0e0e12] shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-stone-200/90 dark:border-white/[0.10] transition-transform animate-in slide-in-from-left duration-200"
       >
         
-        {/* Top Header: Brand Icon + "Agent" + Close (X) button */}
+        {/* Top Header: Neutral Menu title + Close (X) button */}
         <div className="flex items-center justify-between px-2 pb-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-500/15 border border-amber-300/60 dark:border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400">
-              <Bot className="h-5 w-5 stroke-[2.2]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight text-stone-900 dark:text-stone-50 leading-none">
-                Agent
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-500 dark:text-stone-400 mt-0.5">
-                Atelier
-              </span>
-            </div>
-          </div>
+          <span className="text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+            Menu
+          </span>
 
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-zinc-600 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-stone-100 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
             title="Close drawer"
             aria-label="Close drawer"
           >
@@ -256,7 +245,7 @@ export function NavigationDrawer({
               onNewSession();
               onClose();
             }}
-            className="w-full min-h-[44px] flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 active:scale-[0.98] text-white dark:text-stone-950 font-semibold text-sm shadow-sm transition-all"
+            className="w-full min-h-[44px] flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 active:scale-[0.98] text-white dark:text-black font-semibold text-sm shadow-sm transition-all"
             title="New session"
             aria-label="New session"
           >
@@ -276,7 +265,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "sessions" || activeView === "thread"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -293,7 +282,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "builds"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -310,7 +299,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "board"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -327,7 +316,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "projects"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -360,7 +349,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "skills"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -369,7 +358,7 @@ export function NavigationDrawer({
               <span>Skills</span>
             </div>
             {pendingSkillsCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 font-bold text-[11px] shrink-0 border border-amber-300/60 dark:border-amber-500/30 tabular-nums">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 font-bold text-[11px] shrink-0 border border-emerald-300/60 dark:border-emerald-500/30 tabular-nums">
                 {`${pendingSkillsCount} pending`}
               </span>
             )}
@@ -384,7 +373,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "morning-report"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -394,10 +383,10 @@ export function NavigationDrawer({
         </nav>
 
         {/* 3. Sessions List (Recents-style section) */}
-        <div className="pt-4 pb-1 px-3 flex items-center justify-between text-[10px] font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-[0.1em] shrink-0">
+        <div className="pt-4 pb-1 px-3 flex items-center justify-between text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-[0.1em] shrink-0">
           <span>Recents</span>
           {threads.length > 0 && (
-            <span className="text-[11px] font-mono tabular-nums text-stone-500 dark:text-stone-400 font-normal">
+            <span className="text-[11px] font-mono tabular-nums text-zinc-600 dark:text-zinc-400 font-normal">
               {threads.length}
             </span>
           )}
@@ -411,7 +400,7 @@ export function NavigationDrawer({
               ))}
             </div>
           ) : threads.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-stone-500 dark:text-stone-400">
+            <div className="px-3 py-6 text-center text-xs text-zinc-600 dark:text-zinc-400">
               No recent sessions
             </div>
           ) : (
@@ -427,9 +416,9 @@ export function NavigationDrawer({
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                   onTouchCancel={handleTouchEnd}
-                  className={`group relative flex items-center justify-between rounded-2xl px-3.5 py-3 text-xs transition-all min-h-[44px] bg-white dark:bg-[#15151b] atelier-card border ${
+                  className={`group relative flex items-center justify-between rounded-2xl px-3.5 py-3 text-xs transition-all min-h-[44px] bg-white dark:bg-[#15151b] surface-card border ${
                     isSelected
-                      ? "text-amber-900 dark:text-amber-200 font-semibold border-amber-500/60 dark:border-amber-500/50"
+                      ? "text-emerald-900 dark:text-emerald-200 font-semibold border-emerald-500/60 dark:border-emerald-500/50"
                       : "text-stone-700 dark:text-stone-200 border-stone-200/90 dark:border-white/[0.08] hover:border-stone-300 dark:hover:border-white/[0.16]"
                   }`}
                 >
@@ -457,12 +446,12 @@ export function NavigationDrawer({
                   >
                     <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{deriveThreadDisplayTitle(thread.title)}</span>
                     {(thread as any).matchSnippet && (
-                      <span className="text-[11px] leading-snug truncate text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded">
+                      <span className="text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
                       </span>
                     )}
                     {timeLabel && (
-                      <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono tabular-nums">
+                      <span className="text-[10px] text-zinc-600 dark:text-zinc-400 font-mono tabular-nums">
                         {timeLabel}
                       </span>
                     )}
@@ -512,7 +501,7 @@ export function NavigationDrawer({
             }}
             className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "settings"
-                ? "bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-500/35"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
                 : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
@@ -521,7 +510,7 @@ export function NavigationDrawer({
           </button>
 
           {/* Footer info */}
-          <div className="pt-2 pb-1 px-3 text-[11px] text-stone-500 dark:text-stone-400 font-mono">
+          <div className="pt-2 pb-1 px-3 text-[11px] text-zinc-600 dark:text-zinc-400 font-mono">
             Local Agentic Sandbox
           </div>
         </div>
@@ -569,7 +558,7 @@ export function NavigationDrawer({
                     onSelectThread(target.id);
                     onClose();
                   }}
-                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-amber-500/15 text-amber-800 dark:text-amber-300 font-semibold text-sm hover:bg-amber-500/25 transition-colors"
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold text-sm hover:bg-emerald-500/25 transition-colors"
                 >
                   <MessageSquare className="h-4 w-4" />
                   <span>Open session</span>

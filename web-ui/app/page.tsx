@@ -865,7 +865,7 @@ export default function Home() {
         installedModels={installedModels}
       />
 
-      {/* 1. PERSISTENT LABELED LEFT NAVIGATION RAIL (82px — Obsidian Atelier) */}
+      {/* 1. PERSISTENT LABELED LEFT NAVIGATION RAIL (82px) */}
       <nav className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-stone-200/80 dark:border-white/[0.08] bg-stone-50 dark:bg-black py-3 justify-between items-center z-20 select-none" aria-label="Primary Navigation">
         <div className="flex flex-col items-center gap-2 w-full px-1.5">
           <button
@@ -873,7 +873,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "sessions" && viewMode === "unified"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Chat & Sessions"
@@ -887,7 +887,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("board"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "board"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Board"
@@ -901,7 +901,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "builds"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Autonomous Builds"
@@ -915,7 +915,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("projects"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "projects"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Projects & Folders"
@@ -929,7 +929,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "morning-report"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Morning Report"
@@ -943,7 +943,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all relative ${
               activeNavView === "skills"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="Skills Flywheel"
@@ -951,7 +951,7 @@ export default function Home() {
             <Sparkles className="h-5 w-5 shrink-0" />
             <span className="rail-label text-[11px] font-bold">Skills</span>
             {pendingSkillsCount > 0 && (
-              <span className="absolute top-1 right-2 px-1.5 py-0.2 rounded-full bg-amber-600 text-[10px] text-white font-bold tabular-nums">
+              <span className="absolute top-1 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-[10px] text-white font-bold tabular-nums">
                 {pendingSkillsCount}
               </span>
             )}
@@ -964,7 +964,7 @@ export default function Home() {
             onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "settings"
-                ? "bg-amber-700 dark:bg-amber-500 text-white dark:text-stone-950 border border-transparent shadow-sm"
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
             }`}
             title="System Settings"
@@ -1122,7 +1122,7 @@ export default function Home() {
                   onClick={() => setWorkspaceTab("diff")}
                   className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                     workspaceTab === "diff"
-                      ? "bg-white dark:bg-[#1f1f28] text-amber-800 dark:text-amber-300 shadow-xs border border-stone-200 dark:border-amber-500/35"
+                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
                       : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
                   }`}
                 >
@@ -1133,7 +1133,7 @@ export default function Home() {
                   onClick={() => setWorkspaceTab("output")}
                   className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                     workspaceTab === "output"
-                      ? "bg-white dark:bg-[#1f1f28] text-amber-800 dark:text-amber-300 shadow-xs border border-stone-200 dark:border-amber-500/35"
+                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
                       : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
                   }`}
                 >
@@ -1144,7 +1144,7 @@ export default function Home() {
                   onClick={() => setWorkspaceTab("files")}
                   className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                     workspaceTab === "files"
-                      ? "bg-white dark:bg-[#1f1f28] text-amber-800 dark:text-amber-300 shadow-xs border border-stone-200 dark:border-amber-500/35"
+                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
                       : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
                   }`}
                 >

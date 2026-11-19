@@ -9,9 +9,9 @@
   --foreground: 20 14% 10%;
   --card: 0 0% 100%;
   --card-foreground: 20 14% 10%;
-  --primary: 32 95% 37%;
+  --primary: 161 94% 30%;
   --primary-foreground: 0 0% 100%;
-  --accent: 32 95% 37%;
+  --accent: 161 94% 30%;
   --accent-foreground: 0 0% 100%;
   --muted: 24 6% 95%;
   --muted-foreground: 25 5% 38%;
@@ -24,10 +24,10 @@
   --foreground: 60 9% 98%;
   --card: 240 12% 7%;
   --card-foreground: 60 9% 98%;
-  --primary: 38 92% 50%;
-  --primary-foreground: 20 14% 10%;
-  --accent: 38 92% 50%;
-  --accent-foreground: 20 14% 10%;
+  --primary: 160 84% 39%;
+  --primary-foreground: 0 0% 0%;
+  --accent: 160 84% 39%;
+  --accent-foreground: 0 0% 0%;
   --muted: 240 12% 11%;
   --muted-foreground: 24 6% 64%;
   --border: 240 10% 16%;
@@ -107,16 +107,16 @@ body {
   scrollbar-width: none;
 }
 
-/* Obsidian Atelier surface sheen & micro-interactions (CSS-only, mobile smooth) */
-.atelier-card {
+/* Surface sheen & micro-interactions (CSS-only, mobile smooth) */
+.surface-card {
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
 }
-html:not(.dark) .atelier-card,
-html[data-theme="light"] .atelier-card {
+html:not(.dark) .surface-card,
+html[data-theme="light"] .surface-card {
   box-shadow: 0 1px 2px 0 rgba(28, 25, 23, 0.05);
 }
 
-@keyframes atelier-fade-up {
+@keyframes surface-fade-up {
   from {
     opacity: 0;
     transform: translateY(6px);
@@ -126,11 +126,11 @@ html[data-theme="light"] .atelier-card {
     transform: translateY(0);
   }
 }
-.atelier-enter {
-  animation: atelier-fade-up 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.surface-enter {
+  animation: surface-fade-up 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .atelier-enter {
+  .surface-enter {
     animation: none;
   }
 }

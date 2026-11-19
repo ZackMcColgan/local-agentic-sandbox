@@ -369,8 +369,8 @@ export function SettingsView({
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header Card — Obsidian Atelier */}
-        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 atelier-card border border-stone-200/90 dark:border-white/[0.10] flex items-center gap-3">
+        {/* Top Header Card */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center gap-3">
           <button
             type="button"
             onClick={handleClose}
@@ -383,15 +383,15 @@ export function SettingsView({
             <h1 className="text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
               Settings
             </h1>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-stone-500 dark:text-stone-400">
-              Obsidian Atelier · System &amp; Runtime
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-600 dark:text-zinc-400">
+              System &amp; Runtime
             </p>
           </div>
         </div>
 
         {/* Live Status Strip: pinned engine / host / model / prod summary */}
         <div
-          className="bg-white dark:bg-[#0e0e12] rounded-3xl px-4 py-3 atelier-card border border-stone-200/90 dark:border-white/[0.10]"
+          className="bg-white dark:bg-[#0e0e12] rounded-3xl px-4 py-3 surface-card border border-stone-200/90 dark:border-white/[0.10]"
           data-testid="settings-live-status-strip"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

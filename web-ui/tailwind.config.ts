@@ -27,7 +27,7 @@ const config: Config = {
           foreground: "hsl(var(--muted-foreground))",
         },
         "zinc-850": "#15151b",
-        obsidian: {
+        surface: {
           950: "#000000",
           900: "#0e0e12",
           850: "#15151b",

@@ -56,7 +56,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="h-full bg-stone-50 dark:bg-black text-stone-900 dark:text-stone-50 font-sans antialiased overflow-x-hidden selection:bg-amber-500/25 selection:text-amber-900 dark:selection:text-amber-200">
+      <body className="h-full bg-stone-50 dark:bg-black text-stone-900 dark:text-stone-50 font-sans antialiased overflow-x-hidden selection:bg-emerald-500/25 selection:text-emerald-900 dark:selection:text-emerald-200">
         {children}
       </body>
     </html>
