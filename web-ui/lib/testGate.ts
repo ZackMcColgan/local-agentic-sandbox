@@ -191,6 +191,14 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/monsterIntake") ||
+      p.includes("app/api/board/intake") ||
+      p.includes("BoardAddSheet.tsx") ||
+      p.includes("monsterIntake.test.ts"),
+    tests: ["tests/monsterIntake.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/") ||
       p.includes("app/api/board/") ||
       p.includes("BoardView.tsx") ||
