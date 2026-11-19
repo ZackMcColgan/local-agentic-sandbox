@@ -159,7 +159,7 @@ export function BoardAddSheet({
       aria-modal="true"
       aria-label="Add to the board"
     >
-      <div className="max-h-[90vh] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-white/[0.11] bg-[#0e0e12] p-5 text-stone-100 shadow-2xl atelier-enter">
+      <div className="max-h-[90vh] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-white/[0.11] bg-[#0e0e12] p-5 text-stone-100 shadow-2xl surface-enter">
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-white/[0.18]" />
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -181,10 +181,10 @@ export function BoardAddSheet({
         </div>
 
         {/* Door 1: Ask the assistant (Monster-Prompt Single-Call Intake) */}
-        <div className="mt-3.5 rounded-2xl border border-amber-500/60 bg-[#15151b] p-3.5 shadow-[0_0_0_1px_rgba(245,158,11,0.25)_inset]">
+        <div className="mt-3.5 rounded-2xl border border-emerald-500/60 bg-[#15151b] p-3.5 shadow-[0_0_0_1px_rgba(16,185,129,0.25)_inset]">
           <h2 className="flex items-center gap-2 text-[14.5px] font-semibold text-stone-50">
             Ask the assistant
-            <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9.5px] font-bold tracking-[0.6px] text-stone-950">
+            <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold tracking-[0.6px] text-black">
               NEW
             </span>
           </h2>
@@ -200,7 +200,7 @@ export function BoardAddSheet({
                 placeholder="Paste a task or multi-item prompt…"
                 rows={4}
                 data-testid="intake-prompt-input"
-                className="mt-2.5 w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2.5 text-[13.5px] text-stone-100 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none"
+                className="mt-2.5 w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2.5 text-[13.5px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               {intakeError && (
                 <p
@@ -215,7 +215,7 @@ export function BoardAddSheet({
                 onClick={handlePreviewSubmit}
                 disabled={previewLoading}
                 data-testid="intake-preview-btn"
-                className="mt-2.5 w-full rounded-xl bg-amber-500 hover:bg-amber-400 py-2.5 text-center text-[14px] font-bold text-stone-950 transition disabled:opacity-50"
+                className="mt-2.5 w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 text-center text-[14px] font-bold text-black transition disabled:opacity-50"
               >
                 {previewLoading ? "Drafting stack…" : "Preview stack"}
               </button>
@@ -267,7 +267,7 @@ export function BoardAddSheet({
                         {item.dependencies.map((dep) => (
                           <span
                             key={dep}
-                            className="rounded-full border border-amber-500/45 bg-amber-500/15 px-2 py-0.5 text-[10.5px] text-amber-300"
+                            className="rounded-full border border-emerald-500/45 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] text-emerald-300"
                           >
                             {dep}
                           </span>
@@ -299,7 +299,7 @@ export function BoardAddSheet({
                   onClick={() => handleConfirmStack(false)}
                   disabled={confirmLoading}
                   data-testid="intake-confirm-queued-btn"
-                  className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 py-2.5 text-center text-[13.5px] font-bold text-stone-950 transition disabled:opacity-50"
+                  className="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 text-center text-[13.5px] font-bold text-black transition disabled:opacity-50"
                 >
                   {confirmLoading ? "Filing…" : "Confirm & File to Queued"}
                 </button>
@@ -308,7 +308,7 @@ export function BoardAddSheet({
                   onClick={() => handleConfirmStack(true)}
                   disabled={confirmLoading}
                   data-testid="intake-confirm-drain-btn"
-                  className="w-full rounded-xl border border-amber-500/60 bg-amber-500/15 py-2.5 text-center text-[13.5px] font-bold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
+                  className="w-full rounded-xl border border-emerald-500/60 bg-emerald-500/15 py-2.5 text-center text-[13.5px] font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
                 >
                   {confirmLoading ? "Filing…" : "Confirm & Start Drain"}
                 </button>
@@ -341,14 +341,14 @@ export function BoardAddSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Item title (e.g. fix-toggle-spacing)"
-                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               <textarea
                 value={brief}
                 onChange={(e) => setBrief(e.target.value)}
                 placeholder="Brief description of what needs to be done"
                 rows={3}
-                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               {existingItems.length > 0 && (
                 <div>
@@ -365,7 +365,7 @@ export function BoardAddSheet({
                           onClick={() => toggleDep(item.id)}
                           className={`rounded-full border px-2.5 py-0.5 text-[10.5px] ${
                             active
-                              ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                              ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
                               : "border-white/[0.12] text-stone-400"
                           }`}
                         >
@@ -388,7 +388,7 @@ export function BoardAddSheet({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-400 py-2 text-[13px] font-bold text-stone-950 disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2 text-[13px] font-bold text-black disabled:opacity-50"
                 >
                   {submitting ? "Saving…" : "File in Queued"}
                 </button>

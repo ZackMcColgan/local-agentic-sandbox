@@ -120,7 +120,7 @@ export function BoardView({
     return (
       <div
         key={item.id}
-        className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] atelier-card p-3.5 transition-all ${
+        className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] surface-card p-3.5 transition-all ${
           isLive ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40" : "hover:border-white/[0.18]"
         }`}
       >
@@ -150,7 +150,7 @@ export function BoardView({
         )}
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
-          <div className="pt-2 text-[12px] text-amber-300">
+          <div className="pt-2 text-[12px] text-emerald-300">
             {item.parkedReason}
           </div>
         )}
@@ -165,7 +165,7 @@ export function BoardView({
 
         <div className="flex flex-wrap gap-1.5 pt-2.5">
           {(item.needsAttention || item.status === "needs-attention") && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
               needs attention
             </span>
           )}
@@ -204,7 +204,7 @@ export function BoardView({
               {item.threadLink && (
                 <a
                   href={item.threadLink}
-                  className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[10.5px] text-amber-300 hover:bg-amber-500/20 transition-colors"
+                  className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-300 hover:bg-emerald-500/20 transition-colors"
                 >
                   Thread ›
                 </a>
@@ -237,7 +237,7 @@ export function BoardView({
         }
       }}
     >
-      {/* Header — Obsidian Atelier */}
+      {/* Header */}
       <header className="flex flex-wrap shrink-0 items-center gap-2 border-b border-white/[0.08] bg-black/90 backdrop-blur-xl px-4 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-6 md:py-0">
         <button
           type="button"
@@ -258,7 +258,7 @@ export function BoardView({
             controlState === "running"
               ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
               : controlState === "paused"
-              ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
               : "border-white/[0.12] bg-[#15151b] text-stone-300"
           }`}
         >
@@ -267,7 +267,7 @@ export function BoardView({
               controlState === "running"
                 ? "bg-cyan-400 animate-pulse"
                 : controlState === "paused"
-                ? "bg-amber-400"
+                ? "bg-emerald-400"
                 : "bg-stone-400"
             }`}
           />
@@ -291,8 +291,8 @@ export function BoardView({
             aria-pressed={controlState === "running"}
             className={`min-h-[36px] flex-1 rounded-xl border px-3 py-1 text-[12px] font-semibold transition-all disabled:opacity-60 md:flex-none ${
               controlState === "running"
-                ? "border-amber-500 bg-amber-500 text-stone-950"
-                : "border-amber-500/60 text-amber-300 hover:bg-amber-500/15"
+                ? "border-emerald-500 bg-emerald-500 text-black"
+                : "border-emerald-500/60 text-emerald-300 hover:bg-emerald-500/15"
             }`}
           >
             Start
@@ -327,14 +327,14 @@ export function BoardView({
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
-          className="hidden min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 px-3.5 py-1.5 text-[13px] font-semibold text-stone-950 transition-colors md:inline-flex md:items-center"
+          className="hidden min-h-[36px] rounded-xl bg-emerald-500 hover:bg-emerald-400 px-3.5 py-1.5 text-[13px] font-semibold text-black transition-colors md:inline-flex md:items-center"
         >
           + Add item
         </button>
       </header>
 
       {/* Search / filter row */}
-      <div className="mx-4 mt-3 flex shrink-0 items-center gap-2.5 rounded-2xl border border-white/[0.10] bg-[#0e0e12] px-3.5 py-2.5 md:mx-6 focus-within:border-amber-500/60 transition-colors">
+      <div className="mx-4 mt-3 flex shrink-0 items-center gap-2.5 rounded-2xl border border-white/[0.10] bg-[#0e0e12] px-3.5 py-2.5 md:mx-6 focus-within:border-emerald-500/60 transition-colors">
         <span className="text-[15px] text-stone-400">⌕</span>
         <input
           type="search"
@@ -382,7 +382,7 @@ export function BoardView({
               onClick={() => setActiveColIndex(idx)}
               className={`h-1.5 rounded-full transition-all ${
                 idx === activeColIndex
-                  ? "w-5 rounded-[3px] bg-amber-500"
+                  ? "w-5 rounded-[3px] bg-emerald-500"
                   : "w-1.5 bg-stone-700"
               }`}
             />
@@ -415,7 +415,7 @@ export function BoardView({
           type="button"
           onClick={() => setIsAddOpen(true)}
           aria-label="Add to the board"
-          className="fixed right-4 bottom-5 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-[30px] font-medium text-stone-950 shadow-[0_8px_24px_rgba(245,158,11,0.38)] transition-all"
+          className="fixed right-4 bottom-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-[30px] font-medium text-black shadow-[0_8px_24px_rgba(16,185,129,0.38)] transition-all"
         >
           +
         </button>

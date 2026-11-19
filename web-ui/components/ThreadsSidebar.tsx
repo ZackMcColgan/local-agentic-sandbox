@@ -203,7 +203,7 @@ export function ThreadsSidebar({
 
   return (
     <aside className="w-full flex flex-col h-full bg-stone-50 dark:bg-[#0e0e12] border-r border-stone-200/80 dark:border-white/[0.08] shrink-0 overflow-hidden">
-      {/* Top Header — Obsidian Atelier */}
+      {/* Top Header */}
       <div className="h-12 px-4 bg-stone-50 dark:bg-[#0e0e12] border-b border-stone-200/80 dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           {onOpenDrawer && (
@@ -238,7 +238,7 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={onNewThread}
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-amber-700 hover:bg-amber-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-stone-950 transition-colors shrink-0 shadow-xs"
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-[9px] bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black transition-colors shrink-0 shadow-xs"
             title="New session"
             aria-label="New session"
           >
@@ -349,7 +349,7 @@ export function ThreadsSidebar({
               if (statusLabel === "Failed")
                 return { label: "✕ FAILED", classes: "bg-rose-500/10 text-rose-700 dark:text-rose-300" };
               if (statusLabel === "Needs Input")
-                return { label: "NEEDS INPUT", classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300" };
+                return { label: "NEEDS INPUT", classes: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300" };
               return { label: "NEW", classes: "bg-stone-500/10 text-stone-600 dark:text-stone-400" };
             })();
 
@@ -384,11 +384,11 @@ export function ThreadsSidebar({
                   }
                   onSelectThread(thread.id);
                 }}
-                className={`group relative overflow-hidden rounded-2xl px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 atelier-card ${
+                className={`group relative overflow-hidden rounded-2xl px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 surface-card ${
                   isRunning
                     ? "bg-white dark:bg-[#15151b] border border-cyan-500/40 shadow-[inset_3px_0_0_#22d3ee]"
                     : isSelected
-                    ? "bg-white dark:bg-[#15151b] ring-2 ring-amber-500 shadow-md border border-transparent"
+                    ? "bg-white dark:bg-[#15151b] ring-2 ring-emerald-500 shadow-md border border-transparent"
                     : "bg-white dark:bg-[#15151b] hover:shadow-md shadow-xs border border-stone-200/90 dark:border-white/[0.09]"
                 }`}
               >
@@ -404,7 +404,7 @@ export function ThreadsSidebar({
                       {deriveThreadDisplayTitle(thread.title)}
                     </h2>
                     {(thread as any).matchSnippet && (
-                      <p className="mt-0.5 text-[11px] leading-snug truncate text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded">
+                      <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
                       </p>
                     )}
