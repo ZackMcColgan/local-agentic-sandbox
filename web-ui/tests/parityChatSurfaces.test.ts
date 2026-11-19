@@ -48,11 +48,11 @@ describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer togg
   });
 });
 
-describe("parity PR2 — thinking card (Obsidian Atelier structure + UI-018 near-white reasoning)", () => {
-  it("header leads with the Obsidian Atelier glowing amber dot", () => {
+describe("parity PR2 — thinking card (dark surface structure + UI-018 near-white reasoning)", () => {
+  it("header leads with the glowing emerald dot", () => {
     assert.ok(
-      thinkingPanel.includes("shadow-[0_0_10px_rgba(251,191,36,0.9)]"),
-      "glowing amber dot in the thinking header",
+      thinkingPanel.includes("shadow-[0_0_10px_rgba(16,185,129,0.9)]"),
+      "glowing emerald dot in the thinking header",
     );
   });
 
@@ -105,28 +105,28 @@ describe("parity PR2 — live trace rows (board rows + UI-021 brightening)", () 
 });
 
 describe("parity PR2 — RUNNING pill + activity header details", () => {
-  it("LiveRunBlock running state is the Obsidian Atelier solid amber pill", () => {
+  it("LiveRunBlock running state is the solid emerald pill", () => {
     const pill = segment(liveRunBlock, 'data-testid="running-pill"', 500);
-    assert.ok(pill.includes("bg-amber-500"), "solid amber fill");
-    assert.ok(pill.includes("text-stone-950"), "near-black text on the pill");
+    assert.ok(pill.includes("bg-emerald-500"), "solid emerald fill");
+    assert.ok(pill.includes("text-black"), "black text on the pill");
     assert.ok(pill.includes("border-transparent"), "no dark border on solid pill");
     assert.ok(pill.includes("bg-stone-950"), "near-black pulse dot on solid pill");
     assert.ok(pill.includes("RUNNING ·"), "pill reads RUNNING · elapsed");
   });
 
-  it("LiveRunBlock card uses the Obsidian Atelier surface in dark mode", () => {
-    assert.ok(liveRunBlock.includes("dark:bg-[#0e0e12]"), "Obsidian Atelier --bg-surface-1 #0e0e12");
+  it("LiveRunBlock card uses the dark surface in dark mode", () => {
+    assert.ok(liveRunBlock.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
   });
 
-  it("activity header: obsidian card, phone hero 27px, amber-to-cyan gradient pulse, mono tool split", () => {
-    assert.ok(activityHeader.includes("dark:bg-[#0e0e12]"), "Obsidian Atelier --bg-surface-1 #0e0e12");
+  it("activity header: dark card, phone hero 27px, emerald-to-cyan gradient pulse, mono tool split", () => {
+    assert.ok(activityHeader.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
     assert.ok(
       activityHeader.includes("text-[27px]") && activityHeader.includes("sm:text-[34px]"),
       "hero elapsed 27px phone / 34px desktop",
     );
     assert.ok(
-      activityHeader.includes("from-amber-500 to-cyan-400"),
-      "pulse track carries the moving amber-to-cyan gradient",
+      activityHeader.includes("from-emerald-500 to-cyan-400"),
+      "pulse track carries the moving emerald-to-cyan gradient",
     );
     assert.ok(
       activityHeader.includes('data-testid="live-activity-tool"'),

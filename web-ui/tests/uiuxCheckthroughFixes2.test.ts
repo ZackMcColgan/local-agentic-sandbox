@@ -88,7 +88,7 @@ describe("UI-083: board scrolling on mobile", () => {
 });
 
 describe("UI-085: drawer menu text contrast", () => {
-  it("uses high-contrast dark:text-stone-200 for nav item labels in Obsidian Atelier", () => {
+  it("uses high-contrast dark:text-stone-200 for nav item labels", () => {
     const src = readComponent("components/NavigationDrawer.tsx");
     assert.ok(
       !src.includes("dark:text-zinc-500"),

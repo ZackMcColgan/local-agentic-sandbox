@@ -29,10 +29,10 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       );
     });
 
-    it("renders starting state with pulsing amber dot and 'Starting...' text", () => {
+    it("renders starting state with pulsing emerald dot and 'Starting...' text", () => {
       assert.ok(
-        pillFile.includes("bg-amber-500") && pillFile.includes("animate-pulse"),
-        "Must have pulsing amber dot for starting state"
+        pillFile.includes("bg-emerald-500") && pillFile.includes("animate-pulse"),
+        "Must have pulsing emerald dot for starting state"
       );
       assert.ok(pillFile.includes("Starting..."), "Must display 'Starting...' text");
     });

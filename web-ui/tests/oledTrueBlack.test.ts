@@ -30,8 +30,8 @@ describe("OLED true black — dark mode canvas surfaces", () => {
 
   it("design tokens: elevated surfaces stay lifted (layers still read)", () => {
     const block = darkBlock(read("app/design-tokens.css"));
-    assert.match(block, /--bg-surface-2:\s*#15151b/, "card surface stays lifted obsidian #15151b");
-    assert.match(block, /--bg-surface-3:\s*#1f1f28/, "pill surface stays lifted obsidian #1f1f28");
+    assert.match(block, /--bg-surface-2:\s*#15151b/, "card surface stays lifted dark #15151b");
+    assert.match(block, /--bg-surface-3:\s*#1f1f28/, "pill surface stays lifted dark #1f1f28");
   });
 
   it("globals: dark background token and body paint are pure black", () => {

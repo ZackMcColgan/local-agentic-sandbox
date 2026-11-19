@@ -128,7 +128,7 @@ function readComp(rel: string): string {
     "bg-amber-500",
   ]);
 
-  // Obsidian Atelier uses burnished amber as its primary brand accent across surfaces
+  // Emerald is the sole primary brand accent across surfaces; amber is restricted to sanctioned warnings.
   for (const f of purgedFiles) {
     const content = readComp(f);
     assert.ok(content.length > 0, `${f} must be readable`);

@@ -7,11 +7,11 @@ describe("P0.4 — Visual-rule computed-style guard", () => {
   const globalsCss = fs.readFileSync(path.resolve(process.cwd(), "app/globals.css"), "utf8");
   const layoutTsx = fs.readFileSync(path.resolve(process.cwd(), "app/layout.tsx"), "utf8");
 
-  it("enforces Obsidian Atelier burnished-amber --accent in both light (32 95% 37%) and dark (38 92% 50%) tokens", () => {
+  it("enforces emerald --accent in both light (161 94% 30%) and dark (160 84% 39%) tokens", () => {
     const accentMatches = [...globalsCss.matchAll(/--accent:\s*([^;]+);/g)].map((m) => m[1].trim());
     assert.ok(accentMatches.length >= 2, "Expected --accent in :root and .dark");
-    assert.equal(accentMatches[0], "32 95% 37%", `Expected light amber accent 32 95% 37%, got ${accentMatches[0]}`);
-    assert.equal(accentMatches[1], "38 92% 50%", `Expected dark amber accent 38 92% 50%, got ${accentMatches[1]}`);
+    assert.equal(accentMatches[0], "161 94% 30%", `Expected light emerald accent 161 94% 30%, got ${accentMatches[0]}`);
+    assert.equal(accentMatches[1], "160 84% 39%", `Expected dark emerald accent 160 84% 39%, got ${accentMatches[1]}`);
   });
 
   it("enforces pure #000000 dark themeColor in layout.tsx", () => {
