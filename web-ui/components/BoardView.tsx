@@ -108,7 +108,7 @@ export function BoardView({
   const renderCard = (item: BoardItem) => {
     const isLive = item.status === "working";
     const isDone = item.status === "done";
-    const dotColor = isLive || isDone ? "bg-[#10b981]" : "bg-zinc-600";
+    const dotColor = isLive ? "bg-cyan-400 animate-pulse" : isDone ? "bg-emerald-400" : "bg-stone-500";
     const deps = item.dependencies ?? [];
     const allDepsDone =
       deps.length > 0 &&
@@ -120,22 +120,22 @@ export function BoardView({
     return (
       <div
         key={item.id}
-        className={`mb-2.5 rounded-[14px] border border-[#1d1d21] bg-[#101013] p-3 ${
-          isLive ? "shadow-[0_0_0_1px_#10b981_inset]" : ""
+        className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] atelier-card p-3.5 transition-all ${
+          isLive ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40" : "hover:border-white/[0.18]"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className={`h-2 w-2 flex-none rounded-full ${dotColor}`} />
-          <div className="flex-1 min-w-0 break-words line-clamp-2 text-[14.5px] font-semibold tracking-[-0.1px] text-zinc-100">
+          <div className="flex-1 min-w-0 break-words line-clamp-2 text-[14.5px] font-semibold tracking-tight text-stone-50">
             {item.title}
           </div>
-          <div className="max-w-[96px] truncate font-mono text-[10.5px] text-zinc-400">
+          <div className="max-w-[96px] truncate font-mono text-[10.5px] text-stone-400">
             {item.key}
           </div>
         </div>
 
         <div
-          className={`pt-1 text-[12.5px] leading-[1.45] text-zinc-400 ${
+          className={`pt-1.5 text-[12.5px] leading-[1.48] text-stone-300 ${
             expandedBriefIds[item.id] ? "whitespace-pre-wrap" : "line-clamp-3"
           }`}
         >
@@ -143,47 +143,47 @@ export function BoardView({
         </div>
 
         {item.evidence?.liveLine && (
-          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-zinc-400">
-            <span className="text-[#10b981]">●</span>
+          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-cyan-300">
+            <span className="text-cyan-400">●</span>
             <span>{item.evidence.liveLine}</span>
           </div>
         )}
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
-          <div className="pt-2 text-[12px] text-zinc-400">
+          <div className="pt-2 text-[12px] text-amber-300">
             {item.parkedReason}
           </div>
         )}
 
         {item.status === "done" && item.evidence?.prNumber && (
-          <div className="pt-2 text-[11.5px] text-zinc-400">
-            <span className="text-[#10b981]">✓</span> PR #{item.evidence.prNumber}
+          <div className="pt-2 text-[11.5px] text-stone-300 font-mono tabular-nums">
+            <span className="text-emerald-400">✓</span> PR #{item.evidence.prNumber}
             {item.evidence.mergeSha ? ` · ${item.evidence.mergeSha}` : ""}
             {item.evidence.deployTag ? ` · ${item.evidence.deployTag}` : ""}
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5 pt-2">
+        <div className="flex flex-wrap gap-1.5 pt-2.5">
           {(item.needsAttention || item.status === "needs-attention") && (
-            <span className="rounded-full border border-zinc-600 bg-zinc-900 px-2 py-0.5 text-[10.5px] font-medium text-zinc-200">
+            <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">
               needs attention
             </span>
           )}
           {deps.length > 0 && !allDepsDone && (
-            <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
-              waits on <b className="font-semibold text-zinc-300">{waitingOn}</b>
+            <span className="rounded-full border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[10.5px] text-stone-400">
+              waits on <b className="font-semibold text-stone-200">{waitingOn}</b>
             </span>
           )}
           {allDepsDone && (
-            <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
-              deps met <b className="font-semibold text-zinc-300">✓</b>
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-300">
+              deps met <b className="font-semibold text-emerald-200">✓</b>
             </span>
           )}
-          <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
-            Author <b className="font-semibold text-zinc-300">{item.author}</b>
+          <span className="rounded-full border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[10.5px] text-stone-400">
+            Author <b className="font-semibold text-stone-200">{item.author}</b>
           </span>
           {item.sprint && (
-            <span className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400">
+            <span className="rounded-full border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[10.5px] text-stone-400">
               {item.sprint}
             </span>
           )}
@@ -197,14 +197,14 @@ export function BoardView({
                     [item.id]: !prev[item.id],
                   }))
                 }
-                className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400 hover:text-zinc-200"
+                className="rounded-full border border-white/[0.12] px-2 py-0.5 text-[10.5px] text-stone-300 hover:text-stone-50 hover:border-white/[0.22] transition-colors"
               >
                 {expandedBriefIds[item.id] ? "Brief ⌄" : "Brief ›"}
               </button>
               {item.threadLink && (
                 <a
                   href={item.threadLink}
-                  className="rounded-full border border-[#26262b] px-2 py-0.5 text-[10.5px] text-zinc-400 hover:text-zinc-200"
+                  className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[10.5px] text-amber-300 hover:bg-amber-500/20 transition-colors"
                 >
                   Thread ›
                 </a>
@@ -237,38 +237,38 @@ export function BoardView({
         }
       }}
     >
-      {/* Header */}
-      <header className="flex flex-wrap shrink-0 items-center gap-2 border-b border-zinc-800 bg-black px-4 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-6 md:py-0">
+      {/* Header — Obsidian Atelier */}
+      <header className="flex flex-wrap shrink-0 items-center gap-2 border-b border-white/[0.08] bg-black/90 backdrop-blur-xl px-4 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-6 md:py-0">
         <button
           type="button"
           onClick={onOpenDrawer}
           aria-label="Open navigation drawer"
-          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1 rounded-lg hover:bg-zinc-900 md:hidden"
+          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.10] bg-[#15151b] hover:bg-[#1f1f28] md:hidden transition-colors"
         >
-          <span className="block h-0.5 w-5 rounded bg-zinc-300" />
-          <span className="block h-0.5 w-5 rounded bg-zinc-300" />
-          <span className="block h-0.5 w-5 rounded bg-zinc-300" />
+          <span className="block h-0.5 w-5 rounded bg-stone-200" />
+          <span className="block h-0.5 w-5 rounded bg-stone-200" />
+          <span className="block h-0.5 w-5 rounded bg-stone-200" />
         </button>
-        <div className="flex-1 text-[19px] font-semibold tracking-[-0.2px] md:flex-none md:text-[21px]">
+        <div className="flex-1 text-[19px] font-bold tracking-tight text-stone-50 md:flex-none md:text-[21px]">
           Board
         </div>
         <span
           data-testid="board-control-pill"
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
             controlState === "running"
-              ? "border-[#10b981]/60 bg-[#10b981]/10 text-[#10b981]"
+              ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
               : controlState === "paused"
-              ? "border-zinc-600 bg-zinc-900 text-zinc-200"
-              : "border-zinc-700 bg-zinc-900 text-zinc-300"
+              ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+              : "border-white/[0.12] bg-[#15151b] text-stone-300"
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               controlState === "running"
-                ? "bg-[#10b981]"
+                ? "bg-cyan-400 animate-pulse"
                 : controlState === "paused"
-                ? "bg-zinc-300"
-                : "bg-zinc-400"
+                ? "bg-amber-400"
+                : "bg-stone-400"
             }`}
           />
           {controlState === "running"
@@ -289,10 +289,10 @@ export function BoardView({
             disabled={isControlPending || controlState === "running"}
             onClick={() => onControlAction?.("start")}
             aria-pressed={controlState === "running"}
-            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+            className={`min-h-[36px] flex-1 rounded-xl border px-3 py-1 text-[12px] font-semibold transition-all disabled:opacity-60 md:flex-none ${
               controlState === "running"
-                ? "border-[#10b981] bg-[#10b981] text-[#04150e]"
-                : "border-[#10b981]/70 text-[#10b981] hover:bg-[#10b981]/10"
+                ? "border-amber-500 bg-amber-500 text-stone-950"
+                : "border-amber-500/60 text-amber-300 hover:bg-amber-500/15"
             }`}
           >
             Start
@@ -302,10 +302,10 @@ export function BoardView({
             disabled={isControlPending || controlState === "paused"}
             onClick={() => onControlAction?.("pause")}
             aria-pressed={controlState === "paused"}
-            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+            className={`min-h-[36px] flex-1 rounded-xl border px-3 py-1 text-[12px] font-semibold transition-all disabled:opacity-60 md:flex-none ${
               controlState === "paused"
-                ? "border-zinc-300 bg-zinc-200 text-black"
-                : "border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+                ? "border-stone-200 bg-stone-200 text-stone-950"
+                : "border-white/[0.14] text-stone-200 hover:bg-[#1f1f28]"
             }`}
           >
             Pause
@@ -315,10 +315,10 @@ export function BoardView({
             disabled={isControlPending || controlState === "stopped"}
             onClick={() => onControlAction?.("stop")}
             aria-pressed={controlState === "stopped"}
-            className={`min-h-[36px] flex-1 rounded-[10px] border px-3 py-1 text-[12px] font-semibold transition-colors disabled:opacity-60 md:flex-none ${
+            className={`min-h-[36px] flex-1 rounded-xl border px-3 py-1 text-[12px] font-semibold transition-all disabled:opacity-60 md:flex-none ${
               controlState === "stopped"
-                ? "border-zinc-500 bg-zinc-800 text-zinc-100"
-                : "border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+                ? "border-white/[0.18] bg-[#1f1f28] text-stone-100"
+                : "border-white/[0.14] text-stone-200 hover:bg-[#1f1f28]"
             }`}
           >
             Stop
@@ -327,22 +327,22 @@ export function BoardView({
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
-          className="hidden min-h-[36px] rounded-[10px] border-[1.5px] border-[#10b981] px-3.5 py-1.5 text-[13px] font-semibold text-[#10b981] hover:bg-[#10b981]/10 md:inline-flex md:items-center"
+          className="hidden min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 px-3.5 py-1.5 text-[13px] font-semibold text-stone-950 transition-colors md:inline-flex md:items-center"
         >
           + Add item
         </button>
       </header>
 
       {/* Search / filter row */}
-      <div className="mx-4 mt-3 flex shrink-0 items-center gap-2.5 rounded-xl border border-[#1d1d21] bg-[#101013] px-3.5 py-2.5 md:mx-6">
-        <span className="text-[15px] text-zinc-400">⌕</span>
+      <div className="mx-4 mt-3 flex shrink-0 items-center gap-2.5 rounded-2xl border border-white/[0.10] bg-[#0e0e12] px-3.5 py-2.5 md:mx-6 focus-within:border-amber-500/60 transition-colors">
+        <span className="text-[15px] text-stone-400">⌕</span>
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search the board"
           aria-label="Search the board"
-          className="flex-1 bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
+          className="flex-1 bg-transparent text-[13.5px] text-stone-100 placeholder:text-stone-400 focus:outline-none"
         />
       </div>
 
@@ -382,8 +382,8 @@ export function BoardView({
               onClick={() => setActiveColIndex(idx)}
               className={`h-1.5 rounded-full transition-all ${
                 idx === activeColIndex
-                  ? "w-5 rounded-[3px] bg-[#10b981]"
-                  : "w-1.5 bg-zinc-700"
+                  ? "w-5 rounded-[3px] bg-amber-500"
+                  : "w-1.5 bg-stone-700"
               }`}
             />
           ))}
@@ -415,7 +415,7 @@ export function BoardView({
           type="button"
           onClick={() => setIsAddOpen(true)}
           aria-label="Add to the board"
-          className="fixed right-4 bottom-5 flex h-14 w-14 items-center justify-center rounded-full bg-[#10b981] text-[30px] font-medium text-[#04150e] shadow-[0_6px_18px_rgba(16,185,129,0.35)]"
+          className="fixed right-4 bottom-5 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-[30px] font-medium text-stone-950 shadow-[0_8px_24px_rgba(245,158,11,0.38)] transition-all"
         >
           +
         </button>
