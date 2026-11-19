@@ -26,7 +26,14 @@ const config: Config = {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
         },
-        "zinc-850": "#1c1c20",
+        "zinc-850": "#15151b",
+        obsidian: {
+          950: "#000000",
+          900: "#0e0e12",
+          850: "#15151b",
+          800: "#1f1f28",
+          700: "#2b2b36",
+        },
       },
       fontFamily: {
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
