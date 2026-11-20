@@ -3,11 +3,13 @@ import type { BoardItem } from "./boardStore";
 export const FLOW_MONITOR_STAGE2_DEFAULT = false;
 
 export const REQUIRED_PR_CHECKS = [
-  "Unit Tests",
-  "Coverage",
-  "Container Build",
-  "Playwright",
-  "Typecheck",
+  "Typecheck (full error report)",
+  "Unit Tests & Static Analysis",
+  "Code Coverage Report",
+  "Container Build & Docker Scout Scan",
+  "Playwright UI (Shard 1/3)",
+  "Playwright UI (Shard 2/3)",
+  "Playwright UI (Shard 3/3)",
 ] as const;
 
 export interface PrCheckResult {
