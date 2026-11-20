@@ -60,12 +60,20 @@ failures so one timeout cannot void a run.
   job-mode FAIL for this baseline and as a planner-robustness finding for
   small single-file goals.
 - `--mode job --all`: launched 2026-11-20 03:44 CT (run
-  `2026-11-20T09-44-41-242Z`). At banking time its first job
-  (forensic-diagnosis, thread `thread-1795167881268-3mve`) was still
-  executing — the planner accepted that goal with 4 milestones, in
-  contrast to the pr-coding goal. The `--all` job-mode results were not
-  complete at banking time and are not banked here; they land in a
-  follow-up banking PR when the run finishes.
+  `2026-11-20T09-44-41-242Z`); completed the same night with exit 1.
+  Its first job (forensic-diagnosis, thread
+  `thread-1795167881268-3mve`) accepted a 4-milestone plan and executed:
+  pod logs show milestone M1's builder returning a diff, the test runner
+  failing it (1 test), the critic returning `needs_fix`, and a fix round
+  starting. The thread then ended with status `stopped` about 11 minutes
+  in, mid-fix-round, with no stop reason recorded on the thread and no
+  deliverable. The runner recorded the failure trace
+  (`job/forensic-diagnosis.trace.json`) and aborted, so the remaining
+  four job-mode tasks never ran — the same no-per-task-isolation flaw as
+  endpoint mode. Recorded as a job-mode FAIL for forensic-diagnosis and
+  "not run" for the other four tasks in job mode. Two findings follow:
+  a stopped job should carry its stop reason on the thread, and the
+  runner needs per-task isolation in both modes.
 
 ## Grader integrity
 

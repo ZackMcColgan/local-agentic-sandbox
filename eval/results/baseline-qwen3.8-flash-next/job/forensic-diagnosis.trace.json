@@ -1,0 +1,47 @@
+{
+  "taskId": "forensic-diagnosis",
+  "prompt": "You are performing a forensic diagnosis on an SSE (Server-Sent Events) writer failure.\nRead the evidence bundle below carefully and identify the exact root cause of the crash.\nDo not propose speculative fixes or claim the bug is already fixed. State the root cause clearly and concisely, referencing the specific mechanism and symbols from the evidence.\n\n=== EVIDENCE BUNDLE ===\n[2026-11-10T14:22:08.114Z] ERROR sseWriter: Unhandled stream write error\nTypeError: Invalid state: Controller is already closed\n    at ReadableStreamDefaultController.enqueue (node:internal/webstreams/readablestream:1024:13)\n    at writeSseEvent (web-ui/lib/sseWriter.ts:42:16)\n    at onHeartbeat (web-ui/lib/sseWriter.ts:58:9)\n\nCode excerpt (web-ui/lib/sseWriter.ts):\n```ts\nexport function createSseStream(signal: AbortSignal) {\n  let timer: NodeJS.Timeout | null = null;\n  const stream = new ReadableStream({\n    start(controller) {\n      signal.addEventListener(\"abort\", () => {\n        if (timer) clearInterval(timer);\n        controller.close();\n      });\n      timer = setInterval(() => {\n        writeSseEvent(controller, \"ping\", { ts: Date.now() });\n      }, 15000);\n    },\n  });\n  return stream;\n}\n\nfunction writeSseEvent(controller: ReadableStreamDefaultController, event: string, data: unknown) {\n  const payload = `event: ${event}\\ndata: ${JSON.stringify(data)}\\n\\n`;\n  controller.enqueue(new TextEncoder().encode(payload));\n}\n```\n",
+  "output": "",
+  "durationMs": 675745,
+  "raw": {
+    "id": "thread-1795167881268-3mve",
+    "title": "You are performing a forensic diagnosis on an SSE (Server-Sent Events) writer failure.",
+    "status": "stopped",
+    "createdAt": "2026-11-20T09:44:41.268Z",
+    "updatedAt": "2026-11-20T09:55:51.625Z",
+    "model": "qwen3.8-flash-next-gyro-gyro-s",
+    "reasoningEffort": "low",
+    "hostAccess": false,
+    "taskId": "task-1795167881264",
+    "scope": "PROJECT",
+    "isTest": false,
+    "chunkBudget": {
+      "maxRounds": 8
+    },
+    "messages": [
+      {
+        "id": "msg-1795167881268-u",
+        "role": "user",
+        "content": "You are performing a forensic diagnosis on an SSE (Server-Sent Events) writer failure.\nRead the evidence bundle below carefully and identify the exact root cause of the crash.\nDo not propose speculative fixes or claim the bug is already fixed. State the root cause clearly and concisely, referencing the specific mechanism and symbols from the evidence.\n\n=== EVIDENCE BUNDLE ===\n[2026-11-10T14:22:08.114Z] ERROR sseWriter: Unhandled stream write error\nTypeError: Invalid state: Controller is already closed\n    at ReadableStreamDefaultController.enqueue (node:internal/webstreams/readablestream:1024:13)\n    at writeSseEvent (web-ui/lib/sseWriter.ts:42:16)\n    at onHeartbeat (web-ui/lib/sseWriter.ts:58:9)\n\nCode excerpt (web-ui/lib/sseWriter.ts):\n```ts\nexport function createSseStream(signal: AbortSignal) {\n  let timer: NodeJS.Timeout | null = null;\n  const stream = new ReadableStream({\n    start(controller) {\n      signal.addEventListener(\"abort\", () => {\n        if (timer) clearInterval(timer);\n        controller.close();\n      });\n      timer = setInterval(() => {\n        writeSseEvent(controller, \"ping\", { ts: Date.now() });\n      }, 15000);\n    },\n  });\n  return stream;\n}\n\nfunction writeSseEvent(controller: ReadableStreamDefaultController, event: string, data: unknown) {\n  const payload = `event: ${event}\\ndata: ${JSON.stringify(data)}\\n\\n`;\n  controller.enqueue(new TextEncoder().encode(payload));\n}\n```\n",
+        "timestamp": "2026-11-20T09:44:41.268Z"
+      },
+      {
+        "id": "msg-1795167881268-a",
+        "role": "assistant",
+        "content": "Started autonomous engineering run (4 milestones).",
+        "taskId": "task-1795167881264",
+        "timestamp": "2026-11-20T09:44:41.268Z"
+      }
+    ],
+    "tokenEconomics": {
+      "rounds": 0,
+      "promptTokens": 0,
+      "outputTokens": 0,
+      "compactions": 0
+    },
+    "liveness": "settled",
+    "stalledReason": "Turn stalled: no activity for 10m",
+    "resumedToThreadId": "thread-1795168551625-60bj",
+    "autoResumeCount": 1
+  }
+}

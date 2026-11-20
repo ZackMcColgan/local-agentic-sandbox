@@ -48,8 +48,12 @@ bundle flips a flag or promotes a branch; those are owner decisions.
   surfaced loudly as a failed thread both times. CHUNKED-BASELINE criteria
   are not evaluable (no deliverable, chunks, or continuations — the job
   never entered execution). Recorded as a planner-robustness finding for
-  small single-file goals. Job-mode --all was still in progress at bundle
-  assembly (forensic-diagnosis job running); its results bank separately.
+  small single-file goals. Job-mode --all completed the same night: its
+  forensic-diagnosis job accepted a 4-milestone plan, executed into a
+  test-failure/critic fix loop on milestone 1, then ended `stopped`
+  about 11 minutes in with no stop reason recorded on the thread and no
+  deliverable; the runner aborted on that first job, so the other four
+  job-mode tasks never ran. Details in the baseline BANKING-NOTES.md.
 
 ## 3. Release Bar status (STAGE-3.4)
 
