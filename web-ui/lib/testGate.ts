@@ -191,10 +191,12 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/board/drain") ||
       p.includes("lib/subagents/morningReport") ||
       p.includes("boardOrchestrator.test.ts") ||
-      p.includes("boardOrchestratorDrainReport.test.ts"),
+      p.includes("boardOrchestratorDrainReport.test.ts") ||
+      p.includes("boardDrainExecution.test.ts"),
     tests: [
       "tests/boardOrchestrator.test.ts",
       "tests/boardOrchestratorDrainReport.test.ts",
+      "tests/boardDrainExecution.test.ts",
     ],
   },
   {
