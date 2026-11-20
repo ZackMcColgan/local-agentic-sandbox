@@ -23,12 +23,33 @@ export async function GET(_req: NextRequest) {
   }
 }
 
+function isSameOriginRequest(req: NextRequest): boolean {
+  const requestHost = (req.headers.get("host") || req.nextUrl?.host || "").toLowerCase().trim();
+  if (!requestHost) return false;
+
+  const source = req.headers.get("origin") || req.headers.get("referer");
+  if (!source) return false;
+
+  try {
+    const parsed = new URL(source);
+    return parsed.host.toLowerCase() === requestHost;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action } = body;
 
     if (action === "toggleKillSwitch") {
+      if (!isSameOriginRequest(req)) {
+        return NextResponse.json(
+          { error: "Forbidden: cross-origin toggleKillSwitch request rejected" },
+          { status: 403 }
+        );
+      }
       const enabled = Boolean(body.enabled);
       process.env.SELF_DEPLOY_ENABLED = enabled ? "true" : "false";
       return NextResponse.json({

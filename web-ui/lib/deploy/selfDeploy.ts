@@ -211,6 +211,10 @@ export class SelfDeployPipeline {
   public async executeDeploy(
     input: SelfDeployInput & { preRollout?: boolean; skipPreRollout?: boolean }
   ): Promise<SelfDeployRecord> {
+    if (!this.enabled) {
+      throw new Error("Self-deploy is disabled by kill switch (SELF_DEPLOY_ENABLED=false)");
+    }
+
     const branchLower = (input.branchName || "").toLowerCase().trim();
     if (branchLower === "main" || branchLower === "master") {
       throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");

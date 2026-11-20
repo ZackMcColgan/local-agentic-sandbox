@@ -33,6 +33,7 @@ interface LiveRunBlockProps {
   onResumeRun?: () => void;
   onRestartRun?: () => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
+  selfDeployEnabled?: boolean;
   isStopping?: boolean;
   liveTraces?: ExecutionTraceItem[];
 }
@@ -44,10 +45,31 @@ export function LiveRunBlock({
   onResumeRun,
   onRestartRun,
   onDeployRun,
+  selfDeployEnabled,
   isStopping,
   liveTraces
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
+  const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
+  const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
+
+  useEffect(() => {
+    if (selfDeployEnabled !== undefined) return;
+    let cancelled = false;
+    fetch("/api/deploy")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.selfDeployEnabled === "boolean") {
+          setFetchedSelfDeployEnabled(data.selfDeployEnabled);
+        }
+      })
+      .catch(() => {
+        // Keep disabled when /api/deploy is unreachable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selfDeployEnabled]);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
     if (task.startedAt) {
       const start = new Date(task.startedAt).getTime();
@@ -640,8 +662,13 @@ export function LiveRunBlock({
               <button
                 type="button"
                 data-testid="merge-rollout-btn"
-                onClick={() => onDeployRun(task.taskId)}
-                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs"
+                disabled={!isSelfDeployEnabled}
+                title={!isSelfDeployEnabled ? "Self-deploy is disabled by kill switch" : undefined}
+                onClick={() => {
+                  if (!isSelfDeployEnabled) return;
+                  onDeployRun(task.taskId);
+                }}
+                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs inline-flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>Merge to develop & Rollout</span>
