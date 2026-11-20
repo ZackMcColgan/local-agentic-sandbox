@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
+import http from "http";
 import path from "path";
+import { POST as compactRoutePOST } from "../app/api/threads/[id]/compact/route";
 import {
   COMPACTION_PROMPT_V1,
   COMPACTION_MODEL_DIGEST_HEADER,
@@ -598,5 +600,196 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       else process.env.COMPACTION_STRATEGY = saved;
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     }
-  });});
+  });
+
+  it("(a) mid-turn hybrid compaction puts the hybrid digest into the live message view and updates events", async () => {
+    // 1. Verify the chat route mid-turn branch captures the hybrid result,
+    //    rebuilds the live conversationMessages via buildModelMessages(threadData),
+    //    and reports the hybrid tokens/actions rather than discarding the result.
+    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
+    assert.ok(anchor >= 0, "chat route must contain mid-turn fitConversationToBudget");
+    const slice = routeSrc.slice(anchor, anchor + 3800);
+    assert.ok(
+      /const\s+hybridResult\s*=\s*await\s+threadStore\.compactThreadIncrementalHybrid\(threadData/.test(slice),
+      "mid-turn hybrid branch must capture the compactThreadIncrementalHybrid result"
+    );
+    assert.ok(
+      slice.includes("threadStore.buildModelMessages(threadData)"),
+      "mid-turn hybrid branch must rebuild live conversationMessages from buildModelMessages(threadData)"
+    );
+    assert.ok(
+      slice.includes("!hybridResult.noop"),
+      "mid-turn hybrid branch must guard rebuild on !hybridResult.noop and fall back to extraction fit on noop"
+    );
+    assert.ok(
+      slice.includes("hybridResult.tokensBefore") && slice.includes("hybridResult.tokensAfter"),
+      "mid-turn hybrid branch must report hybrid tokensBefore/tokensAfter in turn state and SSE events"
+    );
+
+    // 2. Behavioral verification: compactThreadIncrementalHybrid + buildModelMessages
+    //    leaves the hybrid digest in the live view, drops compacted-away raw messages,
+    //    preserves the 4-message recent tail, and keeps the record boundary consistent.
+    const saved = process.env.COMPACTION_STRATEGY;
+    const tmpDir = path.resolve("./.tmp-test-midturn-hybrid-" + Date.now());
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const store = new ThreadStore(tmpDir);
+      const thread = makeTurnStartThread("thread-midturn-hybrid");
+      store.saveThread(thread);
+
+      const hybridResult = await store.compactThreadIncrementalHybrid(thread, {
+        summarize: async ({ digest }) =>
+          `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo\n` +
+          digest
+      });
+      assert.equal(hybridResult.noop, false);
+      assert.equal(hybridResult.modelSummaryUsed, true);
+
+      const rebuilt = store.buildModelMessages(thread);
+      assert.ok(
+        rebuilt.some((m) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)),
+        "live view must carry the hybrid model digest"
+      );
+      assert.ok(
+        !rebuilt.some((m) => m.content.includes("x".repeat(100))),
+        "compacted-away raw tool output must be absent from the live view"
+      );
+      assert.equal(rebuilt[rebuilt.length - 1].content, "Recent question two", "recent tail must be preserved");
+      assert.equal(rebuilt[rebuilt.length - 3].content, "Recent question one", "recent tail must be preserved");
+      const savedThread = (await store.getThread(thread.id))!;
+      assert.equal(savedThread.compaction?.throughMessageId, hybridResult.throughMessageId);
+      assert.equal(savedThread.compaction?.summary, hybridResult.summary);
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it("(b) /compact route honors COMPACTION_STRATEGY: hybrid invokes summarizer, unset keeps extraction", async () => {
+    const savedStrategy = process.env.COMPACTION_STRATEGY;
+    const savedThreadsDir = process.env.THREADS_DIR;
+    const savedLlmBaseUrl = process.env.LLM_BASE_URL;
+    const savedProvider = process.env.LLM_PROVIDER;
+    const tmpDir = path.resolve("./.tmp-test-compact-route-strategy-" + Date.now());
+    let llmCalls = 0;
+
+    // Local mock Ollama-compatible streaming server for the hybrid summarization pass
+    const mockModelDigest =
+      `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo\nCritical Errors & Failures:\n- Execution error: failed to compile module at line 42.`;
+    const server = http.createServer((_req, res) => {
+      llmCalls++;
+      res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+      res.write(JSON.stringify({ message: { role: "assistant", content: mockModelDigest }, done: false }) + "\n");
+      res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, done_reason: "stop" }) + "\n");
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const addr = server.address() as { port: number };
+
+    try {
+      process.env.THREADS_DIR = tmpDir;
+      process.env.LLM_BASE_URL = `http://127.0.0.1:${addr.port}`;
+      process.env.LLM_PROVIDER = "ollama";
+      const store = new ThreadStore(tmpDir);
+
+      // 1. Strategy unset -> extraction path, response shape unchanged, LLM never called
+      delete process.env.COMPACTION_STRATEGY;
+      const extractionThread = makeTurnStartThread("thread-compact-route-extraction");
+      store.saveThread(extractionThread);
+      const req1 = new Request(`http://localhost/api/threads/${extractionThread.id}/compact`, { method: "POST" });
+      const res1 = await compactRoutePOST(req1, { params: Promise.resolve({ id: extractionThread.id }) });
+      const data1 = await res1.json();
+      assert.equal(res1.status, 200);
+      assert.equal(data1.noop, false);
+      assert.equal(data1.modelSummaryUsed, undefined, "extraction response shape must remain unchanged");
+      assert.ok(data1.summary.startsWith("[CONVERSATION COMPACTED (85% THRESHOLD)]"));
+      assert.equal(llmCalls, 0, "extraction path must not call the LLM");
+
+      // 2. Strategy = hybrid -> hybrid path, summarizer callback exercised
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const hybridThread = makeTurnStartThread("thread-compact-route-hybrid");
+      store.saveThread(hybridThread);
+      const req2 = new Request(`http://localhost/api/threads/${hybridThread.id}/compact`, { method: "POST" });
+      const res2 = await compactRoutePOST(req2, { params: Promise.resolve({ id: hybridThread.id }) });
+      const data2 = await res2.json();
+      assert.equal(res2.status, 200);
+      assert.equal(data2.noop, false);
+      assert.equal(llmCalls, 1, "hybrid /compact must invoke the summarization pass");
+      assert.equal(data2.modelSummaryUsed, true, "hybrid /compact must report modelSummaryUsed=true");
+      assert.ok(data2.summary.startsWith(COMPACTION_MODEL_DIGEST_HEADER), "hybrid /compact must return model digest");
+    } finally {
+      server.close();
+      if (savedStrategy === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = savedStrategy;
+      if (savedThreadsDir === undefined) delete process.env.THREADS_DIR;
+      else process.env.THREADS_DIR = savedThreadsDir;
+      if (savedLlmBaseUrl === undefined) delete process.env.LLM_BASE_URL;
+      else process.env.LLM_BASE_URL = savedLlmBaseUrl;
+      if (savedProvider === undefined) delete process.env.LLM_PROVIDER;
+      else process.env.LLM_PROVIDER = savedProvider;
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it("(c) signal provenance: unrelated external abort does not stop summarization; deadline signal does; chat route closures do not shadow req", async () => {
+    // 1. Verify neither summarizer closure in chat/route.ts shadows the HTTP `req` parameter
+    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    assert.ok(
+      !routeSrc.includes("summarize: async (req)"),
+      "chat route summarizer closures must not shadow the HTTP `req` parameter"
+    );
+
+    // 2. Prove summarization completes when an unrelated external signal aborts mid-pass,
+    //    and is cut when the deadline wrapper's own signal fires.
+    const saved = process.env.COMPACTION_STRATEGY;
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const unrelatedController = new AbortController();
+      let seenSignalAbortedAfterExternalAbort = true;
+
+      const completed = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        inactivityMs: 2000,
+        totalDeadlineMs: 5000,
+        summarize: async (sumReq) => {
+          await new Promise((r) => setTimeout(r, 20));
+          unrelatedController.abort("client_disconnected");
+          await new Promise((r) => setTimeout(r, 20));
+          seenSignalAbortedAfterExternalAbort = Boolean(sumReq.signal?.aborted);
+          return `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo`;
+        }
+      });
+      assert.equal(unrelatedController.signal.aborted, true);
+      assert.equal(seenSignalAbortedAfterExternalAbort, false, "external abort must not abort the deadline signal");
+      assert.equal(completed.modelSummaryUsed, true, "summarization must complete despite external abort");
+
+      // Deadline signal cuts the pass
+      let deadlineSignalAborted = false;
+      const cut = await runHybridCompaction(buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9), {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        inactivityMs: 80,
+        totalDeadlineMs: 500,
+        summarize: (sumReq) =>
+          new Promise<never>(() => {
+            sumReq.signal?.addEventListener("abort", () => {
+              deadlineSignalAborted = true;
+            });
+          })
+      });
+      assert.equal(cut.fallback, true);
+      assert.equal(cut.fallbackReason, "timeout");
+      assert.equal(deadlineSignalAborted, true, "deadline wrapper signal must abort the pass");
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+    }
+  });
+});
 
