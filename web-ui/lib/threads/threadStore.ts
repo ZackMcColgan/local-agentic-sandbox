@@ -1165,8 +1165,43 @@ export class ThreadStore {
     void fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ threadId, message: prompt }),
-    }).catch(() => {});
+      body: JSON.stringify({
+        threadId,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          let bodyText = "";
+          try {
+            bodyText = await res.text();
+          } catch {
+            bodyText = "";
+          }
+          const detail = bodyText ? ` — ${bodyText.slice(0, 500)}` : "";
+          const errorMsg = `Supervisor auto-resume dispatch failed (HTTP ${res.status})${detail}`;
+          console.error(`[ThreadStore] ${errorMsg} (threadId=${threadId})`);
+          const thread = await this.getThread(threadId);
+          if (thread) {
+            thread.error = errorMsg;
+            thread.needsAttention = true;
+            thread.status = "failed";
+            this.saveThread(thread);
+          }
+        }
+      })
+      .catch(async (err: unknown) => {
+        const reason = err instanceof Error ? err.message : String(err);
+        const errorMsg = `Supervisor auto-resume dispatch error: ${reason}`;
+        console.error(`[ThreadStore] ${errorMsg} (threadId=${threadId})`);
+        const thread = await this.getThread(threadId);
+        if (thread) {
+          thread.error = errorMsg;
+          thread.needsAttention = true;
+          thread.status = "failed";
+          this.saveThread(thread);
+        }
+      });
   }
 
   saveThread(thread: Thread): void {
