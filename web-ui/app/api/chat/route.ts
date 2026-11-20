@@ -803,20 +803,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           CHAT_CONTEXT_BUDGET_TOKENS,
           {
             strategy: resolveCompactionStrategy(),
-            summarize: async (req) => {
+            summarize: async (sumReq) => {
               let text = "";
               let truncated = false;
               for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
                 model: activeModel,
                 messages: [
-                  { role: "system", content: req.prompt },
-                  { role: "user", content: req.digest }
+                  { role: "system", content: sumReq.prompt },
+                  { role: "user", content: sumReq.digest }
                 ],
                 keep_alive: -1,
-                signal: req.signal,
-                options: { temperature: req.temperature, num_predict: req.maxTokens }
+                signal: sumReq.signal,
+                options: { temperature: sumReq.temperature, num_predict: sumReq.maxTokens }
               })) {
-                req.onProgress?.();
+                sumReq.onProgress?.();
                 if (chunk.message?.content) text += chunk.message.content;
                 if (chunk.finish_reason === "length") truncated = true;
               }
@@ -1053,56 +1053,92 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS
           });
           if (compaction.compacted) {
-            conversationMessages.length = 0;
-            conversationMessages.push(...compaction.messages);
-            turnCompacted = true;
-            turnTokensBefore = compaction.tokensBefore;
-            turnTokensAfter = compaction.tokensAfter;
-            turnCompactionActions = compaction.actions;
-            turnCompactionCount++;
+            let appliedMessages = compaction.messages;
+            let appliedTokensBefore = compaction.tokensBefore;
+            let appliedTokensAfter = compaction.tokensAfter;
+            let appliedActions: string[] = compaction.actions;
 
             if (activeThreadId && threadData) {
               try {
-                // ROUTE WIRING (compaction-hybrid step 3): COMPACTION_STRATEGY=hybrid
-                // selects the async hybrid rung; unset/anything-else keeps the
-                // extraction call byte-identical. Summarization pass, identifier
-                // post-check, deadlines, and fallback live in the rung.
+                // ROUTE WIRING (compaction-hybrid step 3 + AUD-10): COMPACTION_STRATEGY=hybrid
+                // selects the async hybrid rung and rebuilds the live conversationMessages
+                // from the compacted thread record; unset/anything-else keeps the
+                // extraction call and live replacement byte-identical.
                 if (resolveCompactionStrategy() === "hybrid") {
-                  await threadStore.compactThreadIncrementalHybrid(threadData, {
-                    summarize: async (req) => {
+                  const hybridResult = await threadStore.compactThreadIncrementalHybrid(threadData, {
+                    summarize: async (sumReq) => {
                       let text = "";
                       let truncated = false;
                       for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
                         model: activeModel,
                         messages: [
-                          { role: "system", content: req.prompt },
-                          { role: "user", content: req.digest }
+                          { role: "system", content: sumReq.prompt },
+                          { role: "user", content: sumReq.digest }
                         ],
                         keep_alive: -1,
-                        signal: req.signal,
-                        options: { temperature: req.temperature, num_predict: req.maxTokens }
+                        signal: sumReq.signal,
+                        options: { temperature: sumReq.temperature, num_predict: sumReq.maxTokens }
                       })) {
                         // Per-chunk progress hook: re-arms the deadline wrapper's
                         // inactivity timer so 180s means silence since the LAST
                         // chunk, not elapsed time since start.
-                        req.onProgress?.();
+                        sumReq.onProgress?.();
                         if (chunk.message?.content) text += chunk.message.content;
                         if (chunk.finish_reason === "length") truncated = true;
                       }
                       return { text, truncated };
                     }
                   });
+                  if (!hybridResult.noop) {
+                    const rebuilt: any[] = threadStore.buildModelMessages(threadData);
+                    const liveSystem = conversationMessages[0]?.role === "system" ? conversationMessages[0] : null;
+                    if (liveSystem && rebuilt[0]?.role !== "system") {
+                      rebuilt.unshift(liveSystem);
+                    }
+                    // Preserve any in-flight tool-round messages from the current turn
+                    // that are present in live conversationMessages after the last user message.
+                    let lastUserIdx = -1;
+                    for (let i = conversationMessages.length - 1; i >= 0; i--) {
+                      if (conversationMessages[i]?.role === "user") {
+                        lastUserIdx = i;
+                        break;
+                      }
+                    }
+                    if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
+                      const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
+                      const hasInFlightTools = inFlightTail.some(
+                        (m: any) => m?.role === "tool" || (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
+                      );
+                      if (hasInFlightTools) {
+                        rebuilt.push(...inFlightTail);
+                      }
+                    }
+                    appliedMessages = rebuilt;
+                    appliedTokensBefore = hybridResult.tokensBefore;
+                    appliedTokensAfter = hybridResult.tokensAfter;
+                    appliedActions = hybridResult.modelSummaryUsed
+                      ? ["hybrid_model_digest"]
+                      : ["hybrid_extraction_fallback"];
+                  }
                 } else {
                   threadStore.compactThreadIncremental(threadData);
                 }
               } catch {}
             }
 
+            conversationMessages.length = 0;
+            conversationMessages.push(...appliedMessages);
+            turnCompacted = true;
+            turnTokensBefore = appliedTokensBefore;
+            turnTokensAfter = appliedTokensAfter;
+            turnCompactionActions = appliedActions;
+            turnCompactionCount++;
+
             await sendEvent({
               type: "compaction",
-              tokensBefore: compaction.tokensBefore,
-              tokensAfter: compaction.tokensAfter,
-              actions: compaction.actions
+              tokensBefore: appliedTokensBefore,
+              tokensAfter: appliedTokensAfter,
+              actions: appliedActions
             });
 
             await sendEvent({
@@ -1113,12 +1149,12 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
               triage: triageComplexityResult,
               citations: oracleCitations,
               context: {
-                estimatedTokens: compaction.tokensAfter,
+                estimatedTokens: appliedTokensAfter,
                 budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
                 compactedThisTurn: true,
-                tokensBeforeCompaction: compaction.tokensBefore,
-                tokensAfterCompaction: compaction.tokensAfter,
-                compactionActions: compaction.actions
+                tokensBeforeCompaction: appliedTokensBefore,
+                tokensAfterCompaction: appliedTokensAfter,
+                compactionActions: appliedActions
               }
             });
           }
