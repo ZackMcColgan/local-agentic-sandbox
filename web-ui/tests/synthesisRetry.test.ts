@@ -325,7 +325,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
 });
 
 test("Synthesis cap: runaway synthesis stream stops at MAX_STREAMED_CONTENT_CHARS", async () => {
-  const { MAX_STREAMED_CONTENT_CHARS } = await import("../lib/contextBudget");
+  const { MAX_STREAMED_CONTENT_CHARS, TURN_SIZE_LIMIT_MARKER } = await import("../lib/contextBudget");
   const toolCall = {
     id: "call-1",
     type: "function",
@@ -341,7 +341,7 @@ test("Synthesis cap: runaway synthesis stream stops at MAX_STREAMED_CONTENT_CHAR
 
   const { raw } = await runTurn(script);
   assert.ok(
-    raw.includes("Output truncated") || raw.includes("streamed-content cap"),
+    raw.includes(TURN_SIZE_LIMIT_MARKER.trim().slice(0, 30)),
     "runaway synthesis must hit MAX_STREAMED_CONTENT_CHARS and emit size limit marker"
   );
 });
@@ -474,11 +474,11 @@ test("Synthesis markup guard: tool-call markup in synthesis triggers one retry; 
   assert.ok(asst, "assistant message must exist");
   assert.ok(completionCount >= 4, `markup in synthesis must trigger retry (got ${completionCount})`);
   assert.ok(
-    raw.includes("retrying once") || raw.includes("Tool-call formatting failed"),
+    raw.includes("retrying once") || raw.includes("tool calls were not executable"),
     "must emit retry status or honest markup end marker"
   );
   assert.ok(
-    asst!.content.includes("Tool-call formatting failed"),
+    asst!.content.includes("tool calls were not executable"),
     `second markup failure must end with honest marker, got: ${asst!.content}`
   );
 });
