@@ -6,6 +6,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 import {
   BoardOrchestrator,
+  extractJobOutcomeMetadata,
   type BoardOrchestratorDeps,
   type JobExecutionOutcome,
 } from "../lib/board/boardOrchestrator";
@@ -299,3 +300,22 @@ test("(c) completed drained job reaches shadow-stage hooks (flowMonitor, reviewe
     env.cleanup();
   }
 });
+
+test("(c) extractJobOutcomeMetadata parses PR, headSha, mergeSha, and deployTag for shadow stages", () => {
+  const meta = extractJobOutcomeMetadata(
+    "Opened https://github.com/org/repo/pull/142 (headSha: abc1234def). Merged commit deadbeef99 with deployTag: v2026.11.20."
+  );
+  assert.equal(meta.prNumber, 142);
+  assert.equal(meta.headSha, "abc1234def");
+  assert.equal(meta.merged, true);
+  assert.equal(meta.mergeSha, "deadbeef99");
+  assert.equal(meta.deployTag, "v2026.11.20.");
+
+  const prOnly = extractJobOutcomeMetadata("Created PR #77 for review.");
+  assert.equal(prOnly.prNumber, 77);
+  assert.equal(prOnly.merged, undefined);
+
+  const empty = extractJobOutcomeMetadata("Completed refactoring with no PR.");
+  assert.deepEqual(empty, {});
+});
+

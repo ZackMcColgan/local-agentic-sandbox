@@ -650,6 +650,58 @@ export class BoardOrchestrator {
   }
 }
 
+export interface ExtractedJobMetadata {
+  prNumber?: number;
+  headSha?: string;
+  merged?: boolean;
+  mergeSha?: string;
+  deployTag?: string;
+}
+
+/**
+ * Extracts PR / merge / deploy metadata from a completed job turn's output
+ * so the orchestrator can feed the wired shadow stages (flow monitor,
+ * reviewer gate, self-deploy).
+ */
+export function extractJobOutcomeMetadata(
+  ...texts: Array<string | undefined>
+): ExtractedJobMetadata {
+  const combined = texts.filter((t): t is string => typeof t === "string" && t.length > 0).join("\n");
+  if (!combined) return {};
+
+  const result: ExtractedJobMetadata = {};
+
+  const prMatch =
+    /\/pull\/(\d+)\b/i.exec(combined) ??
+    /\bPR\s*#(\d+)\b/i.exec(combined);
+  if (prMatch) {
+    const parsed = Number.parseInt(prMatch[1], 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      result.prNumber = parsed;
+    }
+  }
+
+  const headShaMatch = /\bhead(?:_?sha|\s+sha)\s*[:=]\s*([0-9a-f]{7,40})\b/i.exec(combined);
+  if (headShaMatch) {
+    result.headSha = headShaMatch[1];
+  }
+
+  const mergeShaMatch =
+    /\bmerge(?:_?sha|\s+(?:sha|commit))\s*[:=]\s*([0-9a-f]{7,40})\b/i.exec(combined) ??
+    /\bmerged\s+(?:commit|sha)\s+([0-9a-f]{7,40})\b/i.exec(combined);
+  if (mergeShaMatch) {
+    result.merged = true;
+    result.mergeSha = mergeShaMatch[1];
+  }
+
+  const deployTagMatch = /\bdeploy(?:_?tag|\s+tag)\s*[:=]\s*([^\s,;]+)/i.exec(combined);
+  if (deployTagMatch) {
+    result.deployTag = deployTagMatch[1];
+  }
+
+  return result;
+}
+
 export async function runBoardDrain(
   deps: BoardOrchestratorDeps
 ): Promise<DrainReport> {

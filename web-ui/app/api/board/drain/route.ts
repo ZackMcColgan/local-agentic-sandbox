@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   BoardOrchestrator,
+  extractJobOutcomeMetadata,
   getLastDrainReport,
   MAX_DRAIN_DURATION_MS,
   MAX_DRAIN_ITEMS,
@@ -10,6 +11,7 @@ import { createProductionStageDeps } from "@/lib/board/productionStageDeps";
 import { formatDrainReportMarkdown } from "@/lib/subagents/morningReport";
 import { activeExecutionSet, ThreadStore } from "@/lib/threads/threadStore";
 import { getSharedSlotScheduler } from "@/lib/slotScheduler";
+import { POST as chatPost } from "@/app/api/chat/route";
 
 export async function GET() {
   try {
@@ -97,11 +99,49 @@ export async function POST(req: NextRequest) {
           title: `${item.key} ${item.title}`,
           initialPrompt: brief,
         });
-        return {
-          status: "in-progress",
-          threadId: thread.id,
-          reason: "Issued fresh thread for board item",
-        };
+        try {
+          const chatReq = new NextRequest("http://localhost/api/chat", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              threadId: thread.id,
+              messages: [{ role: "user", content: brief }],
+              mode: "agent",
+            }),
+          });
+          const response = await chatPost(chatReq);
+          const rawStream = await response.text();
+          const settled = await threadStore.getThread(thread.id);
+
+          if (!response.ok || settled?.status === "failed" || settled?.status === "stopped") {
+            return {
+              status: "failed",
+              threadId: thread.id,
+              error:
+                settled?.error ||
+                `Job turn failed for thread ${thread.id} (HTTP ${response.status})`,
+            };
+          }
+
+          const assistantMessages = (settled?.messages ?? []).filter(
+            (m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 0
+          );
+          const lastAssistant = assistantMessages[assistantMessages.length - 1]?.content ?? "";
+          const metadata = extractJobOutcomeMetadata(lastAssistant, rawStream);
+
+          return {
+            status: "completed",
+            threadId: thread.id,
+            summary: lastAssistant ? lastAssistant.slice(0, 500) : `Completed thread ${thread.id}`,
+            ...metadata,
+          };
+        } catch (err) {
+          return {
+            status: "failed",
+            threadId: thread.id,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
       },
     });
 
