@@ -93,4 +93,57 @@ describe("Evidence-linked job summaries", () => {
     assert.equal(hasCompletionLanguage("Work is completed."), true);
     assert.equal(hasCompletionLanguage("Still investigating the issue."), false);
   });
+
+  it("(g) non-job summary with completion language, hex token, and #N returns neutral result without invoking adapters", async () => {
+    let resolveCalls = 0;
+    let prCalls = 0;
+    const summary = "All done — the answer is complete. See deadbeef and #5.";
+    const result = await verifyEvidenceLinkedSummary(
+      summary,
+      {
+        resolveCommit: async () => {
+          resolveCalls += 1;
+          return true;
+        },
+        checkPr: async () => {
+          prCalls += 1;
+          return { exists: true, state: "MERGED" };
+        },
+      },
+      { isJobSummary: false }
+    );
+
+    assert.equal(result.flagged, false);
+    assert.equal(result.completionStamp, undefined);
+    assert.equal(result.gaps.length, 0);
+    assert.equal(resolveCalls, 0);
+    assert.equal(prCalls, 0);
+  });
+
+  it("(h) job summary with explicit isJobSummary: true keeps verification behavior", async () => {
+    const noCitations = await verifyEvidenceLinkedSummary(
+      "All done — the answer is complete.",
+      {
+        resolveCommit: async () => true,
+        checkPr: async () => ({ exists: true, state: "OPEN" }),
+      },
+      { isJobSummary: true }
+    );
+    assert.equal(noCitations.flagged, true);
+    assert.equal(noCitations.completionStamp, "completed-unverified");
+    assert.ok(noCitations.gaps.length >= 1);
+
+    const withCitations = await verifyEvidenceLinkedSummary(
+      "All done — merged in #5 (deadbeef).",
+      {
+        resolveCommit: async (sha: string) => sha === "deadbeef",
+        checkPr: async (pr: number) =>
+          pr === 5 ? { exists: true, state: "MERGED" } : { exists: false, state: null },
+      },
+      { isJobSummary: true }
+    );
+    assert.equal(withCitations.flagged, true);
+    assert.equal(withCitations.completionStamp, "completed");
+    assert.equal(withCitations.gaps.length, 0);
+  });
 });
