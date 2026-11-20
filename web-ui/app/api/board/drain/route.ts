@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     const orchestrator = new BoardOrchestrator({
       maxItems,
       maxDurationMs,
+      dryRun,
       ...stageDeps,
       getControlState: () => readBoardControlState(),
       getLiveJobState: () => ({

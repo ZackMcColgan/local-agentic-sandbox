@@ -146,6 +146,7 @@ export interface BoardOrchestratorDeps {
   now?: () => number;
   maxItems?: number;
   maxDurationMs?: number;
+  dryRun?: boolean;
   issueAndWait: (params: {
     item: DispatcherBoardItem;
     brief: string;
@@ -248,8 +249,10 @@ export class BoardOrchestrator {
   private readonly deps: BoardOrchestratorDeps;
   private readonly maxItems: number;
   private readonly maxDurationMs: number;
+  private readonly dryRun: boolean;
   private readonly now: () => number;
   private readonly log: (message: string) => void;
+  private dryRunItems: DispatcherBoardItem[] | null = null;
 
   constructor(deps: BoardOrchestratorDeps) {
     this.deps = deps;
@@ -257,11 +260,21 @@ export class BoardOrchestrator {
     this.maxItems = Math.min(Math.max(1, Math.floor(requestedItems)), MAX_DRAIN_ITEMS);
     const requestedDuration = deps.maxDurationMs ?? MAX_DRAIN_DURATION_MS;
     this.maxDurationMs = Math.min(Math.max(1, requestedDuration), MAX_DRAIN_DURATION_MS);
+    this.dryRun = deps.dryRun === true;
     this.now = deps.now ?? (() => Date.now());
     this.log = deps.log ?? ((msg: string) => console.info(msg));
   }
 
   private getItems(): DispatcherBoardItem[] {
+    if (this.dryRun) {
+      if (!this.dryRunItems) {
+        const source = this.deps.items
+          ? this.deps.items
+          : (this.deps.boardStore ?? new BoardStore(this.deps.boardDir)).list() as DispatcherBoardItem[];
+        this.dryRunItems = source.map((item) => ({ ...item }));
+      }
+      return this.dryRunItems;
+    }
     if (this.deps.items) {
       return this.deps.items;
     }
@@ -285,6 +298,10 @@ export class BoardOrchestrator {
     if (patch.parkedReason !== undefined) item.parkedReason = patch.parkedReason;
     if (patch.threadLink !== undefined) item.threadLink = patch.threadLink;
     item.updatedAt = new Date(this.now()).toISOString();
+
+    if (this.dryRun) {
+      return;
+    }
 
     if (!this.deps.items) {
       const store = this.deps.boardStore ?? new BoardStore(this.deps.boardDir);
@@ -462,6 +479,11 @@ export class BoardOrchestrator {
       }
 
       const items = this.getItems();
+      if (items.some((item) => item.status === "working")) {
+        stopReason = "job-already-running";
+        break;
+      }
+
       const head = selectHeadEligibleItem(items);
       if (!head) {
         stopReason = "idle";
@@ -600,6 +622,8 @@ export class BoardOrchestrator {
           reason: result.reason,
           durationMs: Math.max(0, this.now() - itemStartMs),
         });
+        stopReason = "job-already-running";
+        break;
       }
     }
 
