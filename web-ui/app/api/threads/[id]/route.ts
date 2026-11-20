@@ -131,8 +131,10 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             role: "assistant",
             content: completedMsg,
             taskId,
-            timestamp: new Date().toISOString()
-          });
+            timestamp: new Date().toISOString(),
+            ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
+            ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+          } as any);
           getThreadStore().saveThread(currentThread);
         }
       } else {
@@ -159,8 +161,10 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             role: "assistant",
             content: `Task ${result.status}: ${reason}`,
             taskId,
-            timestamp: new Date().toISOString()
-          });
+            timestamp: new Date().toISOString(),
+            ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
+            ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+          } as any);
           getThreadStore().saveThread(currentThread);
         }
       }

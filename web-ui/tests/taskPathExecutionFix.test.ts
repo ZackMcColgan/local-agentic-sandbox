@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
+import { WorkerGitOps } from "../lib/git/workerGitOps";
 import { generatePlanSpec } from "../lib/subagents/planner";
 import { LlamaCppProvider } from "../lib/llm/provider";
 import { ThreadStore } from "../lib/threads/threadStore";
@@ -22,6 +23,11 @@ function initTempGitRepo(dir: string): void {
   execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir, stdio: "pipe" });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: dir, stdio: "pipe" });
   fs.writeFileSync(path.join(dir, "retryAfter.mjs"), "export const retryAfter = 1000;\n", "utf8");
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({ name: "temp-repo", version: "1.0.0", scripts: { "test:gate": "node -e \"process.exit(0)\"" } }, null, 2),
+    "utf8"
+  );
   execFileSync("git", ["add", "."], { cwd: dir, stdio: "pipe" });
   execFileSync("git", ["commit", "-m", "initial commit"], { cwd: dir, stdio: "pipe" });
   // Add an unreachable origin remote to simulate zero port-443 egress in web-ui pod
@@ -37,8 +43,15 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
     const origThreadsDir = process.env.THREADS_DIR;
     const origCheckpointsDir = process.env.CHECKPOINTS_DIR;
     const origFetch = globalThis.fetch;
+    const origRunGateTest = WorkerGitOps.prototype.runGateTest;
 
     try {
+      WorkerGitOps.prototype.runGateTest = async () => ({
+        exitCode: 0,
+        stdout: "stubbed test:gate ok",
+        stderr: "",
+        passed: true,
+      });
       initTempGitRepo(dirtyRepo);
       // Make shared /workspace durably dirty like prod (M retryAfter.mjs + untracked file)
       fs.writeFileSync(path.join(dirtyRepo, "retryAfter.mjs"), "export const retryAfter = 9999;\n// dirty\n", "utf8");
@@ -107,6 +120,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       assert.ok(fs.existsSync(worktreeDir), `Expected isolated worktree at ${worktreeDir}`);
       assert.ok(fs.existsSync(path.join(worktreeDir, "diag-hello.js")), "Deliverable must exist in isolated worktree");
     } finally {
+      WorkerGitOps.prototype.runGateTest = origRunGateTest;
       globalThis.fetch = origFetch;
       if (origWorkspaceDir === undefined) delete process.env.WORKSPACE_DIR;
       else process.env.WORKSPACE_DIR = origWorkspaceDir;
