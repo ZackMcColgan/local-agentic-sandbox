@@ -211,6 +211,10 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         html.includes("bg-zinc-50") && html.includes("text-zinc-800"),
         "Must render neutral styling for incomplete badge"
       );
+      assert.ok(
+        !html.includes("text-amber-800") && !html.includes("bg-amber-50"),
+        "Must not render banned amber styling for incomplete badge"
+      );
     });
 
     it("renders red Error badge when assistant message status is 'error'", () => {
