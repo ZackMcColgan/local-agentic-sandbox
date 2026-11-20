@@ -50,10 +50,6 @@ RUN addgroup -g 10001 -S sandbox && \
 # Copy build artifacts, production modules, and source/tests
 COPY --from=builder /build/mcp-server/package.json ./package.json
 COPY --from=builder /build/node_modules ./node_modules
-# mcp-server pins zod v4 while sibling workspaces hoist zod v3 to the root;
-# npm nests v4 under mcp-server/node_modules. Overlay it so the flattened
-# runtime resolves the version mcp-server actually depends on.
-COPY --from=builder /build/mcp-server/node_modules/zod ./node_modules/zod
 COPY --from=builder /build/mcp-server/dist ./dist
 COPY --from=builder /build/mcp-server/src ./src
 COPY --from=builder /build/mcp-server/tests ./tests
