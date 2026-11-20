@@ -30,14 +30,22 @@ function makeItem(overrides: Partial<FlowMonitorBoardItem> = {}): FlowMonitorBoa
   };
 }
 
-function allFiveGreenChecks(): PrCheckResult[] {
-  return [
-    { name: "Unit Tests", status: "COMPLETED", conclusion: "SUCCESS" },
-    { name: "Coverage", status: "COMPLETED", conclusion: "SUCCESS" },
-    { name: "Container Build", status: "COMPLETED", conclusion: "SUCCESS" },
-    { name: "Playwright", status: "COMPLETED", conclusion: "SUCCESS" },
-    { name: "Typecheck", status: "COMPLETED", conclusion: "SUCCESS" },
-  ];
+const REAL_CI_CHECK_NAMES = [
+  "Typecheck (full error report)",
+  "Unit Tests & Static Analysis",
+  "Code Coverage Report",
+  "Container Build & Docker Scout Scan",
+  "Playwright UI (Shard 1/3)",
+  "Playwright UI (Shard 2/3)",
+  "Playwright UI (Shard 3/3)",
+] as const;
+
+function allSevenGreenChecks(): PrCheckResult[] {
+  return REAL_CI_CHECK_NAMES.map((name) => ({
+    name,
+    status: "COMPLETED",
+    conclusion: "SUCCESS",
+  }));
 }
 
 describe("flow-monitor", () => {
@@ -49,30 +57,43 @@ describe("flow-monitor", () => {
     assert.equal(isFlowMonitorStage2Enabled(true, { FLOW_MONITOR_STAGE2: "false" }), true);
   });
 
-  it("returns green verdict only when ALL FIVE checks pass on the PR head SHA, and voids on head change", () => {
-    const verdict = evaluatePrChecks("sha-abc123", allFiveGreenChecks());
+  it("returns green verdict only when ALL SEVEN real CI checks pass on the PR head SHA, and voids on head change", () => {
+    const verdict = evaluatePrChecks("sha-abc123", allSevenGreenChecks());
     assert.equal(verdict.status, "green");
     assert.equal(verdict.headSha, "sha-abc123");
     assert.equal(isVerdictValidForHead(verdict, "sha-abc123"), true);
     assert.equal(isVerdictValidForHead(verdict, "sha-def456"), false);
 
-    // Missing Typecheck -> not green
-    const missingTypecheck = allFiveGreenChecks().filter((c) => c.name !== "Typecheck");
-    const incompleteVerdict = evaluatePrChecks("sha-abc123", missingTypecheck);
-    assert.equal(incompleteVerdict.status, "running");
+    // Any one of the 7 missing -> running
+    for (const missingName of REAL_CI_CHECK_NAMES) {
+      const incomplete = allSevenGreenChecks().filter((c) => c.name !== missingName);
+      const incompleteVerdict = evaluatePrChecks("sha-abc123", incomplete);
+      assert.equal(incompleteVerdict.status, "running", `missing ${missingName} must evaluate to running`);
+    }
   });
 
   it("reports a PR whose checks are still running as running, never green or red", () => {
-    const checks: PrCheckResult[] = [
-      { name: "Unit Tests", status: "COMPLETED", conclusion: "SUCCESS" },
-      { name: "Coverage", status: "IN_PROGRESS", conclusion: null },
-      { name: "Container Build", status: "COMPLETED", conclusion: "SUCCESS" },
-      { name: "Playwright", status: "QUEUED", conclusion: null },
-      { name: "Typecheck", status: "COMPLETED", conclusion: "SUCCESS" },
-    ];
-    const verdict = evaluatePrChecks("sha-running", checks);
-    assert.equal(verdict.status, "running");
-    assert.equal(verdict.headSha, "sha-running");
+    for (const runningName of REAL_CI_CHECK_NAMES) {
+      const checks = allSevenGreenChecks().map((c) =>
+        c.name === runningName ? { name: c.name, status: "IN_PROGRESS", conclusion: null } : c
+      );
+      const verdict = evaluatePrChecks("sha-running", checks);
+      assert.equal(verdict.status, "running", `running ${runningName} must evaluate to running`);
+      assert.equal(verdict.headSha, "sha-running");
+    }
+  });
+
+  it("reports red when any one of the 7 real CI checks fails", () => {
+    for (const failingName of REAL_CI_CHECK_NAMES) {
+      const checks = allSevenGreenChecks().map((c) =>
+        c.name === failingName
+          ? { name: c.name, status: "COMPLETED", conclusion: "FAILURE", error: `${failingName} failed` }
+          : c
+      );
+      const verdict = evaluatePrChecks("sha-red", checks);
+      assert.equal(verdict.status, "red", `failing ${failingName} must evaluate to red`);
+      assert.equal(verdict.failingJob, failingName);
+    }
   });
 
   it("composes exactly one bounded fix-cycle brief on red naming failing job, step/test, and exact error on the same PR", async () => {

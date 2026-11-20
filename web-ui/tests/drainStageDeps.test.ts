@@ -97,11 +97,7 @@ function makeStubThreadStore(initialThreads: Thread[] = []): {
 
 test("pollChecks maps gh pr checks JSON payload onto PrChecksSnapshot with required checks identifiable", async () => {
   const fixtureChecks = [
-    { name: "Unit Tests", state: "SUCCESS", bucket: "pass" },
-    { name: "Coverage", state: "SUCCESS", bucket: "pass" },
-    { name: "Container Build", state: "SUCCESS", bucket: "pass" },
-    { name: "Playwright", state: "SUCCESS", bucket: "pass" },
-    { name: "Typecheck", state: "SUCCESS", bucket: "pass" },
+    ...REQUIRED_PR_CHECKS.map((name) => ({ name, state: "SUCCESS", bucket: "pass" })),
     { name: "Extra Advisory", state: "PENDING", bucket: "pending" },
   ];
 
@@ -142,7 +138,7 @@ test("pollChecks maps gh pr checks JSON payload onto PrChecksSnapshot with requi
   assert.ok(commands.some((c) => c.includes("gh pr checks 175 --json name,state,bucket")));
   assert.ok(commands.some((c) => c.includes("gh pr view 175 --json headRefOid")));
   assert.equal(snapshot.headSha, "abc123headsha");
-  assert.equal(snapshot.checks.length, 6);
+  assert.equal(snapshot.checks.length, REQUIRED_PR_CHECKS.length + 1);
 
   for (const reqName of REQUIRED_PR_CHECKS) {
     const found = snapshot.checks.find((c) => c.name === reqName);
@@ -469,13 +465,9 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
       return {
         ok: true,
         exitCode: 0,
-        stdout: JSON.stringify([
-          { name: "Unit Tests", state: "SUCCESS", bucket: "pass" },
-          { name: "Coverage", state: "SUCCESS", bucket: "pass" },
-          { name: "Container Build", state: "SUCCESS", bucket: "pass" },
-          { name: "Playwright", state: "SUCCESS", bucket: "pass" },
-          { name: "Typecheck", state: "SUCCESS", bucket: "pass" },
-        ]),
+        stdout: JSON.stringify(
+          REQUIRED_PR_CHECKS.map((name) => ({ name, state: "SUCCESS", bucket: "pass" }))
+        ),
         stderr: "",
       };
     }
