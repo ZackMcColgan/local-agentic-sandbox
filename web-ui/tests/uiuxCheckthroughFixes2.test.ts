@@ -102,6 +102,14 @@ describe("UI-085: drawer menu text contrast", () => {
       src.includes("text-stone-700 dark:text-stone-200"),
       "Nav item labels should use high-contrast dark:text-stone-200"
     );
+    assert.ok(
+      !/h-5 w-5[^"']*dark:text-(?:stone-500|zinc-500|zinc-400)/.test(src),
+      "Nav item icons must not carry dim dark:text-stone-500, dark:text-zinc-500, or dark:text-zinc-400"
+    );
+    assert.ok(
+      src.includes("h-5 w-5 shrink-0"),
+      "Nav item icons should use h-5 w-5 shrink-0 and inherit high-contrast dark:text-stone-200 from nav buttons"
+    );
   });
 });
 
