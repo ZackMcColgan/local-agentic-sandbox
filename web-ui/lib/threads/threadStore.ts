@@ -407,7 +407,6 @@ export function clearTurnActive(threadId: string): void {
 export class ThreadStore {
   private threadsDir: string;
   private supervisor: OvernightSupervisor;
-  private supervisorSweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(threadsDir?: string, supervisor?: OvernightSupervisor) {
     this.threadsDir = threadsDir || resolveThreadsDir();
@@ -670,24 +669,25 @@ export class ThreadStore {
    * blocks process exit or test runners.
    */
   startSupervisorSweep(intervalMs = 60_000): void {
-    if (this.supervisorSweepTimer) return;
-    this.supervisorSweepTimer = setInterval(() => {
+    if (g.__sandboxSupervisorSweepTimer) return;
+    const timer = setInterval(() => {
       void this.sweepStalledThreads().catch(() => {
         // Never crash the process from a background sweep
       });
     }, intervalMs);
-    if (typeof this.supervisorSweepTimer.unref === "function") {
-      this.supervisorSweepTimer.unref();
+    if (typeof timer.unref === "function") {
+      timer.unref();
     }
+    g.__sandboxSupervisorSweepTimer = timer;
   }
 
   /**
    * Stops the background supervisor sweep timer.
    */
   stopSupervisorSweep(): void {
-    if (this.supervisorSweepTimer) {
-      clearInterval(this.supervisorSweepTimer);
-      this.supervisorSweepTimer = null;
+    if (g.__sandboxSupervisorSweepTimer) {
+      clearInterval(g.__sandboxSupervisorSweepTimer);
+      g.__sandboxSupervisorSweepTimer = null;
     }
   }
 
@@ -1003,7 +1003,8 @@ export class ThreadStore {
 
   async listThreadSummaries(query?: string): Promise<ThreadSummary[]> {
     const q = query?.trim().toLowerCase() || "";
-    if (!q && fs.existsSync(this.threadsDir)) {
+    if (!q) {
+      if (!fs.existsSync(this.threadsDir)) return [];
       await this.ensureSeeded();
       await this.loadSummaryIndex();
       const files = (await fs.promises.readdir(this.threadsDir)).filter(

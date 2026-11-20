@@ -501,3 +501,64 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("A8: supervisor sweep is a process-wide singleton across multiple ThreadStore constructions", () => {
+  const dir = makeTempDir("sweep-a8-");
+  // Ensure any sweep started by earlier tests in this process is cleared first.
+  const bootstrap = new ThreadStore(dir);
+  bootstrap.stopSupervisorSweep();
+
+  const origSetInterval = globalThis.setInterval;
+  const origClearInterval = globalThis.clearInterval;
+  let setIntervalCalls = 0;
+  let clearIntervalCalls = 0;
+  const createdTimers: ReturnType<typeof setInterval>[] = [];
+
+  globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+    setIntervalCalls += 1;
+    const handle = origSetInterval(...args);
+    createdTimers.push(handle);
+    return handle;
+  }) as typeof setInterval;
+
+  globalThis.clearInterval = ((...args: Parameters<typeof clearInterval>) => {
+    clearIntervalCalls += 1;
+    return origClearInterval(...args);
+  }) as typeof clearInterval;
+
+  try {
+    const stores = [
+      new ThreadStore(dir),
+      new ThreadStore(dir),
+      new ThreadStore(dir),
+      new ThreadStore(dir),
+      new ThreadStore(dir),
+    ];
+
+    assert.equal(
+      setIntervalCalls,
+      1,
+      `expected exactly 1 setInterval call across ${stores.length} ThreadStore constructions, got ${setIntervalCalls}`,
+    );
+
+    // Stopping via any instance clears the shared timer so a later construction can restart it.
+    stores[stores.length - 1].stopSupervisorSweep();
+    assert.equal(clearIntervalCalls, 1, "expected stopSupervisorSweep to clear the shared interval once");
+
+    // Calling stopSupervisorSweep again is a no-op.
+    stores[0].stopSupervisorSweep();
+    assert.equal(clearIntervalCalls, 1, "expected repeated stopSupervisorSweep to be a no-op");
+
+    // A subsequent construction restarts the singleton sweep.
+    const restarted = new ThreadStore(dir);
+    assert.equal(setIntervalCalls, 2, "expected construction after stop to restart the singleton sweep");
+    restarted.stopSupervisorSweep();
+  } finally {
+    globalThis.setInterval = origSetInterval;
+    globalThis.clearInterval = origClearInterval;
+    for (const t of createdTimers) {
+      origClearInterval(t);
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
