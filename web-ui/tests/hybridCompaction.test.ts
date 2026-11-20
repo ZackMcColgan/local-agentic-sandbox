@@ -451,7 +451,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
     const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
     assert.ok(anchor >= 0, "chat route must contain the in-turn ladder compaction call-site");
-    const slice = routeSrc.slice(anchor, anchor + 2600);
+    const slice = routeSrc.slice(anchor, anchor + 5000);
     assert.ok(slice.includes(`resolveCompactionStrategy() === "hybrid"`), "call-site must branch on the resolved strategy");
     assert.ok(slice.includes("await threadStore.compactThreadIncrementalHybrid(threadData"), "hybrid branch must await the async store rung");
     assert.ok(slice.includes("} else {"), "extraction branch must be the else path");
@@ -459,17 +459,17 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     // The call-site adapter feeds the rung request contract (prompt verbatim,
     // digest as source, signal + guardrail options); the summarization pass,
     // identifier post-check, deadlines, and fallback all live in the rung.
-    assert.ok(slice.includes("content: req.prompt"), "summarize adapter must send COMPACTION_PROMPT_V1 verbatim");
-    assert.ok(slice.includes("content: req.digest"), "summarize adapter must send the extraction digest");
-    assert.ok(slice.includes("signal: req.signal"), "summarize adapter must honor the rung deadline signal");
-    assert.ok(slice.includes("req.onProgress?.()"), "summarize adapter must call the rung progress hook per chunk (resets the inactivity deadline)");
-    assert.ok(slice.includes("num_predict: req.maxTokens"), "summarize adapter must carry the pinned maxTokens");
+    assert.ok(slice.includes("content: sumReq.prompt"), "summarize adapter must send COMPACTION_PROMPT_V1 verbatim");
+    assert.ok(slice.includes("content: sumReq.digest"), "summarize adapter must send the extraction digest");
+    assert.ok(slice.includes("signal: sumReq.signal"), "summarize adapter must honor the rung deadline signal");
+    assert.ok(slice.includes("sumReq.onProgress?.()"), "summarize adapter must call the rung progress hook per chunk (resets the inactivity deadline)");
+    assert.ok(slice.includes("num_predict: sumReq.maxTokens"), "summarize adapter must carry the pinned maxTokens");
     assert.ok(routeSrc.includes(`import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";`), "route must import the strategy resolver");
-    // Out-of-scope surface stays on extraction: the manual compact endpoint.
+    // Manual compact endpoint honors COMPACTION_STRATEGY (AUD-10).
     const compactSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/threads/[id]/compact/route.ts"), "utf8");
-    assert.ok(compactSrc.includes("threadStore.compactThreadIncremental(thread)"), "manual compact endpoint stays extraction");
-    assert.ok(!compactSrc.includes("compactThreadIncrementalHybrid"), "manual compact endpoint must not invoke the hybrid rung");
-    assert.ok(!compactSrc.includes("resolveCompactionStrategy"), "manual compact endpoint must not branch on strategy");
+    assert.ok(compactSrc.includes("threadStore.compactThreadIncremental(thread)"), "manual compact endpoint keeps extraction path");
+    assert.ok(compactSrc.includes("compactThreadIncrementalHybrid"), "manual compact endpoint invokes hybrid rung when strategy=hybrid");
+    assert.ok(compactSrc.includes("resolveCompactionStrategy"), "manual compact endpoint branches on strategy");
   });
 
 
@@ -609,7 +609,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
     const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
     assert.ok(anchor >= 0, "chat route must contain mid-turn fitConversationToBudget");
-    const slice = routeSrc.slice(anchor, anchor + 3800);
+    const slice = routeSrc.slice(anchor, anchor + 5000);
     assert.ok(
       /const\s+hybridResult\s*=\s*await\s+threadStore\.compactThreadIncrementalHybrid\(threadData/.test(slice),
       "mid-turn hybrid branch must capture the compactThreadIncrementalHybrid result"
@@ -639,9 +639,8 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       store.saveThread(thread);
 
       const hybridResult = await store.compactThreadIncrementalHybrid(thread, {
-        summarize: async ({ digest }) =>
-          `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo\n` +
-          digest
+        summarize: async () =>
+          `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect contextBudget\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo`
       });
       assert.equal(hybridResult.noop, false);
       assert.equal(hybridResult.modelSummaryUsed, true);
