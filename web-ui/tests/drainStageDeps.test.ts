@@ -11,6 +11,7 @@ import type { DispatcherBoardItem } from "../lib/board/dispatcher";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import {
   evaluatePrChecks,
+  isVerdictValidForHead,
   REQUIRED_PR_CHECKS,
   type FlowMonitorBoardItem,
 } from "../lib/board/flowMonitor";
@@ -107,7 +108,16 @@ test("pollChecks maps gh pr checks JSON payload onto PrChecksSnapshot with requi
   const commands: string[] = [];
   const bridge: HostBridgeExecutor = async (tool, args) => {
     assert.equal(tool, "host_run_powershell");
-    commands.push(String(args.command));
+    const cmd = String(args.command);
+    commands.push(cmd);
+    if (cmd.includes("gh pr view 175 --json headRefOid")) {
+      return {
+        ok: true,
+        exitCode: 0,
+        stdout: JSON.stringify({ headRefOid: "abc123headsha" }),
+        stderr: "",
+      };
+    }
     return {
       ok: true,
       exitCode: 0,
@@ -128,8 +138,10 @@ test("pollChecks maps gh pr checks JSON payload onto PrChecksSnapshot with requi
   };
 
   const snapshot = await deps.flowMonitor.pollChecks(item);
-  assert.equal(commands.length, 1);
-  assert.ok(commands[0].includes("gh pr checks 175 --json name,state,bucket"));
+  assert.equal(commands.length, 2);
+  assert.ok(commands.some((c) => c.includes("gh pr checks 175 --json name,state,bucket")));
+  assert.ok(commands.some((c) => c.includes("gh pr view 175 --json headRefOid")));
+  assert.equal(snapshot.headSha, "abc123headsha");
   assert.equal(snapshot.checks.length, 6);
 
   for (const reqName of REQUIRED_PR_CHECKS) {
@@ -146,6 +158,53 @@ test("pollChecks maps gh pr checks JSON payload onto PrChecksSnapshot with requi
 
   const verdict = evaluatePrChecks(snapshot.headSha, snapshot.checks);
   assert.equal(verdict.status, "green");
+  assert.equal(isVerdictValidForHead(verdict, "abc123headsha"), true);
+  assert.equal(isVerdictValidForHead(verdict, "other-sha"), false);
+});
+
+test("pollChecks fails closed with empty checks and running verdict when headRefOid fetch fails", async () => {
+  const fixtureChecks = [
+    { name: "Unit Tests", state: "SUCCESS", bucket: "pass" },
+    { name: "Coverage", state: "SUCCESS", bucket: "pass" },
+    { name: "Container Build", state: "SUCCESS", bucket: "pass" },
+    { name: "Playwright", state: "SUCCESS", bucket: "pass" },
+    { name: "Typecheck", state: "SUCCESS", bucket: "pass" },
+  ];
+
+  const bridge: HostBridgeExecutor = async (_tool, args) => {
+    const cmd = String(args.command);
+    if (cmd.includes("gh pr view") && cmd.includes("headRefOid")) {
+      return {
+        ok: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "gh: failed to fetch headRefOid",
+      };
+    }
+    return {
+      ok: true,
+      exitCode: 0,
+      stdout: JSON.stringify(fixtureChecks),
+      stderr: "",
+    };
+  };
+
+  const { store } = makeStubThreadStore();
+  const deps = createProductionStageDeps({
+    executeHostTool: bridge,
+    threadStore: store,
+  });
+
+  const item: FlowMonitorBoardItem = {
+    ...makeBoardItem(),
+    prNumber: 177,
+  };
+
+  const snapshot = await deps.flowMonitor.pollChecks(item);
+  assert.equal(snapshot.headSha, "unknown");
+  assert.deepEqual(snapshot.checks, []);
+  const verdict = evaluatePrChecks(snapshot.headSha, snapshot.checks);
+  assert.equal(verdict.status, "running");
 });
 
 test("pollChecks on bridge failure or unparseable output returns non-green still-running/unknown snapshot", async () => {
@@ -200,14 +259,6 @@ test("getMechanicalInput assembles diff, allowlist, commit subjects, and branch 
 
   const bridge: HostBridgeExecutor = async (_tool, args) => {
     const cmd = String(args.command);
-    if (cmd.includes("gh pr diff 180 --name-only")) {
-      return {
-        ok: true,
-        exitCode: 0,
-        stdout: "web-ui/lib/board/productionStageDeps.ts\n",
-        stderr: "",
-      };
-    }
     if (cmd.includes("gh pr diff 180")) {
       return { ok: true, exitCode: 0, stdout: diffOutput, stderr: "" };
     }
@@ -428,8 +479,13 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
         stderr: "",
       };
     }
-    if (cmd.includes("gh pr diff") && cmd.includes("--name-only")) {
-      return { ok: true, exitCode: 0, stdout: "web-ui/lib/board/productionStageDeps.ts\n", stderr: "" };
+    if (cmd.includes("gh pr view") && cmd.includes("headRefOid")) {
+      return {
+        ok: true,
+        exitCode: 0,
+        stdout: JSON.stringify({ headRefOid: "deadbeef" }),
+        stderr: "",
+      };
     }
     if (cmd.includes("gh pr diff")) {
       return {
