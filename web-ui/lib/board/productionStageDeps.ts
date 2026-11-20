@@ -230,21 +230,35 @@ export function createProductionStageDeps(
       }
 
       try {
-        const res = await runHostCommand(
-          `gh pr checks ${prNumber} --json name,state,bucket`,
-          60
-        );
-        if (!isCommandSuccess(res) || typeof res.stdout !== "string") {
+        const [checksRes, headRes] = await Promise.all([
+          runHostCommand(`gh pr checks ${prNumber} --json name,state,bucket`, 60),
+          runHostCommand(`gh pr view ${prNumber} --json headRefOid`, 60),
+        ]);
+        if (
+          !isCommandSuccess(headRes) ||
+          typeof headRes.stdout !== "string" ||
+          !isCommandSuccess(checksRes) ||
+          typeof checksRes.stdout !== "string"
+        ) {
           return { headSha: fallbackHeadSha, checks: [] };
         }
-        const parsed: unknown = JSON.parse(res.stdout);
+        const parsedHead: unknown = JSON.parse(headRes.stdout);
+        const rawHeadSha =
+          parsedHead && typeof parsedHead === "object" && !Array.isArray(parsedHead)
+            ? (parsedHead as { headRefOid?: unknown }).headRefOid
+            : undefined;
+        const headSha = typeof rawHeadSha === "string" ? rawHeadSha.trim() : "";
+        if (!headSha) {
+          return { headSha: fallbackHeadSha, checks: [] };
+        }
+        const parsed: unknown = JSON.parse(checksRes.stdout);
         if (!Array.isArray(parsed)) {
           return { headSha: fallbackHeadSha, checks: [] };
         }
         const checks = parsed
           .map((row) => mapGhCheckRow(row as GhPrCheckRow))
           .filter((entry): entry is PrCheckResult => entry !== null);
-        return { headSha: fallbackHeadSha, checks };
+        return { headSha, checks };
       } catch {
         return { headSha: fallbackHeadSha, checks: [] };
       }
@@ -265,9 +279,8 @@ export function createProductionStageDeps(
       pr: { prNumber: number; headSha: string }
     ): Promise<MechanicalCheckInput> {
       const prNum = pr.prNumber;
-      const [diffRes, _nameOnlyRes, commitsRes, branchRes] = await Promise.all([
+      const [diffRes, commitsRes, branchRes] = await Promise.all([
         runHostCommand(`gh pr diff ${prNum}`, 60),
-        runHostCommand(`gh pr diff ${prNum} --name-only`, 60),
         runHostCommand(`gh pr view ${prNum} --json commits`, 60),
         runHostCommand(`gh pr view ${prNum} --json headRefName`, 60),
       ]);
