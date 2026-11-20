@@ -164,6 +164,9 @@ export async function POST(req: Request) {
       let lastThinkingUpdate = 0;
       let lastRecordedLength = 0;
 
+      const planController = new AbortController();
+      supervisor.setAbortController(taskId, planController);
+
       const executor = createProductionStepExecutor({
         workerPool: new WorkerPool({
           maxConcurrency: 1,
@@ -179,6 +182,7 @@ export async function POST(req: Request) {
         }),
         model: effectiveModel,
         scope,
+        signal: planController.signal,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
           if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || (manifest.status !== "active" && manifest.status !== "planning")) {
             return;
@@ -226,10 +230,35 @@ export async function POST(req: Request) {
       (async () => {
         console.log(`[threads] decomposing goal for task ${taskId}`);
         try {
-          const planSpec = await getSharedSlotScheduler().runWithSlot(
-            { priority: SlotPriority.P2_ORCHESTRATOR, label: `planner:${taskId}` },
-            () => generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel })
-          );
+          const abortPromise = new Promise<never>((_, reject) => {
+            if (planController.signal.aborted) {
+              const abortErr = new Error("Planning aborted by user");
+              abortErr.name = "AbortError";
+              reject(abortErr);
+              return;
+            }
+            planController.signal.addEventListener(
+              "abort",
+              () => {
+                const abortErr = new Error("Planning aborted by user");
+                abortErr.name = "AbortError";
+                reject(abortErr);
+              },
+              { once: true }
+            );
+          });
+          const planSpec = await Promise.race([
+            getSharedSlotScheduler().runWithSlot(
+              { priority: SlotPriority.P2_ORCHESTRATOR, label: `planner:${taskId}` },
+              () => generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel })
+            ),
+            abortPromise
+          ]);
+          if (planController.signal.aborted) {
+            const abortErr = new Error("Planning aborted by user");
+            abortErr.name = "AbortError";
+            throw abortErr;
+          }
           manifest.complexity = planSpec.complexity;
           manifest.milestones = planSpec.milestones;
           manifest.status = "active";
@@ -249,6 +278,33 @@ export async function POST(req: Request) {
             threadStore.saveThread(currentThread);
           }
         } catch (planErr: any) {
+          const wasAborted = planController.signal.aborted || planErr?.name === "AbortError";
+          if (wasAborted) {
+            console.log(`[threads] Planning aborted for task ${taskId}`);
+            manifest.status = "cancelled";
+            manifest.parkedReason = "Planning aborted by user";
+            manifest.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "planner",
+              message: "Planning aborted by user"
+            });
+            supervisor.saveCheckpoint(manifest);
+            const currentThread = await threadStore.getThread(activeThreadId);
+            if (currentThread) {
+              currentThread.status = "stopped";
+              currentThread.messages.push({
+                id: `msg-${Date.now()}-abort`,
+                role: "assistant",
+                content: "Task cancelled: Planning aborted by user",
+                taskId,
+                timestamp: new Date().toISOString()
+              });
+              threadStore.saveThread(currentThread);
+            }
+            supervisor.deleteAbortController(taskId);
+            activeExecutionSet.delete(taskId);
+            return;
+          }
           console.error(`[threads] Planning failed for task ${taskId}:`, planErr);
           manifest.status = "failed";
           manifest.parkedReason = planErr?.message || String(planErr);
@@ -270,13 +326,14 @@ export async function POST(req: Request) {
             });
             threadStore.saveThread(currentThread);
           }
+          supervisor.deleteAbortController(taskId);
           activeExecutionSet.delete(taskId);
           return;
         }
 
         console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
         try {
-          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor });
+          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: planController.signal });
           console.log(`[threads] task ${taskId} finished with status: ${result.status}`);
 
           if (result.status === "completed") {
@@ -356,8 +413,10 @@ export async function POST(req: Request) {
                 content: completionContent,
                 thought: builderReasoning || "Decomposed goal, verified syntax, and generated deliverable.",
                 taskId,
-                timestamp: new Date().toISOString()
-              });
+                timestamp: new Date().toISOString(),
+                ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
+                ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+              } as any);
               threadStore.saveThread(currentThread);
             }
           } else {
@@ -379,8 +438,10 @@ export async function POST(req: Request) {
                 role: "assistant",
                 content: `Task ${result.status}: ${reason}`,
                 taskId,
-                timestamp: new Date().toISOString()
-              });
+                timestamp: new Date().toISOString(),
+                ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
+                ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+              } as any);
               threadStore.saveThread(currentThread);
             }
           }

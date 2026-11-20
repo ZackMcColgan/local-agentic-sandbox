@@ -1904,6 +1904,42 @@ export class OvernightSupervisor {
         });
         console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${finishMsg}`);
       } else {
+        let gateExitCode = 0;
+        let gateOut = "";
+
+        if (shouldRunGitOps) {
+          console.log(`[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`);
+          task.journal.push({
+            timestamp: new Date().toISOString(),
+            role: "gitops",
+            message: "Running pre-merge test:gate verification (<90s budget)..."
+          });
+
+          if (options?.gateRunner) {
+            try {
+              const gateRes = await options.gateRunner();
+              gateExitCode = gateRes.exitCode;
+              gateOut = gateRes.stdout || gateRes.stderr;
+            } catch (gErr: any) {
+              gateExitCode = 1;
+              gateOut = gErr?.message || String(gErr);
+            }
+          } else {
+            try {
+              const gateRes = await gitOps.runGateTest();
+              gateExitCode = gateRes.exitCode;
+              gateOut = gateRes.stdout || gateRes.stderr;
+            } catch (gateErr: any) {
+              console.error(`[supervisor] test:gate run failed:`, gateErr);
+              gateExitCode = 1;
+              gateOut = gateErr?.message || String(gateErr);
+            }
+          }
+
+          task.gatePassed = gateExitCode === 0;
+          task.gateOutput = gateOut;
+        }
+
         const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(effectiveRepoRoot);
         const milestoneCommits = task.milestones
           .map((m) => (m as any).commitSha as string | undefined)
@@ -1917,151 +1953,153 @@ export class OvernightSupervisor {
         const stamped = stampCompletion(task, claimVerification);
         task.completionStamp = stamped.completionStamp;
         task.verificationGaps = stamped.verificationGaps;
-        task.status = "completed";
-        console.log(`[task:${task.taskId}] phase=terminal status=completed`);
-        if (claimVerification.status === "completed-unverified") {
+
+        if (task.gatePassed === false) {
+          const gateFailMsg = `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`;
+          task.status = "failed";
+          task.completionStamp = "completed-unverified";
+          if (!task.verificationGaps.some((g) => g.kind === "gate")) {
+            task.verificationGaps.push({
+              kind: "gate",
+              claim: "test:gate",
+              checked: "persisted gate result",
+              found: gateFailMsg
+            });
+          }
+          task.errorSummary = task.errorSummary || gateFailMsg;
+          task.parkedReason = task.parkedReason || gateFailMsg;
           task.journal.push({
             timestamp: new Date().toISOString(),
-            role: "supervisor",
-            action: "Completion stamped completed-unverified",
-            message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`
+            role: "gitops",
+            message: gateFailMsg
           });
+          console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${gateFailMsg}`);
+        } else {
+          task.status = "completed";
+          console.log(`[task:${task.taskId}] phase=terminal status=completed`);
+          if (claimVerification.status === "completed-unverified") {
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "supervisor",
+              action: "Completion stamped completed-unverified",
+              message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`
+            });
+          }
+
+          if (shouldRunGitOps && gateExitCode === 0) {
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
+            });
+
+            const prePr = evaluatePrePrGate({
+              flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
+              reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
+              gatePassed: true
+            });
+            if (!prePr.ready) {
+              task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "gitops",
+                message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
+              });
+            } else {
+              // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+              const pushCheck = await gitOps.isPushConfigured();
+              if (!pushCheck.configured) {
+                task.pushStatus = "completed — local only, push not configured";
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: "completed — local only, push not configured"
+                });
+                console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
+              } else {
+                try {
+                  const pushRes = await gitOps.pushBranch(task.branchName);
+                  if (pushRes && pushRes.success) {
+                    task.pushStatus = "pushed";
+                    task.journal.push({
+                      timestamp: new Date().toISOString(),
+                      role: "gitops",
+                      message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
+                    });
+                  } else {
+                    task.pushStatus = "completed — local only, push failed";
+                    task.journal.push({
+                      timestamp: new Date().toISOString(),
+                      role: "gitops",
+                      message: "completed — local only, push failed"
+                    });
+                  }
+                } catch (pErr: any) {
+                  const pErrMsg = pErr?.message || String(pErr);
+                  task.pushStatus = `failed: ${pErrMsg}`;
+                  task.journal.push({
+                    timestamp: new Date().toISOString(),
+                    role: "gitops",
+                    message: `failed: ${pErrMsg}`
+                  });
+                  console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
+                }
+              }
+            }
+
+            // Check if autoDeployOnGreen is enabled
+            if (task.autoDeployOnGreen) {
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "deploy",
+                message: "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout..."
+              });
+
+              try {
+                const pipeline = new SelfDeployPipeline();
+                const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
+                const deployRec = await pipeline.executeDeploy({
+                  branchName: task.branchName,
+                  previousSha: "develop",
+                  newSha: lastSha,
+                  skipPreRollout: true
+                });
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "deploy",
+                  message: `Self-deploy finished with status: ${deployRec.status}`
+                });
+              } catch (dErr: any) {
+                console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "deploy",
+                  message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`
+                });
+              }
+            }
+          }
         }
       }
       task.completedAt = new Date().toISOString();
 
-      if (shouldRunGitOps) {
-        console.log(`[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`);
-        task.journal.push({
-          timestamp: new Date().toISOString(),
-          role: "gitops",
-          message: "Running pre-merge test:gate verification (<90s budget)..."
-        });
-
-        let gateExitCode = 0;
-        let gateOut = "";
-
-        if (options?.gateRunner) {
-          try {
-            const gateRes = await options.gateRunner();
-            gateExitCode = gateRes.exitCode;
-            gateOut = gateRes.stdout || gateRes.stderr;
-          } catch (gErr: any) {
-            gateExitCode = 1;
-            gateOut = gErr?.message || String(gErr);
-          }
-        } else {
-          try {
-            const gateRes = await gitOps.runGateTest();
-            gateExitCode = gateRes.exitCode;
-            gateOut = gateRes.stdout || gateRes.stderr;
-          } catch (gateErr: any) {
-            console.error(`[supervisor] test:gate run failed:`, gateErr);
-            gateExitCode = 1;
-            gateOut = gateErr?.message || String(gateErr);
-          }
+      // Defense-in-depth: revert any premature completion stamp if test:gate failed
+      if (task.gatePassed === false) {
+        if (task.status === "completed") {
+          task.status = "failed";
         }
-
-        task.gatePassed = gateExitCode === 0;
-        task.gateOutput = gateOut;
-
-        if (gateExitCode === 0) {
-          task.journal.push({
-            timestamp: new Date().toISOString(),
-            role: "gitops",
-            message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
-          });
-
-          const prePr = evaluatePrePrGate({
-            flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
-            reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
-            gatePassed: true
-          });
-          if (!prePr.ready) {
-            task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "gitops",
-              message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
-            });
-          } else {
-            // BUILD-1 Honesty Rule: wire pushBranch into terminal path
-            const pushCheck = await gitOps.isPushConfigured();
-          if (!pushCheck.configured) {
-            task.pushStatus = "completed — local only, push not configured";
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "gitops",
-              message: "completed — local only, push not configured"
-            });
-            console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
-          } else {
-            try {
-              const pushRes = await gitOps.pushBranch(task.branchName);
-              if (pushRes && pushRes.success) {
-                task.pushStatus = "pushed";
-                task.journal.push({
-                  timestamp: new Date().toISOString(),
-                  role: "gitops",
-                  message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
-                });
-              } else {
-                task.pushStatus = "completed — local only, push failed";
-                task.journal.push({
-                  timestamp: new Date().toISOString(),
-                  role: "gitops",
-                  message: "completed — local only, push failed"
-                });
-              }
-            } catch (pErr: any) {
-              const pErrMsg = pErr?.message || String(pErr);
-              task.pushStatus = `failed: ${pErrMsg}`;
-              task.journal.push({
-                timestamp: new Date().toISOString(),
-                role: "gitops",
-                message: `failed: ${pErrMsg}`
-              });
-              console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
-            }
-          }
-          }
-
-          // Check if autoDeployOnGreen is enabled
-          if (task.autoDeployOnGreen) {
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "deploy",
-              message: "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout..."
-            });
-
-            try {
-              const pipeline = new SelfDeployPipeline();
-              const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
-              const deployRec = await pipeline.executeDeploy({
-                branchName: task.branchName,
-                previousSha: "develop",
-                newSha: lastSha,
-                skipPreRollout: true
-              });
-              task.journal.push({
-                timestamp: new Date().toISOString(),
-                role: "deploy",
-                message: `Self-deploy finished with status: ${deployRec.status}`
-              });
-            } catch (dErr: any) {
-              console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
-              task.journal.push({
-                timestamp: new Date().toISOString(),
-                role: "deploy",
-                message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`
-              });
-            }
-          }
-        } else {
-          task.journal.push({
-            timestamp: new Date().toISOString(),
-            role: "gitops",
-            message: `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`
+        if (task.completionStamp === "completed" || !task.completionStamp) {
+          task.completionStamp = "completed-unverified";
+        }
+        if (!Array.isArray(task.verificationGaps)) {
+          task.verificationGaps = [];
+        }
+        if (!task.verificationGaps.some((g) => g.kind === "gate")) {
+          task.verificationGaps.push({
+            kind: "gate",
+            claim: "test:gate",
+            checked: "persisted gate result",
+            found: "gate did not pass"
           });
         }
       }
