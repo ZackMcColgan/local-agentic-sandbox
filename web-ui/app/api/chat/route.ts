@@ -1436,6 +1436,8 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
               roundContent: fullRoundContent,
               executedToolCallsCount: 0,
               consecutiveMarkupFailures,
+              roundFinishReason,
+              roundThinking,
             });
             if (markupEval.action === "reprompt") {
               consecutiveMarkupFailures = markupEval.consecutiveMarkupFailures;

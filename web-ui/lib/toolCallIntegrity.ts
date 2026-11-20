@@ -22,6 +22,9 @@ const TOOL_WORK_CLAIM_PATTERNS: RegExp[] = [
   /\b(edited|modified|updated|created|wrote)\s+`[^`]+`/i,
   /\bcommitted\s+[0-9a-f]{7,40}\b/i,
   /⚠️ \[Turn ended: tool calls were not executable\.\]/,
+  /\b(?:i|we)\s+(?:couldn['’]?t|could\s+not|(?:was|were|am|are)\s+unable\s+to)\s+(?:pull|fetch|search|look\s+up|access|run|retrieve)\b/i,
+  /\bwas\s+unable\s+to\s+(?:pull|fetch|search|look\s+up|access|run|retrieve)\b/i,
+  /\b(?:the|my|our)\s+(?:[a-z0-9_-]+\s+)?(?:tool|search|lookup)\s+(?:(?:is|was|got)\s+)?(?:blocked|failed|unavailable|timed\s+out|rejected)\b/i,
 ];
 
 /**
@@ -50,8 +53,10 @@ export interface MarkupRoundEvaluation {
 }
 
 /**
- * Evaluates a completed round for unexecuted tool-call markup.
+ * Evaluates a completed round for unexecuted tool-call markup or phantom tool_calls rounds.
  * - Normal tool rounds (executedToolCallsCount > 0) or clean text rounds pass.
+ * - A round with 0 executed calls fails if markup appears in content or thinking,
+ *   or if roundFinishReason === "tool_calls".
  * - First failed round triggers a single corrective re-prompt.
  * - Second consecutive failed round ends the turn with TURN_TOOL_MARKUP_MARKER.
  */
@@ -59,8 +64,15 @@ export function evaluateMarkupRound(params: {
   roundContent: string;
   executedToolCallsCount: number;
   consecutiveMarkupFailures: number;
+  roundFinishReason?: string;
+  roundThinking?: string;
 }): MarkupRoundEvaluation {
-  if (params.executedToolCallsCount > 0 || !containsToolCallMarkup(params.roundContent)) {
+  const hasMarkup =
+    containsToolCallMarkup(params.roundContent) ||
+    (params.roundThinking ? containsToolCallMarkup(params.roundThinking) : false);
+  const isPhantomToolRound = params.roundFinishReason === "tool_calls";
+
+  if (params.executedToolCallsCount > 0 || (!hasMarkup && !isPhantomToolRound)) {
     return {
       action: "pass",
       consecutiveMarkupFailures: 0,
