@@ -106,7 +106,6 @@ export async function POST(req: NextRequest) {
             body: JSON.stringify({
               threadId: thread.id,
               messages: [{ role: "user", content: brief }],
-              mode: "agent",
             }),
           });
           const response = await chatPost(chatReq);
