@@ -2310,9 +2310,15 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           tracesCount: traces.length,
         });
 
-        const evidenceResult = cleanedContent
-          ? await verifyEvidenceLinkedSummary(cleanedContent, buildVerificationAdapters(process.cwd()))
-          : { flagged: false, completionStamp: undefined, gaps: [] };
+        const isJobThread = Boolean(threadData?.taskId);
+        const evidenceResult =
+          isJobThread && cleanedContent
+            ? await verifyEvidenceLinkedSummary(
+                cleanedContent,
+                buildVerificationAdapters(process.cwd()),
+                { isJobSummary: true }
+              )
+            : { flagged: false, completionStamp: undefined, gaps: [] };
 
         const finalCompletionStamp =
           zeroTraceResult.completionStamp === "completed-unverified"
