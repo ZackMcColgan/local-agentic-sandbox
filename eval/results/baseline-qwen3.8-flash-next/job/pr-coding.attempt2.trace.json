@@ -1,0 +1,51 @@
+{
+  "taskId": "pr-coding",
+  "prompt": "You are working on a PR-sized coding task.\nImplement `parseRetryAfter(headerValue, nowMs)` in `retryAfter.mjs` so that it parses HTTP `Retry-After` header values into a delay in milliseconds:\n- If `headerValue` is `null`, `undefined`, or empty/whitespace-only, return `null`.\n- If `headerValue` is a non-negative integer string (e.g. `\"120\"` or `\"0\"`), return `seconds * 1000`.\n- If `headerValue` is a valid HTTP-date string (e.g. `\"Wed, 21 Oct 2015 07:28:00 GMT\"`), return `Math.max(0, Date.parse(headerValue) - nowMs)` where `nowMs` defaults to `Date.now()`.\n- If `headerValue` is negative (e.g. `\"-5\"`) or unparseable, return `null`.\n\nOutput ONLY the complete updated contents of `retryAfter.mjs` inside a single ```js or ```mjs code block.\n",
+  "output": "",
+  "durationMs": 75102,
+  "raw": {
+    "id": "thread-1795167759988-iy0w",
+    "title": "You are working on a PR-sized coding task.",
+    "status": "failed",
+    "createdAt": "2026-11-20T09:42:39.988Z",
+    "updatedAt": "2026-11-20T09:43:54.244Z",
+    "model": "qwen3.8-flash-next-gyro-gyro-s",
+    "reasoningEffort": "low",
+    "hostAccess": false,
+    "taskId": "task-1795167759984",
+    "scope": "PROJECT",
+    "isTest": false,
+    "chunkBudget": {
+      "maxRounds": 8
+    },
+    "messages": [
+      {
+        "id": "msg-1795167759988-u",
+        "role": "user",
+        "content": "You are working on a PR-sized coding task.\nImplement `parseRetryAfter(headerValue, nowMs)` in `retryAfter.mjs` so that it parses HTTP `Retry-After` header values into a delay in milliseconds:\n- If `headerValue` is `null`, `undefined`, or empty/whitespace-only, return `null`.\n- If `headerValue` is a non-negative integer string (e.g. `\"120\"` or `\"0\"`), return `seconds * 1000`.\n- If `headerValue` is a valid HTTP-date string (e.g. `\"Wed, 21 Oct 2015 07:28:00 GMT\"`), return `Math.max(0, Date.parse(headerValue) - nowMs)` where `nowMs` defaults to `Date.now()`.\n- If `headerValue` is negative (e.g. `\"-5\"`) or unparseable, return `null`.\n\nOutput ONLY the complete updated contents of `retryAfter.mjs` inside a single ```js or ```mjs code block.\n",
+        "timestamp": "2026-11-20T09:42:39.988Z"
+      },
+      {
+        "id": "msg-1795167759988-a",
+        "role": "assistant",
+        "content": "Started autonomous engineering run.",
+        "taskId": "task-1795167759984",
+        "timestamp": "2026-11-20T09:42:39.988Z"
+      },
+      {
+        "id": "msg-1795167834244-err",
+        "role": "assistant",
+        "content": "Task failed: Invalid PlanSpec: planner produced empty milestones.",
+        "taskId": "task-1795167759984",
+        "timestamp": "2026-11-20T09:43:54.244Z"
+      }
+    ],
+    "tokenEconomics": {
+      "rounds": 0,
+      "promptTokens": 0,
+      "outputTokens": 0,
+      "compactions": 0
+    },
+    "liveness": "settled"
+  }
+}
