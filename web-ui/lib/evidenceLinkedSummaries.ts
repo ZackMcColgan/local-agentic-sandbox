@@ -65,14 +65,28 @@ export function hasCompletionLanguage(text: string): boolean {
   return COMPLETION_TRIGGER_RE.test(text);
 }
 
+export interface VerifyEvidenceOptions {
+  /**
+   * When false, evidence verification is skipped and a neutral result is
+   * returned without invoking any adapters. Defaults to true for job-summary
+   * compatibility.
+   */
+  isJobSummary?: boolean;
+}
+
 /**
  * Verifies that any summary claiming completion includes inline citations
  * that resolve against git/PR ground truth.
  */
 export async function verifyEvidenceLinkedSummary(
   text: string,
-  adapters: VerificationAdapters
+  adapters: VerificationAdapters,
+  options?: VerifyEvidenceOptions
 ): Promise<EvidenceSummaryResult> {
+  if (options?.isJobSummary === false) {
+    return { flagged: false, completionStamp: undefined, gaps: [] };
+  }
+
   if (!hasCompletionLanguage(text)) {
     return { flagged: false, completionStamp: undefined, gaps: [] };
   }
