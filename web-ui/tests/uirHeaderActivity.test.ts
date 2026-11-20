@@ -144,7 +144,7 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     assert.ok(!html.includes("Round "), "no Round segment when round is unknown");
   });
 
-  it("pulse track uses design-true emerald-500 to emerald-400 gradient with no emerald-600", () => {
+  it("pulse track uses emerald-500 to cyan-400 gradient", () => {
     const html = renderToString(
       React.createElement(LiveActivityHeader, {
         startedAtMs: NOW - 5_000,
@@ -157,8 +157,7 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
       })
     );
     assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
-    assert.ok(html.includes("to-emerald-400"), "pulse gradient ends at emerald-400");
-    assert.ok(!html.includes("emerald-600"), "no dark emerald-600 in pulse gradient");
+    assert.ok(html.includes("to-cyan-400"), "pulse gradient ends at cyan-400");
   });
 });
 

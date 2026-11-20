@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Bot,
   Plus,
   List,
   Hammer,
@@ -212,30 +211,25 @@ export function NavigationDrawer({
         aria-hidden="true"
       />
 
-      {/* Drawer Surface - Mobile Menu Pattern */}
+      {/* Drawer Surface - Mobile Menu */}
       <div
         data-testid="navigation-drawer"
         role="dialog"
         aria-modal="true"
         aria-label="Navigation Drawer"
-        className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-white dark:bg-[#0b0b0d] shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-slate-100 dark:border-zinc-800 transition-transform animate-in slide-in-from-left duration-200"
+        className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-stone-50 dark:bg-[#0e0e12] shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-stone-200/90 dark:border-white/[0.10] transition-transform animate-in slide-in-from-left duration-200"
       >
         
-        {/* Top Header: Robot Sparkle Icon + "Agent" + Close (X) button */}
+        {/* Top Header: Neutral Menu title + Close (X) button */}
         <div className="flex items-center justify-between px-2 pb-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <Bot className="h-6 w-6 stroke-[2.2]" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-              Agent
-            </span>
-          </div>
+          <span className="text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+            Menu
+          </span>
 
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-zinc-600 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-stone-100 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
             title="Close drawer"
             aria-label="Close drawer"
           >
@@ -251,7 +245,7 @@ export function NavigationDrawer({
               onNewSession();
               onClose();
             }}
-            className="w-full min-h-[44px] flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-semibold text-sm shadow-sm transition-all"
+            className="w-full min-h-[44px] flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 active:scale-[0.98] text-white dark:text-black font-semibold text-sm shadow-sm transition-all"
             title="New session"
             aria-label="New session"
           >
@@ -269,10 +263,10 @@ export function NavigationDrawer({
               onNavigate("sessions");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "sessions" || activeView === "thread"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
             <List className="h-5 w-5 shrink-0" />
@@ -286,13 +280,13 @@ export function NavigationDrawer({
               onNavigate("builds");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "builds"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
-            <Hammer className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+            <Hammer className="h-5 w-5 shrink-0 opacity-80" />
             <span>Builds</span>
           </button>
 
@@ -303,13 +297,13 @@ export function NavigationDrawer({
               onNavigate("board");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "board"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
-            <Columns3 className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+            <Columns3 className="h-5 w-5 shrink-0 opacity-80" />
             <span>Board</span>
           </button>
 
@@ -320,13 +314,13 @@ export function NavigationDrawer({
               onNavigate("projects");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "projects"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
-            <FolderGit2 className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+            <FolderGit2 className="h-5 w-5 shrink-0 opacity-80" />
             <span>Projects &amp; Folders</span>
           </button>
 
@@ -339,9 +333,9 @@ export function NavigationDrawer({
                 onOpenExplorer();
                 onClose();
               }}
-              className="w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+              className="w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             >
-              <FolderTree className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+              <FolderTree className="h-5 w-5 shrink-0 opacity-80" />
               <span>File Explorer</span>
             </button>
           )}
@@ -353,18 +347,18 @@ export function NavigationDrawer({
               onNavigate("skills");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "skills"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
             <div className="flex items-center gap-3.5 min-w-0">
-              <Wrench className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+              <Wrench className="h-5 w-5 shrink-0 opacity-80" />
               <span>Skills</span>
             </div>
             {pendingSkillsCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 font-bold text-[11px] shrink-0 border border-zinc-200 dark:border-zinc-800">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 font-bold text-[11px] shrink-0 border border-emerald-300/60 dark:border-emerald-500/30 tabular-nums">
                 {`${pendingSkillsCount} pending`}
               </span>
             )}
@@ -377,36 +371,36 @@ export function NavigationDrawer({
               onNavigate("morning-report");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "morning-report"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
-            <FileText className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+            <FileText className="h-5 w-5 shrink-0 opacity-80" />
             <span>Morning report</span>
           </button>
         </nav>
 
         {/* 3. Sessions List (Recents-style section) */}
-        <div className="pt-4 pb-1 px-3 flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider shrink-0">
+        <div className="pt-4 pb-1 px-3 flex items-center justify-between text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-[0.1em] shrink-0">
           <span>Recents</span>
           {threads.length > 0 && (
-            <span className="text-[11px] font-mono text-slate-400 dark:text-zinc-400 font-normal">
+            <span className="text-[11px] font-mono tabular-nums text-zinc-600 dark:text-zinc-400 font-normal">
               {threads.length}
             </span>
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-1 px-1 pt-1 pb-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 px-1 pt-1 pb-4">
           {isLoadingThreads && threads.length === 0 ? (
             <div className="space-y-2 px-1 py-1" aria-label="Loading sessions">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-12 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800" />
+                <div key={i} className="h-12 rounded-2xl bg-stone-200/60 dark:bg-[#15151b] animate-pulse border border-stone-200 dark:border-white/[0.08]" />
               ))}
             </div>
           ) : threads.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-slate-400 dark:text-zinc-400">
+            <div className="px-3 py-6 text-center text-xs text-zinc-600 dark:text-zinc-400">
               No recent sessions
             </div>
           ) : (
@@ -422,10 +416,10 @@ export function NavigationDrawer({
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                   onTouchCancel={handleTouchEnd}
-                  className={`group relative flex items-center justify-between rounded-[14px] px-3.5 py-3 text-xs transition-colors min-h-[44px] bg-white dark:bg-[#141418] border ${
+                  className={`group relative flex items-center justify-between rounded-2xl px-3.5 py-3 text-xs transition-all min-h-[44px] bg-white dark:bg-[#15151b] surface-card border ${
                     isSelected
-                      ? "text-emerald-900 dark:text-emerald-200 font-semibold border-emerald-500/50"
-                      : "text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-[#222228] hover:border-slate-300 dark:hover:border-zinc-700"
+                      ? "text-emerald-900 dark:text-emerald-200 font-semibold border-emerald-500/60 dark:border-emerald-500/50"
+                      : "text-stone-700 dark:text-stone-200 border-stone-200/90 dark:border-white/[0.08] hover:border-stone-300 dark:hover:border-white/[0.16]"
                   }`}
                 >
                   <button
@@ -452,19 +446,19 @@ export function NavigationDrawer({
                   >
                     <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{deriveThreadDisplayTitle(thread.title)}</span>
                     {(thread as any).matchSnippet && (
-                      <span className="text-[11px] leading-snug truncate text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+                      <span className="text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
                       </span>
                     )}
                     {timeLabel && (
-                      <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-mono">
+                      <span className="text-[10px] text-zinc-600 dark:text-zinc-400 font-mono tabular-nums">
                         {timeLabel}
                       </span>
                     )}
                   </button>
                   <div className="flex items-center gap-1 shrink-0 ml-1.5">
                     {thread.status === "active" && (
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" title="Active" />
+                      <span className="h-2 w-2 rounded-full bg-cyan-400 shrink-0 animate-pulse" title="Active" />
                     )}
                     {onDeleteThread && (
                       <button
@@ -484,7 +478,7 @@ export function NavigationDrawer({
                             setActionSheetThread(thread);
                           }
                         }}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-700/60 transition-colors"
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-xl text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors"
                         title="Session actions"
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -498,25 +492,25 @@ export function NavigationDrawer({
         </div>
 
         {/* 4. Settings Pinned at Bottom */}
-        <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 px-1 shrink-0">
+        <div className="pt-2 border-t border-stone-200/80 dark:border-white/[0.08] px-1 shrink-0">
           <button
             type="button"
             onClick={() => {
               onNavigate("settings");
               onClose();
             }}
-            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-colors text-left ${
+            className={`w-full min-h-[44px] flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm transition-all text-left ${
               activeView === "settings"
-                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-200/80 dark:border-emerald-800/80"
-                : "text-slate-700 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 font-medium"
+                ? "bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 font-semibold border border-emerald-300/80 dark:border-emerald-500/35"
+                : "text-stone-700 dark:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] font-medium border border-transparent"
             }`}
           >
-            <Settings className="h-5 w-5 text-slate-600 dark:text-zinc-300 shrink-0" />
+            <Settings className="h-5 w-5 shrink-0 opacity-80" />
             <span>Settings</span>
           </button>
 
           {/* Footer info */}
-          <div className="pt-2 pb-1 px-3 text-[11px] text-slate-400 dark:text-zinc-400 font-mono">
+          <div className="pt-2 pb-1 px-3 text-[11px] text-zinc-600 dark:text-zinc-400 font-mono">
             Local Agentic Sandbox
           </div>
         </div>
@@ -564,7 +558,7 @@ export function NavigationDrawer({
                     onSelectThread(target.id);
                     onClose();
                   }}
-                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+                  className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold text-sm hover:bg-emerald-500/25 transition-colors"
                 >
                   <MessageSquare className="h-4 w-4" />
                   <span>Open session</span>

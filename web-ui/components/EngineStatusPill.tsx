@@ -100,7 +100,7 @@ export function EngineStatusPill({
     return (
       <div
         onClick={onOpenSettings}
-        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/90 dark:bg-emerald-950/60 text-xs font-semibold text-emerald-900 dark:text-emerald-200 shadow-2xs min-h-[44px] sm:min-h-[32px] ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-emerald-300/80 dark:border-emerald-500/30 bg-emerald-50/90 dark:bg-emerald-500/10 text-xs font-semibold text-emerald-900 dark:text-emerald-300 shadow-2xs min-h-[44px] sm:min-h-[32px] ${className}`}
         title={`LLM Engine: Running (PID ${data.pid || "active"}, ${data.model || "qwen3.8-flash-next-gyro-gyro-s"}) · Click Stop to turn off`}
         role="status"
         aria-label="Engine running"
@@ -125,12 +125,12 @@ export function EngineStatusPill({
     return (
       <div
         onClick={onOpenSettings}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-xs font-semibold text-amber-800 dark:text-amber-300 shadow-2xs cursor-pointer min-h-[36px] sm:min-h-[32px] ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/15 text-xs font-semibold text-emerald-900 dark:text-emerald-300 shadow-2xs cursor-pointer min-h-[36px] sm:min-h-[32px] ${className}`}
         title="LLM Engine: Starting..."
         role="status"
         aria-label="Engine starting"
       >
-        <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
         <span className="text-xs">Starting...</span>
       </div>
     );
@@ -140,17 +140,17 @@ export function EngineStatusPill({
   return (
     <div
       onClick={onOpenSettings}
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-850 text-xs font-semibold text-slate-600 dark:text-zinc-400 shadow-2xs min-h-[36px] sm:min-h-[32px] ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-stone-300 dark:border-white/[0.12] bg-stone-100 dark:bg-[#15151b] text-xs font-semibold text-stone-600 dark:text-stone-400 shadow-2xs min-h-[36px] sm:min-h-[32px] ${className}`}
       title="LLM Engine: Stopped. Tap Start to spin up llama-server."
       role="status"
       aria-label="Engine stopped"
     >
-      <span className="h-2 w-2 rounded-full bg-slate-400 dark:bg-zinc-600 shrink-0" />
-      <span className="hidden sm:inline text-slate-600 dark:text-zinc-400 text-[11px]">Engine Stopped</span>
+      <span className="h-2 w-2 rounded-full bg-stone-400 dark:bg-stone-500 shrink-0" />
+      <span className="hidden sm:inline text-stone-600 dark:text-stone-400 text-[11px]">Engine Stopped</span>
       <button
         type="button"
         onClick={handleStart}
-        className="min-h-[28px] sm:min-h-[24px] px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
+        className="min-h-[28px] sm:min-h-[24px] px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
         title="Start LLM Engine"
         aria-label="Start LLM Engine"
       >

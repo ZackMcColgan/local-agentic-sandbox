@@ -1,155 +1,151 @@
 /* ==========================================================================
-   LOCAL AGENTIC SANDBOX — CANONICAL DESIGN TOKENS (v2.1 CTO REDESIGN)
-   Updated per CEO Review:
-   1. Explicit text labels on all navigation items (Chat, Builds, Report, Skills, Settings)
-   2. Theme switcher exclusively in Settings (removed from main header & rail)
-   3. Collapsible Sessions & Workspace panels on Desktop + Slide-over Drawers on Mobile
-   4. Mobile-first 390x844 ergonomics
+   LOCAL AGENTIC SANDBOX — DESIGN TOKENS
+   Mobile-first OLED dark theme with warm light companion.
    ========================================================================== */
 
 :root,
 [data-theme="light"] {
   color-scheme: light;
 
-  /* 1. Surfaces (AGENTS.md 2.A: Pure White Daytime Purity — Zero Muddy Gray Washes) */
-  --bg-canvas: #ffffff;
+  /* 1. Surfaces (Alabaster Paper — crisp warm whites, subtle stone elevation) */
+  --bg-canvas: #fafaf9;
   --bg-surface-1: #ffffff;
-  --bg-surface-2: #f8fafc;       /* Subtle slate-50 for code headers & secondary wells */
-  --bg-surface-3: #f1f5f9;       /* Slate-100 ONLY for compact pills, kbd tags, hover states */
-  --bg-glass: rgba(255, 255, 255, 0.90);
+  --bg-surface-2: #f5f5f4;       /* stone-100 for code headers & secondary wells */
+  --bg-surface-3: #e7e5e4;       /* stone-200 for compact pills, kbd tags, hover states */
+  --bg-glass: rgba(250, 250, 249, 0.88);
   --bg-composer: #ffffff;
 
-  /* 2. Typography (High-Contrast Slate — WCAG AAA/AA verified) */
-  --text-primary: #0f172a;       /* slate-900 (17.4:1 on white) */
-  --text-secondary: #334155;     /* slate-700 (10.3:1 on white) */
-  --text-muted: #64748b;         /* slate-500 (4.76:1 on white) */
+  /* 2. Typography (High-Contrast Warm Ink — WCAG AAA/AA verified) */
+  --text-primary: #1c1917;       /* stone-900 */
+  --text-secondary: #44403c;     /* stone-700 */
+  --text-muted: #57534e;         /* stone-600 */
   --text-on-brand: #ffffff;
 
-  /* 3. Borders & Dividers (Crisp 1px structural hairlines) */
-  --border-subtle: #f1f5f9;      /* slate-100 */
-  --border-default: #e2e8f0;     /* slate-200 */
-  --border-strong: #cbd5e1;      /* slate-300 */
-  --border-focus: #10b981;       /* emerald-500 */
+  /* 3. Borders & Dividers (Crisp 1px warm stone hairlines) */
+  --border-subtle: #f5f5f4;      /* stone-100 */
+  --border-default: #e7e5e4;     /* stone-200 */
+  --border-strong: #d6d3d1;      /* stone-300 */
+  --border-focus: #059669;       /* emerald-600 */
 
-  /* 4. Primary Brand & Execution Accent (Emerald Security Aesthetic) */
+  /* 4. Primary Brand & Execution Accent (Emerald) */
   --brand-primary: #059669;      /* emerald-600 for crisp light-mode contrast */
   --brand-primary-hover: #047857;/* emerald-700 */
   --brand-soft-bg: #ecfdf5;      /* emerald-50 */
-  --brand-soft-border: #a7f3d0;  /* emerald-200 */
+  --brand-soft-border: #6ee7b7;  /* emerald-300 */
   --brand-soft-text: #065f46;    /* emerald-800 */
 
-  /* 5. User Message Bubble Accent (AGENTS.md 2.A: Tinted Sky/Blue Glass) */
-  --user-bubble-bg: rgba(239, 246, 255, 0.92); /* bg-blue-50/90 */
-  --user-bubble-border: #bfdbfe;               /* border-blue-200 */
-  --user-bubble-text: #172554;                 /* text-blue-950 */
+  /* 5. User Message Bubble Accent (Emerald-Tinted Paper) */
+  --user-bubble-bg: rgba(236, 253, 245, 0.8);
+  --user-bubble-border: #6ee7b7;
+  --user-bubble-text: #064e3b;
 
   /* 6. Semantic Status Tokens */
   --status-success-bg: #ecfdf5;
   --status-success-border: #a7f3d0;
   --status-success-text: #065f46;
-  --status-success-dot: #10b981;
+  --status-success-dot: #059669;
 
-  --status-running-bg: #f0f9ff;
-  --status-running-border: #bae6fd;
-  --status-running-text: #075985;
-  --status-running-dot: #0284c7;
+  --status-running-bg: #ecfeff;
+  --status-running-border: #a5f3fc;
+  --status-running-text: #155e75;
+  --status-running-dot: #0891b2;
 
   --status-warning-bg: #fffbeb;
   --status-warning-border: #fde68a;
   --status-warning-text: #92400e;
-  --status-warning-dot: #f59e0b;
+  --status-warning-dot: #d97706;
 
-  --status-danger-bg: #fef2f2;
-  --status-danger-border: #fecaca;
-  --status-danger-text: #991b1b;
-  --status-danger-dot: #ef4444;
+  --status-danger-bg: #fff1f2;
+  --status-danger-border: #fecdd3;
+  --status-danger-text: #9f1239;
+  --status-danger-dot: #e11d48;
 
   /* 7. Code & Diff Surfaces */
-  --code-bg: #f8fafc;
-  --code-header-bg: #f1f5f9;
-  --code-border: #e2e8f0;
+  --code-bg: #f5f5f4;
+  --code-header-bg: #e7e5e4;
+  --code-border: #d6d3d1;
   --diff-add-bg: #dcfce7;
   --diff-add-text: #14532d;
-  --diff-del-bg: #fee2e2;
-  --diff-del-text: #7f1d1d;
+  --diff-del-bg: #ffe4e6;
+  --diff-del-text: #881337;
 
   /* 8. Elevation Shadows */
-  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.07), 0 1px 2px -1px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06);
+  --shadow-xs: 0 1px 2px 0 rgba(28, 25, 23, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(28, 25, 23, 0.07), 0 1px 2px -1px rgba(28, 25, 23, 0.05);
+  --shadow-md: 0 4px 14px -2px rgba(28, 25, 23, 0.08), 0 2px 6px -2px rgba(28, 25, 23, 0.04);
+  --shadow-lg: 0 14px 32px -4px rgba(28, 25, 23, 0.14), 0 4px 10px -2px rgba(28, 25, 23, 0.06);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* 1. Surfaces (AGENTS.md 2.B: Deep Zinc Contrast — Zero Muddy Purple #17141f) */
-  --bg-canvas: #000000;          /* OLED true black (owner, Nov 13 2026): pixels off */
-  --bg-surface-1: #121215;       /* elevated panel surface */
-  --bg-surface-2: #18181b;       /* zinc-900 card surface */
-  --bg-surface-3: #27272a;       /* zinc-800 interactive pill / hover */
-  --bg-glass: rgba(0, 0, 0, 0.88);
-  --bg-composer: #141418;
+  /* 1. Surfaces (True OLED Black + Elevated Dark Surfaces) */
+  --bg-canvas: #000000;          /* OLED true black: pixels off */
+  --bg-surface-1: #0e0e12;       /* primary dark panel */
+  --bg-surface-2: #15151b;       /* elevated card surface */
+  --bg-surface-3: #1f1f28;       /* interactive pill / hover */
+  --bg-glass: rgba(0, 0, 0, 0.84);
+  --bg-composer: #111116;
 
-  /* 2. Typography */
-  --text-primary: #f4f4f5;       /* zinc-100 (17.1:1 on zinc-950) */
-  --text-secondary: #a1a1aa;     /* zinc-400 (7.8:1 on zinc-950) */
-  --text-muted: #a1a1aa;         /* zinc-400 (meets dark text floor) */
-  --text-on-brand: #052e16;
+  /* 2. Typography (Warm Ivory + High-Contrast Stone) */
+  --text-primary: #fafaf9;       /* stone-50 (19.6:1 on black) */
+  --text-secondary: #d6d3d1;     /* stone-300 (13.4:1 on black) */
+  --text-muted: #a8a29e;         /* stone-400 (8.1:1 on black, meets dark text floor) */
+  --text-on-brand: #000000;      /* black text on emerald */
 
-  /* 3. Borders & Dividers */
-  --border-subtle: #18181b;      /* zinc-900 */
-  --border-default: #27272a;     /* zinc-800 */
-  --border-strong: #3f3f46;      /* zinc-700 */
+  /* 3. Borders & Dividers (Luminous hairline borders) */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.20);
   --border-focus: #10b981;       /* emerald-500 */
 
-  /* 4. Primary Brand & Execution Accent */
+  /* 4. Primary Brand & Execution Accent (Emerald) */
   --brand-primary: #10b981;      /* emerald-500 */
   --brand-primary-hover: #34d399;/* emerald-400 */
-  --brand-soft-bg: rgba(16, 185, 129, 0.12);
-  --brand-soft-border: rgba(16, 185, 129, 0.28);
+  --brand-soft-bg: rgba(16, 185, 129, 0.14);
+  --brand-soft-border: rgba(16, 185, 129, 0.34);
   --brand-soft-text: #6ee7b7;    /* emerald-300 */
 
-  /* 5. User Message Bubble Accent (Sky/Cyan Tinted Glass on Dark) */
-  --user-bubble-bg: rgba(14, 116, 144, 0.18);
-  --user-bubble-border: rgba(56, 189, 248, 0.32);
-  --user-bubble-text: #e0f2fe;
+  /* 5. User Message Bubble Accent (Emerald-Tinted Glass) */
+  --user-bubble-bg: rgba(16, 185, 129, 0.12);
+  --user-bubble-border: rgba(16, 185, 129, 0.28);
+  --user-bubble-text: #d1fae5;
 
   /* 6. Semantic Status Tokens */
-  --status-success-bg: rgba(16, 185, 129, 0.12);
-  --status-success-border: rgba(16, 185, 129, 0.28);
+  --status-success-bg: rgba(52, 211, 153, 0.12);
+  --status-success-border: rgba(52, 211, 153, 0.28);
   --status-success-text: #6ee7b7;
-  --status-success-dot: #10b981;
+  --status-success-dot: #34d399;
 
-  --status-running-bg: rgba(56, 189, 248, 0.12);
-  --status-running-border: rgba(56, 189, 248, 0.28);
-  --status-running-text: #7dd3fc;
-  --status-running-dot: #38bdf8;
+  --status-running-bg: rgba(34, 211, 238, 0.12);
+  --status-running-border: rgba(34, 211, 238, 0.28);
+  --status-running-text: #67e8f9;
+  --status-running-dot: #22d3ee;
 
-  --status-warning-bg: rgba(245, 158, 11, 0.12);
-  --status-warning-border: rgba(245, 158, 11, 0.28);
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
+  --status-warning-border: rgba(245, 158, 11, 0.30);
   --status-warning-text: #fcd34d;
   --status-warning-dot: #f59e0b;
 
-  --status-danger-bg: rgba(239, 68, 68, 0.12);
-  --status-danger-border: rgba(239, 68, 68, 0.28);
-  --status-danger-text: #fca5a5;
-  --status-danger-dot: #ef4444;
+  --status-danger-bg: rgba(251, 113, 133, 0.12);
+  --status-danger-border: rgba(251, 113, 133, 0.28);
+  --status-danger-text: #fda4af;
+  --status-danger-dot: #fb7185;
 
   /* 7. Code & Diff Surfaces */
   --code-bg: #000000;
-  --code-header-bg: #18181b;
-  --code-border: #27272a;
-  --diff-add-bg: rgba(16, 185, 129, 0.16);
+  --code-header-bg: #15151b;
+  --code-border: rgba(255, 255, 255, 0.11);
+  --diff-add-bg: rgba(52, 211, 153, 0.16);
   --diff-add-text: #6ee7b7;
-  --diff-del-bg: rgba(239, 68, 68, 0.16);
-  --diff-del-text: #fca5a5;
+  --diff-del-bg: rgba(251, 113, 133, 0.16);
+  --diff-del-text: #fda4af;
 
   /* 8. Elevation Shadows */
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 2px 6px -1px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 6px 16px -3px rgba(0, 0, 0, 0.65);
-  --shadow-lg: 0 16px 36px -6px rgba(0, 0, 0, 0.75);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 2px 8px -1px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 8px 20px -4px rgba(0, 0, 0, 0.75);
+  --shadow-lg: 0 18px 40px -6px rgba(0, 0, 0, 0.85);
 }
 
 /* ==========================================================================

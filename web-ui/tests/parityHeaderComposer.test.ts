@@ -79,10 +79,10 @@ describe("parity PR1 — header composition (UI-019 + board header note)", () =>
   });
 });
 
-describe("parity PR1 — composer (board geometry + send button)", () => {
-  it("composer card uses the board surface color and 16px radius in dark mode", () => {
+describe("parity PR1 — composer (geometry + emerald send button)", () => {
+  it("composer card uses the dark surface color and 16px radius in dark mode", () => {
     const form = segment("<form", 600);
-    assert.ok(form.includes("dark:bg-[#141418]"), "composer bg is the board #141418");
+    assert.ok(form.includes("dark:bg-[#111116]"), "composer bg is #111116");
     assert.ok(form.includes("rounded-2xl"), "composer radius is 16px");
   });
 
@@ -90,7 +90,7 @@ describe("parity PR1 — composer (board geometry + send button)", () => {
     const send = segment('data-testid="send-button"', 700);
     assert.ok(send.includes("h-10 w-10"), "send button is 40x40");
     assert.ok(send.includes("rounded-xl"), "send button radius is 12px");
-    assert.ok(send.includes("bg-emerald-500"), "send button is solid board emerald");
+    assert.ok(send.includes("dark:bg-emerald-500"), "send button is solid emerald");
     assert.ok(!send.includes("rounded-full"), "send button is not a circle");
   });
 });

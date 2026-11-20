@@ -48,10 +48,10 @@ describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer togg
   });
 });
 
-describe("parity PR2 — thinking card (board structure + UI-018 near-white reasoning)", () => {
-  it("header leads with the board's glowing emerald dot", () => {
+describe("parity PR2 — thinking card (dark surface structure + UI-018 near-white reasoning)", () => {
+  it("header leads with the glowing emerald dot", () => {
     assert.ok(
-      thinkingPanel.includes("shadow-[0_0_10px_rgba(52,211,153,0.9)]"),
+      thinkingPanel.includes("shadow-[0_0_10px_rgba(16,185,129,0.9)]"),
       "glowing emerald dot in the thinking header",
     );
   });
@@ -105,32 +105,28 @@ describe("parity PR2 — live trace rows (board rows + UI-021 brightening)", () 
 });
 
 describe("parity PR2 — RUNNING pill + activity header details", () => {
-  it("LiveRunBlock running state is the board's solid emerald pill", () => {
+  it("LiveRunBlock running state is the solid emerald pill", () => {
     const pill = segment(liveRunBlock, 'data-testid="running-pill"', 500);
     assert.ok(pill.includes("bg-emerald-500"), "solid emerald fill");
-    assert.ok(pill.includes("text-[#04120c]"), "near-black text on the pill");
+    assert.ok(pill.includes("text-black"), "black text on the pill");
     assert.ok(pill.includes("border-transparent"), "no dark border on solid pill");
-    assert.ok(pill.includes("bg-[#04120c]"), "near-black pulse dot on solid pill");
+    assert.ok(pill.includes("bg-stone-950"), "near-black pulse dot on solid pill");
     assert.ok(pill.includes("RUNNING ·"), "pill reads RUNNING · elapsed");
   });
 
-  it("LiveRunBlock card uses the board bg-1 surface in dark mode", () => {
-    assert.ok(liveRunBlock.includes("dark:bg-[#121215]"), "board --bg-1 #121215");
+  it("LiveRunBlock card uses the dark surface in dark mode", () => {
+    assert.ok(liveRunBlock.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
   });
 
-  it("activity header: bg-1 card, phone hero 27px, gradient pulse, mono tool split", () => {
-    assert.ok(activityHeader.includes("dark:bg-[#121215]"), "board --bg-1 #121215");
+  it("activity header: dark card, phone hero 27px, emerald-to-cyan gradient pulse, mono tool split", () => {
+    assert.ok(activityHeader.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
     assert.ok(
       activityHeader.includes("text-[27px]") && activityHeader.includes("sm:text-[34px]"),
       "hero elapsed 27px phone / 34px desktop",
     );
     assert.ok(
-      activityHeader.includes("from-emerald-500 to-emerald-400"),
-      "pulse track carries the moving emerald gradient",
-    );
-    assert.ok(
-      !activityHeader.includes("from-emerald-600"),
-      "pulse track does not lead with dark emerald-600",
+      activityHeader.includes("from-emerald-500 to-cyan-400"),
+      "pulse track carries the moving emerald-to-cyan gradient",
     );
     assert.ok(
       activityHeader.includes('data-testid="live-activity-tool"'),

@@ -158,21 +158,21 @@ export function ModelBottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Model and thinking effort"
-        className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 animate-in slide-in-from-bottom duration-250 flex flex-col gap-4 max-h-[90vh] overflow-hidden"
+        className="w-full sm:max-w-md bg-stone-50 dark:bg-[#0e0e12] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-stone-200 dark:border-white/[0.11] animate-in slide-in-from-bottom duration-250 flex flex-col gap-4 max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
-        <div className="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto" />
+        <div className="w-12 h-1.5 bg-stone-300 dark:bg-white/[0.18] rounded-full mx-auto" />
 
         {/* Title & Close */}
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-zinc-100">
+          <h3 className="text-lg font-bold tracking-tight text-stone-900 dark:text-stone-50">
             Model &amp; thinking effort
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+            className="p-1.5 rounded-full text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -180,7 +180,7 @@ export function ModelBottomSheet({
 
         {/* Scrollable Model section */}
         <div className="flex-1 min-h-0 space-y-2">
-          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-[0.1em] bg-stone-200/80 dark:bg-[#1f1f28] text-stone-600 dark:text-stone-400">
             Model
           </span>
 
@@ -194,32 +194,32 @@ export function ModelBottomSheet({
                   onClick={() => onModelChange(item.id)}
                   className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all text-left ${
                     selected
-                      ? "bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 shadow-sm"
-                      : "bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
+                      ? "bg-emerald-50 dark:bg-emerald-500/15 border-2 border-emerald-500 shadow-sm"
+                      : "bg-white dark:bg-[#15151b] border border-stone-200 dark:border-white/[0.09] hover:border-stone-300 dark:hover:border-white/[0.18]"
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
                       className={`p-2.5 rounded-full flex items-center justify-center ${
                         selected
-                          ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
-                          : "bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                          : "bg-stone-100 dark:bg-[#1f1f28] text-stone-600 dark:text-stone-400"
                       }`}
                     >
                       {item.icon === "bot" ? <Bot className="h-5 w-5" /> : <Cpu className="h-5 w-5" />}
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                      <div className="text-sm font-bold text-stone-900 dark:text-stone-100">
                         {item.displayName}
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-zinc-400">
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
                         {item.subtext}
                       </div>
                     </div>
                   </div>
 
                   {selected && (
-                    <div className="h-6 w-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                    <div className="h-6 w-6 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black flex items-center justify-center shadow-sm">
                       <Check className="h-4 w-4 stroke-[3]" />
                     </div>
                   )}
@@ -230,20 +230,20 @@ export function ModelBottomSheet({
         </div>
 
         {/* Pinned Sticky Footer: Thinking effort & Done button */}
-        <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-3 shrink-0">
+        <div className="pt-3 border-t border-stone-200/80 dark:border-white/[0.08] space-y-3 shrink-0">
           <div className="flex items-center justify-between">
-            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-[0.1em] bg-stone-200/80 dark:bg-[#1f1f28] text-stone-600 dark:text-stone-400">
               Thinking effort
             </span>
             {!reasoningSupported && (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
                 Not supported by model
               </span>
             )}
           </div>
 
           <div
-            className={`grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 ${
+            className={`grid grid-cols-3 gap-1 p-1 rounded-2xl bg-stone-200/70 dark:bg-[#15151b] border border-stone-200 dark:border-white/[0.09] ${
               !reasoningSupported ? "opacity-50 pointer-events-none" : ""
             }`}
           >
@@ -254,8 +254,8 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("low")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "low"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
+                  : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
               <Zap className="h-3.5 w-3.5" />
@@ -269,8 +269,8 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("medium")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "medium"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
+                  : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
               {reasoningEffort === "medium" ? (
@@ -286,8 +286,8 @@ export function ModelBottomSheet({
               onClick={() => handleReasoningChange("xhigh")}
               className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
                 reasoningEffort === "xhigh"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-zinc-300 hover:text-slate-900"
+                  ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black shadow-sm"
+                  : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
               <Brain className="h-3.5 w-3.5" />
@@ -295,18 +295,18 @@ export function ModelBottomSheet({
             </button>
           </div>
 
-          <p className="text-xs text-slate-500 dark:text-zinc-400 pl-1">
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 pl-1">
             {effortDescriptions[reasoningEffort]}
           </p>
 
           {/* Engine Management Card */}
-          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700 flex items-center justify-between">
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-[#15151b] border border-stone-200 dark:border-white/[0.09] flex items-center justify-between">
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-                <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">Standalone llama.cpp Engine (Strata)</span>
+                <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
+                <span className="text-xs font-bold text-stone-900 dark:text-stone-100">Standalone llama.cpp Engine (Strata)</span>
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+              <span className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
                 {engineStatus === "running" ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)" : "Stopped · 0 MB VRAM"}
               </span>
             </div>
@@ -315,7 +315,7 @@ export function ModelBottomSheet({
                 type="button"
                 onClick={handleToggleEngine}
                 disabled={engineLoading}
-                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold text-white dark:text-black transition-all shadow-xs flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 active:scale-95"
               >
                 <Power className="h-3.5 w-3.5" />
                 <span>{engineLoading ? "Updating..." : "Start Engine"}</span>
@@ -332,7 +332,7 @@ export function ModelBottomSheet({
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-3.5 px-6 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md transition-all"
+            className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-semibold text-sm shadow-md transition-all active:scale-[0.99]"
           >
             Done
           </button>

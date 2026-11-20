@@ -75,29 +75,29 @@ export function BuildsView({
   ];
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
         
-        {/* Top Header matching M3 */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+        {/* Top Header */}
+        <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               data-testid="builds-menu-btn"
               type="button"
               onClick={onOpenDrawer}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors"
               title="Open menu"
               aria-label="Open navigation menu"
             >
               <Menu className="h-6 w-6" />
             </button>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
               Builds
             </h1>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="hidden sm:inline">Build Tier </span>Ready
             </span>
@@ -107,13 +107,13 @@ export function BuildsView({
         {/* Sub-Navigation: Builds Pipeline vs Projects & Folders */}
         {onNavigateToProjects && (
           <div className="flex items-center gap-2 px-1">
-            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-3 py-1.5 rounded-xl border border-emerald-300/60 dark:border-emerald-800">
+            <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-300/60 dark:border-emerald-500/30">
               Builds Pipeline
             </span>
             <button
               type="button"
               onClick={onNavigateToProjects}
-              className="min-h-[44px] text-xs font-semibold text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
+              className="min-h-[44px] text-xs font-semibold text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-white/[0.06] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
             >
               <FolderGit2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span>Projects &amp; Folders</span>

@@ -16,10 +16,10 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       assert.ok(pillFile.includes('role="status"'), "Must have accessible role=status");
     });
 
-    it("renders stopped state with gray dot, 'Engine Stopped' label, and touch-friendly Start button", () => {
+    it("renders stopped state with neutral stone dot, 'Engine Stopped' label, and touch-friendly Start button", () => {
       assert.ok(
-        pillFile.includes("bg-slate-400") || pillFile.includes("bg-zinc-600"),
-        "Must have gray dot for stopped state"
+        pillFile.includes("bg-stone-400") || pillFile.includes("bg-stone-500"),
+        "Must have neutral stone dot for stopped state"
       );
       assert.ok(pillFile.includes("Engine Stopped"), "Must display 'Engine Stopped'");
       assert.ok(pillFile.includes("Start"), "Must display 'Start' button");
@@ -29,10 +29,10 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       );
     });
 
-    it("renders starting state with pulsing amber dot and 'Starting...' text", () => {
+    it("renders starting state with pulsing emerald dot and 'Starting...' text", () => {
       assert.ok(
-        pillFile.includes("bg-amber-500") && pillFile.includes("animate-pulse"),
-        "Must have pulsing amber dot for starting state"
+        pillFile.includes("bg-emerald-500") && pillFile.includes("animate-pulse"),
+        "Must have pulsing emerald dot for starting state"
       );
       assert.ok(pillFile.includes("Starting..."), "Must display 'Starting...' text");
     });
