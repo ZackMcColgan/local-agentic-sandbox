@@ -6,6 +6,7 @@ import {
   MAX_DRAIN_ITEMS,
 } from "@/lib/board/boardOrchestrator";
 import { isDrainAllowed, readBoardControlState } from "@/lib/board/boardControl";
+import { createProductionStageDeps } from "@/lib/board/productionStageDeps";
 import { formatDrainReportMarkdown } from "@/lib/subagents/morningReport";
 import { activeExecutionSet, ThreadStore } from "@/lib/threads/threadStore";
 import { getSharedSlotScheduler } from "@/lib/slotScheduler";
@@ -61,10 +62,13 @@ export async function POST(req: NextRequest) {
 
     const dryRun = body.dryRun === true;
     const threadStore = dryRun ? null : new ThreadStore();
+    const stageDeps =
+      dryRun || !threadStore ? {} : createProductionStageDeps({ threadStore });
 
     const orchestrator = new BoardOrchestrator({
       maxItems,
       maxDurationMs,
+      ...stageDeps,
       getControlState: () => readBoardControlState(),
       getLiveJobState: () => ({
         isRunning: activeExecutionSet.size > 0,

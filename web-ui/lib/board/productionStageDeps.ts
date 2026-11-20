@@ -39,7 +39,7 @@ export type HostBridgeExecutor = (
 
 export interface StageThreadStore {
   createThread: (input: { title?: string; initialPrompt?: string }) => Thread;
-  getThread: (id: string) => Thread | null;
+  getThread: (id: string) => Promise<Thread | null> | Thread | null;
 }
 
 export interface ProductionStageDepsOptions {
@@ -320,7 +320,7 @@ export function createProductionStageDeps(
       const deadline = now() + reviewerTimeoutMs;
 
       while (true) {
-        const record = threadStore.getThread(thread.id);
+        const record = await threadStore.getThread(thread.id);
         if (record) {
           if (record.status === "failed" || record.status === "stopped") {
             return {
