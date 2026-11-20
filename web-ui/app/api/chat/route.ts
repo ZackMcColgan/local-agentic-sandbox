@@ -639,6 +639,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       heartbeatInterval.unref();
     }
 
+    let runTurnStarted = false;
+    let runTurnFinallyRan = false;
+
     // job-queue-isolation: serialize this job turn through the single in-app
     // queue (one turn executes at a time, FIFO) and run it against its OWN git
     // worktree of the host checkout. A turn arriving while one is running
@@ -651,7 +654,29 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       onQueued: (position) => {
         sendEvent({ type: "status", status: `Queued (position ${position})`, queue_position: position });
       },
+      onSettled: () => {
+        if (runTurnStarted || runTurnFinallyRan) return;
+        clearInterval(heartbeatInterval);
+        if (activeThreadId) {
+          clearTurnAbortController(activeThreadId);
+          clearRoundAbortController(activeThreadId);
+        }
+        req.signal.removeEventListener("abort", cleanupClientSignal);
+        startReadableDrain();
+        try {
+          if (clientDisconnected) {
+            try { writer.abort(new Error("client disconnected")).catch(() => {}); } catch {}
+          } else {
+            const closePromise = writer.close();
+            closePromise.catch(() => {});
+            setTimeout(() => {
+              try { writer.abort(new Error("pre-start abort close timeout")).catch(() => {}); } catch {}
+            }, 1000).unref?.();
+          }
+        } catch {}
+      },
       runTurn: async (_job, _worktree) => {
+      runTurnStarted = true;
       let oracleSnippet = "";
       let oracleCitations: string[] = [];
 
@@ -2159,39 +2184,84 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           const runSynthesisPass = async (): Promise<{ content: string; thinking: string }> => {
             let passContent = "";
             let passThinking = "";
-            for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
-              model: activeModel,
-              messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
-              signal: turnAbortController.signal,
-              reasoning_effort: synthOptions.reasoning_effort,
-              options: synthOptions
-            })) {
-              if (chunk.finish_reason) {
-                lastFinishReason = chunk.finish_reason;
+            const passAbortController = new AbortController();
+            const { inactivityMs, totalMs } = resolveRoundDeadlineMs();
+            let passTimedOut: "inactivity" | "total" | null = null;
+            let passInactivityTimer: ReturnType<typeof setTimeout> | null = null;
+            let passTotalTimer: ReturnType<typeof setTimeout> | null = null;
+            const armPassDeadline = () => {
+              if (passInactivityTimer) clearTimeout(passInactivityTimer);
+              passInactivityTimer = setTimeout(() => {
+                passTimedOut = "inactivity";
+                passAbortController.abort();
+              }, inactivityMs);
+              if (typeof passInactivityTimer.unref === "function") passInactivityTimer.unref();
+            };
+            armPassDeadline();
+            passTotalTimer = setTimeout(() => {
+              passTimedOut = "total";
+              passAbortController.abort();
+            }, totalMs);
+            if (typeof passTotalTimer.unref === "function") passTotalTimer.unref();
+
+            try {
+              for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
+                model: activeModel,
+                messages: fitContextWindow(conversationMessages, { isArtifactTurn: isArtifactRequest }),
+                signal: AbortSignal.any([turnAbortController.signal, passAbortController.signal]),
+                reasoning_effort: synthOptions.reasoning_effort,
+                options: synthOptions
+              })) {
+                if (chunk.finish_reason) {
+                  lastFinishReason = chunk.finish_reason;
+                }
+                if (typeof chunk.promptTokens === "number") {
+                  roundPromptTokens.push(chunk.promptTokens);
+                } else if (typeof chunk.prompt_eval_count === "number") {
+                  roundPromptTokens.push(chunk.prompt_eval_count);
+                }
+                if (typeof chunk.outputTokens === "number") {
+                  turnOutputTokens = chunk.outputTokens;
+                } else if (typeof chunk.eval_count === "number") {
+                  turnOutputTokens = chunk.eval_count;
+                }
+                if (chunk.message?.thinking) {
+                  passThinking += chunk.message.thinking;
+                  armPassDeadline();
+                  const currentCumulativeThought = accumulatedThoughts.length > 0
+                    ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
+                    : passThinking;
+                  streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                  await sendEvent({ type: "thinking", content: chunk.message.thinking });
+                  await sendEvent({ type: "thought", thought: currentCumulativeThought });
+                }
+                if (chunk.message?.content) {
+                  passContent += chunk.message.content;
+                  accumulatedStreamedTokens = appendNarrationChunk(accumulatedStreamedTokens, chunk.message.content);
+                  armPassDeadline();
+                  if (accumulatedStreamedTokens.length > MAX_STREAMED_CONTENT_CHARS) {
+                    accumulatedStreamedTokens += TURN_SIZE_LIMIT_MARKER;
+                    streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+                    await sendEvent({ type: "token", content: TURN_SIZE_LIMIT_MARKER });
+                    passAbortController.abort();
+                    break;
+                  }
+                  const currentCumulativeThought = accumulatedThoughts.length > 0
+                    ? (passThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}` : accumulatedThoughts.join("\n\n"))
+                    : (passThinking || undefined);
+                  streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
+                  await sendEvent({ type: "token", content: chunk.message.content });
+                }
               }
-              if (typeof chunk.outputTokens === "number") {
-                turnOutputTokens = chunk.outputTokens;
-              } else if (typeof chunk.eval_count === "number") {
-                turnOutputTokens = chunk.eval_count;
+            } catch (err: any) {
+              if (passAbortController.signal.aborted && !turnAbortController.signal.aborted) {
+                console.log(`[DBG] synthesis pass aborted timedOut=${passTimedOut}`);
+              } else {
+                throw err;
               }
-              if (chunk.message?.thinking) {
-                passThinking += chunk.message.thinking;
-                const currentCumulativeThought = accumulatedThoughts.length > 0
-                  ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
-                  : passThinking;
-                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
-                await sendEvent({ type: "thinking", content: chunk.message.thinking });
-                await sendEvent({ type: "thought", thought: currentCumulativeThought });
-              }
-              if (chunk.message?.content) {
-                passContent += chunk.message.content;
-                accumulatedStreamedTokens = appendNarrationChunk(accumulatedStreamedTokens, chunk.message.content);
-                const currentCumulativeThought = accumulatedThoughts.length > 0
-                  ? (passThinking ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}` : accumulatedThoughts.join("\n\n"))
-                  : (passThinking || undefined);
-                streamSnapshot.maybeWrite(accumulatedStreamedTokens, currentCumulativeThought);
-                await sendEvent({ type: "token", content: chunk.message.content });
-              }
+            } finally {
+              if (passInactivityTimer) clearTimeout(passInactivityTimer);
+              if (passTotalTimer) clearTimeout(passTotalTimer);
             }
             return { content: passContent, thinking: passThinking };
           };
@@ -2199,7 +2269,22 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           let synthResult = await runSynthesisPass();
           let synthesisPasses = 1;
 
-          if (!synthResult.content.trim() && !turnAbortController.signal.aborted && !explicitStopped) {
+          const initialMarkupEval = evaluateMarkupRound({
+            roundContent: synthResult.content,
+            executedToolCallsCount: 0,
+            consecutiveMarkupFailures,
+            roundFinishReason: lastFinishReason,
+            roundThinking: synthResult.thinking,
+          });
+          const needsSynthRetry =
+            (!synthResult.content.trim() || initialMarkupEval.action === "reprompt") &&
+            !turnAbortController.signal.aborted &&
+            !explicitStopped;
+
+          if (needsSynthRetry) {
+            if (initialMarkupEval.action === "reprompt") {
+              consecutiveMarkupFailures = initialMarkupEval.consecutiveMarkupFailures;
+            }
             // SYNTHESIS-RETRY: an empty post-tool synthesis must never strand the turn.
             // Bank pass 1's thinking BEFORE the retry overwrites it so the thought
             // record never jumps backward.
@@ -2218,7 +2303,23 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
             accumulatedThoughts.push(synthResult.thinking.trim());
           }
 
-          if (synthResult.content.trim()) {
+          const finalMarkupEval = evaluateMarkupRound({
+            roundContent: synthResult.content,
+            executedToolCallsCount: 0,
+            consecutiveMarkupFailures,
+            roundFinishReason: lastFinishReason,
+            roundThinking: synthResult.thinking,
+          });
+
+          if (finalMarkupEval.action === "end_turn" || finalMarkupEval.action === "reprompt") {
+            const marker = finalMarkupEval.marker || "⚠️ [Turn incomplete: Tool-call formatting failed.]";
+            honestEndMarker = marker;
+            accumulatedStreamedTokens += marker;
+            streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
+            await sendEvent({ type: "token", content: marker });
+            currentAssistantMessage = { role: "assistant", content: marker };
+            synthSpan.end("error", { synthesisPasses, markupFailure: true });
+          } else if (synthResult.content.trim()) {
             currentAssistantMessage = { role: "assistant", content: synthResult.content };
             synthSpan.end("ok", { synthesisPasses });
           } else {
@@ -2509,6 +2610,7 @@ let currentAssistantMessage: any = { role: "assistant", content: "" };
           error: friendlyMessage
         });
       } finally {
+        runTurnFinallyRan = true;
         clearInterval(heartbeatInterval);
         if (activeThreadId) {
           activeExecutionSet.delete(activeThreadId);

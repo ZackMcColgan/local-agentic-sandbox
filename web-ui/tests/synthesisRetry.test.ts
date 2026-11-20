@@ -197,3 +197,288 @@ test("Double-empty synthesis ends honestly: work persisted, resumable stamp, inc
   );
   assert.ok(raw.includes("retrying once"), "retry status event must be emitted");
 });
+
+test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline and lands partial content", async () => {
+  const toolCall = {
+    id: "call-1",
+    type: "function",
+    function: { name: "workspace_get_tree", arguments: "{}" }
+  };
+  const prevInactivity = process.env.CHAT_ROUND_INACTIVITY_MS;
+  const prevTotal = process.env.CHAT_ROUND_TOTAL_MS;
+  process.env.CHAT_ROUND_INACTIVITY_MS = "300";
+  process.env.CHAT_ROUND_TOTAL_MS = "5000";
+
+  let completionCount = 0;
+  const server = http.createServer((req, res) => {
+    const url = req.url || "";
+    if (url.includes("/api/ps")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: [] }));
+      return;
+    }
+    if (url.includes("/sse")) {
+      res.writeHead(404);
+      res.end("no mcp");
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      if (url.includes("/api/chat")) {
+        completionCount++;
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        if (completionCount === 1) {
+          res.write(JSON.stringify({ message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] } }) + "\n");
+          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n");
+          res.end();
+        } else if (completionCount === 2) {
+          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n");
+          res.end();
+        } else {
+          // Synthesis pass: emit partial content then stall forever until aborted.
+          res.write(JSON.stringify({ message: { role: "assistant", content: "Partial synth " } }) + "\n");
+          req.on("close", () => {
+            if (!res.writableEnded) res.end();
+          });
+        }
+        return;
+      }
+      res.writeHead(404);
+      res.end("not found");
+    });
+  });
+
+  const tmpThreadsDir = path.resolve(process.cwd(), "tmp-test-synth-deadline-" + Date.now());
+  fs.mkdirSync(tmpThreadsDir, { recursive: true });
+  const prevEnv = {
+    THREADS_DIR: process.env.THREADS_DIR,
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+    LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
+    MCP_SERVER_URL: process.env.MCP_SERVER_URL,
+    BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
+    LLM_ENGINE: process.env.LLM_ENGINE
+  };
+
+  try {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as any).port;
+    process.env.THREADS_DIR = tmpThreadsDir;
+    process.env.LLM_ENGINE = "ollama";
+    process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.MCP_SERVER_URL = `http://127.0.0.1:${port}/mcp`;
+    process.env.BROWSER_MCP_URL = `http://127.0.0.1:${port}/browser`;
+
+    const { NextRequest } = await import("next/server");
+    const chatRouteModule = await import("../app/api/chat/route");
+    const { ThreadStore } = await import("../lib/threads/threadStore");
+
+    const store = new ThreadStore(tmpThreadsDir);
+    const threadId = `thread-synth-deadline-${Date.now()}`;
+    store.createThread({ id: threadId, title: "Synthesis Deadline Test", hostAccess: false });
+
+    const req = new NextRequest("http://localhost:3000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId,
+        userMessageId: "u-1",
+        assistantMessageId: "a-1",
+        messages: [{ role: "user", content: "Inspect.", id: "u-1" }],
+        model: "swift-15-27b-mtp",
+        enableTools: true
+      })
+    });
+
+    const res = await Promise.race([
+      chatRouteModule.POST(req as any),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("POST hung")), 4000))
+    ]);
+    const reader = res.body!.getReader();
+    while (true) {
+      const { done } = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Stream hung past synthesis deadline")), 4000))
+      ]);
+      if (done) break;
+    }
+
+    const thread = await store.getThread(threadId);
+    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    assert.ok(asst, "assistant message must exist");
+    assert.ok(asst!.content.includes("Partial synth"), `partial content must be preserved, got: ${asst!.content}`);
+  } finally {
+    server.close();
+    if (prevInactivity === undefined) delete process.env.CHAT_ROUND_INACTIVITY_MS;
+    else process.env.CHAT_ROUND_INACTIVITY_MS = prevInactivity;
+    if (prevTotal === undefined) delete process.env.CHAT_ROUND_TOTAL_MS;
+    else process.env.CHAT_ROUND_TOTAL_MS = prevTotal;
+    Object.entries(prevEnv).forEach(([k, v]) => {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    });
+    fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
+  }
+});
+
+test("Synthesis cap: runaway synthesis stream stops at MAX_STREAMED_CONTENT_CHARS", async () => {
+  const { MAX_STREAMED_CONTENT_CHARS, TURN_SIZE_LIMIT_MARKER } = await import("../lib/contextBudget");
+  const toolCall = {
+    id: "call-1",
+    type: "function",
+    function: { name: "workspace_get_tree", arguments: "{}" }
+  };
+  const hugeChunk = "x".repeat(Math.ceil(MAX_STREAMED_CONTENT_CHARS / 2) + 5000);
+  const script = [
+    { content: "Checking. ", toolCalls: [toolCall], evalCount: 10 },
+    { content: "" },
+    // Synthesis emits 3 huge chunks (> MAX_STREAMED_CONTENT_CHARS).
+    { content: hugeChunk + hugeChunk + hugeChunk, evalCount: 100 }
+  ];
+
+  const { raw } = await runTurn(script);
+  assert.ok(
+    raw.includes(TURN_SIZE_LIMIT_MARKER.trim().slice(0, 30)),
+    "runaway synthesis must hit MAX_STREAMED_CONTENT_CHARS and emit size limit marker"
+  );
+});
+
+test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded in turn promptTokens", async () => {
+  const toolCall = {
+    id: "call-1",
+    type: "function",
+    function: { name: "workspace_get_tree", arguments: "{}" }
+  };
+  let completionCount = 0;
+  const server = http.createServer((req, res) => {
+    const url = req.url || "";
+    if (url.includes("/api/ps")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: [] }));
+      return;
+    }
+    if (url.includes("/sse")) {
+      res.writeHead(404);
+      res.end("no mcp");
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      if (url.includes("/api/chat")) {
+        completionCount++;
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        if (completionCount === 1) {
+          res.write(JSON.stringify({ message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] } }) + "\n");
+          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 100, eval_count: 10 }) + "\n");
+        } else if (completionCount === 2) {
+          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 200, eval_count: 5 }) + "\n");
+        } else {
+          res.write(JSON.stringify({ message: { role: "assistant", content: "Final synthesis." } }) + "\n");
+          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 333, eval_count: 20 }) + "\n");
+        }
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end("not found");
+    });
+  });
+
+  const tmpThreadsDir = path.resolve(process.cwd(), "tmp-test-synth-tokens-" + Date.now());
+  fs.mkdirSync(tmpThreadsDir, { recursive: true });
+  const prevEnv = {
+    THREADS_DIR: process.env.THREADS_DIR,
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+    LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
+    MCP_SERVER_URL: process.env.MCP_SERVER_URL,
+    BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
+    LLM_ENGINE: process.env.LLM_ENGINE
+  };
+  try {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as any).port;
+    process.env.THREADS_DIR = tmpThreadsDir;
+    process.env.LLM_ENGINE = "ollama";
+    process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.MCP_SERVER_URL = `http://127.0.0.1:${port}/mcp`;
+    process.env.BROWSER_MCP_URL = `http://127.0.0.1:${port}/browser`;
+
+    const { NextRequest } = await import("next/server");
+    const chatRouteModule = await import("../app/api/chat/route");
+    const { ThreadStore } = await import("../lib/threads/threadStore");
+
+    const store = new ThreadStore(tmpThreadsDir);
+    const threadId = `thread-synth-tokens-${Date.now()}`;
+    store.createThread({ id: threadId, title: "Synthesis Tokens Test", hostAccess: false });
+
+    const req = new NextRequest("http://localhost:3000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId,
+        userMessageId: "u-1",
+        assistantMessageId: "a-1",
+        messages: [{ role: "user", content: "Inspect.", id: "u-1" }],
+        model: "swift-15-27b-mtp",
+        enableTools: true
+      })
+    });
+    const res = await chatRouteModule.POST(req as any);
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let raw = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+    }
+    // 100 + 200 + 333 = 633 prompt tokens across [100, 200, 333]
+    assert.ok(
+      raw.includes(`"roundPromptTokens":[100,200,333]`),
+      `synthesis prompt_eval_count (333) must be included in roundPromptTokens, got raw: ${raw.slice(-500)}`
+    );
+  } finally {
+    server.close();
+    Object.entries(prevEnv).forEach(([k, v]) => {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    });
+    fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
+  }
+});
+
+test("Synthesis markup guard: tool-call markup in synthesis triggers one retry; second markup ends with honest marker", async () => {
+  const toolCall = {
+    id: "call-1",
+    type: "function",
+    function: { name: "workspace_get_tree", arguments: "{}" }
+  };
+  const markupText = `<function=workspace_read_file><parameter=path>foo.ts</parameter></function>`;
+  const script = [
+    { content: "Checking. ", toolCalls: [toolCall], evalCount: 10 },
+    { content: "" },
+    // Synthesis pass 1: emits tool-call markup as text
+    { content: markupText, evalCount: 20 },
+    // Synthesis retry pass 2: emits tool-call markup again
+    { content: markupText, evalCount: 20 }
+  ];
+
+  const { asst, raw, completionCount } = await runTurn(script);
+  assert.ok(asst, "assistant message must exist");
+  assert.ok(completionCount >= 4, `markup in synthesis must trigger retry (got ${completionCount})`);
+  assert.ok(
+    raw.includes("retrying once") || raw.includes("tool calls were not executable"),
+    "must emit retry status or honest markup end marker"
+  );
+  assert.ok(
+    asst!.content.includes("tool calls were not executable"),
+    `second markup failure must end with honest marker, got: ${asst!.content}`
+  );
+});
