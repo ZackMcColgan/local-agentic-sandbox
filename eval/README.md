@@ -36,3 +36,11 @@ See [CHUNKED-BASELINE.md](./CHUNKED-BASELINE.md) for the chunked baseline regres
 ## Output
 
 Each run writes traces, per-task evidence, and a scorecard (`scorecard.json` and `scorecard.md`) to `eval/results/<run-id>/`.
+
+## Baseline
+
+Incumbent engine baseline (pack v1.0.0, banked 2026-11-20):
+[`results/baseline-qwen3.8-flash-next/endpoint/scorecard.md`](./results/baseline-qwen3.8-flash-next/endpoint/scorecard.md)
+— endpoint mode **3/5 PASS**. Method, the job-mode results, and runner
+caveats are documented in
+[`results/baseline-qwen3.8-flash-next/BANKING-NOTES.md`](./results/baseline-qwen3.8-flash-next/BANKING-NOTES.md).
