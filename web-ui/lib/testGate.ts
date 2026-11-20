@@ -823,7 +823,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/threadsResumeRestartExecution.test.ts",
       "tests/supervisorGitOpsIntegration.test.ts",
       "tests/taskPathObservability.test.ts",
-      "tests/taskPathExecutionFix.test.ts"
+      "tests/taskPathExecutionFix.test.ts",
+      "tests/completionGateAndPlanningAbort.test.ts"
     ]
   },
   {
