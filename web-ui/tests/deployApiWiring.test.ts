@@ -26,19 +26,70 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
     }
   });
 
-  it("POST /api/deploy toggleKillSwitch updates process.env.SELF_DEPLOY_ENABLED", async () => {
+  it("POST /api/deploy toggleKillSwitch updates process.env.SELF_DEPLOY_ENABLED for same-origin requests", async () => {
     const original = process.env.SELF_DEPLOY_ENABLED;
     process.env.SELF_DEPLOY_ENABLED = "false";
 
     try {
       const req = new NextRequest("http://localhost:3000/api/deploy", {
         method: "POST",
+        headers: {
+          host: "localhost:3000",
+          origin: "http://localhost:3000"
+        },
         body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
       });
       const res = await POST(req);
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.selfDeployEnabled, true);
+      assert.equal(process.env.SELF_DEPLOY_ENABLED, "true");
+    } finally {
+      process.env.SELF_DEPLOY_ENABLED = original;
+    }
+  });
+
+  it("POST /api/deploy toggleKillSwitch rejects cross-origin and missing-origin requests with 403 without changing state", async () => {
+    const original = process.env.SELF_DEPLOY_ENABLED;
+    process.env.SELF_DEPLOY_ENABLED = "false";
+
+    try {
+      // Cross-origin Origin header
+      const crossOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
+        method: "POST",
+        headers: {
+          host: "localhost:3000",
+          origin: "http://evil.example.com"
+        },
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+      });
+      const crossRes = await POST(crossOriginReq);
+      assert.equal(crossRes.status, 403);
+      assert.equal(process.env.SELF_DEPLOY_ENABLED, "false");
+
+      // Missing Origin and Referer headers
+      const noOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
+        method: "POST",
+        headers: {
+          host: "localhost:3000"
+        },
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+      });
+      const noOriginRes = await POST(noOriginReq);
+      assert.equal(noOriginRes.status, 403);
+      assert.equal(process.env.SELF_DEPLOY_ENABLED, "false");
+
+      // Same-origin Referer fallback works when Origin is absent
+      const refererReq = new NextRequest("http://localhost:3000/api/deploy", {
+        method: "POST",
+        headers: {
+          host: "localhost:3000",
+          referer: "http://localhost:3000/settings"
+        },
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+      });
+      const refererRes = await POST(refererReq);
+      assert.equal(refererRes.status, 200);
       assert.equal(process.env.SELF_DEPLOY_ENABLED, "true");
     } finally {
       process.env.SELF_DEPLOY_ENABLED = original;

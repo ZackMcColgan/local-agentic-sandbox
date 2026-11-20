@@ -298,6 +298,38 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     );
   });
 
+  it("Kill switch OFF blocks executeDeploy before running any git or shell commands", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const invokedCommands: string[] = [];
+
+    const pipeline = new SelfDeployPipeline({
+      enabled: false,
+      commandRunner: async (file: string, args: string[]) => {
+        invokedCommands.push([file, ...args].join(" "));
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+    });
+
+    await assert.rejects(
+      async () => {
+        await pipeline.executeDeploy({
+          branchName: "feat/task-kill-switch-check",
+          previousSha: "sha-1",
+          newSha: "sha-2",
+          preRollout: true
+        });
+      },
+      /Self-deploy is disabled by kill switch/i,
+      "executeDeploy must throw kill-switch error when disabled"
+    );
+
+    assert.equal(
+      invokedCommands.length,
+      0,
+      `Expected ZERO commands to run when kill switch is off, but ran: ${invokedCommands.join("; ")}`
+    );
+  });
+
   it("Self-deploy from main is strictly blocked", async () => {
     const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
 

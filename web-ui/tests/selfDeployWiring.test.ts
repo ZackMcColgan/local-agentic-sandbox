@@ -163,4 +163,61 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
     assert.ok(deployBtn, "BuildsView must render data-testid='merge-deploy-btn'");
     assert.equal(deployBtn.textContent?.trim(), "Merge to develop & Deploy");
   });
+
+  it("Test 4: LiveRunBlock renders Merge to develop & Rollout button disabled when self-deploy is off and enabled when on", async () => {
+    const { LiveRunBlock } = await import("../components/LiveRunBlock.js");
+    const sampleTask: TaskManifest = {
+      taskId: "task-deploy-btn-state-1",
+      goal: "Verify merge rollout button disabled state",
+      toolchain: "node:22",
+      branchName: "feat/task-deploy-btn-state",
+      status: "completed",
+      currentMilestoneIndex: 1,
+      milestones: [
+        {
+          id: "M1",
+          title: "Done",
+          description: "Done",
+          status: "completed",
+          builderIterations: 1,
+          criticRounds: 1,
+          acceptanceCriteria: []
+        }
+      ],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString()
+    };
+
+    const htmlOff = renderToString(
+      React.createElement(LiveRunBlock, {
+        task: sampleTask,
+        onDeployRun: () => {},
+        selfDeployEnabled: false
+      })
+    );
+    const winOff = new Window();
+    winOff.document.body.innerHTML = htmlOff;
+    const btnOff = winOff.document.querySelector('[data-testid="merge-rollout-btn"]') as HTMLButtonElement | null;
+    assert.ok(btnOff, "Must render merge-rollout-btn when self-deploy is off");
+    assert.equal(btnOff.disabled, true, "merge-rollout-btn must be disabled when self-deploy is off");
+    assert.match(btnOff.textContent || "", /Merge to develop & Rollout/);
+
+    const htmlOn = renderToString(
+      React.createElement(LiveRunBlock, {
+        task: sampleTask,
+        onDeployRun: () => {},
+        selfDeployEnabled: true
+      })
+    );
+    const winOn = new Window();
+    winOn.document.body.innerHTML = htmlOn;
+    const btnOn = winOn.document.querySelector('[data-testid="merge-rollout-btn"]') as HTMLButtonElement | null;
+    assert.ok(btnOn, "Must render merge-rollout-btn when self-deploy is on");
+    assert.equal(btnOn.disabled, false, "merge-rollout-btn must be enabled when self-deploy is on");
+    assert.match(btnOn.textContent || "", /Merge to develop & Rollout/);
+  });
 });
