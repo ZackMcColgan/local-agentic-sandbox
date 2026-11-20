@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import { generatePlanSpec, parsePlanSpec, type PlanSpec } from "../lib/subagents/planner.js";
+import { generatePlanSpec, parsePlanSpec, resolveSingleArtifactFile, type PlanSpec } from "../lib/subagents/planner.js";
 
 describe("Phase 1 — Planner Worker Suite", () => {
   const taskPrompt = "Build a draw.io architecture diagram of this repo's current state, README-ready.";
@@ -197,5 +197,101 @@ describe("Phase 1 — Planner Worker Suite", () => {
         process.env.PLANNER_MODEL = savedPlannerModel;
       }
     }
+  });
+
+  describe("AUD-08 — Filename parsing and PlanSpec retry", () => {
+    it("(a) does not misparse prose 'Node.js' as a filename and rejects SNIPPET with no real file target", async () => {
+      const resolved = resolveSingleArtifactFile("Build a Node.js utility for parsing logs");
+      assert.equal(resolved, null, "Prose 'Node.js' must not resolve to a filename");
+
+      await assert.rejects(
+        () =>
+          generatePlanSpec({
+            taskId: "task-nodejs-prose",
+            goal: "Build a Node.js utility for parsing logs",
+            scope: "SNIPPET"
+          }),
+        /artifact file target|no valid.*file/i,
+        "SNIPPET prompt with no real file target must fail honestly instead of inventing Node.js"
+      );
+    });
+
+    it("(a2) prefers longest path-like match over prose 'Node.js'", () => {
+      const resolved = resolveSingleArtifactFile(
+        "Write a Node.js module at src/utils/math.mjs with add and subtract helpers"
+      );
+      assert.deepEqual(resolved, { filename: "src/utils/math.mjs", filetype: "mjs" });
+    });
+
+    it("(b) resolves .mjs and .cjs file targets correctly", () => {
+      assert.deepEqual(
+        resolveSingleArtifactFile("Create src/cli/runner.mjs to execute tasks"),
+        { filename: "src/cli/runner.mjs", filetype: "mjs" }
+      );
+      assert.deepEqual(
+        resolveSingleArtifactFile("Create scripts/build.cjs for packaging"),
+        { filename: "scripts/build.cjs", filetype: "cjs" }
+      );
+    });
+
+    it("(c) retries empty/truncated PlanSpec JSON up to 3 times and succeeds on retry", async () => {
+      let calls = 0;
+      const flakyGenerate = async (req: any) => {
+        calls++;
+        if (calls === 1) {
+          return { text: "", model: req.model, loadDurationMs: 0, totalDurationMs: 1 };
+        }
+        if (calls === 2) {
+          return { text: '{"milestones": [', model: req.model, loadDurationMs: 0, totalDurationMs: 1 };
+        }
+        return {
+          text: JSON.stringify({
+            milestones: [
+              {
+                id: "M1",
+                title: "Recovered Milestone",
+                description: "Generated on attempt 3",
+                plannedFiles: ["src/app.ts"],
+                acceptanceCriteria: [{ id: "AC-1-1", assertion: "Works" }]
+              }
+            ]
+          }),
+          model: req.model,
+          loadDurationMs: 0,
+          totalDurationMs: 1
+        };
+      };
+
+      const spec = await generatePlanSpec({
+        taskId: "task-retry-succeed",
+        goal: "Implement feature with flaky planner",
+        generate: flakyGenerate
+      });
+
+      assert.equal(calls, 3, "Planner must retry until attempt 3 succeeds");
+      assert.equal(spec.milestones.length, 1);
+      assert.equal(spec.milestones[0].title, "Recovered Milestone");
+    });
+
+    it("(c) fails honestly after 3 attempts on persistent empty/truncated PlanSpec JSON", async () => {
+      let calls = 0;
+      const alwaysEmptyGenerate = async (req: any) => {
+        calls++;
+        return { text: "", model: req.model, loadDurationMs: 0, totalDurationMs: 1 };
+      };
+
+      await assert.rejects(
+        () =>
+          generatePlanSpec({
+            taskId: "task-retry-exhausted",
+            goal: "Implement feature with broken planner",
+            generate: alwaysEmptyGenerate
+          }),
+        /3 attempts|empty/i,
+        "Planner must fail honestly with a clear error after exhausting retries"
+      );
+
+      assert.equal(calls, 3, "Planner must attempt exactly 3 times before failing");
+    });
   });
 });

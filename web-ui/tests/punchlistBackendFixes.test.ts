@@ -531,6 +531,74 @@ describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBa
   });
 });
 
+describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution failure", () => {
+  it("returns 201 with milestones: [] and verbatim planner error in journal when goal has no resolvable artifact file", async () => {
+    const { POST } = await import("../app/api/tasks/route.js");
+    const req = new Request("http://localhost:3000/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        goal: "Build a Node.js utility for parsing logs",
+        scope: "SNIPPET",
+        autoExecute: false
+      })
+    });
+
+    const res = await POST(req);
+    assert.equal(res.status, 201, "POST /api/tasks must return 201 when planner cannot resolve an artifact target");
+    const body = await res.json();
+    assert.ok(body.taskId, "Must return taskId");
+    assert.deepEqual(body.manifest.milestones, [], "Manifest must have empty milestones when planning fails");
+    const plannerEntries = (body.manifest.journal || []).filter((j: any) => j.role === "planner");
+    assert.ok(plannerEntries.length >= 1, "Journal must contain a planner entry");
+    assert.ok(
+      plannerEntries.some((j: any) => String(j.message).includes("Planner could not resolve a valid artifact file target")),
+      `Planner journal entry must record the planner error verbatim, got: ${JSON.stringify(plannerEntries)}`
+    );
+  });
+
+  it("does not launch execution or complete task when autoExecute is true and planning fails", async () => {
+    const { POST, GET } = await import("../app/api/tasks/route.js");
+    const { activeExecutionSet } = await import("../lib/threads/threadStore.js");
+    const req = new Request("http://localhost:3000/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        goal: "Build a Node.js utility for parsing logs",
+        scope: "SNIPPET",
+        autoExecute: true
+      })
+    });
+
+    const res = await POST(req);
+    assert.equal(res.status, 201, "POST /api/tasks must return 201 even with autoExecute: true");
+    const body = await res.json();
+    assert.ok(body.taskId, "Must return taskId");
+    assert.deepEqual(body.manifest.milestones, [], "Manifest must have empty milestones");
+    assert.notEqual(body.manifest.status, "completed", "Task must not be marked completed");
+    assert.equal(activeExecutionSet.has(body.taskId), false, "Task must not be in activeExecutionSet");
+
+    const journalMessages = (body.manifest.journal || []).map((j: any) => String(j.message));
+    assert.ok(
+      journalMessages.some((m: string) => m.includes("Planner could not resolve a valid artifact file target")),
+      "Journal must include verbatim planner error"
+    );
+    assert.ok(
+      journalMessages.some((m: string) => /execution was not started|not started/i.test(m)),
+      `Journal must record that execution was not started, got: ${JSON.stringify(journalMessages)}`
+    );
+
+    // Yield briefly and verify via GET that no background execution completed the task
+    await new Promise((r) => setTimeout(r, 50));
+    const getRes = await GET(new Request(`http://localhost:3000/api/tasks?taskId=${encodeURIComponent(body.taskId)}`));
+    assert.equal(getRes.status, 200);
+    const getBody = await getRes.json();
+    assert.notEqual(getBody.task.status, "completed", "Task must never stamp completed after planning failure");
+    assert.equal(getBody.activeWorkers, 0, "No active workers should be running");
+  });
+});
+
+
 
 
 

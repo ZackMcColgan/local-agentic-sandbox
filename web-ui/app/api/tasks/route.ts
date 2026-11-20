@@ -79,11 +79,45 @@ export async function POST(req: Request) {
     const taskId = `task-${Date.now()}`;
 
     // Generate SPEC.md and decomposed milestones
-    const planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope: body.scope });
-    const specMarkdown = planSpec.toMarkdown();
+    let planSpec: Awaited<ReturnType<typeof generatePlanSpec>> | null = null;
+    let plannerResolutionError: string | null = null;
+    try {
+      planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope: body.scope });
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("could not resolve a valid artifact file target")) {
+        plannerResolutionError = message;
+      } else {
+        throw err;
+      }
+    }
+    const specMarkdown = planSpec ? planSpec.toMarkdown() : "";
 
     const defaultBranch = `feat/task-${taskId.replace(/^task-/, "").slice(0, 12)}`;
     const branchName = body.branchName || defaultBranch;
+
+    const autoExecute = body.autoExecute !== false;
+    const nowIso = new Date().toISOString();
+    const journal: TaskManifest["journal"] = plannerResolutionError
+      ? [
+          {
+            timestamp: nowIso,
+            role: "planner",
+            message: plannerResolutionError
+          },
+          {
+            timestamp: nowIso,
+            role: "supervisor",
+            message: "Execution was not started because planning failed."
+          }
+        ]
+      : [
+          {
+            timestamp: nowIso,
+            role: "planner",
+            message: `Decomposed goal into ${planSpec!.milestones.length} milestones. SPEC.md generated.`
+          }
+        ];
 
     const manifest: TaskManifest = {
       taskId,
@@ -92,34 +126,28 @@ export async function POST(req: Request) {
       branch: branchName,
       toolchain,
       scope: body.scope,
-      status: "active",
-      milestones: planSpec.milestones,
+      status: plannerResolutionError ? "parked" : "active",
+      ...(plannerResolutionError ? { parkedReason: plannerResolutionError } : {}),
+      milestones: planSpec ? planSpec.milestones : [],
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
       autoDeployOnGreen: Boolean(body.autoDeployOnGreen),
-      journal: [
-        {
-          timestamp: new Date().toISOString(),
-          role: "planner",
-          message: `Decomposed goal into ${planSpec.milestones.length} milestones. SPEC.md generated.`
-        }
-      ],
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      journal,
+      startedAt: nowIso,
+      updatedAt: nowIso
     };
 
     tasksRegistry.set(taskId, manifest);
-    const abortController = new AbortController();
-    activeAbortControllers.set(taskId, abortController);
-    supervisor.setAbortController(taskId, abortController);
-    activeExecutionSet.add(taskId);
-
     supervisor.saveCheckpoint(manifest);
 
     // Task 4 (Sprint A2): Wire POST /api/tasks to trigger asynchronous executeTaskWithRecovery when autoExecute !== false
-    const autoExecute = body.autoExecute !== false;
-    if (autoExecute) {
+    if (!plannerResolutionError && autoExecute) {
+      const abortController = new AbortController();
+      activeAbortControllers.set(taskId, abortController);
+      supervisor.setAbortController(taskId, abortController);
+      activeExecutionSet.add(taskId);
+
       (async () => {
         try {
           const executor = createProductionStepExecutor({ signal: abortController.signal });
@@ -143,7 +171,7 @@ export async function POST(req: Request) {
         taskId,
         manifest,
         specMarkdown,
-        status: autoExecute ? "active" : "pending"
+        status: plannerResolutionError ? "parked" : autoExecute ? "active" : "pending"
       },
       { status: 201 }
     );

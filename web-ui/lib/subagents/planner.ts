@@ -71,19 +71,88 @@ export function classifyTaskComplexity(goal: string): TaskComplexity {
   return "PROJECT";
 }
 
+const SUPPORTED_ARTIFACT_EXTENSIONS =
+  "svg|html|json|csv|md|txt|yaml|yml|ts|tsx|mts|cts|js|jsx|mjs|cjs|py|sh|sql";
+
+const PROSE_TECH_NAMES = new Set([
+  "node.js",
+  "next.js",
+  "vue.js",
+  "react.js",
+  "nuxt.js",
+  "express.js",
+  "nest.js",
+  "three.js",
+  "d3.js",
+  "chart.js",
+  "electron.js",
+  "alpine.js",
+  "solid.js",
+  "svelte.js",
+  "preact.js",
+  "angular.js",
+  "ember.js",
+  "backbone.js",
+  "moment.js",
+  "day.js",
+  "pdf.js",
+  "video.js",
+  "phaser.js",
+  "reveal.js",
+  "leaflet.js",
+  "p5.js",
+  "bun.js",
+  "deno.js"
+]);
+
+function extractCandidateFilePaths(goal: string): string[] {
+  const pattern = new RegExp(
+    `(?:^|[\\s"'\`(\\[])(\\.?\\.?\\/?(?:[a-zA-Z0-9_\\-.]+\\/)*[a-zA-Z0-9_\\-.]+\\.(?:${SUPPORTED_ARTIFACT_EXTENSIONS}))(?=$|[\\s"'\`),.;:!?\\]])`,
+    "gi"
+  );
+  const candidates: string[] = [];
+  for (const match of goal.matchAll(pattern)) {
+    const raw = match[1];
+    if (!raw) continue;
+    const normalized = raw.replace(/^\.\//, "");
+    if (!validateRelativePlanPath(normalized)) continue;
+    const hasDir = normalized.includes("/");
+    if (!hasDir) {
+      if (PROSE_TECH_NAMES.has(normalized.toLowerCase())) continue;
+      if (/^[A-Z][a-zA-Z0-9_-]*\.js$/.test(normalized)) continue;
+    }
+    candidates.push(normalized);
+  }
+  return candidates;
+}
+
 /**
  * Extracts the single artifact file name or default from a SINGLE_ARTIFACT or SNIPPET goal.
+ * Returns null if no real file path or explicit filetype creation target is present.
  */
-export function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } {
-  const matchFile = goal.match(/\b([a-zA-Z0-9_\-\.\/]+\.(svg|html|json|csv|md|txt|yaml|yml|ts|tsx|js|jsx|py|sh|sql))\b/i);
-  if (matchFile) {
-    const fn = matchFile[1];
+export function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } | null {
+  const candidates = extractCandidateFilePaths(goal);
+  if (candidates.length > 0) {
+    // Prefer path-like matches (containing '/') over bare filenames, then longest match.
+    candidates.sort((a, b) => {
+      const aHasDir = a.includes("/") ? 1 : 0;
+      const bHasDir = b.includes("/") ? 1 : 0;
+      if (aHasDir !== bHasDir) return bHasDir - aHasDir;
+      return b.length - a.length;
+    });
+    const fn = candidates[0];
     const ext = fn.split(".").pop()?.toLowerCase() || "txt";
     return { filename: fn, filetype: ext };
   }
 
-  const matchType = goal.match(/\b(svg|html|json|csv|md|markdown|txt|yaml|yml|typescript|javascript|python|bash|shell|ts|tsx|js|jsx|py|sh|sql)\b/i);
-  const rawType = matchType ? matchType[1].toLowerCase() : "txt";
+  const explicitTypeMatch = goal.match(
+    /\b(?:create|generate|make|build|write)\s+(?:me\s+)?(?:a|an)\s+(svg|html|json|csv|md|markdown|txt|yaml|yml|typescript|javascript|python|bash|shell)\b/i
+  );
+  if (!explicitTypeMatch) {
+    return null;
+  }
+
+  const rawType = explicitTypeMatch[1].toLowerCase();
   let mappedExt = rawType;
   if (rawType === "markdown") mappedExt = "md";
   if (rawType === "typescript") mappedExt = "ts";
@@ -345,7 +414,13 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
   // SNIPPET / SINGLE_ARTIFACT Path: Exactly 1 milestone, 1 file, no scaffolding
   // =========================================================================
   if (userScope === "SNIPPET" || complexity === "SINGLE_ARTIFACT") {
-    const { filename, filetype } = resolveSingleArtifactFile(goal);
+    const resolvedArtifact = resolveSingleArtifactFile(goal);
+    if (!resolvedArtifact) {
+      throw new Error(
+        `Planner could not resolve a valid artifact file target from goal: "${goal}". Provide an explicit file path.`
+      );
+    }
+    const { filename, filetype } = resolvedArtifact;
     milestones = [
       {
         id: "M1",
@@ -449,23 +524,37 @@ Respond strictly in valid JSON matching this schema:
     if (repoMapContext) promptParts.push(repoMapContext);
     const prompt = promptParts.join("\r\n\r\n");
 
-    const res = await generate({
-      model: modelToUse,
-      prompt,
-      format: "json",
-      keepAlive: input.keepAlive ?? "30m",
-      reasoningEffort: "balanced",
-      options: { temperature: 0.2, num_predict: 4096 }
-    });
-
-    const parsed = repairAndParsePlanJson(res.text);
+    const MAX_PLAN_SPEC_ATTEMPTS = 3;
     let rawList: any[] | undefined;
-    if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
-      // Respect SCRIPT cap of 2 milestones max
-      rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
-      milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
+    for (let attempt = 1; attempt <= MAX_PLAN_SPEC_ATTEMPTS; attempt++) {
+      const attemptPrompt =
+        attempt === 1
+          ? prompt
+          : `${prompt}\r\n\r\nPrevious response was empty, truncated, or invalid JSON with no milestones (attempt ${attempt}/${MAX_PLAN_SPEC_ATTEMPTS}). Return ONLY a complete, valid JSON object with a non-empty "milestones" array.`;
+
+      const res = await generate({
+        model: modelToUse,
+        prompt: attemptPrompt,
+        format: "json",
+        keepAlive: input.keepAlive ?? "30m",
+        reasoningEffort: "balanced",
+        options: { temperature: 0.2, num_predict: 4096 }
+      });
+
+      const parsed = repairAndParsePlanJson(res.text);
+      if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
+        // Respect SCRIPT cap of 2 milestones max
+        rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
+        milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
+        validatePlanSpecMilestones(milestones, rawList);
+        break;
+      }
     }
-    validatePlanSpecMilestones(milestones, rawList);
+    if (milestones.length === 0) {
+      throw new Error(
+        `Invalid PlanSpec: planner produced empty milestones (empty or truncated PlanSpec JSON) after ${MAX_PLAN_SPEC_ATTEMPTS} attempts.`
+      );
+    }
   }
 
   if (milestones.length === 0) {
