@@ -183,3 +183,48 @@ describe("wiring is live, not dead code (audit guard)", () => {
     assert.match(src, /queuePosition/);
   });
 });
+
+describe("pre-start queued-abort SSE cleanup (AUD-11)", () => {
+  it("aborted queued turn settles with runTurn never invoked and onSettled cleanup fired", async () => {
+    const queue = new JobQueue();
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((r) => { releaseA = r; });
+
+    const a = serializeTurn(queue, { id: "A", threadId: "t1", prompt: "a" }, {
+      runTurn: async () => { await gateA; },
+    });
+
+    const controllerB = new AbortController();
+    let runTurnBInvoked = false;
+    let settledStatus: string | null = null;
+    let cleanupCount = 0;
+
+    const b = serializeTurn(queue, { id: "B", threadId: "t2", prompt: "b" }, {
+      signal: controllerB.signal,
+      runTurn: async () => {
+        runTurnBInvoked = true;
+      },
+      onSettled: (status) => {
+        settledStatus = status;
+        if (!runTurnBInvoked) {
+          cleanupCount++;
+        }
+      },
+    });
+
+    // Abort B while A is still holding the queue/slot
+    controllerB.abort();
+    releaseA();
+    await Promise.all([a.settled, b.settled]);
+
+    assert.equal(runTurnBInvoked, false, "aborted queued turn must never invoke runTurn");
+    assert.equal(settledStatus, "failed", "aborted queued turn must settle as failed");
+    assert.equal(cleanupCount, 1, "pre-start cleanup must run exactly once");
+  });
+
+  it("chat route tracks runTurnStarted and cleans up pre-start SSE resources on settle", () => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "app", "api", "chat", "route.ts"), "utf8");
+    assert.match(src, /runTurnStarted/);
+    assert.match(src, /onSettled:\s*\(\)\s*=>/);
+  });
+});
