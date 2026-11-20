@@ -11,6 +11,31 @@ import {
 import { getControlStopReason, readBoardControlState } from "./boardControl";
 import type { BoardControlRecord } from "./boardControlStore";
 import { getSharedSlotScheduler, type SlotUtilizationMetrics } from "../slotScheduler";
+import {
+  isFlowMonitorStage2Enabled,
+  monitorPrToConclusion,
+  type FlowMonitorBoardItem,
+  type MonitorPrResult,
+  type PrChecksSnapshot,
+} from "./flowMonitor";
+import {
+  evaluateReviewerGate,
+  isReviewerGateStage3Enabled,
+  type EvaluateReviewerGateOptions,
+  type MechanicalCheckInput,
+  type ReviewerGateResult,
+} from "./reviewerGate";
+import {
+  AgreementLedgerStore,
+  type PersistentAgreementLedger,
+} from "./agreementLedger";
+import {
+  isSelfDeployVerifiedEnabled,
+  runSelfDeployVerified,
+  type DeployInput,
+  type SelfDeployVerifiedDeps,
+  type SelfDeployVerifiedResult,
+} from "../deploy/selfDeployVerified";
 
 export const MAX_DRAIN_ITEMS = 5;
 export const MAX_DRAIN_DURATION_MS = 10 * 60 * 1000;
@@ -30,8 +55,35 @@ export interface TriageOutcome {
   attempts: number;
 }
 
+export interface ShadowStageOutcomes {
+  flowMonitor?: MonitorPrResult;
+  reviewerGate?: ReviewerGateResult;
+  selfDeploy?: SelfDeployVerifiedResult;
+}
+
+export interface PrOpenShadowResult {
+  flowMonitor?: MonitorPrResult;
+  reviewerGate?: ReviewerGateResult;
+  ledger?: PersistentAgreementLedger;
+}
+
+export interface OrchestratorStageFlags {
+  flowMonitor?: boolean;
+  reviewerGate?: boolean;
+  selfDeploy?: boolean;
+}
+
 export type JobExecutionOutcome =
-  | { status: "completed"; threadId: string; summary?: string }
+  | {
+      status: "completed";
+      threadId: string;
+      summary?: string;
+      prNumber?: number;
+      headSha?: string;
+      merged?: boolean;
+      mergeSha?: string;
+      deployTag?: string;
+    }
   | { status: "chunk-complete"; threadId: string; handoff: DispatcherHandoff }
   | { status: "failed"; threadId?: string; error: string; issue?: OrchestratorIssue }
   | { status: "in-progress"; threadId: string; reason?: string };
@@ -44,6 +96,7 @@ export interface DrainItemOutcome {
   threadId?: string;
   reason?: string;
   triage?: TriageOutcome;
+  shadowStages?: ShadowStageOutcomes;
   durationMs: number;
 }
 
@@ -101,6 +154,29 @@ export interface BoardOrchestratorDeps {
     issue: OrchestratorIssue,
     item: DispatcherBoardItem
   ) => Promise<boolean> | boolean;
+  stageFlags?: OrchestratorStageFlags;
+  agreementLedger?: AgreementLedgerStore;
+  flowMonitor?: {
+    pollChecks: (item: FlowMonitorBoardItem) => Promise<PrChecksSnapshot>;
+    issueThread?: (params: {
+      item: FlowMonitorBoardItem;
+      brief: string;
+    }) => Promise<{ threadId: string }>;
+  };
+  reviewerGate?: {
+    getMechanicalInput: (
+      item: DispatcherBoardItem,
+      pr: { prNumber: number; headSha: string }
+    ) => Promise<MechanicalCheckInput> | MechanicalCheckInput;
+    issueReviewerThread: EvaluateReviewerGateOptions["issueReviewerThread"];
+  };
+  selfDeploy?: {
+    deps?: SelfDeployVerifiedDeps;
+    getDeployInput?: (
+      item: DispatcherBoardItem,
+      merge: { mergeSha: string; targetTag?: string }
+    ) => DeployInput;
+  };
   log?: (message: string) => void;
 }
 
@@ -219,6 +295,117 @@ export class BoardOrchestrator {
         threadLink: patch.threadLink,
       });
     }
+  }
+
+  private resolveFlowMonitorEnabled(): boolean {
+    if (typeof this.deps.stageFlags?.flowMonitor === "boolean") {
+      return this.deps.stageFlags.flowMonitor;
+    }
+    return (
+      isFlowMonitorStage2Enabled(undefined) ||
+      process.env.BOARD_STAGE_FLOW_MONITOR === "true"
+    );
+  }
+
+  private resolveReviewerGateEnabled(): boolean {
+    return isReviewerGateStage3Enabled(this.deps.stageFlags?.reviewerGate);
+  }
+
+  private resolveSelfDeployEnabled(): boolean {
+    return isSelfDeployVerifiedEnabled(this.deps.stageFlags?.selfDeploy);
+  }
+
+  private getAgreementLedger(): AgreementLedgerStore {
+    return this.deps.agreementLedger ?? new AgreementLedgerStore(this.deps.boardDir);
+  }
+
+  async runPrOpenShadowStages(
+    item: DispatcherBoardItem,
+    pr: { prNumber: number; headSha: string }
+  ): Promise<PrOpenShadowResult> {
+    const result: PrOpenShadowResult = {};
+
+    if (this.deps.flowMonitor) {
+      const flowItem: FlowMonitorBoardItem = {
+        ...item,
+        prNumber: pr.prNumber,
+      };
+      const stage2Enabled = this.resolveFlowMonitorEnabled();
+      result.flowMonitor = await monitorPrToConclusion({
+        item: flowItem,
+        stage2Enabled,
+        pollChecks: this.deps.flowMonitor.pollChecks,
+        issueThread:
+          this.deps.flowMonitor.issueThread ??
+          (async () => ({ threadId: "shadow-noop" })),
+        log: this.log,
+      });
+    }
+
+    if (this.deps.reviewerGate) {
+      const stage3Enabled = this.resolveReviewerGateEnabled();
+      const mechanicalInput = await this.deps.reviewerGate.getMechanicalInput(item, pr);
+      const gateResult = await evaluateReviewerGate({
+        itemId: item.id,
+        brief: item.brief,
+        mechanicalInput,
+        stage3Enabled,
+        issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
+        log: this.log,
+      });
+      result.reviewerGate = {
+        ...gateResult,
+        mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
+      };
+      result.ledger = this.getAgreementLedger().recordShadowVerdict({
+        prNumber: pr.prNumber,
+        headSha: pr.headSha,
+        reviewerVerdict: gateResult.verdict,
+      });
+    }
+
+    return result;
+  }
+
+  async runMergedShadowStage(
+    item: DispatcherBoardItem,
+    merge: { mergeSha: string; targetTag?: string }
+  ): Promise<SelfDeployVerifiedResult> {
+    const stageEnabled = this.resolveSelfDeployEnabled();
+    const deployInput: DeployInput = this.deps.selfDeploy?.getDeployInput
+      ? this.deps.selfDeploy.getDeployInput(item, merge)
+      : {
+          targetTag: merge.targetTag ?? `local-agentic-sandbox:${merge.mergeSha.slice(0, 7)}`,
+          developSha: merge.mergeSha,
+        };
+
+    const deployDeps: SelfDeployVerifiedDeps = this.deps.selfDeploy?.deps ?? {
+      readCurrentState: async () => ({
+        image: "local-agentic-sandbox:shadow-current",
+        podStatus: "Running",
+        podRestarts: 0,
+      }),
+      bankRollbackTarget: async (tag: string) => ({ banked: true, tag }),
+      buildAndImport: async (targetTag: string, dryRun: boolean) => ({
+        built: !dryRun,
+        imported: !dryRun,
+        imagePresentInNode: !dryRun,
+        detail: dryRun
+          ? `shadow preparation bookkeeping only for ${targetTag}`
+          : `built ${targetTag}`,
+      }),
+      setImage: async () => ({ ok: false }),
+      verifyDeployment: async (expectedTag: string) => ({
+        ok: false,
+        rolloutSuccess: false,
+        podRunningZeroRestarts: false,
+        gatewayStatus: 0,
+        threadListLoads: false,
+        observedTag: expectedTag,
+      }),
+    };
+
+    return runSelfDeployVerified(deployInput, deployDeps, { stageEnabled });
   }
 
   async drain(): Promise<DrainReport> {
@@ -342,6 +529,28 @@ export class BoardOrchestrator {
       }
 
       if (result.status === "completed") {
+        let shadowStages: ShadowStageOutcomes | undefined;
+        if (result.prNumber !== undefined && (this.deps.flowMonitor || this.deps.reviewerGate)) {
+          const prShadow = await this.runPrOpenShadowStages(head, {
+            prNumber: result.prNumber,
+            headSha: result.headSha ?? "unknown-head",
+          });
+          shadowStages = {
+            ...(prShadow.flowMonitor ? { flowMonitor: prShadow.flowMonitor } : {}),
+            ...(prShadow.reviewerGate ? { reviewerGate: prShadow.reviewerGate } : {}),
+          };
+        }
+        if (result.merged && result.mergeSha && this.deps.selfDeploy) {
+          const selfDeploy = await this.runMergedShadowStage(head, {
+            mergeSha: result.mergeSha,
+            targetTag: result.deployTag,
+          });
+          shadowStages = {
+            ...(shadowStages ?? {}),
+            selfDeploy,
+          };
+        }
+
         this.updateItem(head, {
           status: "done",
           threadLink: `/threads/${result.threadId}`,
@@ -355,6 +564,7 @@ export class BoardOrchestrator {
           outcome: "completed",
           threadId: result.threadId,
           reason: result.summary,
+          ...(shadowStages ? { shadowStages } : {}),
           durationMs: Math.max(0, this.now() - itemStartMs),
         });
       } else if (result.status === "chunk-complete") {

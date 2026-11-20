@@ -169,6 +169,16 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("app/api/board/reviewer-audit") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("lib/deploy/selfDeployVerified") ||
+      p.includes("orchestratorShadowStages.test.ts"),
+    tests: ["tests/orchestratorShadowStages.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/boardOrchestrator") ||
       p.includes("lib/board/boardControl.ts") ||
       p.includes("app/api/board/drain") ||

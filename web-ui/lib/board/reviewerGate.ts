@@ -6,11 +6,14 @@ export const REVIEWER_GATE_STAGE3_DEFAULT = false;
  * Stage flag for reviewer-gate merge authorization.
  * Defaults to OFF (shadow mode): verdicts are logged and authorize nothing.
  */
-export function isReviewerGateStage3Enabled(override?: boolean): boolean {
+export function isReviewerGateStage3Enabled(
+  override?: boolean,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
   if (typeof override === "boolean") {
     return override;
   }
-  return REVIEWER_GATE_STAGE3_DEFAULT;
+  return env.BOARD_STAGE_REVIEWER_GATE === "true";
 }
 
 export interface MechanicalFailure {

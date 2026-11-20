@@ -7,11 +7,14 @@ export const SELF_DEPLOY_VERIFIED_STAGE_DEFAULT = false;
  * Defaults to OFF (shadow mode): prepares and verifies readiness,
  * never executes a production deploy.
  */
-export function isSelfDeployVerifiedEnabled(override?: boolean): boolean {
+export function isSelfDeployVerifiedEnabled(
+  override?: boolean,
+  env: Record<string, string | undefined> = process.env
+): boolean {
   if (typeof override === "boolean") {
     return override;
   }
-  return SELF_DEPLOY_VERIFIED_STAGE_DEFAULT;
+  return env.BOARD_STAGE_SELF_DEPLOY === "true";
 }
 
 export interface DeployInput {
