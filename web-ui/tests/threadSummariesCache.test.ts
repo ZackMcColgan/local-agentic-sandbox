@@ -126,3 +126,107 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
     assert.notEqual(found2?.status, "running", "Expected cached summary to reconcile status when execution is no longer active");
   });
 });
+
+describe("AUD-12: reconcileSummaryStatus honest status reconciliation", () => {
+  let tmpDir: string;
+  let store: ThreadStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "thread-reconcile-status-"));
+    store = new ThreadStore(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeFixtureThread(
+    id: string,
+    overrides: Record<string, unknown> = {}
+  ): void {
+    const now = new Date().toISOString();
+    const data = {
+      id,
+      title: `Fixture ${id}`,
+      status: "running",
+      createdAt: now,
+      updatedAt: now,
+      model: "test-model",
+      reasoningEffort: "medium",
+      messages: [
+        { id: "u1", role: "user", content: "Do work", timestamp: now },
+        { id: "a1", role: "assistant", content: "Working...", timestamp: now },
+      ],
+      ...overrides,
+    };
+    fs.writeFileSync(path.join(tmpDir, `${id}.json`), JSON.stringify(data), "utf8");
+  }
+
+  function writeCheckpoint(taskId: string, status: string): void {
+    const cpPath = (store as any).supervisor.getCheckpointFilePath(taskId);
+    fs.mkdirSync(path.dirname(cpPath), { recursive: true });
+    fs.writeFileSync(cpPath, JSON.stringify({ taskId, status }), "utf8");
+  }
+
+  it("maps dead running thread with messages and no error/checkpoint to stopped, never completed", async () => {
+    writeFixtureThread("dead-running-no-evidence", { status: "running" });
+    const summaries = await store.listThreadSummaries();
+    const found = summaries.find((s) => s.id === "dead-running-no-evidence");
+    assert.equal(found?.status, "stopped");
+  });
+
+  it("maps dead running thread with error set to failed", async () => {
+    writeFixtureThread("dead-running-error", { status: "running", error: "Process crashed" });
+    const summaries = await store.listThreadSummaries();
+    const found = summaries.find((s) => s.id === "dead-running-error");
+    assert.equal(found?.status, "failed");
+  });
+
+  it("maps dead running task thread with paused checkpoint to paused", async () => {
+    const taskId = "task-paused-1";
+    writeFixtureThread("dead-running-paused", { status: "running", taskId });
+    writeCheckpoint(taskId, "paused");
+    const summaries = await store.listThreadSummaries();
+    const found = summaries.find((s) => s.id === "dead-running-paused");
+    assert.equal(found?.status, "paused");
+  });
+
+  it("maps dead running task thread with completed checkpoint to completed", async () => {
+    const taskId = "task-completed-1";
+    writeFixtureThread("dead-running-completed-cp", { status: "running", taskId });
+    writeCheckpoint(taskId, "completed");
+    const summaries = await store.listThreadSummaries();
+    const found = summaries.find((s) => s.id === "dead-running-completed-cp");
+    assert.equal(found?.status, "completed");
+  });
+
+  it("keeps actively-running thread in activeExecutionSet as running", async () => {
+    writeFixtureThread("live-running", { status: "running" });
+    activeExecutionSet.add("live-running");
+    try {
+      const summaries = await store.listThreadSummaries();
+      const found = summaries.find((s) => s.id === "live-running");
+      assert.equal(found?.status, "running");
+    } finally {
+      activeExecutionSet.delete("live-running");
+    }
+  });
+
+  it("keeps genuinely completed thread as completed", async () => {
+    writeFixtureThread("genuinely-completed", { status: "completed" });
+    const summaries = await store.listThreadSummaries();
+    const found = summaries.find((s) => s.id === "genuinely-completed");
+    assert.equal(found?.status, "completed");
+  });
+
+  it("does not persist fabricated completed status into .summaries-index.json for dead running thread", async () => {
+    writeFixtureThread("dead-running-persist-check", { status: "running" });
+    await store.listThreadSummaries();
+    const indexPath = path.join(tmpDir, ".summaries-index.json");
+    assert.ok(fs.existsSync(indexPath), "Expected .summaries-index.json to exist");
+    const indexData = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+    const entry = indexData["dead-running-persist-check.json"];
+    assert.ok(entry, "Expected dead-running-persist-check.json in .summaries-index.json");
+    assert.notEqual(entry.summary?.status, "completed");
+  });
+});

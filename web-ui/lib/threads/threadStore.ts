@@ -996,7 +996,27 @@ export class ThreadStore {
       return { ...summary, status: "running" };
     }
     if (summary.status === "running" && !isActivelyRunning) {
-      return { ...summary, status: summary.messageCount > 0 ? "completed" : "stopped" };
+      if (summary.error) {
+        return { ...summary, status: "failed" };
+      }
+      if (summary.taskId) {
+        try {
+          const checkpointFile = this.supervisor.getCheckpointFilePath(summary.taskId);
+          if (fs.existsSync(checkpointFile)) {
+            const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+            if (
+              data &&
+              (data.status === "paused" ||
+                data.status === "parked" ||
+                data.status === "failed" ||
+                data.status === "completed")
+            ) {
+              return { ...summary, status: data.status };
+            }
+          }
+        } catch {}
+      }
+      return { ...summary, status: "stopped" };
     }
     return summary;
   }
