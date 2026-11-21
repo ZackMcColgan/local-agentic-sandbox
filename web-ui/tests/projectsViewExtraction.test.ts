@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProjectTree } from "../components/projects/ProjectTree";
+import { FileReviewPanel } from "../components/projects/FileReviewPanel";
 import type { ProjectRecord } from "../lib/projects/projectStore";
 
 const sampleProject: ProjectRecord = {
@@ -71,5 +72,77 @@ describe("ProjectTree characterization", () => {
     assert.ok(html.includes('data-testid="project-delete-btn-proj-1"'));
     assert.ok(html.includes('data-testid="project-delete-confirm-proj-2"'));
     assert.ok(html.includes("Confirm Delete"));
+  });
+});
+
+describe("FileReviewPanel characterization", () => {
+  it("renders file tree and preview in files tab", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(FileReviewPanel, {
+        activeTab: "files",
+        baseBranch: "main",
+        tree: [
+          { name: "src", path: "src", type: "dir" },
+          { name: "index.ts", path: "src/index.ts", type: "file" },
+        ],
+        isLoadingTree: false,
+        treeError: null,
+        selectedFilePath: "src/index.ts",
+        fileContent: "export const x = 1;",
+        isLoadingFile: false,
+        fileError: null,
+        onRefreshTree: () => {},
+        onSelectFile: () => {},
+        diffItems: [],
+        isLoadingDiffs: false,
+        diffError: null,
+        diffFilter: "all",
+        actionInProgress: null,
+        reviewFinalized: false,
+        onChangeDiffFilter: () => {},
+        onAcceptFile: () => {},
+        onRevertFile: () => {},
+      })
+    );
+
+    assert.ok(html.includes("Repository Tree"));
+    assert.ok(html.includes("src/index.ts"));
+    assert.ok(html.includes("export const x = 1;"));
+  });
+
+  it("renders diff items and filter counts in diffs tab", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(FileReviewPanel, {
+        activeTab: "diffs",
+        baseBranch: "main",
+        tree: [],
+        isLoadingTree: false,
+        treeError: null,
+        selectedFilePath: null,
+        fileContent: null,
+        isLoadingFile: false,
+        fileError: null,
+        onRefreshTree: () => {},
+        onSelectFile: () => {},
+        diffItems: [
+          { filePath: "src/a.ts", status: "pending", changeType: "M", diff: "@@ -1 +1 @@\n-a\n+b" },
+          { filePath: "src/b.ts", status: "accepted", changeType: "A", diff: "@@ -0,0 +1 @@\n+c" },
+        ],
+        isLoadingDiffs: false,
+        diffError: null,
+        diffFilter: "all",
+        actionInProgress: null,
+        reviewFinalized: false,
+        onChangeDiffFilter: () => {},
+        onAcceptFile: () => {},
+        onRevertFile: () => {},
+      })
+    );
+
+    assert.ok(html.includes("Per-File Git Diff Engine"));
+    assert.ok(html.includes("src/a.ts"));
+    assert.ok(html.includes("src/b.ts"));
+    assert.ok(html.includes("Modified (M)"));
+    assert.ok(html.includes("Added (A)"));
   });
 });
