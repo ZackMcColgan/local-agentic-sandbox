@@ -31,7 +31,10 @@ describe("UI-007: host-runner disconnect presentation", () => {
   });
 
   it("ChatStream.tsx renders the distinct host-runner disconnect/recovered status element", () => {
-    const chatSrc = fs.readFileSync(path.join(process.cwd(), "components/ChatStream.tsx"), "utf8");
+    const chatSrc =
+      fs.readFileSync(path.join(process.cwd(), "components/ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.join(process.cwd(), "components/chat/messageRender.tsx"), "utf8");
     assert.match(chatSrc, /classifyHostRunnerDisconnect\s*\(/);
     assert.match(chatSrc, /host-runner-disconnect-status/);
   });

@@ -1094,10 +1094,10 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("ChatStream handles streamed compaction events and renders persistent in-thread marker", () => {
-      const chatStreamSrc = fs.readFileSync(
-        path.resolve(__dirname, "../components/ChatStream.tsx"),
-        "utf8"
-      );
+      const chatStreamSrc =
+        fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8") +
+        "\n" +
+        fs.readFileSync(path.resolve(__dirname, "../components/chat/compactionPill.tsx"), "utf8");
       assert.ok(
         chatStreamSrc.includes('event.type === "compaction"'),
         "ChatStream must handle event.type === 'compaction'"

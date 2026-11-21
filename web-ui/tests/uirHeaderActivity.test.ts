@@ -224,7 +224,8 @@ describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {
 });
 
 describe("uir-0 — header diet in ChatStream", () => {
-  const src = readSrc("components/ChatStream.tsx");
+  const src =
+    readSrc("components/ChatStream.tsx") + "\n" + readSrc("components/chat/messageRender.tsx");
 
   it("Engine pill and Host status chip are gone from the header", () => {
     assert.ok(
