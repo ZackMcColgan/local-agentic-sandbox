@@ -281,6 +281,19 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
         globalThis.fetch = originalFetch;
       }
     });
+
+    it("ProjectsView toolchain options match the repo builder Dockerfiles (node:22, python:3.12, golang:1.23, rust:1.80)", () => {
+      const sourcePath = fs.existsSync(path.resolve(process.cwd(), "web-ui/components/ProjectsView.tsx"))
+        ? path.resolve(process.cwd(), "web-ui/components/ProjectsView.tsx")
+        : path.resolve(process.cwd(), "components/ProjectsView.tsx");
+      const src = fs.readFileSync(sourcePath, "utf8");
+      assert.equal(src.includes("python:3.11"), false, "Stale python:3.11 must not appear");
+      assert.equal(src.includes("golang:1.22"), false, "Stale golang:1.22 must not appear");
+      assert.equal(src.includes("rust:1.77"), false, "Stale rust:1.77 must not appear");
+      assert.ok(src.includes("python:3.12"), "Expected python:3.12 matching deploy/builder-python/Dockerfile");
+      assert.ok(src.includes("golang:1.23"), "Expected golang:1.23 matching deploy/builder-go/Dockerfile");
+      assert.ok(src.includes("rust:1.80"), "Expected rust:1.80 matching deploy/builder-rust/Dockerfile");
+    });
   });
 
   describe("Item 2: Path Validator rejects roots, system dirs & invalid paths", () => {

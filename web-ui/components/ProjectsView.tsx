@@ -1316,9 +1316,9 @@ export function ProjectsView({
                           className="px-2.5 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs"
                         >
                           <option value="node:22">node:22</option>
-                          <option value="python:3.11">python:3.11</option>
-                          <option value="golang:1.22">golang:1.22</option>
-                          <option value="rust:1.77">rust:1.77</option>
+                          <option value="python:3.12">python:3.12</option>
+                          <option value="golang:1.23">golang:1.23</option>
+                          <option value="rust:1.80">rust:1.80</option>
                         </select>
                       </div>
 
@@ -1377,9 +1377,9 @@ export function ProjectsView({
                       className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono focus:outline-emerald-500"
                     >
                       <option value="node:22">node:22</option>
-                      <option value="python:3.11">python:3.11</option>
-                      <option value="golang:1.22">golang:1.22</option>
-                      <option value="rust:1.77">rust:1.77</option>
+                      <option value="python:3.12">python:3.12</option>
+                      <option value="golang:1.23">golang:1.23</option>
+                      <option value="rust:1.80">rust:1.80</option>
                     </select>
                   </div>
 
@@ -1457,9 +1457,9 @@ export function ProjectsView({
                         className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-xs font-mono"
                       >
                         <option value="node:22">node:22</option>
-                        <option value="python:3.11">python:3.11</option>
-                        <option value="golang:1.22">golang:1.22</option>
-                        <option value="rust:1.77">rust:1.77</option>
+                        <option value="python:3.12">python:3.12</option>
+                        <option value="golang:1.23">golang:1.23</option>
+                        <option value="rust:1.80">rust:1.80</option>
                       </select>
                     </div>
                   </div>
