@@ -50,10 +50,7 @@ export function computeTurnLiveness(
   now: number,
   isLiveOverride: boolean = false
 ): ThreadLiveness {
-  const isLive =
-    thread.status === "active" ||
-    thread.status === "running" ||
-    isLiveOverride;
+  const isLive = thread.status === "active" || thread.status === "running" || isLiveOverride;
   if (!isLive) return "settled";
   const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
   if (!Number.isFinite(touchedAt)) return "stalled";
