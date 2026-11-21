@@ -106,9 +106,23 @@ export function resolveCompactionStrategy(
   return raw === "hybrid" ? "hybrid" : "extraction";
 }
 
+export interface CompactionMessage {
+  role: string;
+  content: string;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id?: string;
+    type?: string;
+    name?: string;
+    arguments?: unknown;
+    function?: { name?: string; arguments?: string | Record<string, unknown> };
+  }>;
+}
+
 export interface CompactionResult {
   compacted: boolean;
-  messages: any[];
+  messages: CompactionMessage[];
   tokensBefore: number;
   tokensAfter: number;
 }
@@ -124,7 +138,7 @@ export interface SummarizeRequest {
   /** The extraction digest produced from the replaced messages. */
   digest: string;
   /** The messages the digest replaced (source material for the model pass). */
-  replacedMessages: any[];
+  replacedMessages: CompactionMessage[];
   /** COMPACTION_PROMPT_V1, verbatim. */
   prompt: string;
   temperature: number;
@@ -234,7 +248,7 @@ export interface HybridCompactionResult extends CompactionResult {
   fallback: boolean;
   fallbackReason?: HybridFallbackReason;
   /** Messages replaced by the digest (for the summarization source). */
-  replacedMessages?: any[];
+  replacedMessages?: CompactionMessage[];
 }
 
 /**
@@ -249,7 +263,7 @@ export interface HybridCompactionResult extends CompactionResult {
  *   failure/timeout/truncation/rejection falls back to the extraction digest.
  */
 export async function runHybridCompaction(
-  messages: any[],
+  messages: CompactionMessage[],
   options: {
     maxContentTokens?: number;
     compactionThreshold?: number;
@@ -337,8 +351,8 @@ export async function runHybridCompaction(
   let result: SummarizeResult;
   try {
     result = await runSummarizationWithinDeadlines(req, options.summarize);
-  } catch (err: any) {
-    const msg = String(err?.message ?? err);
+  } catch (err: unknown) {
+    const msg = String(err instanceof Error ? err.message : err);
     return fallbackToDigest(
       msg.includes("timeout") || msg.includes("deadline") || msg.includes("abort")
         ? "timeout"
@@ -360,7 +374,7 @@ export async function runHybridCompaction(
     return fallbackToDigest("identifier_post_check_rejected");
   }
 
-  const hybridMessages: any[] = [...base.messages];
+  const hybridMessages: CompactionMessage[] = [...base.messages];
   hybridMessages[digestIndex] = { role: "assistant", content: result.text };
   const tokensAfter = estimateTokens(hybridMessages);
 
@@ -381,7 +395,7 @@ export async function runHybridCompaction(
 /**
  * Extracts exact file paths, git SHAs, URLs, and error lines verbatim.
  */
-export function extractIdentifiersAndErrors(messages: any[]): {
+export function extractIdentifiersAndErrors(messages: CompactionMessage[]): {
   filePaths: string[];
   gitShas: string[];
   urls: string[];
@@ -461,7 +475,7 @@ export function extractIdentifiersAndErrors(messages: any[]): {
 /**
  * Summarizes an array of older messages into a concise structured Markdown digest.
  */
-export function summarizeTurnHistory(olderMessages: any[]): string {
+export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string {
   const userQueries: string[] = [];
   const toolsInvoked: Set<string> = new Set();
   const keyDeliverables: string[] = [];
@@ -574,13 +588,13 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
  * compacts older turns while preserving system prompt and recent turns.
  */
 export function compactConversationHistory(
-  messages: any[],
+  messages: CompactionMessage[],
   options?: {
     maxContentTokens?: number;
     compactionThreshold?: number;
     preserveRecentMessages?: number;
   }
-): CompactionResult & { replacedMessages?: any[] } {
+): CompactionResult & { replacedMessages?: CompactionMessage[] } {
   if (!Array.isArray(messages) || messages.length <= 3) {
     const tokens = estimateTokens(messages);
     return { compacted: false, messages, tokensBefore: tokens, tokensAfter: tokens };
@@ -609,7 +623,7 @@ export function compactConversationHistory(
   const recentMessages = messages.slice(endIdx);
   const summaryContent = summarizeTurnHistory(olderMessages);
 
-  const compactedMessages: any[] = [];
+  const compactedMessages: CompactionMessage[] = [];
   if (hasSystem) {
     compactedMessages.push(messages[0]);
   }

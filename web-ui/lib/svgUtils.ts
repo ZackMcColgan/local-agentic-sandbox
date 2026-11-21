@@ -1,22 +1,29 @@
 import DOMPurify from "dompurify";
 
-let domPurifyInstance: any = null;
-let lastWindow: any = null;
+interface DomPurifyLike {
+  sanitize: (dirty: string, cfg?: Record<string, unknown>) => string;
+}
 
-function patchHappyDomNode(targetWin: any) {
+type DomPurifyFactory = (win: unknown) => DomPurifyLike;
+
+let domPurifyInstance: DomPurifyLike | null = null;
+let lastWindow: unknown = null;
+
+function patchHappyDomNode(targetWin: unknown) {
   try {
-    const winNode = targetWin?.Node;
+    const winNode = (targetWin as { Node?: { prototype?: Record<string, unknown> } } | null)?.Node;
     if (winNode && winNode.prototype) {
       const origNodeName = Object.getOwnPropertyDescriptor(winNode.prototype, "nodeName")?.get;
       Object.defineProperty(winNode.prototype, "nodeName", {
         get() {
-          if ((this as any).tagName) return (this as any).tagName;
+          const self = this as { tagName?: string; nodeType?: number };
+          if (self.tagName) return self.tagName;
           const name = origNodeName ? origNodeName.call(this) : "";
           if (name) return name;
-          if (this.nodeType === 3) return "#text";
-          if (this.nodeType === 8) return "#comment";
-          if (this.nodeType === 11) return "#document-fragment";
-          if (this.nodeType === 9) return "#document";
+          if (self.nodeType === 3) return "#text";
+          if (self.nodeType === 8) return "#comment";
+          if (self.nodeType === 11) return "#document-fragment";
+          if (self.nodeType === 9) return "#document";
           return "#unknown";
         },
         configurable: true,
@@ -25,7 +32,7 @@ function patchHappyDomNode(targetWin: any) {
   } catch {}
 }
 
-function getPurifier() {
+function getPurifier(): DomPurifyLike | null {
   if (typeof window !== "undefined") {
     // If the window instance changed (e.g. across tests), recreate purifier instance
     if (domPurifyInstance && lastWindow === window) {
@@ -33,10 +40,10 @@ function getPurifier() {
     }
     lastWindow = window;
     patchHappyDomNode(window);
-    if (typeof (DOMPurify as any) === "function") {
-      domPurifyInstance = (DOMPurify as any)(window);
+    if (typeof (DOMPurify as unknown) === "function") {
+      domPurifyInstance = (DOMPurify as unknown as DomPurifyFactory)(window);
     } else {
-      domPurifyInstance = DOMPurify;
+      domPurifyInstance = DOMPurify as unknown as DomPurifyLike;
     }
     return domPurifyInstance;
   }
@@ -49,11 +56,13 @@ function getPurifier() {
   try {
     if (typeof window === "undefined") {
       // Dynamic require avoids Webpack client-side static bundling of happy-dom
-      const req = (globalThis as any).__non_webpack_require__ || Function("return require")();
-      const { GlobalWindow } = req("happy-dom");
+      const req =
+        (globalThis as { __non_webpack_require__?: NodeRequire }).__non_webpack_require__ ||
+        (Function("return require")() as NodeRequire);
+      const { GlobalWindow } = req("happy-dom") as { GlobalWindow: new () => unknown };
       const win = new GlobalWindow();
       patchHappyDomNode(win);
-      domPurifyInstance = (DOMPurify as any)(win);
+      domPurifyInstance = (DOMPurify as unknown as DomPurifyFactory)(win);
       lastWindow = null;
     }
   } catch {
@@ -160,7 +169,20 @@ export function convertDrawioToSvg(xml: string): string {
       const attrsStr = match[1];
       const inner = match[2] || "";
 
-      const attrs: any = {};
+      interface MxCellData {
+        id: string;
+        parent?: string;
+        value?: string;
+        style?: string;
+        vertex?: string;
+        edge?: string;
+        source?: string;
+        target?: string;
+        geometry?: Record<string, string>;
+        points?: Array<{ x: number; y: number }>;
+        [key: string]: unknown;
+      }
+      const attrs: Partial<MxCellData> = {};
       let attrMatch: RegExpExecArray | null;
       while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
         attrs[attrMatch[1]] = attrMatch[2] !== undefined ? attrMatch[2] : attrMatch[3];
@@ -196,7 +218,7 @@ export function convertDrawioToSvg(xml: string): string {
       }
 
       if (attrs.id && attrs.id !== "0" && attrs.id !== "1") {
-        cells.push(attrs);
+        cells.push(attrs as (typeof cells)[number]);
       }
     }
 
@@ -208,7 +230,18 @@ export function convertDrawioToSvg(xml: string): string {
     }
 
     // Build vertex map
-    const vertexMap = new Map<string, any>();
+    const vertexMap = new Map<
+      string,
+      (typeof vertices)[number] & {
+        parsedStyle: Record<string, string | boolean>;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        absX: number;
+        absY: number;
+      }
+    >();
     for (const v of vertices) {
       const g = v.geometry || {};
       const x = parseFloat(g.x || "0");
@@ -233,6 +266,7 @@ export function convertDrawioToSvg(xml: string): string {
       let depth = 0;
       while (parentId && vertexMap.has(parentId) && depth < 10) {
         const parent = vertexMap.get(parentId);
+        if (!parent) break;
         v.absX += parent.x;
         v.absY += parent.y;
         parentId = parent.parent;
@@ -746,8 +780,8 @@ export function extractCodeDeliverablesFromMessage(message: {
   content: string;
   traces?: Array<{
     tool: string;
-    args?: Record<string, any>;
-    result?: any;
+    args?: Record<string, unknown>;
+    result?: unknown;
   }>;
 }): ExtractedCodeDeliverable[] {
   const deliverables: ExtractedCodeDeliverable[] = [];
@@ -796,8 +830,8 @@ export function extractSvgsFromMessage(message: {
   content: string;
   traces?: Array<{
     tool: string;
-    args?: Record<string, any>;
-    result?: any;
+    args?: Record<string, unknown>;
+    result?: unknown;
   }>;
 }): ExtractedSvgItem[] {
   const svgs: ExtractedSvgItem[] = [];
@@ -814,13 +848,18 @@ export function extractSvgsFromMessage(message: {
     let finalPath = pathArg;
     let isPathSvg = pathArg ? isSvgFilePath(pathArg) : false;
 
+    const traceRes =
+      trace.result && typeof trace.result === "object"
+        ? (trace.result as { content?: Array<{ text?: string }> })
+        : null;
+
     if (
       !finalPath &&
       (trace.tool === "execute_sandboxed_python" || trace.tool === "workspace_run_command")
     ) {
       const execStr = String(trace.args?.code || trace.args?.command || "");
       const match = execStr.match(/["']([a-zA-Z0-9_./-]+\.svg)["']/i);
-      const isError = String(trace.result?.content?.[0]?.text || "").includes("EXECUTION_ERROR");
+      const isError = String(traceRes?.content?.[0]?.text || "").includes("EXECUTION_ERROR");
       if (match && !isError) {
         finalPath = match[1];
         isPathSvg = true;
@@ -830,16 +869,16 @@ export function extractSvgsFromMessage(message: {
     // Check stdout / result output
     let stdoutSvg = "";
     try {
-      if (trace.result?.content?.[0]?.text) {
+      if (traceRes?.content?.[0]?.text) {
         try {
-          const parsed = JSON.parse(trace.result.content[0].text);
+          const parsed = JSON.parse(traceRes.content[0].text);
           stdoutSvg =
             parsed.content ||
             parsed.stdout ||
             parsed.output ||
             (typeof parsed === "string" ? parsed : "");
         } catch {
-          stdoutSvg = trace.result.content[0].text;
+          stdoutSvg = traceRes.content[0].text;
         }
       } else if (typeof trace.result === "string") {
         stdoutSvg = trace.result;
