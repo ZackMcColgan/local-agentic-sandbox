@@ -41,11 +41,14 @@ describe("P0.5 — Stray UI fixes", () => {
     );
   });
 
-  it("P0.5b: SettingsView mounts EngineStatusPill", () => {
+  it("P0.5b: SettingsView surfaces engine status", () => {
     const settingsSrc = fs.readFileSync(
       path.resolve(process.cwd(), "components/SettingsView.tsx"),
       "utf8"
     );
-    assert.ok(settingsSrc.includes("EngineStatusPill"), "SettingsView must mount EngineStatusPill");
+    assert.ok(
+      settingsSrc.includes("engineStatusLabel") && settingsSrc.includes("/api/engine"),
+      "SettingsView must surface engine status"
+    );
   });
 });

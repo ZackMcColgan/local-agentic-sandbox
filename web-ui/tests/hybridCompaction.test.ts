@@ -604,7 +604,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     );
     assert.match(
       routeSrc,
-      /import\s*\{\s*compactConversationHistory,\s*resolveCompactionStrategy,?\s*\}\s*from\s*"@\/lib\/conversationCompaction";/,
+      /import\s*\{\s*resolveCompactionStrategy\s*\}\s*from\s*"@\/lib\/conversationCompaction";/,
       "route must import the strategy resolver"
     );
     // Manual compact endpoint honors COMPACTION_STRATEGY (AUD-10).

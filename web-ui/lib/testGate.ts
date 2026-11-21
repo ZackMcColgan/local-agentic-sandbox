@@ -1363,6 +1363,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("playwright.live.config") ||
     normalizedPath.endsWith("vitest.config.ts") ||
+    normalizedPath.endsWith("eslint.config.mjs") ||
+    normalizedPath.startsWith(".husky/") ||
     normalizedPath.includes("test-results") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
