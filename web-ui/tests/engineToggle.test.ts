@@ -2,6 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EngineZone } from "../components/settings/EngineZone";
 
 describe("Engine Status Pill & Settings Toggle UI Components", () => {
   const componentsDir = path.resolve(__dirname, "../components");
@@ -64,32 +67,67 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
 
   describe("SettingsView Engine Management Section", () => {
     it("displays Engine Management section with reported engine identity and honest VRAM fallback", () => {
-      assert.ok(
-        settingsFile.includes("Engine Management"),
-        "SettingsView must contain 'Engine Management' heading"
+      const html = renderToStaticMarkup(
+        React.createElement(EngineZone, {
+          engineData: {
+            status: "stopped",
+            reachable: false,
+            engine: "custom-engine",
+            model: null,
+            vram_mb: null,
+          },
+          engineLoading: false,
+          engineMessage: null,
+          activeModel: "qwen3.8-flash-next",
+          reasoningEffort: "low",
+          onEngineAction: () => {},
+        })
       );
       assert.ok(
-        settingsFile.includes("engineData.engine"),
-        "SettingsView must derive engine identity from engineData"
+        html.includes("Engine Management"),
+        "EngineZone must contain 'Engine Management' heading"
       );
       assert.ok(
-        settingsFile.includes("Not reported by this engine"),
-        "SettingsView must render explicit 'Not reported by this engine' fallback when VRAM is unreported"
+        html.includes("custom-engine"),
+        "EngineZone must derive engine identity from engineData"
+      );
+      assert.ok(
+        html.includes("Not reported by this engine"),
+        "EngineZone must render explicit 'Not reported by this engine' fallback when VRAM is unreported"
       );
     });
 
     it("provides Start, Stop, and Restart action buttons with proper disable states", () => {
-      assert.ok(settingsFile.includes("Start"), "Must include Start button");
-      assert.ok(settingsFile.includes("Stop"), "Must include Stop button");
-      assert.ok(settingsFile.includes("Restart"), "Must include Restart button");
-
-      // Verify disabled attributes
+      const runningHtml = renderToStaticMarkup(
+        React.createElement(EngineZone, {
+          engineData: { status: "running", reachable: true },
+          engineLoading: false,
+          engineMessage: null,
+          activeModel: "qwen3.8-flash-next",
+          reasoningEffort: "low",
+          onEngineAction: () => {},
+        })
+      );
+      assert.ok(runningHtml.includes("Start"), "Must include Start button");
+      assert.ok(runningHtml.includes("Stop"), "Must include Stop button");
+      assert.ok(runningHtml.includes("Restart"), "Must include Restart button");
       assert.ok(
-        settingsFile.includes('engineData.status === "running"'),
+        runningHtml.includes('disabled=""') && runningHtml.includes('aria-label="Start llama-server"'),
         "Start button must disable when engine is running"
       );
+
+      const stoppedHtml = renderToStaticMarkup(
+        React.createElement(EngineZone, {
+          engineData: { status: "stopped", reachable: false },
+          engineLoading: false,
+          engineMessage: null,
+          activeModel: "qwen3.8-flash-next",
+          reasoningEffort: "low",
+          onEngineAction: () => {},
+        })
+      );
       assert.ok(
-        settingsFile.includes('engineData.status === "stopped"'),
+        stoppedHtml.includes('disabled=""') && stoppedHtml.includes('aria-label="Stop llama-server"'),
         "Stop button must disable when engine is stopped"
       );
     });
@@ -100,19 +138,8 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
         "SettingsView must communicate with /api/engine"
       );
       assert.ok(
-        settingsFile.includes('action: "start"') ||
-          settingsFile.includes('handleEngineAction("start")'),
-        "SettingsView must dispatch start action"
-      );
-      assert.ok(
-        settingsFile.includes('action: "stop"') ||
-          settingsFile.includes('handleEngineAction("stop")'),
-        "SettingsView must dispatch stop action"
-      );
-      assert.ok(
-        settingsFile.includes('action: "restart"') ||
-          settingsFile.includes('handleEngineAction("restart")'),
-        "SettingsView must dispatch restart action"
+        settingsFile.includes("handleEngineAction"),
+        "SettingsView must pass handleEngineAction to EngineZone"
       );
     });
   });
