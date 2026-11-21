@@ -18,19 +18,24 @@ describe("chat complexity triage", () => {
   });
 
   it("_triageComplexity returns DEEP_SYNTHESIS when model classifies deep work", async () => {
-    let seenModel = "";
-    const result = await _triageComplexity("Design a distributed consensus engine", "http://127.0.0.1:11434", "fast-model", {
-      chat: async (_baseUrl, payload) => {
-        seenModel = payload.model;
-        return {
-          message: {
-            role: "assistant",
-            content: '{"complexity":"DEEP_SYNTHESIS","reasoning":"novel architecture"}',
-          },
-        };
-      },
-      warn: () => {},
-    });
+    let seenModel: string | undefined = "";
+    const result = await _triageComplexity(
+      "Design a distributed consensus engine",
+      "http://127.0.0.1:11434",
+      "fast-model",
+      {
+        chat: async (_baseUrl, payload) => {
+          seenModel = payload.model;
+          return {
+            message: {
+              role: "assistant",
+              content: '{"complexity":"DEEP_SYNTHESIS","reasoning":"novel architecture"}',
+            },
+          };
+        },
+        warn: () => {},
+      }
+    );
     assert.equal(seenModel, "fast-model");
     assert.equal(result, "DEEP_SYNTHESIS");
   });

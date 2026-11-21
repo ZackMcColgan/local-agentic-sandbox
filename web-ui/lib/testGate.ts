@@ -795,6 +795,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/chat/triage") || p.includes("chatTriage.test.ts"),
     tests: ["tests/chatTriage.test.ts"],
   },
+  {
+    match: (p) => p.includes("lib/chat/turnEngine") || p.includes("chatTurnEngine.test.ts"),
+    tests: ["tests/chatTurnEngine.test.ts"],
+  },
   // Chat API route and progressive tools
   {
     match: (p) =>

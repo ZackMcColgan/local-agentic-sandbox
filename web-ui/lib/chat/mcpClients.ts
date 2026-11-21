@@ -19,10 +19,10 @@ export interface McpClientDeps {
   warn?: (...args: unknown[]) => void;
 }
 
-export const getMcpUrl = (env: NodeJS.ProcessEnv = process.env): string =>
+export const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
   env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
 
-export const getBrowserMcpUrl = (env: NodeJS.ProcessEnv = process.env): string =>
+export const getBrowserMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
   env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 
 export async function connectMcpClient(url: string, name: string, deps: McpClientDeps = {}) {

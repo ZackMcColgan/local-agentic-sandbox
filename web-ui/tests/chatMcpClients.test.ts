@@ -19,7 +19,10 @@ describe("chat route MCP client characterization", () => {
 
   it("getMcpUrl and getBrowserMcpUrl return env overrides or defaults", () => {
     assert.equal(getMcpUrl({}), "http://mcp-server:8080/sse");
-    assert.equal(getMcpUrl({ MCP_SERVER_URL: "http://127.0.0.1:9000/sse" }), "http://127.0.0.1:9000/sse");
+    assert.equal(
+      getMcpUrl({ MCP_SERVER_URL: "http://127.0.0.1:9000/sse" }),
+      "http://127.0.0.1:9000/sse"
+    );
     assert.equal(getBrowserMcpUrl({}), "http://browser-mcp:8081/sse");
     assert.equal(
       getBrowserMcpUrl({ BROWSER_MCP_URL: "http://127.0.0.1:9001/sse" }),
