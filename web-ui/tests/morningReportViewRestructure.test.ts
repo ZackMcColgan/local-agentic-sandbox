@@ -140,6 +140,55 @@ describe("uir-4 — Morning Report verdict banner", () => {
     assert.ok(bannerIdx < summaryIdx, "verdict banner must render before the summary card");
   });
 
+  it("reconciles header total with bucket sum and computes duration from the same displayed task list", async () => {
+    const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+    const { computeMorningReportKpis } = await import("../components/MorningReportView.js");
+
+    const now = Date.now();
+    const tasks = [
+      makeTask({
+        taskId: "t-comp-1",
+        status: "completed",
+        startedAt: new Date(now - 120_000).toISOString(),
+        completedAt: new Date(now - 60_000).toISOString()
+      }),
+      makeTask({
+        taskId: "t-comp-2",
+        status: "completed",
+        startedAt: new Date(now - 90_000).toISOString(),
+        completedAt: new Date(now - 30_000).toISOString()
+      }),
+      makeTask({
+        taskId: "t-parked-1",
+        status: "paused",
+        parkedReason: "Chunk boundary reached",
+        startedAt: new Date(now - 7 * 3600_000).toISOString(),
+        updatedAt: new Date(now - 7 * 3600_000 + 300_000).toISOString(),
+        completedAt: undefined
+      }),
+      makeTask({
+        taskId: "t-stopped-1",
+        status: "stopped",
+        startedAt: new Date(now - 180_000).toISOString(),
+        updatedAt: new Date(now - 120_000).toISOString(),
+        completedAt: undefined
+      })
+    ];
+
+    const report = generateOvernightMorningReport(tasks);
+    const kpis = computeMorningReportKpis(report.tasks);
+
+    assert.equal(kpis.total, 4);
+    assert.equal(
+      kpis.completed + kpis.failed + kpis.stalled,
+      kpis.total,
+      "Header total must always equal completed + failed + stalled"
+    );
+    // 60s + 60s + 300s + 60s = 480s (8m 0s) — must NOT include 7h idle wall-clock time
+    assert.equal(kpis.totalDurationSeconds, 480);
+    assert.equal(kpis.totalDurationFormatted, "8m 0s");
+  });
+
   it("renders the calm all-clear verdict when everything completed and no flags wait", async () => {
     const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
     const overnightReport = generateOvernightMorningReport([

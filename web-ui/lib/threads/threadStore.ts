@@ -996,7 +996,27 @@ export class ThreadStore {
       return { ...summary, status: "running" };
     }
     if (summary.status === "running" && !isActivelyRunning) {
-      return { ...summary, status: summary.messageCount > 0 ? "completed" : "stopped" };
+      if (summary.error) {
+        return { ...summary, status: "failed" };
+      }
+      if (summary.taskId) {
+        try {
+          const checkpointFile = this.supervisor.getCheckpointFilePath(summary.taskId);
+          if (fs.existsSync(checkpointFile)) {
+            const data = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+            if (
+              data &&
+              (data.status === "paused" ||
+                data.status === "parked" ||
+                data.status === "failed" ||
+                data.status === "completed")
+            ) {
+              return { ...summary, status: data.status };
+            }
+          }
+        } catch {}
+      }
+      return { ...summary, status: "stopped" };
     }
     return summary;
   }
@@ -1384,6 +1404,15 @@ export class ThreadStore {
     }
     if (!thread) return { rounds: 0, promptTokens: 0, outputTokens: 0, compactions: 0 };
     return thread.tokenEconomics ?? computeThreadTokenEconomics(thread);
+  }
+
+  async clearThreadMessages(threadId: string): Promise<Thread | null> {
+    const thread = await this.getThread(threadId);
+    if (!thread) return null;
+    thread.messages = [];
+    thread.updatedAt = new Date().toISOString();
+    this.saveThread(thread);
+    return thread;
   }
 
   async deleteThread(threadId: string): Promise<boolean> {

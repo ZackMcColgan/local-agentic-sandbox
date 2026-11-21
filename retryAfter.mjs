@@ -1,14 +1,14 @@
 /**
  * Parses an HTTP `Retry-After` header value into a delay in milliseconds.
  *
- * Contract (per brief / eval spec, AC-2-1 / AC-2-2 / AC-2-3):
+ * Contract (per brief):
  * - null / undefined / empty / whitespace-only -> null
  * - non-negative integer string (e.g. "120", "0", "000") -> seconds * 1000
  *   (a plain delay, independent of nowMs)
  * - valid HTTP-date string (e.g. "Wed, 21 Oct 2015 07:28:00 GMT") ->
  *   Math.max(0, Date.parse(value) - nowMs), where nowMs defaults to Date.now()
  *   (past dates clamp to 0)
- * - negative (e.g. "-5") or non-integer (e.g. "1.5") or unparseable -> null
+ * - negative (e.g. "-5") or unparseable -> null
  *
  * @param {string | null | undefined} headerValue
  * @param {number} [nowMs]
@@ -35,8 +35,6 @@ export function parseRetryAfter(headerValue, nowMs = Date.now()) {
     if (!Number.isInteger(numeric) || numeric < 0) {
       return null;
     }
-    // AC-2-1 / AC-2-2 / AC-2-3: integer seconds yield a plain delay
-    // (seconds * 1000), independent of nowMs. Zero yields 0.
     return numeric * 1000;
   }
 

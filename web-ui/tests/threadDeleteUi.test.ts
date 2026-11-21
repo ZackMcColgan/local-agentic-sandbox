@@ -199,4 +199,34 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
       );
     }
   });
+
+  it("8. ChatStream overflow Delete session requires confirmation dialog instead of calling onDeleteThread directly", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const chatSrc = fs.readFileSync(
+      path.resolve(__dirname, "../components/ChatStream.tsx"),
+      "utf-8"
+    );
+
+    assert.ok(
+      !chatSrc.includes("onClick={onDeleteThread}"),
+      "ChatStream overflow Delete session must not call onDeleteThread directly without confirmation"
+    );
+    assert.ok(
+      chatSrc.includes('data-testid="thread-delete-dialog"'),
+      "ChatStream must render the thread-delete-dialog confirmation modal"
+    );
+    assert.ok(
+      chatSrc.includes('data-testid="confirm-delete-btn"'),
+      "ChatStream confirmation dialog must have confirm-delete-btn"
+    );
+    assert.ok(
+      chatSrc.includes('data-testid="cancel-delete-btn"'),
+      "ChatStream confirmation dialog must have cancel-delete-btn"
+    );
+    assert.ok(
+      chatSrc.includes("This action is permanent and cannot be undone"),
+      "ChatStream confirmation dialog must match sidebar permanent deletion warning wording"
+    );
+  });
 });

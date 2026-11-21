@@ -38,6 +38,125 @@ interface LiveRunBlockProps {
   liveTraces?: ExecutionTraceItem[];
 }
 
+export function resolveDeliverableFile(task: TaskManifest): string | undefined {
+  const journalMatch = task.journal?.find((j) => {
+    const txt = j.message || (j as any).entry;
+    return typeof txt === "string" && txt.toLowerCase().includes("committed");
+  });
+  const journalFile = journalMatch
+    ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
+    : undefined;
+
+  return (
+    task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
+    task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
+    journalFile
+  );
+}
+
+export function buildDeliverableFileUrl(deliverableFile: string): string {
+  return `/api/files?path=${encodeURIComponent(deliverableFile)}`;
+}
+
+export function resolveCodePreviewContent(
+  deliverableFile: string,
+  loadedContent: string | null
+): string {
+  if (loadedContent !== null) {
+    return loadedContent;
+  }
+  return `// Deliverable committed: ${deliverableFile}`;
+}
+
+export interface RunCardStatusInfo {
+  status: string;
+  isPlanning: boolean;
+  isRunning: boolean;
+  isParked: boolean;
+  isPaused: boolean;
+  isCrashed: boolean;
+  isStopped: boolean;
+  isCompleted: boolean;
+  isFailed: boolean;
+  headerLabel: string;
+}
+
+export function deriveRunCardStatus(
+  task: Pick<TaskManifest, "status" | "parkedReason">
+): RunCardStatusInfo {
+  const status = typeof task.status === "string" ? task.status.trim() : "";
+  const isPlanning = status === "planning";
+  const isRunning = status === "active" || status === "in_progress" || isPlanning;
+  const isParked = status === "parked" || (status === "paused" && Boolean(task.parkedReason));
+  const isPaused = status === "paused" && !isParked;
+  const isCrashed = status === "crashed";
+  const isStopped = status === "cancelled" || status === "stopped";
+  const isCompleted = status === "completed";
+  const isFailed = status === "failed";
+
+  const headerLabel = isRunning
+    ? "Live run"
+    : isParked
+      ? "Run parked"
+      : isPaused
+        ? "Run paused"
+        : isFailed || isCrashed
+          ? "Run failed"
+          : isCompleted
+            ? "Run completed"
+            : isStopped
+              ? "Run stopped"
+              : "Run settled";
+
+  return {
+    status,
+    isPlanning,
+    isRunning,
+    isParked,
+    isPaused,
+    isCrashed,
+    isStopped,
+    isCompleted,
+    isFailed,
+    headerLabel
+  };
+}
+
+export function computeRunElapsedSeconds(
+  task: Pick<TaskManifest, "status" | "parkedReason" | "startedAt" | "completedAt" | "updatedAt">,
+  nowMs: number = Date.now()
+): number {
+  if (!task.startedAt) return 0;
+  const start = new Date(task.startedAt).getTime();
+  if (Number.isNaN(start)) return 0;
+
+  const { isRunning } = deriveRunCardStatus(task);
+  if (isRunning) {
+    return Math.max(0, Math.floor((nowMs - start) / 1000));
+  }
+
+  const settleTs = task.completedAt || task.updatedAt;
+  if (!settleTs) return 0;
+  const end = new Date(settleTs).getTime();
+  if (Number.isNaN(end)) return 0;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
+export function formatRunTimerLabel(
+  statusInfo: RunCardStatusInfo,
+  elapsedSeconds: number
+): string {
+  const formatted = formatElapsedDuration(elapsedSeconds);
+  if (statusInfo.isRunning) return `Running for ${formatted}`;
+  if (statusInfo.isCompleted) return `Completed in ${formatted}`;
+  if (statusInfo.isParked) return `Parked after ${formatted}`;
+  if (statusInfo.isPaused) return `Paused at ${formatted}`;
+  if (statusInfo.isStopped) return `Stopped after ${formatted}`;
+  if (statusInfo.isFailed) return `Failed after ${formatted}`;
+  if (statusInfo.isCrashed) return `Crashed after ${formatted}`;
+  return `Elapsed ${formatted}`;
+}
+
 export function LiveRunBlock({
   task,
   onStopRun,
@@ -51,6 +170,7 @@ export function LiveRunBlock({
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
+  const [deliverableCode, setDeliverableCode] = useState<string | null>(null);
   const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
 
   useEffect(() => {
@@ -70,38 +190,68 @@ export function LiveRunBlock({
       cancelled = true;
     };
   }, [selfDeployEnabled]);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
-    if (task.startedAt) {
-      const start = new Date(task.startedAt).getTime();
-      const endTs = task.completedAt || (task.status !== "active" && String(task.status) !== "in_progress" && task.status !== "planning" ? task.updatedAt : undefined);
-      const end = endTs ? new Date(endTs).getTime() : Date.now();
-      return Math.max(0, Math.floor((end - start) / 1000));
-    }
-    return 0;
-  });
+  const statusInfo = deriveRunCardStatus(task);
+  const {
+    status,
+    isPlanning,
+    isRunning,
+    isParked,
+    isPaused,
+    isCrashed,
+    isStopped,
+    isCompleted,
+    isFailed
+  } = statusInfo;
 
-  const status = String(task.status || "active");
-  const isPlanning = status === "planning";
-  const isRunning = status === "active" || status === "in_progress" || isPlanning;
-  const isPaused = status === "paused";
-  const isCrashed = status === "crashed";
-  const isStopped = status === "cancelled" || status === "stopped";
-  const isCompleted = status === "completed";
-  const isFailed = status === "failed" || status === "parked";
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() =>
+    computeRunElapsedSeconds(task)
+  );
 
-  // Real-time elapsed timer while task is actively running
+  const deliverableFile = isCompleted ? resolveDeliverableFile(task) : undefined;
+  const isDeliverableSvg = deliverableFile ? deliverableFile.toLowerCase().endsWith(".svg") : false;
+  const isDeliverableHtml = deliverableFile
+    ? deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm")
+    : false;
+
   useEffect(() => {
-    if (!isRunning || !task.startedAt) return;
+    if (!isCompleted || !deliverableFile || isDeliverableSvg || isDeliverableHtml) {
+      setDeliverableCode(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(buildDeliverableFileUrl(deliverableFile))
+      .then((res) => (res.ok ? res.text() : null))
+      .then((text) => {
+        if (!cancelled) {
+          setDeliverableCode(text);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDeliverableCode(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCompleted, deliverableFile, isDeliverableSvg, isDeliverableHtml]);
 
-    const start = new Date(task.startedAt).getTime();
+  // Real-time elapsed timer while task is actively running; freeze at settle duration otherwise
+  useEffect(() => {
+    if (!isRunning) {
+      setElapsedSeconds(computeRunElapsedSeconds(task));
+      return;
+    }
+    if (!task.startedAt) return;
+
     const updateElapsed = () => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+      setElapsedSeconds(computeRunElapsedSeconds(task, Date.now()));
     };
     updateElapsed();
 
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [isRunning, task.startedAt]);
+  }, [isRunning, task.startedAt, task.completedAt, task.updatedAt, task.status, task.parkedReason]);
 
   // Calculate overall or active milestone progress percentage
   const totalMilestones = task.milestones?.length || 1;
@@ -160,17 +310,7 @@ export function LiveRunBlock({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-base font-bold text-stone-900 dark:text-stone-50">
-              {isRunning
-                ? "Live run"
-                : status === "parked"
-                  ? "Run parked"
-                  : isFailed || isCrashed
-                    ? "Run failed"
-                    : isCompleted
-                      ? "Run completed"
-                      : isStopped
-                        ? "Run stopped"
-                        : "Run paused"}
+              {statusInfo.headerLabel}
             </span>
             {isPlanning && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 dark:bg-[#1f1f28] text-stone-700 dark:text-stone-300 flex items-center gap-1.5 border border-stone-200 dark:border-white/[0.10]">
@@ -195,6 +335,11 @@ export function LiveRunBlock({
             {isStopped && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
                 • Stopped
+              </span>
+            )}
+            {isParked && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                • Parked
               </span>
             )}
             {isPaused && (
@@ -230,15 +375,7 @@ export function LiveRunBlock({
         {/* Elapsed Timer & Dynamic Activity */}
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400">
           <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>
-            {isCompleted
-              ? `Completed in ${formatElapsedDuration(elapsedSeconds)}`
-              : isPaused
-              ? `Paused at ${formatElapsedDuration(elapsedSeconds)}`
-              : isStopped
-              ? `Stopped after ${formatElapsedDuration(elapsedSeconds)}`
-              : `Running for ${formatElapsedDuration(elapsedSeconds)}`}
-          </span>
+          <span>{formatRunTimerLabel(statusInfo, elapsedSeconds)}</span>
         </div>
       </div>
 
@@ -358,22 +495,10 @@ export function LiveRunBlock({
       })()}
 
       {/* Deliverable Badge & Inline Graphic/Code Preview when Completed */}
-      {isCompleted && (() => {
-        const journalMatch = task.journal?.find((j) => {
-          const txt = j.message || (j as any).entry;
-          return typeof txt === "string" && txt.toLowerCase().includes("committed");
-        });
-        const journalFile = journalMatch
-          ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
-          : undefined;
-
-        const deliverableFile =
-          task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
-          task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
-          journalFile;
-        if (!deliverableFile) return null;
-        const isSvg = deliverableFile.toLowerCase().endsWith(".svg");
-        const isHtml = deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm");
+      {isCompleted && deliverableFile && (() => {
+        const isSvg = isDeliverableSvg;
+        const isHtml = isDeliverableHtml;
+        const deliverableUrl = buildDeliverableFileUrl(deliverableFile);
         return (
           <div className="space-y-3 pt-1">
             <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
@@ -391,7 +516,7 @@ export function LiveRunBlock({
             {isSvg ? (
               <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <SvgViewer
-                  url={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                  url={deliverableUrl}
                   title={deliverableFile}
                   initialTab="preview"
                 />
@@ -401,7 +526,7 @@ export function LiveRunBlock({
                 <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{deliverableFile}</span>
                   <a
-                    href={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    href={deliverableUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px]"
@@ -413,7 +538,7 @@ export function LiveRunBlock({
                 </div>
                 <div className="p-2 bg-white dark:bg-black min-h-[220px]">
                   <iframe
-                    src={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    src={deliverableUrl}
                     sandbox="allow-scripts"
                     className="w-full h-64 border-0 rounded-xl bg-white"
                     title={deliverableFile}
@@ -421,24 +546,7 @@ export function LiveRunBlock({
                 </div>
               </div>
             ) : (() => {
-              // Extract generated deliverable content from milestone diffSummary or state
-              const milestoneWithDiff = task.milestones?.find(m => m.diffSummary && m.diffSummary.trim().length > 0);
-              let codeSnippet = "";
-              if (milestoneWithDiff?.diffSummary) {
-                // Parse git diff additions
-                const lines = milestoneWithDiff.diffSummary.split("\n");
-                const addedLines = lines
-                  .filter(l => l.startsWith("+") && !l.startsWith("+++"))
-                  .map(l => l.slice(1));
-                if (addedLines.length > 0) {
-                  codeSnippet = addedLines.join("\n");
-                }
-              }
-
-              if (!codeSnippet) {
-                codeSnippet = `// Deliverable committed: ${deliverableFile}`;
-              }
-
+              const codeSnippet = resolveCodePreviewContent(deliverableFile, deliverableCode);
               const ext = deliverableFile.split(".").pop() || "typescript";
               return (
                 <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
@@ -523,6 +631,18 @@ export function LiveRunBlock({
         </div>
       )}
 
+      {/* Parked Run Banner */}
+      {isParked && task.parkedReason && (
+        <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/80 dark:bg-amber-950/40 flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+              Run parked: {task.parkedReason}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Failed Run Terminal Message */}
       {isFailed && (
         <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/70 bg-rose-50/80 dark:bg-rose-950/40 flex items-start gap-2.5">
@@ -575,7 +695,7 @@ export function LiveRunBlock({
       )}
 
       {/* Live tool-call trace rows during the turn (UI-003 / UI-011b) */}
-      {liveTraces && liveTraces.length > 0 && (
+      {isRunning && liveTraces && liveTraces.length > 0 && (
         <div className="mt-2.5 space-y-2 w-full" data-testid="live-trace-rows">
           {liveTraces.map((trace, tIdx) => (
             <button
@@ -619,8 +739,8 @@ export function LiveRunBlock({
         </div>
       )}
 
-      {/* Paused Controls: Resume / Restart */}
-      {isPaused && (onResumeRun || onRestartRun) && (
+      {/* Paused / Parked Controls: Resume / Restart */}
+      {(isPaused || isParked) && (onResumeRun || onRestartRun) && (
         <div className="flex items-center gap-2">
           {onResumeRun && (
             <button

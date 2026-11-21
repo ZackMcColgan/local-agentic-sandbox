@@ -336,8 +336,10 @@ export function ThreadsSidebar({
               if (rawStatus === "running") return "Running";
               if (rawStatus === "active") return "Active";
               if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
+              if (rawStatus === "parked") return "Parked";
+              if (rawStatus === "stopped") return "Stopped";
               if (rawStatus === "failed") return "Failed";
-              if (rawStatus === "completed" || (thread.messages && thread.messages.length > 0) || ((thread as any).messageCount ?? 0) > 0) return "Completed";
+              if (rawStatus === "completed") return "Completed";
               return "New";
             })();
             const isRunning = statusLabel === "Running" || statusLabel === "Active";
@@ -348,6 +350,10 @@ export function ThreadsSidebar({
                 return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" };
               if (statusLabel === "Failed")
                 return { label: "✕ FAILED", classes: "bg-rose-500/10 text-rose-700 dark:text-rose-300" };
+              if (statusLabel === "Stopped")
+                return { label: "■ STOPPED", classes: "bg-stone-500/15 text-stone-700 dark:text-stone-300" };
+              if (statusLabel === "Parked")
+                return { label: "⏸ PARKED", classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300" };
               if (statusLabel === "Needs Input")
                 return { label: "NEEDS INPUT", classes: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300" };
               return { label: "NEW", classes: "bg-stone-500/10 text-stone-600 dark:text-stone-400" };

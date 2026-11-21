@@ -46,7 +46,7 @@ export function BuildsView({
         const boardTasks: TaskManifest[] = rawItems.map((t: any) => ({
           taskId: t.taskId || t.id || t.threadId,
           goal: t.title || t.goal || t.brief || "Board Item",
-          status: t.status === "working" ? "active" : t.status || "active",
+          status: t.status === "working" ? "active" : t.status || "paused",
           toolchain: t.toolchain || "node:22",
           branchName: t.branchName || "main",
           milestones: Array.isArray(t.milestones) ? t.milestones : [],

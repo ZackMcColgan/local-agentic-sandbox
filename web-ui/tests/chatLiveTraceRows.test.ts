@@ -273,3 +273,221 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
     }
   });
 });
+
+describe("trace duplication and live-trace scoping", () => {
+  let win: GlobalWindow;
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    win = new GlobalWindow();
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.window = win as any;
+    globalThis.document = win.document as any;
+    globalThis.localStorage = win.localStorage as any;
+    container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(container as any);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    delete (globalThis as any).window;
+    delete (globalThis as any).document;
+    delete (globalThis as any).localStorage;
+  });
+
+  it("(b) parked LiveRunBlock renders 0 live rows when given another run's traces", async () => {
+    const parkedTask: TaskManifest = {
+      ...activeTask,
+      taskId: "task-parked-1",
+      status: "paused",
+    };
+    await act(async () => {
+      root.render(
+        React.createElement(LiveRunBlock, {
+          task: parkedTask,
+          liveTraces: [trace("search_web"), trace("workspace_read_file")],
+        })
+      );
+    });
+    const liveRows = container.querySelectorAll('[data-testid="live-trace-rows"] button');
+    assert.equal(liveRows.length, 0, "Parked LiveRunBlock must render 0 live trace rows");
+  });
+
+  it("(a) 3 trace events on a turn render exactly 3 rows in order with no duplicates", async () => {
+    // Simulate ChatStream's onTracesUpdate contract: ChatStream passes the full
+    // accumulated list on every trace event.
+    const { default: Home } = await import("../app/page");
+    const originalFetch = globalThis.fetch;
+    const encoder = new TextEncoder();
+
+    const makeSseStream = () =>
+      new ReadableStream({
+        start(controller) {
+          const events = [
+            { type: "trace", trace: trace("search_web") },
+            { type: "trace", trace: trace("workspace_read_file") },
+            { type: "trace", trace: trace("workspace_run_command") },
+            { type: "done" },
+          ];
+          for (const ev of events) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+          }
+          controller.close();
+        },
+      });
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/chat")) {
+        return new Response(makeSseStream(), {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
+      if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
+        return new Response(JSON.stringify({ threads: [{ id: "t1", title: "Thread 1", updatedAt: new Date().toISOString() }] }), { status: 200 });
+      }
+      if (url.includes("/api/threads/t1")) {
+        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      await act(async () => {
+        root.render(React.createElement(Home));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+      if (textarea) {
+        await act(async () => {
+          const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
+          if (propsKey) {
+            (textarea as any)[propsKey].onChange({ target: { value: "run 3 tools" } });
+          }
+        });
+        const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
+        await act(async () => {
+          const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
+          if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
+            (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+          } else {
+            sendBtn.click();
+          }
+        });
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 80));
+        });
+      }
+
+      // Navigate to telemetry/trace panel or check ExecutionTrace rows
+      // In page.tsx, traces are passed to <ExecutionTrace traces={traces} />.
+      // We can also check that the live-trace-rows or trace rows have 3 items, not 6.
+      const toolButtons = Array.from(container.querySelectorAll("button")).filter((b) =>
+        (b.getAttribute("aria-label") || "").startsWith("Tool:")
+      );
+      assert.equal(toolButtons.length, 3, `Expected 3 trace rows, got ${toolButtons.length}`);
+      assert.ok((toolButtons[0].getAttribute("aria-label") || "").includes("search_web"));
+      assert.ok((toolButtons[1].getAttribute("aria-label") || "").includes("workspace_read_file"));
+      assert.ok((toolButtons[2].getAttribute("aria-label") || "").includes("workspace_run_command"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("(c) switching threads clears the previous thread's traces from the panel", async () => {
+    const { default: Home } = await import("../app/page");
+    const originalFetch = globalThis.fetch;
+    const encoder = new TextEncoder();
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/chat")) {
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "trace", trace: trace("search_web") })}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+      }
+      if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
+        return new Response(
+          JSON.stringify({
+            threads: [
+              { id: "t1", title: "Thread 1", updatedAt: new Date().toISOString() },
+              { id: "t2", title: "Thread 2", updatedAt: new Date().toISOString() },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.includes("/api/threads/t1")) {
+        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), { status: 200 });
+      }
+      if (url.includes("/api/threads/t2")) {
+        return new Response(JSON.stringify({ thread: { id: "t2", messages: [] }, task: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      await act(async () => {
+        root.render(React.createElement(Home));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+      if (textarea) {
+        await act(async () => {
+          const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
+          if (propsKey) {
+            (textarea as any)[propsKey].onChange({ target: { value: "hi" } });
+          }
+        });
+        const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
+        await act(async () => {
+          const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
+          if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
+            (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+          } else {
+            sendBtn.click();
+          }
+        });
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 80));
+        });
+      }
+
+      // Switch to Thread 2 (or New Chat if sidebar thread list is collapsed)
+      const switchBtn = Array.from(container.querySelectorAll("button, [role='button'], div")).find((el) =>
+        (el.textContent || "").trim() === "Thread 2"
+      ) as HTMLElement | undefined;
+      assert.ok(switchBtn, "Thread switch button must exist");
+      await act(async () => {
+        switchBtn.click();
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      // Open ExecutionTrace / Telemetry view or check no stale traces remain
+      const toolButtons = Array.from(container.querySelectorAll("button")).filter((b) =>
+        (b.getAttribute("aria-label") || "").startsWith("Tool:")
+      );
+      assert.equal(toolButtons.length, 0, "Switching threads must clear previous thread's traces");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

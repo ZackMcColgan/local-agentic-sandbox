@@ -204,4 +204,89 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
     setHostSettings({ jobChunkingEnabled: true });
     assert.equal(getHostSettings().jobChunkingEnabled, true);
   });
+
+  it("(d) supervisor executeTaskWithRecovery honors jobChunkingEnabled=false (no chunk stop) and =true (chunk stops)", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { OvernightSupervisor } = await import("../lib/subagents/supervisor");
+    const tmpBase = path.resolve(
+      process.cwd(),
+      "tmp-sup-chunk-gate-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)
+    );
+    const tmpRepo = path.join(tmpBase, "repo");
+    const tmpCheckpoints = path.join(tmpBase, "checkpoints");
+    fs.mkdirSync(tmpRepo, { recursive: true });
+    fs.mkdirSync(tmpCheckpoints, { recursive: true });
+
+    try {
+      execFileSync("git", ["init"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["config", "user.name", "Test"], { cwd: tmpRepo, stdio: "ignore" });
+      fs.writeFileSync(path.join(tmpRepo, "init.txt"), "init\n", "utf8");
+      execFileSync("git", ["add", "init.txt"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["commit", "-m", "init"], { cwd: tmpRepo, stdio: "ignore" });
+      const headSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmpRepo, encoding: "utf8" }).trim();
+
+      const makeTask = (taskId: string) => ({
+        taskId,
+        goal: "Supervisor chunking toggle test",
+        toolchain: "node:22" as const,
+        branchName: `feat/${taskId}`,
+        status: "active" as const,
+        milestones: [
+          {
+            id: "M1",
+            title: "Milestone 1",
+            description: "First",
+            acceptanceCriteria: [{ id: "AC1", assertion: "ok" }],
+            status: "pending" as const,
+            builderIterations: 0,
+            criticRounds: 0
+          },
+          {
+            id: "M2",
+            title: "Milestone 2",
+            description: "Second",
+            acceptanceCriteria: [{ id: "AC2", assertion: "ok" }],
+            status: "pending" as const,
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      const supervisor = new OvernightSupervisor({ checkpointDirectory: tmpCheckpoints });
+
+      // 1. Toggle OFF: must complete both milestones without chunk-stopping
+      setHostSettings({ jobChunkingEnabled: false });
+      const resOff = await supervisor.executeTaskWithRecovery(makeTask("task-chunk-off"), {
+        repoRoot: tmpRepo,
+        chunkBudget: { maxRounds: 1 },
+        stepExecutor: async () => ({ status: "completed", gitSha: headSha })
+      });
+      assert.equal(resOff.status, "completed", "Supervisor job must complete when jobChunkingEnabled is false");
+      assert.equal(resOff.milestones[0].status, "completed");
+      assert.equal(resOff.milestones[1].status, "completed");
+      assert.notEqual(resOff.parkedReason, "[[CHUNK_COMPLETE]]");
+
+      // 2. Toggle ON: must pause at chunk boundary after 1 round
+      setHostSettings({ jobChunkingEnabled: true });
+      const resOn = await supervisor.executeTaskWithRecovery(makeTask("task-chunk-on"), {
+        repoRoot: tmpRepo,
+        chunkBudget: { maxRounds: 1 },
+        stepExecutor: async () => ({ status: "completed", gitSha: headSha })
+      });
+      assert.equal(resOn.status, "paused", "Supervisor job must pause at chunk boundary when jobChunkingEnabled is true");
+      assert.equal(resOn.parkedReason, "[[CHUNK_COMPLETE]]");
+      assert.equal(resOn.milestones[0].status, "completed");
+      assert.equal(resOn.milestones[1].status, "pending");
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
 });

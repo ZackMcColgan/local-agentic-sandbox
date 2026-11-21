@@ -216,7 +216,7 @@ function resolveTaskOutcome(task: TaskManifest): {
     return { status: "completed" };
   }
 
-  if (task.status === "parked") {
+  if (task.status === "parked" || task.status === "paused") {
     const reason =
       task.parkedReason ||
       task.ambiguityFlags?.[0]?.question ||
