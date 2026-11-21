@@ -41,7 +41,8 @@ import {
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
-import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
+import { parseToolCallsFromText, cleanResidualToolTags } from "@/lib/toolParser";
+import { getMcpUrl, getBrowserMcpUrl, connectMcpClient } from "@/lib/chat/mcpClients";
 import {
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
@@ -130,8 +131,6 @@ import { formatSseWriterError } from "@/lib/turnReconciliation";
 
 const getLlmBaseUrl = () =>
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const getMcpUrl = () => process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
-const getBrowserMcpUrl = () => process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 
 // job-queue-isolation: single in-app slot — chat job turns execute one at a
 // time (FIFO); additional turns queue visibly instead of contending for the
@@ -190,38 +189,6 @@ interface ChatInputMessage {
   timestamp?: string;
   tool_calls?: LlmToolCall[];
   [key: string]: unknown;
-}
-
-async function connectMcpClient(url: string, name: string) {
-  const sseUrl = normalizeMcpUrl(url);
-  let transport: SSEClientTransport | null = null;
-  let client: Client | null = null;
-  try {
-    transport = new SSEClientTransport(new URL(sseUrl));
-    client = new Client({ name, version: "1.0.0" }, { capabilities: {} });
-    await client.connect(transport);
-    const toolsResult = await client.listTools();
-    console.log(
-      `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
-    );
-    return { client, transport, tools: toolsResult.tools };
-  } catch (err: unknown) {
-    console.warn(
-      `[Orchestrator] Could not connect to MCP at ${sseUrl}:`,
-      err instanceof Error ? err.message : String(err)
-    );
-    if (client) {
-      try {
-        await client.close();
-      } catch {}
-    }
-    if (transport) {
-      try {
-        await transport.close();
-      } catch {}
-    }
-    return null;
-  }
 }
 
 /**
