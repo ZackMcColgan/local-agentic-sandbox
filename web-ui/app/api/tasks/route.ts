@@ -11,6 +11,19 @@ const tasksRegistry = new Map<string, TaskManifest>();
 const activeAbortControllers = new Map<string, AbortController>();
 const supervisor = new OvernightSupervisor();
 
+async function resolveTaskById(taskId: string | null | undefined): Promise<TaskManifest | undefined> {
+  if (!taskId) return undefined;
+  let task = tasksRegistry.get(taskId);
+  if (!task) {
+    const diskTask = await supervisor.resumeTaskFromCheckpoint(taskId);
+    if (diskTask) {
+      task = diskTask;
+      tasksRegistry.set(taskId, task);
+    }
+  }
+  return task;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -21,7 +34,7 @@ export async function POST(req: Request) {
       activeExecutionSet.delete(taskId);
       cancelTask(taskId);
       activeAbortControllers.delete(taskId);
-      const task = tasksRegistry.get(taskId);
+      const task = await resolveTaskById(taskId);
       if (task) {
         supervisor.parkTask(task, "User cancelled task");
       }
@@ -32,7 +45,7 @@ export async function POST(req: Request) {
     // 2. Action: Revert Ambiguity Flag
     if (body.action === "revert") {
       const { taskId, flagId } = body;
-      const task = tasksRegistry.get(taskId);
+      const task = await resolveTaskById(taskId);
       if (task) {
         const flag = task.ambiguityFlags.find((f) => f.id === flagId);
         if (flag) {
@@ -52,7 +65,7 @@ export async function POST(req: Request) {
     // 3. Action: Adjust Ambiguity Flag
     if (body.action === "adjust") {
       const { taskId, flagId, instruction } = body;
-      const task = tasksRegistry.get(taskId);
+      const task = await resolveTaskById(taskId);
       if (task) {
         const flag = task.ambiguityFlags.find((f) => f.id === flagId);
         if (flag) {
@@ -158,6 +171,7 @@ export async function POST(req: Request) {
           console.error(`[tasks] Task ${taskId} async execution error:`, err);
         } finally {
           activeExecutionSet.delete(taskId);
+          activeAbortControllers.delete(taskId);
         }
       })().catch((err) => {
         console.error(`[tasks] Background task execution failure:`, err);
@@ -210,15 +224,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ tasks: list, activeTask });
   }
 
-  let task = tasksRegistry.get(taskId);
-  if (!task) {
-    // Try recovering from disk checkpoint
-    const diskTask = await supervisor.resumeTaskFromCheckpoint(taskId);
-    if (diskTask) {
-      task = diskTask;
-      tasksRegistry.set(taskId, task);
-    }
-  }
+  const task = await resolveTaskById(taskId);
 
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });

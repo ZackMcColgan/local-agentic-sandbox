@@ -101,4 +101,156 @@ test('Fix 4 — Active Task Rehydration & Refresh Durability Suite', async (t) =
     assert.strictEqual(activeTask.journal.length, 2);
     assert(activeTask.journal[1].message.includes('Working on milestone m2'));
   });
+
+  await t.test('POST /api/tasks releases activeWorkers slot when async execution settles', async () => {
+    const tmpWorkspace = path.join(testCheckpointDir, 'ws-settle');
+    fs.mkdirSync(tmpWorkspace, { recursive: true });
+    const prevEnv = {
+      AGENT_CHECKPOINT_DIR: process.env.AGENT_CHECKPOINT_DIR,
+      WORKSPACE_DIR: process.env.WORKSPACE_DIR,
+      FAST_GRAPH_TEST: process.env.FAST_GRAPH_TEST,
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+      LLM_ENGINE: process.env.LLM_ENGINE
+    };
+    process.env.AGENT_CHECKPOINT_DIR = testCheckpointDir;
+    process.env.WORKSPACE_DIR = tmpWorkspace;
+    process.env.FAST_GRAPH_TEST = '1';
+    process.env.LLM_ENGINE = 'ollama';
+    process.env.LLM_BASE_URL = 'http://127.0.0.1:1';
+    process.env.OLLAMA_BASE_URL = 'http://127.0.0.1:1';
+
+    try {
+      const tasksRoute = await import('../app/api/tasks/route');
+      const { activeExecutionSet } = await import('../lib/threads/threadStore');
+
+      const postReq = new Request('http://localhost:3000/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          goal: 'Write a tiny hello.txt file',
+          autoExecute: true
+        })
+      });
+      const postRes = await tasksRoute.POST(postReq);
+      assert.strictEqual(postRes.status, 201);
+      const created = await postRes.json();
+      const taskId: string = created.taskId;
+      assert.ok(taskId);
+
+      // Wait for background execution to settle (activeExecutionSet cleared)
+      const deadline = Date.now() + 10000;
+      while (activeExecutionSet.has(taskId) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.strictEqual(activeExecutionSet.has(taskId), false, 'Background execution should have settled');
+
+      const getReq = new Request(`http://localhost:3000/api/tasks?taskId=${encodeURIComponent(taskId)}`);
+      const getRes = await tasksRoute.GET(getReq);
+      assert.strictEqual(getRes.status, 200);
+      const data = await getRes.json();
+      assert.strictEqual(data.activeWorkers, 0, 'Settled task must report activeWorkers: 0');
+      assert.strictEqual(supervisor.getAbortController(taskId), undefined, 'Supervisor registry must also release abort controller');
+    } finally {
+      Object.entries(prevEnv).forEach(([k, v]) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      });
+    }
+  });
+
+  await t.test('POST /api/tasks cancel, revert, and adjust resolve persisted tasks from disk after restart', async () => {
+    const prevCheckpointDir = process.env.AGENT_CHECKPOINT_DIR;
+    process.env.AGENT_CHECKPOINT_DIR = testCheckpointDir;
+
+    try {
+      const tasksRoute = await import('../app/api/tasks/route');
+      const nowIso = new Date().toISOString();
+
+      const makeDiskTask = (taskId: string, flagId: string): TaskManifest => ({
+        taskId,
+        goal: 'Persisted task across restart',
+        branchName: `feat/${taskId}`,
+        branch: `feat/${taskId}`,
+        toolchain: 'node:22',
+        status: 'active',
+        milestones: [],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [
+          {
+            id: flagId,
+            milestoneId: 'M1',
+            question: 'Which approach?',
+            judgmentCall: 'Default approach',
+            reasoning: 'Best fit',
+            revertAction: { type: 're_plan', target: 'M1' },
+            reviewed: false
+          }
+        ],
+        journal: [],
+        startedAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      // 1. revert on disk-only task (not in tasksRegistry)
+      const revertTaskId = `task-disk-revert-${Date.now()}`;
+      supervisor.saveCheckpoint(makeDiskTask(revertTaskId, 'flag-rev-1'));
+      const revertRes = await tasksRoute.POST(
+        new Request('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'revert', taskId: revertTaskId, flagId: 'flag-rev-1' })
+        })
+      );
+      assert.strictEqual(revertRes.status, 200, 'revert must resolve disk-only task instead of 404');
+      const revertBody = await revertRes.json();
+      assert.strictEqual(revertBody.success, true);
+      assert.strictEqual(revertBody.flag.reviewed, true);
+      const persistedAfterRevert = await supervisor.resumeTaskFromCheckpoint(revertTaskId);
+      assert.strictEqual(persistedAfterRevert?.ambiguityFlags[0].reviewed, true);
+
+      // 2. adjust on disk-only task (not in tasksRegistry)
+      const adjustTaskId = `task-disk-adjust-${Date.now()}`;
+      supervisor.saveCheckpoint(makeDiskTask(adjustTaskId, 'flag-adj-1'));
+      const adjustRes = await tasksRoute.POST(
+        new Request('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'adjust',
+            taskId: adjustTaskId,
+            flagId: 'flag-adj-1',
+            instruction: 'Use strict mode'
+          })
+        })
+      );
+      assert.strictEqual(adjustRes.status, 200, 'adjust must resolve disk-only task instead of 404');
+      const adjustBody = await adjustRes.json();
+      assert.strictEqual(adjustBody.success, true);
+      assert.strictEqual(adjustBody.flag.reviewed, true);
+      const persistedAfterAdjust = await supervisor.resumeTaskFromCheckpoint(adjustTaskId);
+      assert.strictEqual(persistedAfterAdjust?.ambiguityFlags[0].reviewed, true);
+      assert.ok(persistedAfterAdjust?.journal.some((j) => j.message.includes('Use strict mode')));
+
+      // 3. cancel on disk-only task (not in tasksRegistry)
+      const cancelTaskId = `task-disk-cancel-${Date.now()}`;
+      supervisor.saveCheckpoint(makeDiskTask(cancelTaskId, 'flag-can-1'));
+      const cancelRes = await tasksRoute.POST(
+        new Request('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cancel', taskId: cancelTaskId })
+        })
+      );
+      assert.strictEqual(cancelRes.status, 200);
+      const cancelBody = await cancelRes.json();
+      assert.strictEqual(cancelBody.status, 'stopped');
+      const persistedAfterCancel = await supervisor.resumeTaskFromCheckpoint(cancelTaskId);
+      assert.strictEqual(persistedAfterCancel?.status, 'stopped', 'cancel must park the persisted task on disk');
+    } finally {
+      if (prevCheckpointDir === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
+      else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointDir;
+    }
+  });
 });
