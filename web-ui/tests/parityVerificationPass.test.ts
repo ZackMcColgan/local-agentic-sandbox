@@ -135,7 +135,7 @@ describe("parity PR4 — canvas diff (board: single gutter, tinted rows, rail he
   it("the board's mobile diff note is present under the diff", () => {
     const note = around(canvas, "Code lines never wrap", 200, 200);
     assert.ok(note.includes("lg:hidden"), "the diff note is mobile-only");
-    assert.ok(canvas.includes("nothing is cut to fit the phone"), "board note text is complete");
+    assert.match(canvas, /nothing is cut\s+to fit the phone/, "board note text is complete");
   });
 
   it("code view sits on bg-1 like the rest of the pane", () => {

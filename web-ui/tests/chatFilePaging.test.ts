@@ -207,10 +207,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         routeCode.includes('toolName === "workspace_read_file" || toolName === "host_read_file"'),
         "route.ts must identify file read tools (workspace_read_file and host_read_file)"
       );
-      assert.ok(
-        routeCode.includes(
-          "content: isFileReadTool ? JSON.stringify(result) : clampToolOutput(JSON.stringify(result))"
-        ),
+      assert.match(
+        routeCode,
+        /content:\s*isFileReadTool\s*\?\s*JSON\.stringify\(result\)\s*:\s*clampToolOutput\(JSON\.stringify\(result\)\)/,
         "route.ts must bypass clampToolOutput for file read tools"
       );
 
@@ -221,10 +220,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         contextCode.includes('toolName === "workspace_read_file" || toolName === "host_read_file"'),
         "contextBudget.ts must identify file read tools (workspace_read_file and host_read_file)"
       );
-      assert.ok(
-        contextCode.includes(
-          "content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))"
-        ),
+      assert.match(
+        contextCode,
+        /content:\s*isFileReadTool\s*\?\s*JSON\.stringify\(toolResult\)\s*:\s*clampToolOutput\(JSON\.stringify\(toolResult\)\)/,
         "contextBudget.ts must bypass clampToolOutput for file read tools"
       );
     });

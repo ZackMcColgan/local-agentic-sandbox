@@ -559,8 +559,9 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       slice.includes(`resolveCompactionStrategy() === "hybrid"`),
       "call-site must branch on the resolved strategy"
     );
-    assert.ok(
-      slice.includes("await threadStore.compactThreadIncrementalHybrid(threadData"),
+    assert.match(
+      slice,
+      /await\s+threadStore\.compactThreadIncrementalHybrid\(\s*threadData/,
       "hybrid branch must await the async store rung"
     );
     assert.ok(slice.includes("} else {"), "extraction branch must be the else path");
@@ -591,10 +592,9 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       slice.includes("num_predict: sumReq.maxTokens"),
       "summarize adapter must carry the pinned maxTokens"
     );
-    assert.ok(
-      routeSrc.includes(
-        `import { compactConversationHistory, resolveCompactionStrategy } from "@/lib/conversationCompaction";`
-      ),
+    assert.match(
+      routeSrc,
+      /import\s*\{\s*compactConversationHistory,\s*resolveCompactionStrategy,?\s*\}\s*from\s*"@\/lib\/conversationCompaction";/,
       "route must import the strategy resolver"
     );
     // Manual compact endpoint honors COMPACTION_STRATEGY (AUD-10).
@@ -842,7 +842,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     assert.ok(anchor >= 0, "chat route must contain mid-turn fitConversationToBudget");
     const slice = routeSrc.slice(anchor, anchor + 5000);
     assert.ok(
-      /const\s+hybridResult\s*=\s*await\s+threadStore\.compactThreadIncrementalHybrid\(threadData/.test(
+      /const\s+hybridResult\s*=\s*await\s+threadStore\.compactThreadIncrementalHybrid\(\s*threadData/.test(
         slice
       ),
       "mid-turn hybrid branch must capture the compactThreadIncrementalHybrid result"
