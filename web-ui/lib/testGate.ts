@@ -70,6 +70,11 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/subagents/codeValidation") || p.includes("codeValidation.test.ts"),
+    tests: ["tests/codeValidation.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("threadStore.ts") ||
       p.includes("app/api/threads/route.ts") ||
       p.includes("ChatStream.tsx") ||
