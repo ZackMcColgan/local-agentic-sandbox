@@ -579,6 +579,7 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/supervisorGitOpsIntegration.test.ts",
       // UI-008: readable thread-list titles derived at record-create time
       "tests/threadTitles.test.ts",
+      "tests/threadLiveness.test.ts",
       "tests/threadTitleDerivation.test.ts",
     ],
   },
