@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { spawn, execSync } from "child_process";
+import { checkCommandDialect } from "./dialectGuard";
 
 export type JobStatus = "pending" | "running" | "done" | "failed" | "interrupted";
 
@@ -265,6 +266,16 @@ export async function runAsyncJob(
           return;
         }
         effectiveCwd = rec.args.cwd;
+      }
+      const command = String(rec.args?.command || "");
+      const dialect = checkCommandDialect(command, "powershell");
+      if (!dialect.ok) {
+        store.update(rec.id, {
+          status: "failed",
+          finishedAt: Date.now(),
+          error: dialect.reason
+        });
+        return;
       }
       await runPowershellJob(store, rec, effectiveCwd);
       return;
