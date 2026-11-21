@@ -200,7 +200,21 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         (deleteBtn as HTMLButtonElement).click();
       });
 
-      assert.equal(deleteCalled, true, "Clicking delete action must trigger onDeleteThread");
+      // Deletion is gated by a confirmation dialog: the click alone must not delete
+      assert.equal(deleteCalled, false, "Clicking delete action must not delete before confirmation");
+      const dialog = container.querySelector("[data-testid='thread-delete-dialog']");
+      assert.ok(dialog, "Clicking delete action must open the confirmation dialog");
+
+      const confirmBtn = container.querySelector(
+        "[data-testid='confirm-delete-btn']"
+      ) as HTMLButtonElement;
+      assert.ok(confirmBtn, "Confirmation dialog must provide a confirm delete button");
+
+      act(() => {
+        confirmBtn.click();
+      });
+
+      assert.equal(deleteCalled, true, "Confirming the dialog must trigger onDeleteThread");
     });
   });
 
