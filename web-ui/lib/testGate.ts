@@ -1,6 +1,23 @@
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const GATE_MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ANCHORED_WEB_UI_ROOT = path.resolve(GATE_MODULE_DIR, "..");
+const ANCHORED_REPO_ROOT = path.resolve(ANCHORED_WEB_UI_ROOT, "..");
+const TSX_TEST_BATCH_SIZE = 120;
+
+function resolveTsxCliPath(webUiCwd: string, repoRoot: string): string | null {
+  const candidates = [
+    path.join(webUiCwd, "node_modules", "tsx", "dist", "cli.mjs"),
+    path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs"),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 /**
  * Canonical workspaces that define "the suite" across the entire repository.
@@ -1630,12 +1647,10 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     };
   }
 
-  const repoRoot =
-    options.repoRoot ||
-    path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
-  const webUiCwd = fs.existsSync(path.join(process.cwd(), "tests"))
-    ? process.cwd()
-    : path.resolve(repoRoot, "web-ui");
+  const repoRoot = options.repoRoot || ANCHORED_REPO_ROOT;
+  const webUiCwd = options.repoRoot
+    ? path.resolve(options.repoRoot, "web-ui")
+    : ANCHORED_WEB_UI_ROOT;
   const mcpServerCwd = path.resolve(repoRoot, "mcp-server");
   const browserMcpCwd = path.resolve(repoRoot, "browser-mcp");
 
@@ -1688,42 +1703,64 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
   }
 
-  // 1. Run web-ui tsx tests if any mapped
+  // 1. Run web-ui tsx tests in batches to stay safely under Windows command-line limits
   if (tsxTests.length > 0) {
-    try {
-      const remainingTime = Math.max(
-        1,
-        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
-      );
-      const cmd = `npx tsx --tsconfig tsconfig.json --test ${tsxTests.join(" ")}`;
-      const out = execSync(cmd, {
-        cwd: webUiCwd,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        env: childEnv,
-        timeout: remainingTime,
-      });
-      testOutput += out;
-      const counts = parseTapCounts(out);
-      if (counts.passed === 0 && counts.failed === 0) {
-        failedCount += 1;
-        runError = "web-ui test runner produced unparseable TAP output";
-      } else {
-        passedCount += counts.passed;
-        failedCount += counts.failed;
+    const tsxCli = resolveTsxCliPath(webUiCwd, repoRoot);
+    for (let i = 0; i < tsxTests.length; i += TSX_TEST_BATCH_SIZE) {
+      const batch = tsxTests.slice(i, i + TSX_TEST_BATCH_SIZE);
+      try {
+        const remainingTime = Math.max(
+          1,
+          budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+        );
+        const out = tsxCli
+          ? execFileSync(
+              process.execPath,
+              [tsxCli, "--tsconfig", "tsconfig.json", "--test", ...batch],
+              {
+                cwd: webUiCwd,
+                encoding: "utf8",
+                stdio: ["ignore", "pipe", "pipe"],
+                env: childEnv,
+                timeout: remainingTime,
+              }
+            )
+          : execSync(`npx tsx --tsconfig tsconfig.json --test ${batch.join(" ")}`, {
+              cwd: webUiCwd,
+              encoding: "utf8",
+              stdio: ["ignore", "pipe", "pipe"],
+              env: childEnv,
+              timeout: remainingTime,
+            });
+        testOutput += out;
+        const counts = parseTapCounts(out);
+        if (counts.passed === 0 && counts.failed === 0) {
+          failedCount += 1;
+          runError = runError ?? "web-ui test runner produced unparseable TAP output";
+        } else {
+          passedCount += counts.passed;
+          failedCount += counts.failed;
+        }
+      } catch (err: any) {
+        const stdout = err.stdout ? err.stdout.toString() : "";
+        const stderr = err.stderr ? err.stderr.toString() : "";
+        const batchOutput = `${stdout}\n${stderr}`;
+        testOutput += batchOutput;
+        const counts = parseTapCounts(batchOutput);
+        if (counts.passed === 0 && counts.failed === 0) {
+          failedCount += 1;
+        } else {
+          passedCount += counts.passed;
+          failedCount += counts.failed > 0 ? counts.failed : 1;
+        }
+        runError = runError ?? err.message;
+        if (
+          err.code === "ETIMEDOUT" ||
+          (err.message && (err.message.includes("ETIMEDOUT") || err.message.includes("timed out")))
+        ) {
+          break;
+        }
       }
-    } catch (err: any) {
-      const stdout = err.stdout ? err.stdout.toString() : "";
-      const stderr = err.stderr ? err.stderr.toString() : "";
-      testOutput += `${stdout}\n${stderr}`;
-      const counts = parseTapCounts(testOutput);
-      if (counts.passed === 0 && counts.failed === 0) {
-        failedCount += 1;
-      } else {
-        passedCount += counts.passed;
-        failedCount += counts.failed > 0 ? counts.failed : 1;
-      }
-      runError = err.message;
     }
   }
 
