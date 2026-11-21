@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
-import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
 import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
 import {
@@ -11,199 +10,57 @@ import {
   resolveCompactionStrategy,
 } from "../conversationCompaction";
 import type {
-  CompactionStrategy,
   HybridFallbackReason,
   SummarizeRequest,
   SummarizeResult,
 } from "../conversationCompaction";
-import { TurnFileDiff } from "../chatDiffs";
 import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
-import type { ElisionMeta } from "../microElision";
-import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
-import { superviseStalledThread, STALL_WINDOW_MS } from "./inAppSupervisor";
+import { superviseStalledThread } from "./inAppSupervisor";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
+
+import type {
+  TurnConversationPreparation,
+  TurnStartCompactionOptions,
+  ThreadAttachment,
+  ThreadMessage,
+  ThreadLiveness,
+  ThreadCompactionBoundary,
+  ThreadSummary,
+  Thread,
+  ActiveTurnInfo,
+} from "./types";
+
+export type {
+  TurnConversationPreparation,
+  TurnStartCompactionOptions,
+  ThreadAttachment,
+  ThreadMessage,
+  ThreadLiveness,
+  ThreadCompactionBoundary,
+  ThreadSummary,
+  Thread,
+  ActiveTurnInfo,
+};
 
 export const COMPACTION_TRIGGER_TOKENS = Math.floor(
   CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO
 );
 
-/** Max characters for a derived thread-list title (UI-008). */
-export const THREAD_TITLE_MAX_CHARS = 80;
+import { THREAD_TITLE_MAX_CHARS, deriveStoredThreadTitle, deriveThreadTitle } from "./titles";
 
-/**
- * UI-008: derive a readable thread-list title from a goal/prompt at
- * record-create time. Strips the driver/session style prefixes
- * ('Session: ', 'JOB — ' incl. hyphen/dash variants) case-insensitively,
- * collapses to the first line, and truncates at a word boundary so the
- * sidebar never shows a raw prefix or a mid-word cut. Plain goals pass
- * through unchanged apart from the word-boundary truncation.
- */
-export function deriveStoredThreadTitle(raw: string | undefined): string {
-  let text = (raw ?? "").trim();
-  // Strip stacked style prefixes: 'Session:' / 'JOB' followed by an em/en dash,
-  // hyphen, or colon separator. Only the exact prefix tokens are removed —
-  // ordinary words that merely start with 'job'/'session' are left intact.
-  const prefixPattern = /^(?:session|job)\s*[:\-–—]\s*/i;
-  while (prefixPattern.test(text)) {
-    text = text.replace(prefixPattern, "").trim();
-  }
-  // First line only — multi-line briefs keep the summary line.
-  const firstLine = text.split(/\r?\n/)[0].trim();
-  return firstLine || "New thread";
-}
+export { THREAD_TITLE_MAX_CHARS, deriveStoredThreadTitle, deriveThreadTitle };
 
-export function deriveThreadTitle(
-  raw: string | undefined,
-  maxChars: number = THREAD_TITLE_MAX_CHARS
-): string {
-  const firstLine = deriveStoredThreadTitle(raw);
-  if (firstLine === "New thread") return firstLine;
-  if (firstLine.length <= maxChars) return firstLine;
-  // Truncate at a word boundary: cut at the last whitespace before the cap.
-  const window = firstLine.slice(0, maxChars);
-  const lastBoundary = window.lastIndexOf(" ");
-  const cut = lastBoundary > 0 ? window.slice(0, lastBoundary) : window;
-  return cut.trim();
-}
+import {
+  TURN_STALL_WINDOW_MS,
+  ZOMBIE_TURN_AGE_CAP_MS,
+  isRecordStaleBeyond,
+  isZombiePresence,
+  computeTurnLiveness as computeTurnLivenessPure,
+} from "./liveness";
 
-/** Result of turn-start conversation preparation (thread view + compaction report). */
-export interface TurnConversationPreparation {
-  messages: Array<{
-    role: string;
-    content: string;
-    name?: string;
-    tool_call_id?: string;
-    tool_calls?: Array<{
-      id?: string;
-      type?: string;
-      function?: { name?: string; arguments?: string | Record<string, unknown> };
-    }>;
-    [key: string]: unknown;
-  }>;
-  compactedThisTurn: boolean;
-  tokensBeforeCompaction?: number;
-  tokensAfterCompaction?: number;
-  /** True when the boundary summary placed in the model view is the MODEL DIGEST. */
-  modelSummaryUsed?: boolean;
-  /** Set when the hybrid pass failed and the extraction digest was used instead. */
-  fallbackReason?: HybridFallbackReason;
-}
-
-/** Options for the turn-start compaction path (strategy-aware dispatch). */
-export interface TurnStartCompactionOptions {
-  /** Overrides COMPACTION_STRATEGY for this call; defaults to resolveCompactionStrategy(). */
-  strategy?: CompactionStrategy;
-  /** Summarization callback for the hybrid rung. Absent => extraction rung. */
-  summarize?: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
-  /** Injectable deadlines (test seam); default to the pinned guardrails. */
-  inactivityMs?: number;
-  totalDeadlineMs?: number;
-}
-
-export interface ThreadAttachment {
-  name: string;
-  type: string;
-  size: number;
-  previewUrl?: string;
-  base64?: string;
-  isImage?: boolean;
-}
-
-export interface ThreadMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  thought?: string;
-  traces?: ExecutionTraceItem[];
-  attachments?: ThreadAttachment[];
-  diffs?: TurnFileDiff[];
-  modelUsed?: string;
-  durationMs?: number;
-  thinkingDurationMs?: number;
-  phaseTimings?: {
-    contextPrepMs?: number;
-    thinkingMs?: number;
-    toolsMs?: number;
-    writingMs?: number;
-  };
-  timestamp: string;
-  taskId?: string;
-  error?: string;
-  parkedReason?: string;
-  isStopped?: boolean;
-  compactedThisTurn?: boolean;
-  tokensBeforeCompaction?: number;
-  tokensAfterCompaction?: number;
-  compactionActions?: string[];
-  selectedModel?: string;
-  status?: "completed" | "incomplete" | "error" | "streaming";
-  finish_reason?: string;
-  outputTokens?: number;
-  /** TOKEN ECONOMICS (a): prompt tokens recorded per model round in this turn. */
-  roundPromptTokens?: number[];
-  /** TOKEN ECONOMICS (c): micro-elision audit — every stub applied during the
-   * turn (tool, target, original size, round). The full results remain in
-   * `traces`, so a stubbed result stays recoverable from the thread record. */
-  microElisions?: ElisionMeta[];
-  /** TOKEN ECONOMICS (d): read-dedup audit — every unchanged re-read stubbed
-   * during the turn (path, content hash, the earlier read's round/trace, and
-   * the re-read's round). The full content of the first read remains in
-   * `traces`, so a stubbed read stays recoverable from the thread record. */
-  readDedups?: ReadDedupMeta[];
-  /** TOKEN ECONOMICS (a): per-job rollup for this turn (rounds, prompt integral, output, compactions). */
-  tokenEconomics?: JobTokenRollup;
-  /** Per-job chunk budget override (maxRounds, maxDurationMs, marathonOptOut). */
-  chunkBudget?: ChunkBudgetConfig | null;
-}
-
-/**
- * TURN-LIVENESS: derived heartbeat state for a thread record.
- * - "alive": turn is live and its record was touched within TURN_STALL_WINDOW_MS.
- * - "stalled": turn is live but no activity landed past the stale window.
- * - "settled": turn is not live (completed / stopped / failed / paused).
- */
-export type ThreadLiveness = "alive" | "stalled" | "settled";
-
-/** How long a live turn may go without a record touch before it reads as stalled. */
-export const TURN_STALL_WINDOW_MS = STALL_WINDOW_MS;
-
-/**
- * qa-6 / UI-001 + UI-002: hard cap on zombie live signals. A turn-presence
- * entry (or execution-set entry) whose thread record has gone untouched
- * past this cap belongs to a turn that died without clearing its live
- * signals — reconcile reaps it instead of trusting it forever. A genuinely
- * live turn heartbeats its record (touchActiveTurn + per-round snapshots),
- * so its record never approaches this cap while it works.
- */
-export const ZOMBIE_TURN_AGE_CAP_MS = 6 * 60 * 60 * 1000;
-
-/** True when the thread record has not been touched for longer than windowMs. */
-export function isRecordStaleBeyond(thread: Thread, now: number, windowMs: number): boolean {
-  const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
-  if (!Number.isFinite(touchedAt)) return false;
-  return now - touchedAt > windowMs;
-}
-
-/**
- * A presence entry is a zombie when it is older than the hard cap AND the
- * thread record has been stale past the ordinary stall window. Both
- * conditions are required: an ancient presence with a fresh record is a
- * live long turn; a young presence with a stale record may just be a
- * quiet round.
- */
-export function isZombiePresence(
-  presence: { startedAt: string } | null | undefined,
-  thread: Thread,
-  now: number = Date.now()
-): boolean {
-  if (!presence) return false;
-  const startedAt = Date.parse(presence.startedAt || "");
-  if (!Number.isFinite(startedAt)) return false;
-  if (now - startedAt <= ZOMBIE_TURN_AGE_CAP_MS) return false;
-  return isRecordStaleBeyond(thread, now, TURN_STALL_WINDOW_MS);
-}
+export { TURN_STALL_WINDOW_MS, ZOMBIE_TURN_AGE_CAP_MS, isRecordStaleBeyond, isZombiePresence };
 
 /**
  * Derives liveness from the record's last-activity timestamp (updatedAt) against the
@@ -211,15 +68,8 @@ export function isZombiePresence(
  * reconciliation stays owned by reconcileThread.
  */
 export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
-  const isLive =
-    thread.status === "active" ||
-    thread.status === "running" ||
-    activeExecutionSet.has(thread.id) ||
-    Boolean(getActiveTurn(thread.id));
-  if (!isLive) return "settled";
-  const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
-  if (!Number.isFinite(touchedAt)) return "stalled";
-  return now - touchedAt <= TURN_STALL_WINDOW_MS ? "alive" : "stalled";
+  const isLiveOverride = activeExecutionSet.has(thread.id) || Boolean(getActiveTurn(thread.id));
+  return computeTurnLivenessPure(thread, now, isLiveOverride);
 }
 
 /**
@@ -235,77 +85,6 @@ export function touchActiveTurn(threadId: string): void {
     raw.updatedAt = new Date().toISOString();
     fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
   } catch {}
-}
-
-export interface ThreadCompactionBoundary {
-  strategy?: CompactionStrategy;
-  extractionDigest?: string;
-  fallbackLogged?: boolean;
-  fallbackReason?: HybridFallbackReason;
-  throughMessageId: string;
-  summary: string;
-  compactedAt: string;
-  tokensBefore: number;
-  tokensAfter: number;
-}
-
-export interface ThreadSummary {
-  id: string;
-  title: string;
-  status: Thread["status"];
-  createdAt: string;
-  updatedAt: string;
-  model?: string;
-  reasoningEffort?: Thread["reasoningEffort"];
-  taskId?: string;
-  error?: string;
-  parkedReason?: string;
-  messageCount: number;
-  lastMessagePreview: string;
-  hasDiffs: boolean;
-  hasStreamingMessage: boolean;
-  matchSnippet?: string;
-}
-
-export interface Thread {
-  id: string;
-  title: string;
-  status: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
-  createdAt: string;
-  updatedAt: string;
-  liveness?: ThreadLiveness;
-  model: string;
-  reasoningEffort: "low" | "medium" | "xhigh";
-  messages: ThreadMessage[];
-  compaction?: ThreadCompactionBoundary;
-  hostAccess?: boolean;
-  taskId?: string;
-  error?: string;
-  parkedReason?: string;
-  scope?: TaskScope;
-  workerInfo?: string;
-  timeLabel?: string;
-  isTest?: boolean;
-  isSubagent?: boolean;
-  isScheduled?: boolean;
-  /** In-app supervisor: reason the turn was honestly ended after stalling. */
-  stalledReason?: string;
-  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
-  needsAttention?: boolean;
-  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
-  autoResumeCount?: number;
-  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
-  resumedFromThreadId?: string;
-  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
-  resumedToThreadId?: string;
-  /**
-   * TOKEN ECONOMICS (a): per-job rollup aggregated across the thread's turns
-   * (rounds, prompt-token integral, output tokens, compaction count). Surfaced
-   * with the board item; no separate UI surface in this pass.
-   */
-  tokenEconomics?: JobTokenRollup;
-  /** Per-job chunk budget override (maxRounds, maxDurationMs, marathonOptOut). */
-  chunkBudget?: ChunkBudgetConfig | null;
 }
 
 export function resolveThreadsDir(): string {
@@ -352,17 +131,6 @@ const g = globalThis as {
 };
 export const activeExecutionSet: Set<string> =
   g.__sandboxActiveExecutionSet || (g.__sandboxActiveExecutionSet = new Set<string>());
-
-/**
- * CHAT-PRESENCE: turn-presence marker. Visible in GET responses from the moment a
- * turn starts — before any token or streaming snapshot exists — so cross-device
- * watchers see "a turn is running" immediately. Cleared on done/error/abort/stop.
- */
-export interface ActiveTurnInfo {
-  threadId: string;
-  startedAt: string;
-  status: "streaming";
-}
 
 const activeTurnRegistry: Map<string, ActiveTurnInfo> =
   g.__sandboxActiveTurnRegistry ||

@@ -177,16 +177,28 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
     );
   });
 
-  it("status unions include streaming and the badge renders it honestly", () => {
-    const storeSrc = fs.readFileSync(
-      path.resolve(__dirname, "../lib/threads/threadStore.ts"),
-      "utf8"
-    );
-    assert.match(
-      storeSrc,
-      /status\?: "completed" \| "incomplete" \| "error" \| "streaming"/,
-      "ThreadMessage.status must allow streaming"
-    );
+  it("status unions include streaming and the badge renders it honestly", async () => {
+    const { store, dir } = makeStore();
+    const thread = store.createThread({ id: "t-stream-status", title: "stream status" });
+    activeExecutionSet.add(thread.id);
+    try {
+      store.upsertMessage(thread.id, {
+        id: "msg-stream",
+        role: "assistant",
+        content: "partial",
+        status: "streaming",
+        timestamp: new Date().toISOString(),
+      });
+      const loaded = await store.getThread(thread.id);
+      assert.equal(
+        loaded?.messages[0]?.status,
+        "streaming",
+        "ThreadMessage.status must round-trip streaming"
+      );
+    } finally {
+      activeExecutionSet.delete(thread.id);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
     const streamSrc = fs.readFileSync(
       path.resolve(__dirname, "../components/ChatStream.tsx"),
       "utf8"
