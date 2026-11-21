@@ -867,6 +867,11 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Subagents & Supervisor
   {
+    match: (p) =>
+      p.includes("lib/subagents/checkpointSaver") || p.includes("checkpointSaver.test.ts"),
+    tests: ["tests/checkpointSaver.test.ts", "tests/langgraphSupervisorNodes.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/supervisor"),
     tests: [
       "tests/supervisor.test.ts",
