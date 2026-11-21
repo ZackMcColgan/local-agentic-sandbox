@@ -362,12 +362,22 @@ export class SelfDeployPipeline {
         return failImport(`Docker save failed: ${saveRes.stderr || saveRes.stdout}`);
       }
 
-      const mkdirRes = await this.commandRunner("docker", ["exec", k8sNode, "mkdir", "-p", "/images"]);
+      const mkdirRes = await this.commandRunner("docker", [
+        "exec",
+        k8sNode,
+        "mkdir",
+        "-p",
+        "/images",
+      ]);
       if (mkdirRes.exitCode !== 0) {
         return failImport(`Node mkdir /images failed: ${mkdirRes.stderr || mkdirRes.stdout}`);
       }
 
-      const cpRes = await this.commandRunner("docker", ["cp", tarPath, `${k8sNode}:/images/image.tar`]);
+      const cpRes = await this.commandRunner("docker", [
+        "cp",
+        tarPath,
+        `${k8sNode}:/images/image.tar`,
+      ]);
       if (cpRes.exitCode !== 0) {
         return failImport(`Docker cp to node failed: ${cpRes.stderr || cpRes.stdout}`);
       }
