@@ -298,3 +298,54 @@ test("enforces hard 5-item cap and 10-minute duration cap without interrupting m
   assert.equal(reportTimed.stopReason, "time-cap-reached");
   assert.equal(threeItems[1].status, "queued");
 });
+
+test("writes deep-link threadLink (/?thread=<id>) for failed, completed, chunk-complete, and in-progress outcomes", async () => {
+  const failedItem = makeItem({ id: "link-fail", key: "#51", title: "Failed link" });
+  const completedItem = makeItem({ id: "link-done", key: "#52", title: "Done link" });
+  const chunkItem = makeItem({ id: "link-chunk", key: "#53", title: "Chunk link" });
+  const inProgressItem = makeItem({ id: "link-prog", key: "#54", title: "In-progress link" });
+
+  let chunkCalls = 0;
+  let chunkLinkAfterFirst = "";
+
+  const orchestrator = new BoardOrchestrator({
+    items: [failedItem, completedItem, chunkItem, inProgressItem],
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    issueAndWait: async ({ item }) => {
+      if (item.id === "link-fail") {
+        return { status: "failed", threadId: "t-fail", error: "boom" };
+      }
+      if (item.id === "link-done") {
+        return { status: "completed", threadId: "t-done" };
+      }
+      if (item.id === "link-chunk") {
+        chunkCalls += 1;
+        if (chunkCalls === 1) {
+          return {
+            status: "chunk-complete",
+            threadId: "t-chunk-1",
+            handoff: {
+              state: "c1",
+              branch: "b1",
+              headSha: "abc1234",
+              nextStep: "next",
+            },
+          };
+        }
+        chunkLinkAfterFirst = item.threadLink ?? "";
+        return { status: "completed", threadId: "t-chunk-2" };
+      }
+      return { status: "in-progress", threadId: "t-prog" };
+    },
+  });
+
+  await orchestrator.drain();
+  assert.equal(failedItem.threadLink, "/?thread=t-fail");
+  assert.equal(completedItem.threadLink, "/?thread=t-done");
+  assert.equal(chunkLinkAfterFirst, "/?thread=t-chunk-1");
+  assert.equal(chunkItem.threadLink, "/?thread=t-chunk-2");
+  assert.equal(inProgressItem.threadLink, "/?thread=t-prog");
+});
