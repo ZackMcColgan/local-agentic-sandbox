@@ -188,10 +188,23 @@ export function registerBrowserTools(mcp: McpServer) {
                 }
               );
               if (weatherRes.ok) {
-                const wData: any = await weatherRes.json();
+                interface WttrWeatherDay {
+                  date?: string;
+                  maxtempF?: string;
+                  mintempF?: string;
+                  hourly?: Array<{ weatherDesc?: Array<{ value?: string }> }>;
+                }
+                interface WttrResponse {
+                  current_condition?: Array<{
+                    temp_F?: string;
+                    weatherDesc?: Array<{ value?: string }>;
+                  }>;
+                  weather?: WttrWeatherDay[];
+                }
+                const wData = (await weatherRes.json()) as WttrResponse;
                 const current = wData.current_condition?.[0];
                 const forecasts = wData.weather || [];
-                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f: any) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || "clear"}`).join("; ")}`;
+                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || "clear"}`).join("; ")}`;
                 results.push({
                   title: `Weather Forecast: ${query}`,
                   snippet,
@@ -287,7 +300,8 @@ export function registerBrowserTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
             {
@@ -295,7 +309,7 @@ export function registerBrowserTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "SEARCH_ERROR",
-                  error: err.message,
+                  error: message,
                   query,
                 },
                 null,
@@ -381,7 +395,8 @@ export function registerBrowserTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
             {
@@ -389,7 +404,7 @@ export function registerBrowserTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "FETCH_ERROR",
-                  error: err.message,
+                  error: message,
                   url,
                 },
                 null,

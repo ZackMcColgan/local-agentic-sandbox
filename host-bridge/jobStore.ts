@@ -9,7 +9,7 @@ export type JobStatus = "pending" | "running" | "done" | "failed" | "interrupted
 export interface JobRecord {
   id: string;
   tool: string;
-  args: any;
+  args: Record<string, unknown>;
   status: JobStatus;
   createdAt: number;
   startedAt?: number;
@@ -31,7 +31,9 @@ export const MAX_ASYNC_TIMEOUT_SECONDS = 3600;
 export const DEFAULT_ASYNC_TIMEOUT_SECONDS = 3600;
 const MAX_SPOOL_READ_BYTES = 256 * 1024;
 
-export function resolveAsyncTimeoutSeconds(args: any): number {
+export function resolveAsyncTimeoutSeconds(
+  args: Record<string, unknown> | undefined | null
+): number {
   let seconds = DEFAULT_ASYNC_TIMEOUT_SECONDS;
   if (typeof args?.timeoutSeconds === "number" && !isNaN(args.timeoutSeconds)) {
     seconds = Math.max(1, Math.min(MAX_ASYNC_TIMEOUT_SECONDS, Math.floor(args.timeoutSeconds)));
@@ -102,7 +104,7 @@ export class JobStore {
     if (changed) this.persist();
   }
 
-  create(tool: string, args: any, timeoutMs: number): JobRecord {
+  create(tool: string, args: Record<string, unknown>, timeoutMs: number): JobRecord {
     const rec: JobRecord = {
       id: crypto.randomUUID(),
       tool,
@@ -261,7 +263,10 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
 export async function runAsyncJob(
   store: JobStore,
   rec: JobRecord,
-  executeOtherTool: (tool: string, args: any) => Promise<any>
+  executeOtherTool: (
+    tool: string,
+    args: Record<string, unknown>
+  ) => Promise<Record<string, unknown> | undefined>
 ): Promise<void> {
   try {
     if (rec.tool === "host_run_powershell") {
@@ -301,11 +306,12 @@ export async function runAsyncJob(
       exitCode: failed ? 1 : 0,
       error: failed ? String(result.error || "Tool reported failure") : undefined,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
     store.update(rec.id, {
       status: "failed",
       finishedAt: Date.now(),
-      error: err?.message || "Async job execution error",
+      error: message || "Async job execution error",
     });
   }
 }

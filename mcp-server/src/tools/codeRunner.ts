@@ -16,7 +16,7 @@ export function registerCodeRunner(mcp: McpServer) {
         .string()
         .optional()
         .describe("Optional pytest or unit test assertions to run alongside the code"),
-    } as any,
+    },
     async ({ code, test_code }: { code: string; test_code?: string }) => {
       const runId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const scriptPath = `/tmp/script_${runId}.py`;
@@ -58,7 +58,8 @@ export function registerCodeRunner(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = err as { message?: string; stderr?: string; stdout?: string };
         const executionDurationMs = Math.round(performance.now() - startTime);
         return {
           content: [
@@ -67,9 +68,9 @@ export function registerCodeRunner(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: err.message,
-                  stderr: err.stderr ? err.stderr.trim() : "",
-                  stdout: err.stdout ? err.stdout.trim() : "",
+                  error: e.message ?? String(err),
+                  stderr: e.stderr ? e.stderr.trim() : "",
+                  stdout: e.stdout ? e.stdout.trim() : "",
                   duration_ms: executionDurationMs,
                   security_boundary: {
                     network_egress: "BLOCKED",

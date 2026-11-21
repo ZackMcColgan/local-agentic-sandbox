@@ -75,7 +75,7 @@ export function createHostServer(options: HostServerOptions = {}) {
   const manifest = getBridgeManifest(__dirname);
 
   // Resolve Git config
-  let fileConfig: any = {};
+  let fileConfig: Partial<BridgeGitConfig> = {};
   const configPath = path.join(__dirname, "config.json");
   if (fs.existsSync(configPath)) {
     try {
@@ -186,7 +186,7 @@ export function createHostServer(options: HostServerOptions = {}) {
       }
 
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
-      let logs: any[] = [];
+      let logs: unknown[] = [];
       if (gitConfig.gitOpsLogPath && fs.existsSync(gitConfig.gitOpsLogPath)) {
         try {
           const lines = fs
@@ -238,7 +238,12 @@ export function createHostServer(options: HostServerOptions = {}) {
       });
 
       req.on("end", async () => {
-        let body: any;
+        let body: {
+          tool?: string;
+          args?: Record<string, unknown>;
+          capability?: GitCapability;
+          mergeGrant?: MergeGrant;
+        };
         try {
           const rawText = Buffer.concat(chunks).toString("utf8");
           body = JSON.parse(rawText);
@@ -248,7 +253,7 @@ export function createHostServer(options: HostServerOptions = {}) {
           return;
         }
 
-        const tool = body.tool;
+        const tool = String(body.tool ?? "");
         const toolArgs = body.args || {};
 
         // Dual-layer approval gate: verify destructive actions
@@ -298,10 +303,11 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify(result));
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (!res.writableEnded) {
+            const message = err instanceof Error ? err.message : undefined;
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: err.message || "Internal server error" }));
+            res.end(JSON.stringify({ error: message || "Internal server error" }));
           }
         }
       });
@@ -336,7 +342,12 @@ export function createHostServer(options: HostServerOptions = {}) {
       });
 
       req.on("end", async () => {
-        let body: any;
+        let body: {
+          tool?: string;
+          args?: Record<string, unknown>;
+          capability?: GitCapability;
+          mergeGrant?: MergeGrant;
+        };
         try {
           const rawText = Buffer.concat(chunks).toString("utf8");
           body = JSON.parse(rawText);
@@ -346,7 +357,7 @@ export function createHostServer(options: HostServerOptions = {}) {
           return;
         }
 
-        const tool = body.tool;
+        const tool = String(body.tool ?? "");
         const toolArgs = body.args || {};
 
         // Destructive classification + approvals UNCHANGED, applied at START
@@ -505,12 +516,12 @@ export function createHostServer(options: HostServerOptions = {}) {
 
 export async function handleToolExecution(
   tool: string,
-  args: any,
+  args: Record<string, unknown>,
   res: http.ServerResponse,
   capability?: GitCapability,
   gitConfig?: BridgeGitConfig,
   mergeGrant?: MergeGrant
-): Promise<any> {
+): Promise<Record<string, unknown> | undefined> {
   if (tool.startsWith("host_git_")) {
     return await executeGitVerb(tool, args, capability, gitConfig, mergeGrant);
   }

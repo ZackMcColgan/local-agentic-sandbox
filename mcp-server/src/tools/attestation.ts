@@ -54,7 +54,7 @@ export function registerAttestation(mcp: McpServer) {
         .string()
         .describe("Container image URI or digest (e.g. local-agentic-sandbox/mcp-server:latest)"),
       environment: z.enum(["dev", "staging", "prod"]).describe("Target deployment environment"),
-    } as any,
+    },
     async ({
       image_uri,
       environment,
@@ -130,7 +130,7 @@ export function registerAttestation(mcp: McpServer) {
         .default(0)
         .describe("Maximum allowed critical CVEs (policy threshold)"),
       max_high: z.number().default(0).describe("Maximum allowed high CVEs (policy threshold)"),
-    } as any,
+    },
     async ({
       image_uri,
       max_critical,
@@ -177,7 +177,8 @@ export function registerAttestation(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
             {
@@ -188,7 +189,7 @@ export function registerAttestation(mcp: McpServer) {
                   notice: "Docker Scout CLI is not available inside this execution sandbox.",
                   recommendation:
                     "Run 'docker scout cves local-agentic-sandbox/mcp-server:latest' on host or in GitHub Actions CI.",
-                  error: err.message,
+                  error: message,
                 },
                 null,
                 2

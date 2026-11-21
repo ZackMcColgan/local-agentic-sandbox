@@ -227,13 +227,26 @@ function runGh(
   };
 }
 
+export interface GitVerbArgs {
+  branch?: string;
+  baseRef?: string;
+  paths?: unknown[];
+  message?: string;
+  title?: string;
+  body?: string;
+  base?: string;
+  prNumber?: string | number;
+  deleteSourceBranch?: boolean;
+  [key: string]: unknown;
+}
+
 export async function executeGitVerb(
   verb: string,
-  args: any = {},
+  args: GitVerbArgs = {},
   capability?: GitCapability,
   config?: BridgeGitConfig,
   grant?: MergeGrant
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const gitLogPath = config?.gitOpsLogPath || resolveDefaultGitOpsLogPath();
 
   // 1. Two-Key Bridge Flag (Key b)
@@ -829,7 +842,7 @@ export async function executeGitVerb(
       }
 
       case "host_git_pr_status": {
-        const prNumber = parseInt(args.prNumber, 10);
+        const prNumber = parseInt(String(args.prNumber ?? ""), 10);
         if (isNaN(prNumber) || prNumber <= 0) {
           const refusal = "Refused: valid prNumber required";
           appendGitOpsAuditLog(gitLogPath, {
@@ -860,13 +873,14 @@ export async function executeGitVerb(
             success: true,
             data,
           };
-        } catch (err: any) {
-          return { success: false, error: `Failed to parse gh output: ${err.message}` };
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { success: false, error: `Failed to parse gh output: ${message}` };
         }
       }
 
       case "host_git_pr_merge": {
-        const prNumber = parseInt(args.prNumber, 10);
+        const prNumber = parseInt(String(args.prNumber ?? ""), 10);
         if (isNaN(prNumber) || prNumber <= 0) {
           const refusal = "Refused: valid prNumber required";
           appendGitOpsAuditLog(gitLogPath, {
@@ -955,9 +969,22 @@ export async function executeGitVerb(
           return { success: false, error: refusal };
         }
 
-        let prInfo: any;
+        interface PrViewInfo {
+          baseRefName?: string;
+          state?: string;
+          isDraft?: boolean;
+          mergeable?: string;
+          statusCheckRollup?: Array<{
+            conclusion?: string;
+            status?: string;
+            state?: string;
+            name?: string;
+            context?: string;
+          }>;
+        }
+        let prInfo: PrViewInfo;
         try {
-          prInfo = JSON.parse(viewRes.stdout);
+          prInfo = JSON.parse(viewRes.stdout) as PrViewInfo;
         } catch {
           return { success: false, error: "Failed to parse PR info" };
         }
@@ -1078,15 +1105,16 @@ export async function executeGitVerb(
         return { success: false, error: `Unknown git verb: ${verb}` };
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     appendGitOpsAuditLog(gitLogPath, {
       verb,
       repo: capability.repo,
       branch: capability.branch,
       headBefore,
       result: "error",
-      error: err.message,
+      error: message,
     });
-    return { success: false, error: err.message };
+    return { success: false, error: message };
   }
 }

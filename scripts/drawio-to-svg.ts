@@ -59,8 +59,9 @@ if (require.main === module || process.argv[1]?.includes("drawio-to-svg")) {
     console.log(
       `[drawio-to-svg] SUCCESS: Generated ${outputArg} (${bytesWritten} bytes) in ${durationMs}ms`
     );
-  } catch (err: any) {
-    console.error(`[drawio-to-svg] ERROR: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[drawio-to-svg] ERROR: ${message}`);
     process.exit(1);
   }
 }

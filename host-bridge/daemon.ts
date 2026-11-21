@@ -47,16 +47,18 @@ export async function runDaemon() {
   let hostServer: ReturnType<typeof createHostServer>;
   try {
     hostServer = createHostServer({ port });
-  } catch (err: any) {
-    console.error(`[HostRunner] Fatal configuration error: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[HostRunner] Fatal configuration error: ${message}`);
     process.exit(1);
   }
 
   try {
     await hostServer.start();
     console.log(`[HostRunner] Bound strictly to 127.0.0.1:${port} (PID: ${process.pid})`);
-  } catch (err: any) {
-    if (err.code === "EADDRINUSE") {
+  } catch (err: unknown) {
+    const errObj = err as { code?: string; message?: string };
+    if (errObj.code === "EADDRINUSE") {
       console.warn(
         `[HostRunner] Port ${port} is already in use. Probing running instance /health...`
       );
@@ -73,7 +75,7 @@ export async function runDaemon() {
         process.exit(1);
       }
     } else {
-      console.error(`[HostRunner] Failed to bind: ${err.message}`);
+      console.error(`[HostRunner] Failed to bind: ${errObj.message ?? String(err)}`);
       process.exit(1);
     }
   }

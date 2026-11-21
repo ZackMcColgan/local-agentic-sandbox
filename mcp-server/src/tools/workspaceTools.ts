@@ -12,6 +12,26 @@ export { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patc
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
+function toErrorInfo(err: unknown): {
+  message: string;
+  stdout?: string;
+  stderr?: string;
+  code?: string | number;
+  status?: number;
+} {
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    return {
+      message: typeof e.message === "string" ? e.message : String(err),
+      stdout: typeof e.stdout === "string" ? e.stdout : undefined,
+      stderr: typeof e.stderr === "string" ? e.stderr : undefined,
+      code: typeof e.code === "string" || typeof e.code === "number" ? e.code : undefined,
+      status: typeof e.status === "number" ? e.status : undefined,
+    };
+  }
+  return { message: String(err) };
+}
+
 // Determine Workspace Root: /workspace in container, or local fallback in repo root
 export const WORKSPACE_DIR =
   process.env.WORKSPACE_DIR ||
@@ -67,8 +87,8 @@ async function ensureWorkspaceInitialized() {
         WORKSPACE_DIR
       );
     }
-  } catch (err: any) {
-    console.warn("[WorkspaceTools] Workspace initialization notice:", err.message);
+  } catch (err: unknown) {
+    console.warn("[WorkspaceTools] Workspace initialization notice:", toErrorInfo(err).message);
   }
 }
 
@@ -162,7 +182,9 @@ export function validateCodeAst(
         scriptKind
       );
 
-      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      const diagnostics =
+        (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ||
+        [];
       if (diagnostics.length > 0) {
         const first = diagnostics[0];
         const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
@@ -173,8 +195,8 @@ export function validateCodeAst(
         };
       }
       return { valid: true };
-    } catch (err: any) {
-      return { valid: false, error: `AST parser failure: ${err.message}` };
+    } catch (err: unknown) {
+      return { valid: false, error: `AST parser failure: ${toErrorInfo(err).message}` };
     }
   }
 
@@ -182,7 +204,7 @@ export function validateCodeAst(
   if (ext === ".py") {
     // Try python3 (Unix) then python (Windows) - python3 often missing on Windows
     const pythonCmds = ["python3", "python"];
-    let lastErr: any = null;
+    let lastErr: unknown = null;
     for (const cmd of pythonCmds) {
       try {
         execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
@@ -192,14 +214,11 @@ export function validateCodeAst(
           stdio: ["pipe", "pipe", "pipe"],
         });
         return { valid: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         // ENOENT = command not found; 9009 / app execution alias stub on Windows = not installed
-        const stderr = err.stderr ? err.stderr.trim() : err.message || "";
-        if (
-          err.code === "ENOENT" ||
-          err.status === 9009 ||
-          stderr.includes("Python was not found")
-        ) {
+        const e = toErrorInfo(err);
+        const stderr = e.stderr ? e.stderr.trim() : e.message || "";
+        if (e.code === "ENOENT" || e.status === 9009 || stderr.includes("Python was not found")) {
           lastErr = err;
           continue;
         }
@@ -236,7 +255,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .string()
         .optional()
         .describe("Optional subdirectory to inspect (relative to /workspace)"),
-    } as any,
+    },
     async ({ max_depth = 3, sub_path }: { max_depth?: number; sub_path?: string }) => {
       await ensureWorkspaceInitialized();
       const targetDir = sub_path ? resolveSafePath(sub_path) : WORKSPACE_DIR;
@@ -268,8 +287,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
               lines.push(`${prefix}${pointer}${entry.name}`);
             }
           }
-        } catch (err: any) {
-          lines.push(`${prefix}[Error reading directory: ${err.message}]`);
+        } catch (err: unknown) {
+          lines.push(`${prefix}[Error reading directory: ${toErrorInfo(err).message}]`);
         }
         return lines;
       }
@@ -307,7 +326,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .string()
         .optional()
         .describe("Optional filename filter or extension (e.g. '*.ts', '*.py')"),
-    } as any,
+    },
     async ({ pattern, file_glob }: { pattern: string; file_glob?: string }) => {
       await ensureWorkspaceInitialized();
 
@@ -333,7 +352,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
       let regex: RegExp;
       try {
         regex = new RegExp(pattern, "i");
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -341,7 +360,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `Invalid regular expression syntax: ${err.message}`,
+                  error: `Invalid regular expression syntax: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -425,7 +444,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
       end_line: z.number().optional().describe("Optional end line (1-indexed)"),
       offset: z.number().optional().describe("Optional line offset (if start_line not provided)"),
       limit: z.number().optional().describe("Optional line count limit"),
-    } as any,
+    },
     async ({
       path: filePath,
       start_line,
@@ -480,7 +499,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -488,7 +507,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `Failed to read file ${filePath}: ${err.message}`,
+                  error: `Failed to read file ${filePath}: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -512,7 +531,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .optional()
         .default(true)
         .describe("Create parent directories if they don't exist"),
-    } as any,
+    },
     async ({
       path: filePath,
       content,
@@ -574,7 +593,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -582,7 +601,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `Failed to write file ${filePath}: ${err.message}`,
+                  error: `Failed to write file ${filePath}: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -608,7 +627,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
           })
         )
         .describe("Array of search-and-replace patches to apply in order"),
-    } as any,
+    },
     async ({
       path: filePath,
       patches,
@@ -627,7 +646,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -635,7 +654,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `Failed to patch file ${filePath}: ${err.message}`,
+                  error: `Failed to patch file ${filePath}: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -662,7 +681,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .optional()
         .default(30)
         .describe("Timeout limit in seconds (default: 30)"),
-    } as any,
+    },
     async ({ command, timeout_seconds = 30 }: { command: string; timeout_seconds?: number }) => {
       await ensureWorkspaceInitialized();
       const startTime = performance.now();
@@ -695,7 +714,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = toErrorInfo(err);
         const durationMs = Math.round(performance.now() - startTime);
         return {
           content: [
@@ -705,9 +725,9 @@ export function registerWorkspaceTools(mcp: McpServer) {
                 {
                   status: "EXECUTION_ERROR",
                   command,
-                  exit_code: err.code || 1,
-                  stdout: err.stdout ? err.stdout.trim() : "",
-                  stderr: err.stderr ? err.stderr.trim() : err.message,
+                  exit_code: e.code || 1,
+                  stdout: e.stdout ? e.stdout.trim() : "",
+                  stderr: e.stderr ? e.stderr.trim() : e.message,
                   execution_time_ms: durationMs,
                 },
                 null,
@@ -726,7 +746,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Inspect current git branch, uncommitted files, and colored unified diff in /workspace.",
     {
       cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff"),
-    } as any,
+    },
     async ({ cached = false }: { cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
@@ -758,7 +778,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -766,7 +786,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `git_status error: ${err.message}`,
+                  error: `git_status error: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -788,7 +808,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .optional()
         .describe("Optional commit, branch, or file path to diff against"),
       cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff"),
-    } as any,
+    },
     async ({ target, cached = false }: { target?: string; cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
@@ -813,7 +833,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -821,7 +841,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `git diff error: ${err.message}`,
+                  error: `git diff error: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -844,7 +864,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
         .optional()
         .default(true)
         .describe("Whether to create a new branch (-b)"),
-    } as any,
+    },
     async ({ branch_name, create_new = true }: { branch_name: string; create_new?: boolean }) => {
       await ensureWorkspaceInitialized();
 
@@ -870,7 +890,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           content: [
             {
@@ -878,7 +898,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `git checkout error: ${err.message}`,
+                  error: `git checkout error: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
@@ -898,7 +918,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
       message: z
         .string()
         .describe("Semantic commit message (e.g. 'feat(auth): add jwt token refresh')"),
-    } as any,
+    },
     async ({ message }: { message: string }) => {
       await ensureWorkspaceInitialized();
 
@@ -922,11 +942,9 @@ export function registerWorkspaceTools(mcp: McpServer) {
             },
           ],
         };
-      } catch (err: any) {
-        if (
-          err.stdout?.includes("nothing to commit") ||
-          err.message?.includes("nothing to commit")
-        ) {
+      } catch (err: unknown) {
+        const e = toErrorInfo(err);
+        if (e.stdout?.includes("nothing to commit") || e.message?.includes("nothing to commit")) {
           return {
             content: [
               {
@@ -951,7 +969,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
               text: JSON.stringify(
                 {
                   status: "EXECUTION_ERROR",
-                  error: `git commit error: ${err.message}`,
+                  error: `git commit error: ${toErrorInfo(err).message}`,
                 },
                 null,
                 2
