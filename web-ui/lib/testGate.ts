@@ -1337,9 +1337,11 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.startsWith("scripts/shakeout") ||
     normalizedPath.startsWith("scripts/start-strata") ||
     normalizedPath.startsWith("scripts/stop-strata") ||
+    normalizedPath === "scripts/deploy-cluster.js" ||
     normalizedPath.startsWith("scripts/Start-HostRunner") ||
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("playwright.live.config") ||
+    normalizedPath.endsWith("vitest.config.ts") ||
     normalizedPath.includes("test-results") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
