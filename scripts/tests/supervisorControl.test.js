@@ -2,11 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { EventEmitter } from "node:events";
-import {
-  handleControlRequest,
-  createControlServer,
-  ENGINE_STOPPED_MESSAGE,
-} from "../llamacpp-standalone.js";
+import { createControlServer, ENGINE_STOPPED_MESSAGE } from "../llamacpp-standalone.js";
 
 function makeRequest(options, postData = null) {
   return new Promise((resolve, reject) => {

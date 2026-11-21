@@ -83,7 +83,9 @@ async function deployService(serviceName) {
     if (fs.existsSync(tarPath)) {
       try {
         fs.unlinkSync(tarPath);
-      } catch {}
+      } catch {
+        /* ignore temp tar cleanup error */
+      }
     }
   }
 

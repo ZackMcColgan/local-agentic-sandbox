@@ -12,7 +12,9 @@ async function waitForPort(port, maxRetries = 20) {
         signal: AbortSignal.timeout(15000),
       });
       if (res.ok) return await res.json();
-    } catch {}
+    } catch {
+      /* retry until Chrome debug port is ready */
+    }
     await new Promise((r) => setTimeout(r, 400));
   }
   throw new Error(`Failed to connect to Chrome on port ${port}`);
@@ -74,7 +76,9 @@ async function testLanCopy() {
               permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
               origin: targetHost,
             });
-          } catch {}
+          } catch {
+            /* ignore unsupported clipboard permission grant */
+          }
 
           console.log("Simulating insecure HTTP LAN context (navigator.clipboard disabled)...");
           const testResult = await send("Runtime.evaluate", {
@@ -141,7 +145,9 @@ async function testLanCopy() {
   } finally {
     try {
       chrome.kill();
-    } catch {}
+    } catch {
+      /* ignore Chrome kill error */
+    }
   }
 }
 

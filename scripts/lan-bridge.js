@@ -17,7 +17,7 @@ const https = require("https");
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
-const { execSync, spawn } = require("child_process");
+const { execSync } = require("child_process");
 
 const TARGET_PORT = parseInt(process.env.TARGET_PORT || "3001", 10);
 const TARGET_HOST = process.env.TARGET_HOST || "127.0.0.1";
@@ -216,12 +216,16 @@ function createProxyServer(listenPort) {
       res.on("error", () => {
         try {
           proxyReq.destroy();
-        } catch {}
+        } catch {
+          /* ignore proxyReq destroy error */
+        }
       });
       proxyRes.on("error", () => {
         try {
           res.destroy();
-        } catch {}
+        } catch {
+          /* ignore response destroy error */
+        }
       });
       proxyRes.pipe(res, { end: true });
 
@@ -252,14 +256,18 @@ function createProxyServer(listenPort) {
             </html>
           `);
         }
-      } catch (e) {}
+      } catch {
+        /* ignore 502 error response write failure */
+      }
     });
 
     req.on("error", (err) => {
       console.error(`[LAN Bridge :${listenPort} Req Error] ${req.method} ${req.url}:`, err.message);
       try {
         proxyReq.destroy();
-      } catch {}
+      } catch {
+        /* ignore proxyReq destroy error */
+      }
     });
 
     // Pipe incoming request body to target (e.g. POST /api/chat)
@@ -270,7 +278,9 @@ function createProxyServer(listenPort) {
   if (isHttps) {
     try {
       ensureSslCerts();
-    } catch {}
+    } catch {
+      /* SSL cert generation optional; checked below */
+    }
     if (!fs.existsSync(SSL_CERT_PATH) || !fs.existsSync(SSL_KEY_PATH)) {
       console.warn(
         `[LAN Bridge :443] Notice: SSL cert/key not found at ${SSL_CERT_PATH}. Skipping HTTPS.`
@@ -327,7 +337,9 @@ function createProxyServer(listenPort) {
   server.on("clientError", (err, socket) => {
     try {
       socket.destroy();
-    } catch {}
+    } catch {
+      /* ignore client socket destroy error */
+    }
   });
 
   server.on("error", (err) => {

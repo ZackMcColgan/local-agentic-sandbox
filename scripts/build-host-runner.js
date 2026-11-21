@@ -89,7 +89,9 @@ function swapFileIntoPlace(srcPath, destPath) {
   const stalePath = destPath + ".old";
   try {
     if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { force: true });
-  } catch {}
+  } catch {
+    /* ignore stale binary cleanup error */
+  }
 }
 
 module.exports = { swapBinary: swapFileIntoPlace };
@@ -145,7 +147,9 @@ if (require.main === module) {
       try {
         esbuild = require(c);
         break;
-      } catch {}
+      } catch {
+        /* try next candidate path */
+      }
     }
   }
 
@@ -219,7 +223,7 @@ if (require.main === module) {
     });
     console.error("ERROR: Executable should have failed without secret!");
     process.exit(1);
-  } catch (err) {
+  } catch {
     // Expected to exit 1
     console.log(
       "      Verified: Executable fails closed when HOST_RUNNER_SHARED_SECRET is missing."

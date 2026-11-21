@@ -77,7 +77,7 @@ function sendChatStream(payload, timeoutMs = 120000) {
             } else if (ev.type === "done" && ev.content) {
               assistantContent = ev.content;
             }
-          } catch (e) {
+          } catch {
             // ignore parse err
           }
         }
@@ -159,7 +159,9 @@ async function main() {
     } else if (typeof searchTrace.result === "object") {
       innerResults = searchTrace.result;
     }
-  } catch {}
+  } catch {
+    /* ignore non-JSON tool result */
+  }
 
   const isEmptyResults =
     (innerResults && Array.isArray(innerResults.results) && innerResults.results.length === 0) ||
@@ -266,6 +268,8 @@ main().catch((err) => {
   // Always attempt to turn off hook on error
   try {
     run(`kubectl set env deployment/browser-mcp SEARCH_FORCE_EMPTY_RESULTS- -n ${K8S_NAMESPACE}`);
-  } catch {}
+  } catch {
+    /* best-effort cleanup of test env hook */
+  }
   process.exit(1);
 });

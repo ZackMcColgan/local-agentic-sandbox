@@ -21,7 +21,7 @@ const { chromium } = require("playwright");
   // Scroll to TOP within the first second/start
   console.log("[Acceptance b] Scrolling to TOP (scrollTop = 0)...");
   await page.evaluate(() => {
-    const el = document.querySelector('[data-scroll-container="true"]');
+    const el = globalThis.document.querySelector('[data-scroll-container="true"]');
     if (el) {
       el.scrollTop = 0;
       el.dispatchEvent(new Event("scroll"));
@@ -35,7 +35,7 @@ const { chromium } = require("playwright");
   for (let i = 0; i < 20; i++) {
     await page.waitForTimeout(500);
     const snap = await page.evaluate(() => {
-      const el = document.querySelector('[data-scroll-container="true"]');
+      const el = globalThis.document.querySelector('[data-scroll-container="true"]');
       const text = el ? el.innerText : "";
       return {
         scrollTop: el ? el.scrollTop : -1,
@@ -75,7 +75,7 @@ const { chromium } = require("playwright");
 
   await page.waitForTimeout(600);
   const snapAfterSend = await page.evaluate(() => {
-    const el = document.querySelector('[data-scroll-container="true"]');
+    const el = globalThis.document.querySelector('[data-scroll-container="true"]');
     return el
       ? {
           scrollTop: el.scrollTop,

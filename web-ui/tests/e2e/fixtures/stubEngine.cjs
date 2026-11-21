@@ -85,7 +85,9 @@ const server = http.createServer(async (req, res) => {
   if (rawBody.trim()) {
     try {
       jsonBody = JSON.parse(rawBody);
-    } catch {}
+    } catch {
+      /* ignore non-JSON request body */
+    }
   }
 
   // --- CONTROL ENDPOINTS ---
@@ -127,9 +129,13 @@ const server = http.createServer(async (req, res) => {
           for (const f of files) {
             try {
               fs.rmSync(path.join(d, f), { recursive: true, force: true });
-            } catch {}
+            } catch {
+              /* ignore locked thread file removal error */
+            }
           }
-        } catch {}
+        } catch {
+          /* ignore thread dir read error */
+        }
       }
     }
 
@@ -147,9 +153,13 @@ const server = http.createServer(async (req, res) => {
           for (const f of files) {
             try {
               fs.rmSync(path.join(d, f), { recursive: true, force: true });
-            } catch {}
+            } catch {
+              /* ignore locked checkpoint file removal error */
+            }
           }
-        } catch {}
+        } catch {
+          /* ignore checkpoint dir read error */
+        }
       }
     }
 
@@ -314,7 +324,9 @@ async function handleChatRequest(req, res, body, script) {
           done: false,
         };
         res.write(JSON.stringify(chunk) + "\n");
-      } catch {}
+      } catch {
+        /* ignore write error on closed stream */
+      }
       step++;
     }, 200);
 
