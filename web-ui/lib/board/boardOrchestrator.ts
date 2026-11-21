@@ -367,6 +367,7 @@ export class BoardOrchestrator {
         brief: item.brief,
         mechanicalInput,
         stage3Enabled,
+        ciAllGreen: result.flowMonitor?.verdict.status === "green",
         issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
         log: this.log,
       });
@@ -523,7 +524,7 @@ export class BoardOrchestrator {
             status: "needs-attention",
             needsAttention: true,
             parkedReason: finalIssue.message,
-            threadLink: result.threadId ? `/threads/${result.threadId}` : undefined,
+            threadLink: result.threadId ? `/?thread=${result.threadId}` : undefined,
           });
           surfacedIssues.push({
             itemId: head.id,
@@ -575,7 +576,7 @@ export class BoardOrchestrator {
 
         this.updateItem(head, {
           status: "done",
-          threadLink: `/threads/${result.threadId}`,
+          threadLink: `/?thread=${result.threadId}`,
         });
         completedCount += 1;
         itemsProcessed += 1;
@@ -593,7 +594,7 @@ export class BoardOrchestrator {
         this.updateItem(head, {
           status: "queued",
           handoff: result.handoff,
-          threadLink: `/threads/${result.threadId}`,
+          threadLink: `/?thread=${result.threadId}`,
         });
         requeuedCount += 1;
         itemsProcessed += 1;
@@ -609,7 +610,7 @@ export class BoardOrchestrator {
       } else if (result.status === "in-progress") {
         this.updateItem(head, {
           status: "working",
-          threadLink: `/threads/${result.threadId}`,
+          threadLink: `/?thread=${result.threadId}`,
         });
         inProgressCount += 1;
         itemsProcessed += 1;

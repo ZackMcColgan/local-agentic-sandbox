@@ -282,11 +282,13 @@ test("4. Confirm files exactly N items atomically with author Owner, source assi
   assert.equal(res.items[0].source, "assistant");
   assert.equal(res.items[0].status, "queued");
   assert.deepEqual(res.items[0].dependencies, [existing.id]);
+  assert.deepEqual(res.items[0].allowlist, ["web-ui/lib/board/monsterIntake.ts"]);
 
   assert.equal(res.items[1].author, "Owner");
   assert.equal(res.items[1].source, "assistant");
   assert.equal(res.items[1].status, "queued");
   assert.deepEqual(res.items[1].dependencies, [res.items[0].id]);
+  assert.deepEqual(res.items[1].allowlist, ["web-ui/components/BoardAddSheet.tsx"]);
 
   assert.equal(res.control?.state, "running");
   assert.equal(controlStore.getState().state, "running");

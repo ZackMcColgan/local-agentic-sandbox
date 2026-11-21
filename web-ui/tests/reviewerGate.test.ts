@@ -40,6 +40,18 @@ describe("reviewerGate — mechanical checks", () => {
     const result = runMechanicalChecks(makeCleanInput());
     assert.equal(result.verdict, "PASS");
     assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "enforced");
+  });
+
+  it("records allowlist as not-declared/skipped (not per-file violations) when item has no declared allowlist", () => {
+    const result = runMechanicalChecks(makeCleanInput({ allowlist: [] }));
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "not-declared");
+    assert.ok(
+      result.notes.some((n) => /not[- ]declared|skipped/i.test(n) && /allowlist/i.test(n)),
+      "expected not-declared/skipped allowlist note in evidence",
+    );
   });
 
   it("FAILs an allowlist violation with the offending file named", () => {
@@ -211,6 +223,58 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
 
     assert.equal(result.verdict, "FAIL");
     assert.equal(result.mergeAuthorized, false);
+  });
+
+  it("computes mergeAuthorized via isMergeAuthorized from real inputs and stays false in shadow mode", async () => {
+    const enabledPass = await evaluateReviewerGate({
+      itemId: "item-25",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: true,
+      ciAllGreen: true,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-3",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(enabledPass.verdict, "PASS");
+    assert.equal(enabledPass.shadowMode, false);
+    assert.equal(enabledPass.mergeAuthorized, true);
+
+    const enabledMissingCi = await evaluateReviewerGate({
+      itemId: "item-26",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: true,
+      ciAllGreen: false,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-4",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(enabledMissingCi.verdict, "PASS");
+    assert.equal(enabledMissingCi.mergeAuthorized, false);
+
+    const shadowPass = await evaluateReviewerGate({
+      itemId: "item-27",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: false,
+      ciAllGreen: true,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-5",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(shadowPass.verdict, "PASS");
+    assert.equal(shadowPass.shadowMode, true);
+    assert.equal(shadowPass.mergeAuthorized, false);
   });
 
   it("never treats a reviewer verdict as merge authorization while Stage 3 is OFF", () => {

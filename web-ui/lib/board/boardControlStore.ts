@@ -61,12 +61,29 @@ function defaultControlRecord(): BoardControlRecord {
   };
 }
 
-function extractThreadIdFromLink(threadLink?: string): string | null {
+export function extractThreadIdFromLink(threadLink?: string): string | null {
   if (!threadLink) return null;
   const trimmed = threadLink.trim();
   if (!trimmed) return null;
-  const parts = trimmed.split("/").filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : null;
+
+  try {
+    const parsed = new URL(trimmed, "http://localhost");
+    const queryId = parsed.searchParams.get("thread")?.trim();
+    if (queryId) {
+      return queryId;
+    }
+    const legacyMatch = /^\/threads\/([^/]+)\/?$/.exec(parsed.pathname);
+    if (legacyMatch) {
+      const legacyId = decodeURIComponent(legacyMatch[1]).trim();
+      if (legacyId) {
+        return legacyId;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export class BoardControlStore {

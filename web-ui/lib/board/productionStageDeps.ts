@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { executeHostTool as defaultExecuteHostTool } from "../hostMode";
 import { ThreadStore, type Thread } from "../threads/threadStore";
 import { prepareSelfDeployPlan } from "../selfDeployMachinery";
@@ -42,9 +43,15 @@ export interface StageThreadStore {
   getThread: (id: string) => Promise<Thread | null> | Thread | null;
 }
 
+export type ReviewerChatDispatcher = (params: {
+  threadId: string;
+  brief: string;
+}) => Promise<{ ok: boolean; status: number; rawStream?: string }>;
+
 export interface ProductionStageDepsOptions {
   executeHostTool?: HostBridgeExecutor;
   threadStore?: StageThreadStore;
+  dispatchChatTurn?: ReviewerChatDispatcher;
   hostCheckoutPath?: string;
   reviewerTimeoutMs?: number;
   reviewerPollIntervalMs?: number;
@@ -68,6 +75,24 @@ interface GhPrCheckRow {
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function defaultDispatchChatTurn(params: {
+  threadId: string;
+  brief: string;
+}): Promise<{ ok: boolean; status: number; rawStream?: string }> {
+  const { POST: chatPost } = await import("../../app/api/chat/route");
+  const chatReq = new NextRequest("http://localhost/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      threadId: params.threadId,
+      messages: [{ role: "user", content: params.brief }],
+    }),
+  });
+  const response = await chatPost(chatReq);
+  const rawStream = await response.text();
+  return { ok: response.ok, status: response.status, rawStream };
 }
 
 function isCommandSuccess(res: HostBridgeCommandResult | null | undefined): boolean {
@@ -203,6 +228,8 @@ export function createProductionStageDeps(
     options.executeHostTool ??
     ((tool, args) => defaultExecuteHostTool(tool, args));
   const threadStore: StageThreadStore = options.threadStore ?? new ThreadStore();
+  const dispatchChatTurn: ReviewerChatDispatcher =
+    options.dispatchChatTurn ?? defaultDispatchChatTurn;
   const hostCheckoutPath = options.hostCheckoutPath ?? process.env.HOST_CHECKOUT_PATH;
   const reviewerTimeoutMs = options.reviewerTimeoutMs ?? DEFAULT_REVIEWER_TIMEOUT_MS;
   const reviewerPollIntervalMs =
@@ -332,6 +359,24 @@ export function createProductionStageDeps(
       });
       const deadline = now() + reviewerTimeoutMs;
 
+      let dispatchError: string | null = null;
+      const dispatchPromise = dispatchChatTurn({
+        threadId: thread.id,
+        brief,
+      })
+        .then((res) => {
+          if (!res.ok) {
+            dispatchError = `Reviewer chat dispatch failed for thread ${thread.id} (HTTP ${res.status}).`;
+          }
+        })
+        .catch((err) => {
+          dispatchError =
+            err instanceof Error
+              ? err.message
+              : `Reviewer chat dispatch threw for thread ${thread.id}: ${String(err)}`;
+        });
+      void dispatchPromise;
+
       while (true) {
         const record = await threadStore.getThread(thread.id);
         if (record) {
@@ -363,6 +408,14 @@ export function createProductionStageDeps(
             }
             return parseReviewerVerdictContent(thread.id, lastAssistant.content);
           }
+        }
+
+        if (dispatchError) {
+          return {
+            threadId: thread.id,
+            verdict: "FAIL",
+            evidence: [dispatchError],
+          };
         }
 
         if (now() >= deadline) {

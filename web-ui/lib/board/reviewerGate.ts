@@ -32,6 +32,8 @@ export interface MechanicalCheckResult {
   verdict: GateVerdict;
   changedFiles: string[];
   failures: MechanicalFailure[];
+  allowlistStatus: "enforced" | "not-declared";
+  notes: string[];
 }
 
 const BANNED_HYGIENE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
@@ -113,11 +115,20 @@ export function runMechanicalChecks(input: MechanicalCheckInput): MechanicalChec
   const failures: MechanicalFailure[] = [];
   const parsedFiles = parseUnifiedDiff(input.diff);
   const changedFiles = parsedFiles.map((f) => f.path);
-  const allowSet = new Set(input.allowlist.map((p) => p.replace(/\\/g, "/")));
+  const normalizedAllowlist = (input.allowlist ?? [])
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .map((p) => p.trim().replace(/\\/g, "/"));
+  const allowlistStatus: "enforced" | "not-declared" =
+    normalizedAllowlist.length > 0 ? "enforced" : "not-declared";
+  const notes: string[] = [];
+  if (allowlistStatus === "not-declared") {
+    notes.push("Allowlist check skipped: no allowlist declared on item.");
+  }
+  const allowSet = new Set(normalizedAllowlist);
 
   for (const file of parsedFiles) {
     const normalizedPath = file.path.replace(/\\/g, "/");
-    if (!allowSet.has(normalizedPath)) {
+    if (allowlistStatus === "enforced" && !allowSet.has(normalizedPath)) {
       failures.push({
         check: "allowlist",
         evidence: `File outside allowlist: ${normalizedPath}`,
@@ -179,6 +190,8 @@ export function runMechanicalChecks(input: MechanicalCheckInput): MechanicalChec
     verdict: failures.length === 0 ? "PASS" : "FAIL",
     changedFiles,
     failures,
+    allowlistStatus,
+    notes,
   };
 }
 
@@ -193,6 +206,8 @@ export interface EvaluateReviewerGateOptions {
   brief: string;
   mechanicalInput: MechanicalCheckInput;
   stage3Enabled?: boolean;
+  ciAllGreen?: boolean;
+  finishVerificationClean?: boolean;
   issueReviewerThread: (params: {
     itemId: string;
     brief: string;
@@ -248,6 +263,13 @@ export async function evaluateReviewerGate(
   const stage3Enabled = isReviewerGateStage3Enabled(options.stage3Enabled);
   const shadowMode = !stage3Enabled;
 
+  const mergeAuthorized = isMergeAuthorized({
+    stage3Enabled,
+    ciAllGreen: options.ciAllGreen ?? false,
+    reviewerGateVerdict: verdict,
+    finishVerificationClean: options.finishVerificationClean ?? false,
+  });
+
   options.log?.(
     `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`,
   );
@@ -257,7 +279,7 @@ export async function evaluateReviewerGate(
     mechanical,
     reviewer,
     shadowMode,
-    mergeAuthorized: false,
+    mergeAuthorized,
   };
 }
 
