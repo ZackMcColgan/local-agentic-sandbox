@@ -156,7 +156,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
       // The longer message (user) was truncated
       const fittedUser = fitted.find((m) => m.role === "user");
-      assert.ok(fittedUser.content.includes("...[truncated]"));
+      assert.ok(fittedUser && fittedUser.content.includes("...[truncated]"));
     });
   });
 

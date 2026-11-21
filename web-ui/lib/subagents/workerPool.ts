@@ -53,7 +53,7 @@ export interface WorkerPoolOptions {
   scheduler?: PrioritySlotScheduler;
 }
 
-export interface WorkerJob<T = any> {
+export interface WorkerJob<T = unknown> {
   id?: string;
   role: WorkerRole;
   taskId?: string;
@@ -193,10 +193,9 @@ export function scanWorkspaceRepoMap(
               );
 
               for (const stmt of sourceFile.statements) {
-                const mods = (stmt as any).modifiers;
+                const mods = (stmt as { modifiers?: ts.NodeArray<ts.ModifierLike> }).modifiers;
                 const hasExport =
-                  Array.isArray(mods) &&
-                  mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
+                  Array.isArray(mods) && mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
                 if (hasExport) {
                   if (ts.isFunctionDeclaration(stmt) && stmt.name) {
                     exports.push(stmt.name.text);
@@ -416,7 +415,9 @@ export function validateCodeAst(
         scriptKind
       );
 
-      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      const diagnostics =
+        (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ||
+        [];
       if (diagnostics.length > 0) {
         const first = diagnostics[0];
         const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
@@ -427,8 +428,11 @@ export function validateCodeAst(
         };
       }
       return { valid: true };
-    } catch (err: any) {
-      return { valid: false, error: `AST parser failure: ${err.message}` };
+    } catch (err: unknown) {
+      return {
+        valid: false,
+        error: `AST parser failure: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   }
 
@@ -444,13 +448,10 @@ export function validateCodeAst(
           stdio: ["pipe", "pipe", "pipe"],
         });
         return { valid: true };
-      } catch (err: any) {
-        const stderr = err.stderr ? err.stderr.trim() : err.message || "";
-        if (
-          err.code === "ENOENT" ||
-          err.status === 9009 ||
-          stderr.includes("Python was not found")
-        ) {
+      } catch (err: unknown) {
+        const e = err as { stderr?: string; message?: string; code?: string; status?: number };
+        const stderr = e.stderr ? e.stderr.trim() : e.message || "";
+        if (e.code === "ENOENT" || e.status === 9009 || stderr.includes("Python was not found")) {
           continue;
         }
         return {
@@ -468,8 +469,11 @@ export function validateCodeAst(
     try {
       JSON.parse(content);
       return { valid: true };
-    } catch (err: any) {
-      return { valid: false, error: `Invalid JSON syntax in ${filePath}: ${err.message}` };
+    } catch (err: unknown) {
+      return {
+        valid: false,
+        error: `Invalid JSON syntax in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   }
 
@@ -618,9 +622,9 @@ export class BuilderWorker {
       try {
         await this.patchFile(targetRelPath, parsedPatches, { repoRoot });
         return fs.readFileSync(fullPath, "utf8");
-      } catch (patchErr: any) {
+      } catch (patchErr: unknown) {
         console.warn(
-          `[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`
+          `[builder] Surgical patch failed for ${targetRelPath}: ${patchErr instanceof Error ? patchErr.message : String(patchErr)}. Falling back to full content or retry.`
         );
       }
     }
@@ -1093,8 +1097,9 @@ export async function recordTestBaseline(
   stdout = await releaseCurrentSlotForWait(() => {
     try {
       return execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
-    } catch (err: any) {
-      return err.stdout || err.message || "";
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; message?: string };
+      return e.stdout || e.message || "";
     }
   });
 
@@ -1264,7 +1269,8 @@ export class CriticWorker {
 
     const collectedEvidence: EvidenceItem[] = [];
     const contractResults: ContractAssertionResult[] = [];
-    const forceEmptyEvidence = (diffContext as any)?.forceEmptyEvidence === true;
+    const forceEmptyEvidence =
+      (diffContext as { forceEmptyEvidence?: boolean } | undefined)?.forceEmptyEvidence === true;
 
     // Item 3: Deliverable Contracts evaluation
     if (milestone.assertions && milestone.assertions.length > 0) {
@@ -1506,7 +1512,7 @@ Respond strictly in JSON:
         options: { temperature: 0.1, num_predict: 2048 },
       });
       verdictText = result.text;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[CriticWorker] Model evaluation failed for milestone ${milestone.id}:`, err);
       return {
         approved: false,
@@ -1516,12 +1522,12 @@ Respond strictly in JSON:
         feedback: [
           ...feedback,
           "critic model unreachable — abstaining",
-          String(err?.message || err),
+          String(err instanceof Error ? err.message : err),
         ],
       };
     }
 
-    let parsed: any;
+    let parsed: { approved?: unknown; feedback?: unknown; analysis?: string } | undefined;
     try {
       parsed = JSON.parse(stripCodeFence(verdictText));
     } catch {
@@ -1682,7 +1688,7 @@ export class WorkerPool {
   readonly scope?: string;
   private readonly scheduler: PrioritySlotScheduler;
   private readonly explicitMultiConcurrency: boolean;
-  private activeJobs = new Set<Promise<any>>();
+  private activeJobs = new Set<Promise<unknown>>();
 
   constructor(options?: WorkerPoolOptions) {
     this.explicitMultiConcurrency =
@@ -1733,7 +1739,7 @@ export class WorkerPool {
     };
   }
 
-  private resolveJobPriority(job: WorkerJob<any>): SlotPriority {
+  private resolveJobPriority(job: WorkerJob<unknown>): SlotPriority {
     if (job.priority !== undefined) return job.priority;
     if (job.role === "builder") return SlotPriority.P1_BUILDER;
     if (job.role === "recorder") return SlotPriority.P3_HOUSEKEEPING;
