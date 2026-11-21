@@ -23,7 +23,8 @@ import {
   ChevronDown,
   Eye,
   Check,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from "lucide-react";
 import { ProjectRecord } from "@/lib/projects/projectStore";
 import { ProjectTreeNode } from "@/lib/projects/projectGit";
@@ -64,6 +65,8 @@ export function ProjectsView({
   );
   const [activeTab, setActiveTab] = useState<"files" | "tasks" | "diffs">("files");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   // Registration Form State
   const [formName, setFormName] = useState("");
@@ -599,7 +602,62 @@ export function ProjectsView({
                         </span>
                       </>
                     )}
+                    {onDeleteProject && (
+                      <button
+                        type="button"
+                        data-testid={`project-delete-btn-${proj.project_id}`}
+                        aria-label={`Delete project ${proj.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteProjectId(proj.project_id);
+                        }}
+                        className="ml-auto inline-flex items-center gap-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1 rounded-lg"
+                        title="Remove project from registry"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
+
+                  {confirmDeleteProjectId === proj.project_id && onDeleteProject && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-3 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 space-y-2"
+                    >
+                      <p className="text-[11px] text-rose-800 dark:text-rose-200">
+                        Remove <strong>{proj.name}</strong> from the registry? Files on disk and linked chat threads will not be deleted.
+                      </p>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteProjectId(null)}
+                          className="px-2.5 py-1 rounded-xl text-[11px] font-semibold text-slate-600 dark:text-zinc-300 hover:bg-white/60 dark:hover:bg-zinc-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`project-delete-confirm-${proj.project_id}`}
+                          disabled={deletingProjectId === proj.project_id}
+                          onClick={async () => {
+                            setDeletingProjectId(proj.project_id);
+                            try {
+                              await onDeleteProject(proj.project_id);
+                              if (activeProjectId === proj.project_id) {
+                                setActiveProjectId(null);
+                              }
+                            } finally {
+                              setDeletingProjectId(null);
+                              setConfirmDeleteProjectId(null);
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50"
+                        >
+                          {deletingProjectId === proj.project_id ? "Removing..." : "Confirm Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

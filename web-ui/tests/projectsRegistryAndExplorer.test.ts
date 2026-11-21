@@ -25,7 +25,7 @@ import {
 import { GET as getProjects, POST as postProjects, PATCH as patchProjects } from "../app/api/projects/route";
 import { GET as getProjectFiles } from "../app/api/projects/[id]/files/route";
 import { ProjectsView } from "../components/ProjectsView";
-import { closeSharedRunLedger } from "../lib/ledger/runLedger";
+import { closeSharedRunLedger, getSharedRunLedger } from "../lib/ledger/runLedger";
 
 describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () => {
   let tempDir: string;
@@ -147,6 +147,86 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
       const deleted = deleteProject(project.project_id);
       assert.equal(deleted, true);
       assert.equal(getProject(project.project_id), null);
+    });
+
+    it("deleteProject cascades to project_tasks and project_file_reviews atomically without touching other projects", () => {
+      const otherRepoDir = path.join(tempDir, "other-repo");
+      fs.mkdirSync(otherRepoDir, { recursive: true });
+
+      const projA = registerProject({ name: "Project A", rootPath: testRepoDir });
+      const projB = registerProject({ name: "Project B", rootPath: otherRepoDir });
+
+      const db = getSharedRunLedger().getDatabase();
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO project_tasks (task_id, project_id, prompt, status, base_sha, branch, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run("task_a1", projA.project_id, "Prompt A", "completed", "abc", "main", now, now);
+      db.prepare(
+        `INSERT INTO project_tasks (task_id, project_id, prompt, status, base_sha, branch, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run("task_b1", projB.project_id, "Prompt B", "completed", "def", "main", now, now);
+
+      db.prepare(
+        `INSERT INTO project_file_reviews (id, task_id, file_path, status) VALUES (?, ?, ?, ?)`
+      ).run("rev_a1", "task_a1", "src/a.ts", "pending");
+      db.prepare(
+        `INSERT INTO project_file_reviews (id, task_id, file_path, status) VALUES (?, ?, ?, ?)`
+      ).run("rev_b1", "task_b1", "src/b.ts", "pending");
+
+      const deleted = deleteProject(projA.project_id);
+      assert.equal(deleted, true);
+      assert.equal(getProject(projA.project_id), null);
+
+      const tasksA = db.prepare("SELECT * FROM project_tasks WHERE project_id = ?").all(projA.project_id);
+      const reviewsA = db.prepare("SELECT * FROM project_file_reviews WHERE task_id = ?").all("task_a1");
+      assert.equal(tasksA.length, 0, "project_tasks for deleted project must be removed");
+      assert.equal(reviewsA.length, 0, "project_file_reviews for deleted project must be removed");
+
+      // Other project and its children remain untouched
+      assert.ok(getProject(projB.project_id), "Other project must remain");
+      const tasksB = db.prepare("SELECT * FROM project_tasks WHERE project_id = ?").all(projB.project_id);
+      const reviewsB = db.prepare("SELECT * FROM project_file_reviews WHERE task_id = ?").all("task_b1");
+      assert.equal(tasksB.length, 1, "Other project tasks must remain");
+      assert.equal(reviewsB.length, 1, "Other project file reviews must remain");
+      // Files on disk must not be deleted
+      assert.equal(fs.existsSync(testRepoDir), true, "Project files on disk must not be deleted");
+    });
+
+    it("ProjectsView renders delete control with confirmation and invokes onDeleteProject", async () => {
+      const proj = registerProject({ name: "Deletable Project", rootPath: testRepoDir });
+      let deletedId: string | null = null;
+
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          React.createElement(ProjectsView, {
+            projects: [proj],
+            selectedProjectId: proj.project_id,
+            onOpenDrawer: () => {},
+            onDeleteProject: async (id: string) => {
+              deletedId = id;
+            },
+          })
+        );
+      });
+
+      const deleteBtn = container.querySelector(`[data-testid="project-delete-btn-${proj.project_id}"]`) as HTMLButtonElement | null;
+      assert.ok(deleteBtn, "Delete button should render on project card");
+
+      await act(async () => {
+        deleteBtn!.click();
+      });
+
+      assert.equal(deletedId, null, "Should require confirmation before deleting");
+      const confirmBtn = container.querySelector(`[data-testid="project-delete-confirm-${proj.project_id}"]`) as HTMLButtonElement | null;
+      assert.ok(confirmBtn, "Confirmation button should appear after clicking delete");
+
+      await act(async () => {
+        confirmBtn!.click();
+      });
+
+      assert.equal(deletedId, proj.project_id, "Confirming delete should invoke onDeleteProject with project_id");
     });
   });
 
