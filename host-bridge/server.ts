@@ -514,6 +514,14 @@ export function createHostServer(options: HostServerOptions = {}) {
   };
 }
 
+export interface HostToolResult {
+  success?: boolean;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  [key: string]: unknown;
+}
+
 export async function handleToolExecution(
   tool: string,
   args: Record<string, unknown>,
@@ -521,7 +529,7 @@ export async function handleToolExecution(
   capability?: GitCapability,
   gitConfig?: BridgeGitConfig,
   mergeGrant?: MergeGrant
-): Promise<Record<string, unknown> | undefined> {
+): Promise<HostToolResult | undefined> {
   if (tool.startsWith("host_git_")) {
     return await executeGitVerb(tool, args, capability, gitConfig, mergeGrant);
   }

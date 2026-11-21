@@ -16,8 +16,8 @@ import { copyText } from "@/lib/clipboard";
 
 export interface ExecutionTraceItem {
   tool: string;
-  args: Record<string, any>;
-  result: any;
+  args: Record<string, unknown>;
+  result: unknown;
   durationMs: number;
   timestamp: string;
   model?: string;
@@ -76,15 +76,18 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
       <div className="space-y-2">
         {traces.map((trace, idx) => {
           const isOpen = !!openIndexes[idx];
+          const resObj =
+            trace.result && typeof trace.result === "object"
+              ? (trace.result as { isError?: boolean; content?: Array<{ text?: string }> })
+              : null;
           const isSuccess =
-            !trace.result?.isError &&
-            !trace.result?.content?.[0]?.text?.includes("EXECUTION_ERROR");
+            !resObj?.isError && !resObj?.content?.[0]?.text?.includes("EXECUTION_ERROR");
 
           // Parse result text if it's formatted as stringified JSON
-          let parsedResult: any = trace.result;
+          let parsedResult: unknown = trace.result;
           try {
-            if (trace.result?.content?.[0]?.text) {
-              parsedResult = JSON.parse(trace.result.content[0].text);
+            if (resObj?.content?.[0]?.text) {
+              parsedResult = JSON.parse(resObj.content[0].text);
             }
           } catch {
             // Keep as-is

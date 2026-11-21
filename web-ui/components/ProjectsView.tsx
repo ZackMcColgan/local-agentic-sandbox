@@ -51,9 +51,28 @@ export interface ProjectsViewProps {
     mode: "now" | "schedule"
   ) => Promise<void>;
   // Phase 3 props (optional)
-  diffs?: any[];
+  diffs?: ProjectDiffItem[];
   onAcceptFile?: (filePath: string) => Promise<void>;
   onRevertFile?: (filePath: string) => Promise<void>;
+}
+
+interface ProjectDiffItem {
+  filePath: string;
+  status: string;
+  changeType?: string;
+  diff?: string;
+  additions?: number;
+  deletions?: number;
+  [key: string]: unknown;
+}
+
+interface BrowserFolderItem {
+  name: string;
+  path: string;
+  relPath: string;
+  isGitRepo?: boolean;
+  defaultBranch?: string;
+  toolchain?: string;
 }
 
 export function ProjectsView({
@@ -88,11 +107,11 @@ export function ProjectsView({
   // Folder Browser & Smart Discovery State
   const [entryMode, setEntryMode] = useState<"browse" | "greenfield" | "manual">("browse");
   const [browserSubpath, setBrowserSubpath] = useState<string>("");
-  const [browserItems, setBrowserItems] = useState<any[]>([]);
+  const [browserItems, setBrowserItems] = useState<BrowserFolderItem[]>([]);
   const [browserCurrentPath, setBrowserCurrentPath] = useState<string>("");
   const [browserParentPath, setBrowserParentPath] = useState<string | null>(null);
   const [isBrowserLoading, setIsBrowserLoading] = useState<boolean>(false);
-  const [selectedFolder, setSelectedFolder] = useState<any | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<BrowserFolderItem | null>(null);
   const [greenfieldName, setGreenfieldName] = useState<string>("");
   const [greenfieldToolchain, setGreenfieldToolchain] = useState<string>("node:22");
 
@@ -107,8 +126,9 @@ export function ProjectsView({
         setBrowserParentPath(data.parentPath || null);
         setBrowserSubpath(data.relPath === "." ? "" : data.relPath);
       }
-    } catch (err: any) {
-      console.warn("Failed to browse filesystem:", err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("Failed to browse filesystem:", msg);
     } finally {
       setIsBrowserLoading(false);
     }
@@ -120,7 +140,7 @@ export function ProjectsView({
     }
   }, [isRegisterModalOpen, entryMode, browserSubpath]);
 
-  const handleSelectFolder = (folder: any) => {
+  const handleSelectFolder = (folder: BrowserFolderItem) => {
     setSelectedFolder(folder);
     setFormName(folder.name);
     setFormPath(folder.path);
@@ -182,8 +202,8 @@ export function ProjectsView({
       setSelectedFolder(null);
       setFormName("");
       setFormPath("");
-    } catch (err: any) {
-      setFormError(err.message);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -232,8 +252,8 @@ export function ProjectsView({
       }
       setIsRegisterModalOpen(false);
       setGreenfieldName("");
-    } catch (err: any) {
-      setFormError(err.message);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -250,7 +270,7 @@ export function ProjectsView({
   const [fileError, setFileError] = useState<string | null>(null);
 
   // Diff Review State
-  const [diffItems, setDiffItems] = useState<any[]>(diffs);
+  const [diffItems, setDiffItems] = useState<ProjectDiffItem[]>(diffs);
   const [isLoadingDiffs, setIsLoadingDiffs] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [diffFilter, setDiffFilter] = useState<"all" | "pending" | "accepted" | "reverted">("all");
@@ -299,8 +319,10 @@ export function ProjectsView({
         setDiffItems(data.files || []);
         if (data.taskId) setDiffTaskId(data.taskId);
         if (data.baseSha) setDiffBaseSha(data.baseSha);
-      } catch (err: any) {
-        setDiffError(err.message || "Failed to load project diffs");
+      } catch (err: unknown) {
+        setDiffError(
+          (err instanceof Error ? err.message : undefined) || "Failed to load project diffs"
+        );
       } finally {
         setIsLoadingDiffs(false);
       }
@@ -326,8 +348,8 @@ export function ProjectsView({
       setDiffItems((prev) =>
         prev.map((f) => (f.filePath === filePath ? { ...f, status: "accepted" } : f))
       );
-    } catch (err: any) {
-      setDiffError(err.message || "Failed to accept file");
+    } catch (err: unknown) {
+      setDiffError((err instanceof Error ? err.message : undefined) || "Failed to accept file");
     } finally {
       setActionInProgress(null);
     }
@@ -350,8 +372,8 @@ export function ProjectsView({
       setDiffItems((prev) =>
         prev.map((f) => (f.filePath === filePath ? { ...f, status: "reverted" } : f))
       );
-    } catch (err: any) {
-      setDiffError(err.message || "Failed to revert file");
+    } catch (err: unknown) {
+      setDiffError((err instanceof Error ? err.message : undefined) || "Failed to revert file");
     } finally {
       setActionInProgress(null);
     }
@@ -368,8 +390,8 @@ export function ProjectsView({
         body: JSON.stringify({ action: "finalize", taskId: tId }),
       });
       setReviewFinalized(true);
-    } catch (err: any) {
-      setDiffError(err.message || "Failed to finalize review");
+    } catch (err: unknown) {
+      setDiffError((err instanceof Error ? err.message : undefined) || "Failed to finalize review");
     }
   };
 
@@ -399,8 +421,10 @@ export function ProjectsView({
         }
         const data = await res.json();
         setTree(data.tree || []);
-      } catch (err: any) {
-        setTreeError(err.message || "Failed to load project tree");
+      } catch (err: unknown) {
+        setTreeError(
+          (err instanceof Error ? err.message : undefined) || "Failed to load project tree"
+        );
       } finally {
         setIsLoadingTree(false);
       }
@@ -426,8 +450,8 @@ export function ProjectsView({
       }
       const data = await res.json();
       setFileContent(data.content || "");
-    } catch (err: any) {
-      setFileError(err.message || "Failed to read file");
+    } catch (err: unknown) {
+      setFileError((err instanceof Error ? err.message : undefined) || "Failed to read file");
       setFileContent(null);
     } finally {
       setIsLoadingFile(false);
@@ -474,8 +498,10 @@ export function ProjectsView({
       setIsRegisterModalOpen(false);
       setFormName("");
       setFormPath("");
-    } catch (err: any) {
-      setFormError(err.message || "Failed to register project");
+    } catch (err: unknown) {
+      setFormError(
+        (err instanceof Error ? err.message : undefined) || "Failed to register project"
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -230,7 +230,7 @@ function runGh(
 export interface GitVerbArgs {
   branch?: string;
   baseRef?: string;
-  paths?: unknown[];
+  paths?: string[];
   message?: string;
   title?: string;
   body?: string;
@@ -240,13 +240,24 @@ export interface GitVerbArgs {
   [key: string]: unknown;
 }
 
+export interface GitVerbResult {
+  success: boolean;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  data?: unknown;
+  prNumber?: number;
+  mergeSha?: string;
+  [key: string]: unknown;
+}
+
 export async function executeGitVerb(
   verb: string,
   args: GitVerbArgs = {},
   capability?: GitCapability,
   config?: BridgeGitConfig,
   grant?: MergeGrant
-): Promise<Record<string, unknown>> {
+): Promise<GitVerbResult> {
   const gitLogPath = config?.gitOpsLogPath || resolveDefaultGitOpsLogPath();
 
   // 1. Two-Key Bridge Flag (Key b)

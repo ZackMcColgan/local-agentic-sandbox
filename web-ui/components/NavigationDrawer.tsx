@@ -462,9 +462,9 @@ export function NavigationDrawer({
                     <span className="line-clamp-2 break-words text-[13.5px] font-semibold">
                       {deriveThreadDisplayTitle(thread.title)}
                     </span>
-                    {(thread as any).matchSnippet && (
+                    {(thread as { matchSnippet?: string }).matchSnippet && (
                       <span className="text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
-                        {(thread as any).matchSnippet}
+                        {(thread as { matchSnippet?: string }).matchSnippet}
                       </span>
                     )}
                     {timeLabel && (

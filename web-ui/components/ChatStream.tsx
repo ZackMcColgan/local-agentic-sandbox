@@ -159,12 +159,18 @@ export interface UiHostApproval {
   id: string;
   threadId?: string;
   tool: string;
-  args: Record<string, any>;
+  args: {
+    command?: string;
+    path?: string;
+    cwd?: string;
+    recursive?: boolean;
+    [key: string]: unknown;
+  };
   riskReason: string;
   createdAt?: number;
   expiresAt?: number;
   status: "pending" | "executed" | "denied" | "expired" | "error";
-  result?: any;
+  result?: unknown;
   error?: string;
   isSubmitting?: boolean;
 }
@@ -187,25 +193,28 @@ interface ChatStreamProps {
   threadStatus?:
     "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   threadHostAccess?: boolean;
-  onHostAccessChanged?: (enabled: boolean, updatedThread?: any) => void;
+  onHostAccessChanged?: (
+    enabled: boolean,
+    updatedThread?: { id: string; [key: string]: unknown }
+  ) => void;
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
   onStopTask?: () => Promise<void> | void;
-  onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
+  onTaskUpdated?: (task?: TaskManifest, thread?: { id: string; [key: string]: unknown }) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
   onOpenSettings?: () => void;
   onLaunchTask?: (
     goal: string,
-    attachments?: any[],
+    attachments?: unknown[],
     scope?: TaskScope,
     autoDeployOnGreen?: boolean
   ) => Promise<void>;
   defaultComposerMode?: "chat" | "build";
   onNewThread?: () => void;
   onDeleteThread?: () => void;
-  onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
+  onSendMessage?: (content: string, attachments?: unknown[]) => Promise<void>;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenDrawer?: () => void;
   onEnsureThread?: (initialTitle: string) => Promise<string | null>;
@@ -320,12 +329,12 @@ function UserMessageContent({ content }: { content: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        code: ({ children }: any) => (
+        code: ({ children }) => (
           <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
             {children}
           </code>
         ),
-        p: ({ children }: any) => (
+        p: ({ children }) => (
           <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-blue-950 dark:text-sky-100">
             {children}
           </p>
@@ -565,8 +574,8 @@ export function ChatStream({
       .then((data) => {
         if (!active || !data?.approvals) return;
         const now = Date.now();
-        const unexpired = data.approvals.filter(
-          (a: any) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
+        const unexpired = (data.approvals as UiHostApproval[]).filter(
+          (a) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
         );
 
         setHostApprovals((prev) => {
@@ -1466,12 +1475,18 @@ export function ChatStream({
             // Server explicitly reported a terminal turn error (e.g. engine offline,
             // simulation error event). This is a verdict, not a disconnect: never
             // route it into the detached-turn reconciliation path.
-            const terminalErr = new Error(event.error || "Streaming error encountered");
-            (terminalErr as any).isTerminalServerError = true;
+            const terminalErr = new Error(event.error || "Streaming error encountered") as Error & {
+              isTerminalServerError?: boolean;
+            };
+            terminalErr.isTerminalServerError = true;
             throw terminalErr;
           }
-        } catch (parseErr: any) {
-          if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
+        } catch (parseErr: unknown) {
+          if (
+            parseErr instanceof Error &&
+            parseErr.message &&
+            !parseErr.message.includes("JSON.parse")
+          ) {
             throw parseErr;
           }
         }
@@ -1515,15 +1530,16 @@ export function ChatStream({
           const errJson = await res.json();
           errMessage = errJson.error || errMessage;
         } catch {}
-        const httpErr = new Error(errMessage);
-        (httpErr as any).terminalServerError = true;
+        const httpErr = new Error(errMessage) as Error & { terminalServerError?: boolean };
+        httpErr.terminalServerError = true;
         throw httpErr;
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
       setLiveTurnTraces([]);
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      const streamErr = err as Error & { isTerminalServerError?: boolean };
+      if (streamErr.name === "AbortError") {
         console.log("Approval continuation aborted by user");
         setMessages((prev) =>
           upsertAssistant(prev, (msg) => ({
@@ -1534,7 +1550,7 @@ export function ChatStream({
         );
       } else {
         console.error("[ChatStream] Stream interrupted mid-approval:", err);
-        if (targetThreadId && err.isTerminalServerError !== true) {
+        if (targetThreadId && streamErr.isTerminalServerError !== true) {
           setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(targetThreadId);
@@ -1546,7 +1562,7 @@ export function ChatStream({
             }))
           );
         } else {
-          setErrorMsg(err.message || "Failed to continue chat after host approval");
+          setErrorMsg(streamErr.message || "Failed to continue chat after host approval");
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
@@ -1633,14 +1649,15 @@ export function ChatStream({
             : item
         )
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
       setHostApprovals((prev) =>
         prev.map((item) =>
           item.id === approvalId
             ? {
                 ...item,
                 status: "error",
-                error: err?.message || "Failed to submit approval",
+                error: message || "Failed to submit approval",
                 isSubmitting: false,
               }
             : item
@@ -1699,8 +1716,9 @@ export function ChatStream({
           setPendingSteers((prev) => [...prev, prompt]);
           setInput("");
           if (textareaRef.current) textareaRef.current.style.height = "auto";
-        } catch (steerErr: any) {
-          setErrorMsg(steerErr.message || "Failed to deliver steer to turn");
+        } catch (steerErr: unknown) {
+          const message = steerErr instanceof Error ? steerErr.message : undefined;
+          setErrorMsg(message || "Failed to deliver steer to turn");
           // Requirement 4: On steer POST failure, restore text into composer - never silently eaten
           setInput(prompt);
         } finally {
@@ -1824,8 +1842,9 @@ export function ChatStream({
       setStreamStatus("Planning autonomous milestones with real LLM model...");
       try {
         await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
-      } catch (err: any) {
-        setErrorMsg(err.message || "Failed to launch builder task");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : undefined;
+        setErrorMsg(message || "Failed to launch builder task");
       } finally {
         setIsLoading(false);
         setStreamStatus(null);
@@ -1954,15 +1973,16 @@ export function ChatStream({
         }
         // HTTP-level failure is a terminal verdict (503 backend-down, 413, 504),
         // not a mid-stream disconnect: never reconcile it server-side.
-        const httpErr = new Error(errMessage);
-        (httpErr as any).isTerminalServerError = true;
+        const httpErr = new Error(errMessage) as Error & { isTerminalServerError?: boolean };
+        httpErr.isTerminalServerError = true;
         throw httpErr;
       }
 
       await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
       turnEndedNormally = true;
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      const streamErr = err as Error & { isTerminalServerError?: boolean };
+      if (streamErr.name === "AbortError") {
         console.log("Chat stream aborted by user");
         setMessages((prev) =>
           upsertAssistant(prev, (msg) => ({
@@ -1977,7 +1997,7 @@ export function ChatStream({
         // Transient reconciliation applies only to genuine client-side disconnects
         // on real threads. Terminal server errors (engine offline, HTTP 503) and
         // offline simulations must render the error banner + Retry surface instead.
-        if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
+        if (currentTid && streamErr.isTerminalServerError !== true && !isSimulating) {
           // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
           setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
@@ -1990,7 +2010,7 @@ export function ChatStream({
             }))
           );
         } else {
-          setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+          setErrorMsg(streamErr.message || "Failed to communicate with agent orchestrator");
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
@@ -3073,7 +3093,14 @@ export function ChatStream({
                                     <ReactMarkdown
                                       remarkPlugins={[remarkGfm]}
                                       components={{
-                                        code: ({ inline, className, children, ...props }: any) => {
+                                        code: ({
+                                          inline,
+                                          className,
+                                          children,
+                                          ...props
+                                        }: React.ComponentPropsWithoutRef<"code"> & {
+                                          inline?: boolean;
+                                        }) => {
                                           const match = /language-(\w+)/.exec(className || "");
                                           const codeString = String(children).replace(/\n$/, "");
                                           const isSvg = isSvgCode(
@@ -3110,17 +3137,17 @@ export function ChatStream({
                                             </code>
                                           );
                                         },
-                                        p: ({ children }: any) => (
+                                        p: ({ children }) => (
                                           <p className="mb-3 last:mb-0 leading-[1.6] text-slate-900 dark:text-zinc-100">
                                             {children}
                                           </p>
                                         ),
-                                        ul: ({ children }: any) => (
+                                        ul: ({ children }) => (
                                           <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
                                             {children}
                                           </ul>
                                         ),
-                                        ol: ({ children, start }: any) => (
+                                        ol: ({ children, start }) => (
                                           <ol
                                             start={start}
                                             className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100"
@@ -3128,57 +3155,57 @@ export function ChatStream({
                                             {children}
                                           </ol>
                                         ),
-                                        li: ({ children }: any) => (
+                                        li: ({ children }) => (
                                           <li className="leading-[1.6]">{children}</li>
                                         ),
-                                        blockquote: ({ children }: any) => (
+                                        blockquote: ({ children }) => (
                                           <blockquote className="border-l-4 border-emerald-500 bg-slate-50/80 dark:bg-zinc-900/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
                                             {children}
                                           </blockquote>
                                         ),
-                                        table: ({ children }: any) => (
+                                        table: ({ children }) => (
                                           <div className="overflow-x-auto my-3 rounded-xl border border-slate-200 dark:border-zinc-800">
                                             <table className="min-w-full text-left text-xs divide-y divide-slate-200 dark:divide-zinc-800">
                                               {children}
                                             </table>
                                           </div>
                                         ),
-                                        thead: ({ children }: any) => (
+                                        thead: ({ children }) => (
                                           <thead className="bg-[#f4eff4] dark:bg-[#2b2930] text-slate-900 dark:text-zinc-100 font-semibold">
                                             {children}
                                           </thead>
                                         ),
-                                        tbody: ({ children }: any) => (
+                                        tbody: ({ children }) => (
                                           <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                                             {children}
                                           </tbody>
                                         ),
-                                        tr: ({ children }: any) => (
+                                        tr: ({ children }) => (
                                           <tr className="hover:bg-slate-50/50 dark:hover:bg-zinc-850/50 transition-colors">
                                             {children}
                                           </tr>
                                         ),
-                                        th: ({ children }: any) => (
+                                        th: ({ children }) => (
                                           <th className="px-3.5 py-2 font-semibold text-xs tracking-wider">
                                             {children}
                                           </th>
                                         ),
-                                        td: ({ children }: any) => (
+                                        td: ({ children }) => (
                                           <td className="px-3.5 py-2 text-xs leading-relaxed text-slate-800 dark:text-zinc-200">
                                             {children}
                                           </td>
                                         ),
-                                        h1: ({ children }: any) => (
+                                        h1: ({ children }) => (
                                           <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-4 mb-2 first:mt-0">
                                             {children}
                                           </h1>
                                         ),
-                                        h2: ({ children }: any) => (
+                                        h2: ({ children }) => (
                                           <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-3.5 mb-1.5">
                                             {children}
                                           </h2>
                                         ),
-                                        h3: ({ children }: any) => (
+                                        h3: ({ children }) => (
                                           <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100 mt-3 mb-1">
                                             {children}
                                           </h3>
@@ -3426,21 +3453,31 @@ export function ChatStream({
 
                         {/* Grounded File Citation Card matching Mockup 4 */}
                         {m.traces &&
-                          m.traces.some(
-                            (t: any) =>
-                              t.tool?.includes("file") ||
-                              t.args?.path ||
-                              (t.name && String(t.name).includes(".ts"))
-                          ) && (
+                          m.traces.some((t) => {
+                            const traceItem = t as ExecutionTraceItem & { name?: string };
+                            return (
+                              traceItem.tool?.includes("file") ||
+                              Boolean(traceItem.args?.path) ||
+                              (Boolean(traceItem.name) && String(traceItem.name).includes(".ts"))
+                            );
+                          }) && (
                             <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
                               {m.traces
-                                .filter(
-                                  (t: any) =>
-                                    t.args?.path || (t.name && String(t.name).includes(".ts"))
-                                )
+                                .filter((t) => {
+                                  const traceItem = t as ExecutionTraceItem & { name?: string };
+                                  return (
+                                    Boolean(traceItem.args?.path) ||
+                                    (Boolean(traceItem.name) &&
+                                      String(traceItem.name).includes(".ts"))
+                                  );
+                                })
                                 .slice(0, 3)
-                                .map((t: any, cIdx) => {
-                                  const pathLabel = t.args?.path || t.name;
+                                .map((t, cIdx) => {
+                                  const traceItem = t as ExecutionTraceItem & { name?: string };
+                                  const pathLabel =
+                                    typeof traceItem.args?.path === "string"
+                                      ? traceItem.args.path
+                                      : traceItem.name;
                                   if (!pathLabel) return null;
                                   return (
                                     <div
@@ -4156,7 +4193,7 @@ export function ChatStream({
 }
 
 export function deduplicateStreamMessages<
-  T extends { role: string; content: string; traces?: any[] },
+  T extends { role: string; content: string; traces?: unknown[] },
 >(messages: T[]): T[] {
   const out: T[] = [];
   for (const m of messages) {

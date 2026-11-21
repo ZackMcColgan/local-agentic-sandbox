@@ -122,9 +122,10 @@ async function runOvernightDogfood() {
     try {
       const res = execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
       return parseTapCounts(res);
-    } catch (err: any) {
-      const stdout = err.stdout ? err.stdout.toString() : "";
-      const stderr = err.stderr ? err.stderr.toString() : "";
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
       const counts = parseTapCounts(stdout + "\n" + stderr);
       if (counts.passed === 0 && counts.failed === 0) {
         return { passed: 0, failed: 1 };

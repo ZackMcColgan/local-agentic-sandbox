@@ -12,12 +12,20 @@ interface SkillCandidateItem {
   status: "pending" | "approved" | "rejected";
 }
 
+interface FlywheelSkillItem {
+  skillId: string;
+  name: string;
+  domain: string;
+  sourceTaskId: string;
+  useCount: number;
+}
+
 interface SkillsViewProps {
   onOpenDrawer: () => void;
   pendingCount?: number;
   initialPending?: SkillCandidateItem[];
   initialActive?: string[];
-  initialFlywheel?: any[];
+  initialFlywheel?: FlywheelSkillItem[];
   initialPreviewCandidate?: SkillCandidateItem | null;
 }
 
@@ -31,7 +39,7 @@ export function SkillsView({
 }: SkillsViewProps) {
   const [pending, setPending] = useState<SkillCandidateItem[]>(initialPending || []);
   const [active, setActive] = useState<string[]>(initialActive || []);
-  const [flywheel, setFlywheel] = useState<any[]>(initialFlywheel || []);
+  const [flywheel, setFlywheel] = useState<FlywheelSkillItem[]>(initialFlywheel || []);
   const [loading, setLoading] = useState<boolean>(!initialPending);
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<SkillCandidateItem | null>(
@@ -78,8 +86,9 @@ export function SkillsView({
         const errJson = await res.json();
         setActionError(errJson.error || "Failed to approve skill candidate");
       }
-    } catch (err: any) {
-      setActionError(err.message || "Failed to approve skill candidate");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
+      setActionError(message || "Failed to approve skill candidate");
     }
   };
 
@@ -97,8 +106,9 @@ export function SkillsView({
         const errJson = await res.json();
         setActionError(errJson.error || "Failed to reject skill candidate");
       }
-    } catch (err: any) {
-      setActionError(err.message || "Failed to reject skill candidate");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
+      setActionError(message || "Failed to reject skill candidate");
     }
   };
 
@@ -261,7 +271,7 @@ export function SkillsView({
               Flywheel SQLite Pattern Store ({flywheel.length})
             </h2>
             <div className="space-y-2">
-              {flywheel.map((fSkill: any) => (
+              {flywheel.map((fSkill) => (
                 <div
                   key={fSkill.skillId}
                   className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs"
@@ -323,7 +333,7 @@ export function SkillsView({
                   {`---
 id: ${previewCandidate.id}
 status: ${previewCandidate.status || "pending"}
-confidence: ${(previewCandidate as any).confidence ?? 0.94}
+confidence: ${(previewCandidate as { confidence?: number }).confidence ?? 0.94}
 pattern: ${previewCandidate.pattern}
 occurrences: ${previewCandidate.occurrences}
 ---

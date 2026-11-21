@@ -152,7 +152,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
 
       const res = await executeGitVerb("host_git_status", {}, capability, configOff);
       assert.equal(res.success, false);
-      assert.match(res.error, /Unattended host git is disabled in bridge configuration/);
+      assert.match(res.error ?? "", /Unattended host git is disabled in bridge configuration/);
     });
 
     it("refuses when repo is not in the allowlist", async () => {
@@ -162,7 +162,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
       };
       const res = await executeGitVerb("host_git_status", {}, capability, baseConfig);
       assert.equal(res.success, false);
-      assert.match(res.error, /not in allowlist/);
+      assert.match(res.error ?? "", /not in allowlist/);
     });
 
     it("refuses when caller attempts to retarget to a different branch than granted capability", async () => {
@@ -174,7 +174,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /Capability mismatch/);
+      assert.match(res.error ?? "", /Capability mismatch/);
     });
   });
 
@@ -190,7 +190,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(badRes.success, false);
-      assert.match(badRes.error, /prohibited agent\/tool tokens/);
+      assert.match(badRes.error ?? "", /prohibited agent\/tool tokens/);
 
       // 2. Valid name
       const goodRes = await executeGitVerb(
@@ -215,7 +215,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(wildcardRes.success, false);
-      assert.match(wildcardRes.error, /exact relative file paths required/);
+      assert.match(wildcardRes.error ?? "", /exact relative file paths required/);
 
       const runtimeRes = await executeGitVerb(
         "host_git_add",
@@ -224,7 +224,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(runtimeRes.success, false);
-      assert.match(runtimeRes.error, /staging runtime directories is forbidden/);
+      assert.match(runtimeRes.error ?? "", /staging runtime directories is forbidden/);
     });
 
     it("host_git_commit refuses empty commit or staging outside declared scope", async () => {
@@ -236,7 +236,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(emptyRes.success, false);
-      assert.match(emptyRes.error, /nothing staged/);
+      assert.match(emptyRes.error ?? "", /nothing staged/);
 
       // Create a valid file, stage, commit
       fs.writeFileSync(path.join(repoDir, "test.txt"), "Proof text\n", "utf8");
@@ -272,7 +272,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(protectedRes.success, false);
-      assert.match(protectedRes.error, /direct push to protected branch .* is forbidden/);
+      assert.match(protectedRes.error ?? "", /direct push to protected branch .* is forbidden/);
 
       // Push feature branch to origin
       const pushRes = await executeGitVerb(
@@ -293,7 +293,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
       fs.writeFileSync(path.join(repoDir, "test.txt"), "Dirty local change\n", "utf8");
       const dirtyPull = await executeGitVerb("host_git_pull_ff", {}, capability, baseConfig);
       assert.equal(dirtyPull.success, false);
-      assert.match(dirtyPull.error, /tracked modifications/);
+      assert.match(dirtyPull.error ?? "", /tracked modifications/);
 
       // Revert dirty change
       execSync("git checkout -- test.txt", { cwd: repoDir, stdio: "ignore" });
@@ -314,7 +314,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         baseConfig
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /No merge grant exists/);
+      assert.match(res.error ?? "", /No merge grant exists/);
     });
 
     it("refuses when grant PR number or branch does not match", async () => {
@@ -327,7 +327,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         grant
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /PR mismatch/);
+      assert.match(res.error ?? "", /PR mismatch/);
     });
 
     it("refuses when grant is already consumed", async () => {
@@ -340,7 +340,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         grant
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /already been consumed/);
+      assert.match(res.error ?? "", /already been consumed/);
     });
 
     it("refuses main-based merge unless instruction explicitly names main", async () => {
@@ -358,7 +358,7 @@ describe("Unattended Host Git Operations & Rails (Part 1 & 2)", () => {
         grant
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /explicitly approve main/);
+      assert.match(res.error ?? "", /explicitly approve main/);
     });
   });
 });

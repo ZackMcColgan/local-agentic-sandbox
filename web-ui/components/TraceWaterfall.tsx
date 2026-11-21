@@ -26,7 +26,7 @@ export interface AgentSpan {
   endTime?: number;
   durationMs?: number;
   status: "ok" | "error";
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface TraceSession {

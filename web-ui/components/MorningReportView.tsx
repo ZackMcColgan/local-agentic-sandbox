@@ -154,7 +154,9 @@ export function MorningReportView({
           {
             taskId: report.taskId,
             goal: report.goal,
-            status: (report.status === "active" ? "active" : report.status) as any,
+            status: (report.status === "active"
+              ? "active"
+              : report.status) as OvernightTaskEntry["status"],
             branch: report.branch || "develop",
             gitHeadSha: report.gitHeadSha || "",
             startedAt: report.startedAt || new Date().toISOString(),
@@ -175,7 +177,7 @@ export function MorningReportView({
                 {
                   taskId: report.taskId,
                   goal: report.goal,
-                  status: report.status as any,
+                  status: report.status as "parked" | "failed",
                   reason: report.parkedItems?.[0] || "Task requires attention",
                 },
               ]
@@ -290,8 +292,9 @@ export function MorningReportView({
           `Unable to load preview (${res.status}). Open link directly: ${art.previewUrl}`
         );
       }
-    } catch (err: any) {
-      setPreviewContent(`Preview error: ${err?.message || "Failed to fetch artifact"}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
+      setPreviewContent(`Preview error: ${message || "Failed to fetch artifact"}`);
     } finally {
       setPreviewLoading(false);
     }

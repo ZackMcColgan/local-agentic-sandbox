@@ -40,16 +40,18 @@ interface LiveRunBlockProps {
 
 export function resolveDeliverableFile(task: TaskManifest): string | undefined {
   const journalMatch = task.journal?.find((j) => {
-    const txt = j.message || (j as any).entry;
+    const txt = j.message || (j as { entry?: string }).entry;
     return typeof txt === "string" && txt.toLowerCase().includes("committed");
   });
   const journalFile = journalMatch
-    ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
+    ? (journalMatch.message || (journalMatch as { entry?: string }).entry)?.match(
+        /[\w\-./]+\.\w+/
+      )?.[0]
     : undefined;
 
   return (
     task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
-    task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
+    task.milestones?.flatMap((m) => (m as { filesChanged?: string[] }).filesChanged || [])[0] ||
     journalFile
   );
 }

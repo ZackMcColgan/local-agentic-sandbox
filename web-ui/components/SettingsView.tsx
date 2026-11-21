@@ -400,7 +400,7 @@ export function SettingsView({
         setEngineData(json);
       }
     } catch {
-      setEngineData((prev: any) => ({ ...prev, status: "stopped", reachable: false }));
+      setEngineData((prev) => ({ ...prev, status: "stopped", reachable: false }));
     }
   };
 
@@ -429,8 +429,9 @@ export function SettingsView({
       });
       const json = await res.json().catch(() => ({}));
       setEngineMessage(formatEngineActionMessage(action, res.ok, res.status, json));
-    } catch (err: any) {
-      setEngineMessage(`Failed: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setEngineMessage(`Failed: ${message}`);
     } finally {
       setEngineLoading(false);
       setTimeout(fetchEngineStatus, 1500);
