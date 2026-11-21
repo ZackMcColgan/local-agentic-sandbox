@@ -40,46 +40,46 @@ describe("useLiveTraces hook", () => {
   });
 
   it("accumulates traces via updateTraces and clears via clearTraces", async () => {
-    let latest: UseLiveTracesResult | null = null;
+    const state: { current: UseLiveTracesResult | null } = { current: null };
 
     function Harness({ threadId }: { threadId: string | null }) {
-      latest = useLiveTraces(threadId);
+      state.current = useLiveTraces(threadId);
       return null;
     }
 
     await act(async () => {
       root.render(React.createElement(Harness, { threadId: "t1" }));
     });
-    assert.deepEqual(latest!.traces, []);
+    assert.equal(state.current!.traces.length, 0);
 
     const t1 = makeTrace("search_web");
     const t2 = makeTrace("workspace_read_file");
     await act(async () => {
-      latest!.updateTraces([t1]);
+      state.current!.updateTraces([t1]);
     });
-    assert.equal(latest!.traces.length, 1);
-    assert.equal(latest!.traces[0].tool, "search_web");
+    assert.equal(state.current!.traces.length, 1);
+    assert.equal(state.current!.traces[0].tool, "search_web");
 
     await act(async () => {
-      latest!.updateTraces([t1, t2]);
+      state.current!.updateTraces([t1, t2]);
     });
-    assert.equal(latest!.traces.length, 2);
+    assert.equal(state.current!.traces.length, 2);
     assert.deepEqual(
-      latest!.traces.map((t) => t.tool),
+      state.current!.traces.map((t) => t.tool),
       ["search_web", "workspace_read_file"]
     );
 
     await act(async () => {
-      latest!.clearTraces();
+      state.current!.clearTraces();
     });
-    assert.deepEqual(latest!.traces, []);
+    assert.equal(state.current!.traces.length, 0);
   });
 
   it("clears previous thread traces when selectedThreadId switches or becomes null", async () => {
-    let latest: UseLiveTracesResult | null = null;
+    const state: { current: UseLiveTracesResult | null } = { current: null };
 
     function Harness({ threadId }: { threadId: string | null }) {
-      latest = useLiveTraces(threadId);
+      state.current = useLiveTraces(threadId);
       return null;
     }
 
@@ -87,34 +87,34 @@ describe("useLiveTraces hook", () => {
       root.render(React.createElement(Harness, { threadId: "t1" }));
     });
     await act(async () => {
-      latest!.updateTraces([makeTrace("search_web"), makeTrace("workspace_grep")]);
+      state.current!.updateTraces([makeTrace("search_web"), makeTrace("workspace_grep")]);
     });
-    assert.equal(latest!.traces.length, 2);
+    assert.equal(state.current!.traces.length, 2);
 
     // Switching to another thread clears traces
     await act(async () => {
       root.render(React.createElement(Harness, { threadId: "t2" }));
     });
-    assert.deepEqual(latest!.traces, []);
+    assert.deepEqual(state.current!.traces, []);
 
     // Re-populate on t2, then clear selectedThreadId to null
     await act(async () => {
-      latest!.updateTraces([makeTrace("workspace_run_command")]);
+      state.current!.updateTraces([makeTrace("workspace_run_command")]);
     });
-    assert.equal(latest!.traces.length, 1);
+    assert.equal(state.current!.traces.length, 1);
 
     await act(async () => {
       root.render(React.createElement(Harness, { threadId: null }));
     });
-    assert.deepEqual(latest!.traces, []);
+    assert.deepEqual(state.current!.traces, []);
   });
 
   it("preserves traces when shouldSkipClear returns true for the new threadId", async () => {
-    let latest: UseLiveTracesResult | null = null;
+    const state: { current: UseLiveTracesResult | null } = { current: null };
     let skipId: string | null = "t-auto";
 
     function Harness({ threadId }: { threadId: string | null }) {
-      latest = useLiveTraces(threadId, {
+      state.current = useLiveTraces(threadId, {
         shouldSkipClear: (id) => id === skipId,
       });
       return null;
@@ -124,22 +124,22 @@ describe("useLiveTraces hook", () => {
       root.render(React.createElement(Harness, { threadId: null }));
     });
     await act(async () => {
-      latest!.updateTraces([makeTrace("search_web")]);
+      state.current!.updateTraces([makeTrace("search_web")]);
     });
-    assert.equal(latest!.traces.length, 1);
+    assert.equal(state.current!.traces.length, 1);
 
     // Transition to the auto-created thread should preserve traces
     await act(async () => {
       root.render(React.createElement(Harness, { threadId: "t-auto" }));
     });
-    assert.equal(latest!.traces.length, 1);
-    assert.equal(latest!.traces[0].tool, "search_web");
+    assert.equal(state.current!.traces.length, 1);
+    assert.equal(state.current!.traces[0].tool, "search_web");
 
     // Switching to another thread afterwards clears traces
     skipId = null;
     await act(async () => {
       root.render(React.createElement(Harness, { threadId: "t-other" }));
     });
-    assert.deepEqual(latest!.traces, []);
+    assert.deepEqual(state.current!.traces, []);
   });
 });

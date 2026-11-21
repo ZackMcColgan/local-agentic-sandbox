@@ -47,7 +47,9 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
 
   it("ensures page.tsx removes mobile sidebars and renders inspector full-screen on mobile", () => {
     const pageFile = path.join(appDir, "page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.join(componentsDir, "ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     // app-sidebar must be hidden on mobile (< md:)
     assert.match(

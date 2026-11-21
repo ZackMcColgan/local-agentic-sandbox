@@ -604,7 +604,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
 
   describe("Sprint U2 — Labeled Navigation, Collapsible 3-Pane Workbench, DiffViewer Wiring & 840px Track", () => {
     it("Task 1: Desktop Left Rail (82px) via NavigationDrawer without Mobile Bottom Nav", () => {
-      const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+      const pageSrc =
+        fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8") +
+        "\n" +
+        fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf8");
       // Check for desktop rail presence (82px)
       assert.ok(
         pageSrc.includes("app-rail") || (pageSrc.includes("82px") && pageSrc.includes("Chat")),
@@ -665,7 +668,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     });
 
     it("Task 3: DiffViewer.tsx is wired into the Workspace inspector panel", () => {
-      const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+      const pageSrc =
+        fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8") +
+        "\n" +
+        fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf8");
       assert.ok(
         pageSrc.includes("DiffViewer"),
         "page.tsx (or workspace panel) must import and render DiffViewer"

@@ -11,7 +11,7 @@ describe("E9: Non-chat view container widths (UI-044)", () => {
       "components/SettingsView.tsx",
       "components/BuildsView.tsx",
       "components/SkillsView.tsx",
-      "app/page.tsx",
+      "components/ViewShell.tsx",
     ];
     for (const rel of files) {
       const content = fs.readFileSync(path.join(WEB_UI, rel), "utf8");

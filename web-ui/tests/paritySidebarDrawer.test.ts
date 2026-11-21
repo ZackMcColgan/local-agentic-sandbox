@@ -7,7 +7,10 @@ const componentsDir = path.join(process.cwd(), "components");
 const appDir = path.join(process.cwd(), "app");
 const sidebar = fs.readFileSync(path.join(componentsDir, "ThreadsSidebar.tsx"), "utf8");
 const drawer = fs.readFileSync(path.join(componentsDir, "NavigationDrawer.tsx"), "utf8");
-const page = fs.readFileSync(path.join(appDir, "page.tsx"), "utf8");
+const page =
+  fs.readFileSync(path.join(appDir, "page.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(componentsDir, "ViewShell.tsx"), "utf8");
 
 function segment(src: string, startMarker: string, length = 1600): string {
   const i = src.indexOf(startMarker);

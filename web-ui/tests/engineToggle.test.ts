@@ -122,7 +122,10 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       path.join(componentsDir, "ModelBottomSheet.tsx"),
       "utf-8"
     );
-    const pageFile = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8");
+    const pageFile =
+      fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf-8");
 
     it("EngineStatusPill provides Stop button when running and posts action: stop", () => {
       assert.ok(pillFile.includes("Stop"), "EngineStatusPill must contain Stop button");

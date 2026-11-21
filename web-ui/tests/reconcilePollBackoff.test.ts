@@ -111,7 +111,10 @@ test("reconcile poll keeps polling while active and inside both caps", () => {
 });
 
 const streamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
-const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+const pageSrc =
+  fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf8");
 
 test("ChatStream uses the backoff policy instead of the fixed 1s re-arm", () => {
   assert.match(streamSrc, /reconcilePollDelayMs/, "loop must re-arm via reconcilePollDelayMs");
