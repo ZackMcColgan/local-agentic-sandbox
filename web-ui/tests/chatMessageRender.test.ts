@@ -39,14 +39,18 @@ function baseProps(message: ChatMessage) {
 
 describe("chat/messageRender presentational components", () => {
   it("UserMessageContent renders short prompt without collapse toggle", () => {
-    const html = renderToStaticMarkup(React.createElement(UserMessageContent, { content: "Short prompt" }));
+    const html = renderToStaticMarkup(
+      React.createElement(UserMessageContent, { content: "Short prompt" })
+    );
     assert.ok(html.includes("Short prompt"));
     assert.ok(!html.includes("brief-collapse-toggle"));
   });
 
   it("UserMessageContent collapses long prompts behind Show full brief toggle", () => {
     const longText = "a".repeat(400);
-    const html = renderToStaticMarkup(React.createElement(UserMessageContent, { content: longText }));
+    const html = renderToStaticMarkup(
+      React.createElement(UserMessageContent, { content: longText })
+    );
     assert.ok(html.includes('data-testid="brief-collapse-toggle"'));
     assert.ok(html.includes("Show full brief"));
   });

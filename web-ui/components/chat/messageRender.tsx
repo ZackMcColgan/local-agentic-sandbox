@@ -344,8 +344,9 @@ export function ChatMessageItem({
               const msgLastTrace =
                 m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
               const statusTool = streamStatus
-                ? (streamStatus.match(/^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i)?.[1] ??
-                  null)
+                ? (streamStatus.match(
+                    /^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i
+                  )?.[1] ?? null)
                 : null;
               const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
               const phaseLabel = toolForPhase
@@ -373,11 +374,7 @@ export function ChatMessageItem({
                       round={m.roundPromptTokens?.length}
                       traceCount={traceCount}
                       traces={
-                        isStreamingThis
-                          ? m.traces?.length
-                            ? m.traces
-                            : liveTurnTraces
-                          : m.traces
+                        isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces
                       }
                       phaseLabel={phaseLabel}
                       activityLabel={statusTool ? null : streamStatus}
@@ -411,10 +408,7 @@ export function ChatMessageItem({
           {/* Inline Expandable Sandbox & Telemetry Badges */}
           {!isUser && m.completionStamp === "completed-unverified" && (
             <div className="mb-2">
-              <CompletionVerificationBadge
-                stamp={m.completionStamp}
-                gaps={m.verificationGaps}
-              />
+              <CompletionVerificationBadge stamp={m.completionStamp} gaps={m.verificationGaps} />
             </div>
           )}
           {!isUser &&
@@ -603,10 +597,7 @@ export function ChatMessageItem({
                             }
                             if (inline && isSvgFilePath(codeString)) {
                               return (
-                                <SvgFileLink
-                                  href={resolveSvgUrl(codeString)}
-                                  rawHref={codeString}
-                                >
+                                <SvgFileLink href={resolveSvgUrl(codeString)} rawHref={codeString}>
                                   {children}
                                 </SvgFileLink>
                               );
@@ -802,8 +793,7 @@ export function ChatMessageItem({
             <div className="flex flex-col gap-2.5 pt-1 w-full max-w-lg">
               {m.attachments.map((att, aIdx) => {
                 const fileRelPath = att.previewUrl || att.name;
-                const isHtml =
-                  att.name.toLowerCase().endsWith(".html") || att.type === "text/html";
+                const isHtml = att.name.toLowerCase().endsWith(".html") || att.type === "text/html";
                 const isSvg =
                   att.name.toLowerCase().endsWith(".svg") || att.type === "image/svg+xml";
                 const canOpenInTab = isHtml || isSvg;

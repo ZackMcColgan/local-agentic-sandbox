@@ -4,7 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const componentsDir = path.join(process.cwd(), "components");
-const chatStream = fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf8");
+const chatStream =
+  fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(componentsDir, "chat/messageRender.tsx"), "utf8");
 const thinkingPanel = fs.readFileSync(path.join(componentsDir, "ThinkingPanel.tsx"), "utf8");
 const liveRunBlock = fs.readFileSync(path.join(componentsDir, "LiveRunBlock.tsx"), "utf8");
 const activityHeader = fs.readFileSync(path.join(componentsDir, "LiveActivityHeader.tsx"), "utf8");

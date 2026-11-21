@@ -61,7 +61,8 @@ export function HostApprovalsPanel({ approvals, onDecision }: HostApprovalsPanel
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 {approval.args?.cwd && (
                   <span className="text-slate-500 dark:text-zinc-400 font-mono">
-                    cwd: <span className="text-slate-700 dark:text-zinc-200">{approval.args.cwd}</span>
+                    cwd:{" "}
+                    <span className="text-slate-700 dark:text-zinc-200">{approval.args.cwd}</span>
                   </span>
                 )}
                 {approval.args?.recursive && (

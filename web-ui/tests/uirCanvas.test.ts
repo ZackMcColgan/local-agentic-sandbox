@@ -244,7 +244,10 @@ describe("uir-2 canvas: UI wiring (source assertions)", () => {
   });
 
   it("ChatStream mounts the canvas provider and pane around the chat column", () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+    const src =
+      fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/chat/messageRender.tsx"), "utf8");
     assert.ok(src.includes("CanvasProvider"), "ChatStream must wrap its tree in CanvasProvider");
     assert.ok(src.includes("ArtifactCanvasPane"), "ChatStream must mount the ArtifactCanvasPane");
     assert.ok(

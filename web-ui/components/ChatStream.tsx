@@ -4,20 +4,14 @@ import React, { useState, useRef, useEffect } from "react";
 import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import type { SupervisorBadgeInput } from "./supervisorBadgeState";
-import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
 import {
   Send,
   Sparkles,
   Loader2,
-  Terminal,
   ShieldAlert,
-  ShieldCheck,
-  Copy,
   Check,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
-  Globe,
   Trash2,
   Paperclip,
   FileText,
@@ -30,15 +24,8 @@ import {
   ArrowDown,
   PanelLeft,
   FolderGit2,
-  FileCode,
-  ExternalLink,
-  Download,
-  RefreshCw,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
-import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
@@ -47,43 +34,21 @@ import {
   reconcilePollDelayMs,
   shouldStopReconcilePoll,
 } from "../lib/reconcilePollPolicy";
-import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
-import { ThinkingPanel } from "./ThinkingPanel";
-import { LiveActivityHeader } from "./LiveActivityHeader";
-import {
-  phaseLabelForTool,
-  hostDisconnectChipVisible,
-  streamBannerKind,
-} from "../lib/liveActivity";
+import { hostDisconnectChipVisible, streamBannerKind } from "../lib/liveActivity";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
-import {
-  isSvgCode,
-  isSvgFilePath,
-  resolveSvgUrl,
-  wrapRawSvgInMarkdown,
-  extractSvgsFromMessage,
-  hasCompleteInlineSvg,
-  extractCodeDeliverablesFromMessage,
-} from "../lib/svgUtils";
 import { AgentMode } from "../config/models";
-import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../lib/toolCallIntegrity";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import {
   parseThinkingAndContent,
   formatHumanReadableTrace,
   formatChatErrorMessage,
-  getServedByNote,
-  extractFileWriteDiffsFromTraces,
   formatElapsedDuration,
-  formatMessageTimestamp,
-  displayRepoPath,
-  displayBasename,
 } from "../lib/chatUtils";
 import { CanvasProvider } from "./CanvasContext";
-import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
+import { ArtifactCanvasPane } from "./ArtifactCanvas";
 import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
@@ -2512,10 +2477,7 @@ export function ChatStream({
               )}
 
               {/* Host Mode Approvals (Cards & Receipts) */}
-              <HostApprovalsPanel
-                approvals={hostApprovals}
-                onDecision={handleApprovalDecision}
-              />
+              <HostApprovalsPanel approvals={hostApprovals} onDecision={handleApprovalDecision} />
 
               {/* Standalone turn status slot only when isLoading is true and no assistant ThinkingPanel is rendered at the tail */}
               {isLoading &&

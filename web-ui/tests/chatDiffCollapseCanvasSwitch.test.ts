@@ -30,7 +30,10 @@ import { ArtifactCanvasPane, CanvasDiffCard } from "../components/ArtifactCanvas
 import { DiffViewer } from "../components/DiffViewer";
 
 const webUiDir = process.cwd();
-const chatStreamSrc = fs.readFileSync(path.join(webUiDir, "components/ChatStream.tsx"), "utf8");
+const chatStreamSrc =
+  fs.readFileSync(path.join(webUiDir, "components/ChatStream.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(webUiDir, "components/chat/messageRender.tsx"), "utf8");
 const diffViewerSrc = fs.readFileSync(path.join(webUiDir, "components/DiffViewer.tsx"), "utf8");
 
 // Two 90-line file bodies, identical for the first 75 lines, first real
@@ -286,10 +289,10 @@ describe("UI-023/UI-024 — rendered UI", () => {
   it("ChatStream consolidates to a single diff surface (CanvasDiffCard only, no duplicate DiffViewer)", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const chatStreamSrc = fs.readFileSync(
-      path.join(process.cwd(), "components", "ChatStream.tsx"),
-      "utf8"
-    );
+    const chatStreamSrc =
+      fs.readFileSync(path.join(process.cwd(), "components", "ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.join(process.cwd(), "components", "chat", "messageRender.tsx"), "utf8");
     assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
     assert.equal(
       chatStreamSrc.includes("<DiffViewer"),
