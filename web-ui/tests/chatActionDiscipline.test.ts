@@ -250,7 +250,14 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         log: () => {},
       });
       const reader = stream.readable.getReader();
-      const firstChunk = await reader.read();
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      const firstChunk = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          guardTimer = setTimeout(() => reject(new Error("heartbeat ping timeout")), 1000);
+        }),
+      ]);
+      if (guardTimer !== undefined) clearTimeout(guardTimer);
       sse.stopHeartbeat();
       await sse.closeWriterWithTimeout(200);
       ac.signal.removeEventListener("abort", sse.cleanupClientSignal);
