@@ -418,6 +418,7 @@ export function ChatStream({
   }, [draftPrompt, onClearDraftPrompt]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStoppingTask, setIsStoppingTask] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeThreadState, setActiveThreadId] = useState<string | undefined>(threadId);
   const activeThreadIdRef = useRef<string | undefined>(threadId);
   const activeThreadId = activeThreadIdRef.current || activeThreadState || threadId;
@@ -2393,7 +2394,10 @@ export function ChatStream({
                 {onDeleteThread && (
                   <button
                     type="button"
-                    onClick={onDeleteThread}
+                    onClick={() => {
+                      setShowOverflowMenu(false);
+                      setShowDeleteConfirm(true);
+                    }}
                     className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
                   >
                     Delete session
@@ -2414,6 +2418,72 @@ export function ChatStream({
           </div>
         </div>
       </header>
+
+      {/* Confirm Dialog for Permanent Session Deletion (mirrors ThreadsSidebar) */}
+      {showDeleteConfirm && onDeleteThread && (
+        <div
+          data-testid="thread-delete-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-confirm-delete-title"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setShowDeleteConfirm(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setShowDeleteConfirm(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3
+                  id="chat-confirm-delete-title"
+                  className="text-base font-bold text-slate-900 dark:text-zinc-100 line-clamp-2"
+                >
+                  Delete &ldquo;{threadTitle || "Untitled session"}&rdquo;?
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+                  This action is permanent and cannot be undone.{" "}
+                  {activeTask?.taskId &&
+                  ((activeThreadId || threadId) === `thread-${activeTask.taskId}` ||
+                    (activeThreadId || threadId || "").startsWith("thread-task-"))
+                    ? "All messages and the task checkpoint for this session will be removed."
+                    : activeTask?.taskId
+                      ? "All messages for this session will be removed. The task checkpoint is retained and the task will be marked cancelled."
+                      : "All messages for this session will be removed."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                data-testid="cancel-delete-btn"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-delete-btn"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  onDeleteThread();
+                }}
+                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Conversation Thread Messages */}
       <div
