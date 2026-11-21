@@ -43,7 +43,8 @@ import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
 import { resolveSupervisorChunkResume, resolveThreadChunkBudget, handleLiveTurnChunkBudget, type ChunkBudgetConfig } from "../jobChunking";
 import { getHostSettings } from "../hostSettings";
-import { touchActiveTurn } from "../threads/threadStore";
+import { touchActiveTurn, ThreadStore } from "../threads/threadStore";
+import { buildJobTokenRollup, sumRoundPromptTokens } from "../tokenEconomics";
 import { STALL_WINDOW_MS } from "../threads/inAppSupervisor";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import {
@@ -755,6 +756,10 @@ export interface StepExecutorResult {
   deliverableContent?: string;
   thinking?: string;
   reason?: string;
+  rounds?: number;
+  promptTokens?: number;
+  outputTokens?: number;
+  roundPromptTokens?: number[];
 }
 
 export type StepExecutor = (
@@ -925,16 +930,53 @@ export function createProductionStepExecutor(
       const builderModel = workerPool.getModelForRole("builder") || modelToUse;
       const criticModel = workerPool.getModelForRole("critic") || modelToUse;
 
+      const stepRoundPromptTokens: number[] = [];
+      let stepOutputTokens = 0;
+      let stepRounds = 0;
+      const baseGenerate = workerPool.generate;
+      const trackedGenerate: GenerateFn | undefined = baseGenerate
+        ? async (req) => {
+            const genRes = await baseGenerate(req);
+            const pTokens =
+              typeof genRes?.promptTokens === "number" && Number.isFinite(genRes.promptTokens) && genRes.promptTokens > 0
+                ? genRes.promptTokens
+                : typeof genRes?.prompt_eval_count === "number" && Number.isFinite(genRes.prompt_eval_count) && genRes.prompt_eval_count > 0
+                ? genRes.prompt_eval_count
+                : 0;
+            const oTokens =
+              typeof genRes?.outputTokens === "number" && Number.isFinite(genRes.outputTokens) && genRes.outputTokens > 0
+                ? genRes.outputTokens
+                : typeof genRes?.eval_count === "number" && Number.isFinite(genRes.eval_count) && genRes.eval_count > 0
+                ? genRes.eval_count
+                : 0;
+            if (pTokens > 0 || oTokens > 0) {
+              stepRounds += 1;
+              if (pTokens > 0) stepRoundPromptTokens.push(pTokens);
+              stepOutputTokens += oTokens;
+            }
+            return genRes;
+          }
+        : undefined;
+      const buildUsageFields = () =>
+        stepRounds > 0
+          ? {
+              rounds: stepRounds,
+              promptTokens: sumRoundPromptTokens(stepRoundPromptTokens),
+              outputTokens: stepOutputTokens,
+              roundPromptTokens: [...stepRoundPromptTokens]
+            }
+          : {};
+
       const builder = createBuilderWorker({
         model: builderModel,
-        generate: workerPool.generate,
+        generate: trackedGenerate,
         keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(builderModel) : "24h",
         scope: effectiveScope
       });
 
       const critic = createCriticWorker({
         model: criticModel,
-        generate: workerPool.generate,
+        generate: trackedGenerate,
         keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(criticModel) : "24h",
         scope: effectiveScope
       });
@@ -1118,7 +1160,8 @@ export function createProductionStepExecutor(
             builderModel: builderRes.model || builderModel,
             targetFile: lastTargetFile,
             deliverableContent: builderRes.rawContent,
-            thinking: builderRes.thinking
+            thinking: builderRes.thinking,
+            ...buildUsageFields()
           };
         }
       }
@@ -1636,6 +1679,10 @@ export class OvernightSupervisor {
     const chunkBudget = jobChunkingEnabled ? (options?.chunkBudget ?? resolveThreadChunkBudget(task as any)) : undefined;
     const runStartTime = Date.now();
     let roundsUsed = 0;
+    const jobRoundPromptTokens: number[] = [];
+    let jobPromptTokens = 0;
+    let jobOutputTokens = 0;
+    let jobRounds = 0;
 
     try {
       while (task.currentMilestoneIndex < task.milestones.length) {
@@ -1693,6 +1740,41 @@ export class OvernightSupervisor {
               }
               task.updatedAt = new Date().toISOString();
               const res = await executor(milestone, attempt, { repoRoot: effectiveRepoRoot });
+              {
+                const stepRoundsArr = Array.isArray(res.roundPromptTokens)
+                  ? res.roundPromptTokens.filter((n) => typeof n === "number" && Number.isFinite(n) && n > 0)
+                  : [];
+                const stepPrompt =
+                  typeof res.promptTokens === "number" && Number.isFinite(res.promptTokens) && res.promptTokens > 0
+                    ? res.promptTokens
+                    : sumRoundPromptTokens(stepRoundsArr);
+                const stepOutput =
+                  typeof res.outputTokens === "number" && Number.isFinite(res.outputTokens) && res.outputTokens > 0
+                    ? res.outputTokens
+                    : 0;
+                const stepRoundsCount =
+                  typeof res.rounds === "number" && Number.isFinite(res.rounds) && res.rounds > 0
+                    ? res.rounds
+                    : stepRoundsArr.length > 0
+                    ? stepRoundsArr.length
+                    : stepPrompt > 0 || stepOutput > 0
+                    ? 1
+                    : 0;
+                if (stepRoundsCount > 0 || stepPrompt > 0 || stepOutput > 0) {
+                  if (stepRoundsArr.length > 0) {
+                    jobRoundPromptTokens.push(...stepRoundsArr);
+                  } else if (stepPrompt > 0) {
+                    jobRoundPromptTokens.push(stepPrompt);
+                  }
+                  jobPromptTokens += stepPrompt;
+                  jobOutputTokens += stepOutput;
+                  jobRounds += stepRoundsCount;
+                  milestone.tokenThroughput = {
+                    promptTokens: (milestone.tokenThroughput?.promptTokens || 0) + stepPrompt,
+                    completionTokens: (milestone.tokenThroughput?.completionTokens || 0) + stepOutput
+                  };
+                }
+              }
               if (isPaused()) {
                 task.status = "paused";
                 console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
@@ -2116,6 +2198,39 @@ export class OvernightSupervisor {
           title: `Task Completed: ${task.taskId}`,
           body: `All ${task.milestones.length} milestones completed: ${task.goal?.slice(0, 100)}`
         }).catch(() => {});
+      }
+
+      if (jobRounds > 0 || jobPromptTokens > 0 || jobOutputTokens > 0) {
+        const rollup = buildJobTokenRollup({
+          rounds: jobRounds,
+          promptTokens: jobPromptTokens,
+          outputTokens: jobOutputTokens,
+          compactions: 0
+        });
+        (task as any).tokenEconomics = rollup;
+        const activeThreadId = (task as any).threadId;
+        if (activeThreadId) {
+          try {
+            const store = new ThreadStore();
+            const existingThread = await store.getThread(activeThreadId);
+            if (existingThread) {
+              existingThread.messages = existingThread.messages || [];
+              existingThread.messages.push({
+                id: `msg-${task.taskId}-usage`,
+                role: "assistant",
+                content: "",
+                taskId: task.taskId,
+                timestamp: new Date().toISOString(),
+                outputTokens: rollup.outputTokens,
+                roundPromptTokens: [...jobRoundPromptTokens],
+                tokenEconomics: rollup
+              });
+              store.saveThread(existingThread);
+            }
+          } catch (uErr: any) {
+            console.warn(`[supervisor] Could not persist token rollup to thread ${activeThreadId}:`, uErr?.message || uErr);
+          }
+        }
       }
 
       this.saveCheckpoint(task);

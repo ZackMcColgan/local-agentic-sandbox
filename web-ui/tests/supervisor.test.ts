@@ -415,4 +415,137 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       }
     }
   });
+
+  it("records real per-call token usage into the thread token rollup and leaves unreported usage at 0", async () => {
+    const { ThreadStore } = await import("../lib/threads/threadStore.js");
+    const { latestRoundPromptTokens } = await import("../lib/tokenEconomics.js");
+    const tmpBase = path.resolve(process.cwd(), "temp-test-tokens-" + Date.now());
+    const tmpCheckpoints = path.join(tmpBase, "checkpoints");
+    const tmpThreads = path.join(tmpBase, "threads");
+    fs.mkdirSync(tmpCheckpoints, { recursive: true });
+    fs.mkdirSync(tmpThreads, { recursive: true });
+    const prevThreadsDir = process.env.THREADS_DIR;
+    process.env.THREADS_DIR = tmpThreads;
+
+    try {
+      const store = new ThreadStore(tmpThreads);
+      const supervisor = new OvernightSupervisor({ checkpointDirectory: tmpCheckpoints });
+
+      // 1. Executor reports known token counts
+      const threadWithUsage = store.createThread({
+        id: `thread-usage-${Date.now()}`,
+        title: "Token usage test",
+        isTest: true
+      });
+      const taskWithUsage: TaskManifest = {
+        taskId: `task-usage-${Date.now()}`,
+        threadId: threadWithUsage.id,
+        goal: "Verify token rollup recording",
+        toolchain: "node:22",
+        branchName: "task/token-usage",
+        status: "active",
+        milestones: [
+          {
+            id: "M1",
+            title: "Step 1",
+            description: "First",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "ok" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          },
+          {
+            id: "M2",
+            title: "Step 2",
+            description: "Second",
+            acceptanceCriteria: [{ id: "AC-2", assertion: "ok" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        ambiguityFlags: [],
+        journal: [],
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const resWithUsage = await supervisor.executeTaskWithRecovery(taskWithUsage, {
+        stepExecutor: async (m) => {
+          if (m.id === "M1") {
+            return {
+              status: "completed",
+              gitSha: "sha-m1",
+              rounds: 2,
+              promptTokens: 1200,
+              outputTokens: 350,
+              roundPromptTokens: [500, 700]
+            };
+          }
+          return {
+            status: "completed",
+            gitSha: "sha-m2",
+            rounds: 1,
+            promptTokens: 900,
+            outputTokens: 150,
+            roundPromptTokens: [900]
+          };
+        }
+      });
+
+      assert.equal(resWithUsage.status, "completed");
+      const rollup = store.getTokenEconomics(threadWithUsage.id);
+      assert.equal(rollup.rounds, 3, "Completed job rollup must sum rounds across milestones");
+      assert.equal(rollup.promptTokens, 2100, "Completed job rollup must sum promptTokens across milestones");
+      assert.equal(rollup.outputTokens, 500, "Completed job rollup must sum outputTokens across milestones");
+      const loadedThread = await store.getThread(threadWithUsage.id);
+      assert.equal(
+        latestRoundPromptTokens(loadedThread?.messages),
+        900,
+        "Header context meter must see latest round prompt tokens"
+      );
+
+      // 2. Executor reports NO token usage -> rollup stays 0 (never fabricated)
+      const threadNoUsage = store.createThread({
+        id: `thread-no-usage-${Date.now()}`,
+        title: "No token usage test",
+        isTest: true
+      });
+      const taskNoUsage: TaskManifest = {
+        ...taskWithUsage,
+        taskId: `task-no-usage-${Date.now()}`,
+        threadId: threadNoUsage.id,
+        milestones: [
+          {
+            id: "M1",
+            title: "Step 1",
+            description: "First",
+            acceptanceCriteria: [{ id: "AC-1", assertion: "ok" }],
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0
+          }
+        ],
+        currentMilestoneIndex: 0,
+        checkpoints: [],
+        journal: []
+      };
+
+      const resNoUsage = await supervisor.executeTaskWithRecovery(taskNoUsage, {
+        stepExecutor: async () => ({
+          status: "completed",
+          gitSha: "sha-no-usage"
+        })
+      });
+      assert.equal(resNoUsage.status, "completed");
+      const zeroRollup = store.getTokenEconomics(threadNoUsage.id);
+      assert.deepEqual(zeroRollup, { rounds: 0, promptTokens: 0, outputTokens: 0, compactions: 0 });
+    } finally {
+      if (prevThreadsDir === undefined) delete process.env.THREADS_DIR;
+      else process.env.THREADS_DIR = prevThreadsDir;
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
 });
