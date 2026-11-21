@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Map, Cog, CheckCircle2, Loader2 } from "lucide-
 
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
+import { formatThoughtLabel } from "../lib/liveActivity";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
 
@@ -144,7 +145,7 @@ export function ThinkingPanel({
   const headerTitle = isStreaming
     ? "Thinking"
     : effectiveDurationMs != null && effectiveDurationMs > 0
-      ? `Thought for ${formatElapsedDuration(Math.max(1, Math.floor(effectiveDurationMs / 1000)))}`
+      ? formatThoughtLabel(Math.max(1000, Math.floor(effectiveDurationMs / 1000) * 1000))
       : "Thought";
 
   return (

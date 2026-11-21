@@ -729,6 +729,8 @@ export function ChatStream({
   // caps, and no polling while ChatStream is not the active view.
   const disconnectedAtMsRef = useRef<number | null>(disconnectedAtMs);
   disconnectedAtMsRef.current = disconnectedAtMs;
+  const setMessagesRef = useRef(setMessages);
+  setMessagesRef.current = setMessages;
 
   useEffect(() => {
     if (!reconcilingThreadId) return;
@@ -751,7 +753,7 @@ export function ChatStream({
           const threadMsgs: ChatMessage[] = data.thread.messages;
           const lastAsst = [...threadMsgs].reverse().find((m) => m.role === "assistant");
           if (lastAsst) {
-            setMessages(threadMsgs);
+            setMessagesRef.current(threadMsgs);
             if (lastAsst.status !== "streaming") {
               setIsTransientDisconnected(false);
               setReconcilingThreadId(null);
@@ -790,7 +792,7 @@ export function ChatStream({
       active = false;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [reconcilingThreadId, isActiveView, setMessages]);
+  }, [reconcilingThreadId, isActiveView]);
   useEffect(() => {
     const tid = activeThreadId || threadId;
     if (typeof window !== "undefined" && tid) {
