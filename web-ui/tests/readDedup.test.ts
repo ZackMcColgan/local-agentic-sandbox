@@ -280,13 +280,35 @@ describe("Read dedup (d): chat route wiring (source assertions)", () => {
     assert.match(routeSrc, /ReadDedupRegistry/, "route must construct the per-turn registry");
   });
 
-  it("route persists the dedup log on BOTH persist paths (aborted and final assistant message)", () => {
+  it("route persists the dedup log on BOTH persist paths (aborted and final assistant message)", async () => {
     assert.match(routeSrc, /turnReadDedups/, "route must accumulate dedup metadata for the turn");
-    const persistSites = routeSrc.match(/readDedups:/g) || [];
-    assert.ok(
-      persistSites.length >= 2,
-      "dedup log must ride on both the aborted and final persist paths"
-    );
+    assert.match(routeSrc, /readDedups:/, "dedup log must ride on the final persist path");
+    const { buildAbortedAssistantMessage } = await import("../lib/chat/turnEngine");
+    const sampleDedup: ReadDedupMeta = {
+      path: "README.md",
+      contentHash: computeContentHash("hello"),
+      round: 1,
+      traceIndex: 0,
+      originalChars: 5,
+      reReadRound: 2,
+    };
+    const aborted = buildAbortedAssistantMessage({
+      assistantMessageId: "a-dedup",
+      activeThreadId: "t-dedup",
+      threadsDir: "/nonexistent",
+      turnCreatedFiles: [],
+      turnPreImages: new Map(),
+      turnHostDiffs: [],
+      explicitStopped: true,
+      turnSignalAborted: true,
+      accumulatedStreamedTokens: "",
+      accumulatedThoughts: [],
+      traces: [],
+      activeModel: "test-model",
+      turnMicroElisions: [],
+      turnReadDedups: [sampleDedup],
+    });
+    assert.deepEqual(aborted.readDedups, [sampleDedup]);
   });
 
   it("threadStore declares the readDedups field so the dedup log lands on the thread record", async () => {
