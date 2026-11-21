@@ -786,6 +786,19 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/subagents/skillGate"),
     tests: ["tests/skillGate.test.ts"],
   },
+  // Chat route extracted modules
+  {
+    match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
+    tests: ["tests/chatMcpClients.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/chat/triage") || p.includes("chatTriage.test.ts"),
+    tests: ["tests/chatTriage.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/chat/turnEngine") || p.includes("chatTurnEngine.test.ts"),
+    tests: ["tests/chatTurnEngine.test.ts"],
+  },
   // Chat API route and progressive tools
   {
     match: (p) =>

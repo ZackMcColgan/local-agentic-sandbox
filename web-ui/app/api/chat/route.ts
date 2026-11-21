@@ -41,7 +41,8 @@ import {
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
-import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
+import { parseToolCallsFromText, cleanResidualToolTags } from "@/lib/toolParser";
+import { getMcpUrl, getBrowserMcpUrl, connectMcpClient } from "@/lib/chat/mcpClients";
 import {
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
@@ -67,7 +68,6 @@ import {
   CHAT_CONTEXT_BUDGET_TOKENS,
   fitConversationToBudget,
   HIGH_WATER_BANKING_DIRECTIVE,
-  resolveRoundDeadlineMs,
   TURN_TIMEOUT_MARKER,
   TURN_SIZE_LIMIT_MARKER,
   TURN_TRUNCATION_MARKER,
@@ -126,12 +126,15 @@ import {
   HONEST_ABORT_DIRECTIVE,
 } from "@/lib/grounding";
 
-import { formatSseWriterError } from "@/lib/turnReconciliation";
+import {
+  createSseEventWriter,
+  createRoundDeadline,
+  buildAbortedAssistantMessage,
+  runSynthesisPass as executeSynthesisPass,
+} from "@/lib/chat/turnEngine";
 
 const getLlmBaseUrl = () =>
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const getMcpUrl = () => process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
-const getBrowserMcpUrl = () => process.env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 
 // job-queue-isolation: single in-app slot — chat job turns execute one at a
 // time (FIFO); additional turns queue visibly instead of contending for the
@@ -190,87 +193,6 @@ interface ChatInputMessage {
   timestamp?: string;
   tool_calls?: LlmToolCall[];
   [key: string]: unknown;
-}
-
-async function connectMcpClient(url: string, name: string) {
-  const sseUrl = normalizeMcpUrl(url);
-  let transport: SSEClientTransport | null = null;
-  let client: Client | null = null;
-  try {
-    transport = new SSEClientTransport(new URL(sseUrl));
-    client = new Client({ name, version: "1.0.0" }, { capabilities: {} });
-    await client.connect(transport);
-    const toolsResult = await client.listTools();
-    console.log(
-      `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
-    );
-    return { client, transport, tools: toolsResult.tools };
-  } catch (err: unknown) {
-    console.warn(
-      `[Orchestrator] Could not connect to MCP at ${sseUrl}:`,
-      err instanceof Error ? err.message : String(err)
-    );
-    if (client) {
-      try {
-        await client.close();
-      } catch {}
-    }
-    if (transport) {
-      try {
-        await transport.close();
-      } catch {}
-    }
-    return null;
-  }
-}
-
-/**
- * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
- * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
- */
-async function _triageComplexity(
-  userQuery: string,
-  llmBaseUrl: string,
-  triageModel: string = DEFAULT_SUBAGENT_MODEL
-): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
-  try {
-    const data = await getLLMProvider().chat(llmBaseUrl, {
-      model: triageModel,
-      messages: [
-        {
-          role: "system",
-          content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
-SIMPLE_EXECUTION: file navigation, git branch operations, running tests/commands, inspecting logs, small bug fixes, direct tool calls.
-DEEP_SYNTHESIS: novel system architecture, complex algorithm design, full module refactoring, difficult multi-step planning.
-Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "reasoning": "brief explanation"}`,
-        },
-        {
-          role: "user",
-          content: userQuery,
-        },
-      ],
-      format: "json",
-      keep_alive: "24h",
-      options: {
-        temperature: 0.1,
-        num_ctx: 2048,
-        num_predict: 128,
-      },
-    });
-
-    const rawContent = (data.message?.content || "{}")
-      .replace(/^```json\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-    const parsed = JSON.parse(rawContent || "{}");
-    if (parsed.complexity === "DEEP_SYNTHESIS") {
-      return "DEEP_SYNTHESIS";
-    }
-    return "SIMPLE_EXECUTION";
-  } catch (err) {
-    console.warn("[Triage] Error classifying complexity, defaulting to SIMPLE_EXECUTION:", err);
-    return "SIMPLE_EXECUTION";
-  }
 }
 
 /**
@@ -528,31 +450,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     }
 
     // Create TransformStream for Real-Time SSE Token & Trace Streaming
-    const encoder = new TextEncoder();
-    const stream = new TransformStream();
-    const writer = stream.writable.getWriter();
-
-    // job-queue-isolation: consume the readable side so pending writer.write /
-    // writer.close resolve even when the client abandoned the stream. Without
-    // this, an unread TransformStream backpressures forever and the serialized
-    // chat job queue stalls (queue tail never settles).
-    let readableDrainStarted = false;
-    const startReadableDrain = () => {
-      if (readableDrainStarted) return;
-      readableDrainStarted = true;
-      (async () => {
-        try {
-          // If the readable is already locked (a live client reader), that
-          // reader consumes the stream; nothing to drain here.
-          if (stream.readable.locked) return;
-          const drainReader = stream.readable.getReader();
-          while (true) {
-            const { done } = await drainReader.read();
-            if (done) break;
-          }
-        } catch {}
-      })().catch(() => {});
-    };
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
 
     let accumulatedStreamedTokens = "";
     let assistantPersisted = false;
@@ -580,62 +478,37 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     let lastFinishReason: string | undefined = undefined;
     let turnOutputTokens: number | undefined = undefined;
 
+    let explicitStopped = false;
+    const turnAbortController = new AbortController();
+
     const persistAssistantOnAbort = () => {
       if (!activeThreadId || assistantPersisted) return;
       assistantPersisted = true;
       try {
-        const turnAttachments = collectTurnAttachments(
+        const abortedMsg = buildAbortedAssistantMessage({
+          assistantMessageId,
           activeThreadId,
           threadsDir,
-          turnCreatedFiles
-        );
-        const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
-        const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
-
-        const abortMarker =
-          explicitStopped || turnAbortController.signal.aborted
-            ? "*[Stopped by user]*"
-            : "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
-        const abortContent = accumulatedStreamedTokens.trim()
-          ? `${accumulatedStreamedTokens}\n\n${abortMarker}`
-          : abortMarker;
-
-        const finalOutputTokens =
-          turnOutputTokens ??
-          (accumulatedStreamedTokens ? estimateTokens(accumulatedStreamedTokens) : 0);
-
-        const abortedMsg = {
-          id: assistantMessageId,
-          role: "assistant" as const,
-          content: abortContent,
-          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
-          traces:
-            traces.length > 0
-              ? (traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])
-              : undefined,
-          attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
-          diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
-          modelUsed: activeModel,
-          selectedModel: requestedModel || activeModel,
-          timestamp: new Date().toISOString(),
-          status: "incomplete" as const,
-          isStopped: explicitStopped || turnAbortController.signal.aborted ? true : undefined,
-          finish_reason: lastFinishReason || "abort",
-          outputTokens: finalOutputTokens,
-          // TOKEN ECONOMICS (c): the elision audit rides on the aborted record too.
-          microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
-          // TOKEN ECONOMICS (d): the read-dedup audit rides on the aborted record too.
-          readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined,
-        };
+          turnCreatedFiles,
+          turnPreImages,
+          turnHostDiffs,
+          explicitStopped,
+          turnSignalAborted: turnAbortController.signal.aborted,
+          accumulatedStreamedTokens,
+          accumulatedThoughts,
+          traces,
+          activeModel,
+          requestedModel,
+          lastFinishReason,
+          turnOutputTokens,
+          turnMicroElisions,
+          turnReadDedups,
+        });
         threadStore.addMessage(activeThreadId, abortedMsg);
       } catch (err) {
         console.warn("[ChatRoute] Failed to persist aborted assistant message:", err);
       }
     };
-
-    let clientDisconnected = false;
-    let explicitStopped = false;
-    const turnAbortController = new AbortController();
 
     if (activeThreadId) {
       registerTurnAbortController(activeThreadId, turnAbortController);
@@ -646,87 +519,12 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       persistAssistantOnAbort();
     });
 
-    const cleanupClientSignal = () => {
-      if (!clientDisconnected) {
-        clientDisconnected = true;
-        clearInterval(heartbeatInterval);
-
-        console.log(
-          `[ChatRoute] Client SSE connection disconnected for thread ${activeThreadId || "ephemeral"}. Turn continuing detached server-side.`
-        );
-        // job-queue-isolation: drain the unread readable so pending SSE writes
-        // and writer.close() resolve. The client is gone, so consuming the
-        // stream here is safe; without this, an abandoned stream deadlocks
-        // the serialized job queue forever (queue tail never settles).
-        startReadableDrain();
-      }
-    };
-    req.signal.addEventListener("abort", cleanupClientSignal);
-
-    const sendEvent = async (data: Record<string, unknown>) => {
-      if (clientDisconnected || req.signal.aborted) {
-        clearInterval(heartbeatInterval);
-        return;
-      }
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      let onAbort: (() => void) | undefined;
-      try {
-        // job-queue-isolation: await the write itself (no 500ms timeout race).
-        // A slow reader is backpressure, not a dead client: the drain on client
-        // disconnect and writer.abort on real write errors keep the serialized
-        // queue moving, so a queued turn is never misclassified as abandoned.
-        const writePromise = writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        writePromise.catch(() => {});
-        await Promise.race([
-          writePromise,
-          new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error("writer timeout")), 2000);
-          }),
-          new Promise((_, reject) => {
-            onAbort = () => reject(new Error("client aborted"));
-            req.signal.addEventListener("abort", onAbort, { once: true });
-          }),
-        ]);
-      } catch (err: unknown) {
-        clearInterval(heartbeatInterval);
-        clientDisconnected = true;
-        const errMessage = err instanceof Error ? err.message : undefined;
-        if (!req.signal.aborted && errMessage === "writer timeout") {
-          // Idle reader (client stopped consuming): abort the writable so the
-          // readable errors out and later writes skip instantly instead of
-          // waiting the timeout again each event.
-          startReadableDrain();
-          try {
-            writer.abort(err).catch(() => {});
-          } catch {}
-        }
-        console.log(
-          `[ChatRoute] SSE writer failed for thread ${activeThreadId || "ephemeral"}: ${formatSseWriterError(err)}. Turn continuing detached server-side.`
-        );
-        // job-queue-isolation: the client is gone; abort the writable so any
-        // pending write/close resolves instead of backpressuring forever on an
-        // unread (locked) readable — which would stall the serialized queue.
-        try {
-          writer.abort(err).catch(() => {});
-        } catch {}
-      } finally {
-        if (timeoutId !== undefined) clearTimeout(timeoutId);
-        if (onAbort !== undefined) req.signal.removeEventListener("abort", onAbort);
-      }
-    };
-
-    const heartbeatInterval = setInterval(() => {
-      if (clientDisconnected || req.signal.aborted) {
-        clearInterval(heartbeatInterval);
-        return;
-      }
-      sendEvent({ type: "ping", ts: Date.now() }).catch(() => {
-        clearInterval(heartbeatInterval);
-      });
-    }, 10_000);
-    if (typeof heartbeatInterval.unref === "function") {
-      heartbeatInterval.unref();
-    }
+    const sseWriter = createSseEventWriter({
+      stream,
+      signal: req.signal,
+      activeThreadId,
+    });
+    const { sendEvent, cleanupClientSignal } = sseWriter;
 
     let runTurnStarted = false;
     let runTurnFinallyRan = false;
@@ -756,28 +554,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         },
         onSettled: () => {
           if (runTurnStarted || runTurnFinallyRan) return;
-          clearInterval(heartbeatInterval);
+          sseWriter.stopHeartbeat();
           if (activeThreadId) {
             clearTurnAbortController(activeThreadId);
             clearRoundAbortController(activeThreadId);
           }
           req.signal.removeEventListener("abort", cleanupClientSignal);
-          startReadableDrain();
-          try {
-            if (clientDisconnected) {
-              try {
-                writer.abort(new Error("client disconnected")).catch(() => {});
-              } catch {}
-            } else {
-              const closePromise = writer.close();
-              closePromise.catch(() => {});
-              setTimeout(() => {
-                try {
-                  writer.abort(new Error("pre-start abort close timeout")).catch(() => {});
-                } catch {}
-              }, 1000).unref?.();
-            }
-          } catch {}
+          sseWriter.closeWriterPreStart(1000);
         },
         runTurn: async (_job, _worktree) => {
           runTurnStarted = true;
@@ -1033,15 +816,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   type: "error",
                   error: `Approval continuation failed: ${consumed.reason}`,
                 });
-                clearInterval(heartbeatInterval);
+                sseWriter.stopHeartbeat();
                 for (const s of activeSessions) {
                   try {
                     await s.client.close();
                   } catch {}
                 }
-                try {
-                  await writer.close();
-                } catch {}
+                await sseWriter.closeWriterWithTimeout(1000);
                 return;
               }
 
@@ -1432,27 +1213,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               // re-arms on each streamed chunk (silence since LAST chunk), the total
               // timer is absolute. Both abort ONLY this round's controller, never the
               // turn — the existing round-abort path then continues the turn once.
-              const { inactivityMs, totalMs } = resolveRoundDeadlineMs();
+              const roundDeadline = createRoundDeadline(roundAbortController);
               console.log(
-                `[DBG] dispatch round ${round} inactivity=${inactivityMs} total=${totalMs}`
+                `[DBG] dispatch round ${round} inactivity=${roundDeadline.inactivityMs} total=${roundDeadline.totalMs}`
               );
-              let roundTimedOut: "inactivity" | "total" | null = null;
-              let roundInactivityTimer: ReturnType<typeof setTimeout> | null = null;
-              let roundTotalTimer: ReturnType<typeof setTimeout> | null = null;
-              const armRoundDeadline = () => {
-                if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
-                roundInactivityTimer = setTimeout(() => {
-                  roundTimedOut = "inactivity";
-                  roundAbortController.abort();
-                }, inactivityMs);
-                if (typeof roundInactivityTimer.unref === "function") roundInactivityTimer.unref();
-              };
-              armRoundDeadline();
-              roundTotalTimer = setTimeout(() => {
-                roundTimedOut = "total";
-                roundAbortController.abort();
-              }, totalMs);
-              if (typeof roundTotalTimer.unref === "function") roundTotalTimer.unref();
+              const armRoundDeadline = roundDeadline.arm;
 
               const llmPayload: Parameters<ReturnType<typeof getLLMProvider>["streamChat"]>[1] = {
                 model: activeModel,
@@ -1554,12 +1319,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   throw roundErr;
                 }
               } finally {
-                if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
-                if (roundTotalTimer) clearTimeout(roundTotalTimer);
+                roundDeadline.clear();
                 if (activeThreadId) {
                   clearRoundAbortController(activeThreadId, roundAbortController);
                 }
               }
+
+              const roundTimedOut = roundDeadline.getTimedOut();
 
               roundFinishReasons.push(roundFinishReason || "stop");
 
@@ -2438,108 +2204,34 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               });
 
               // SYNTHESIS-RETRY: a single synthesis pass, streamed into the shared accumulators.
-              const runSynthesisPass = async (): Promise<{ content: string; thinking: string }> => {
-                let passContent = "";
-                let passThinking = "";
-                const passAbortController = new AbortController();
-                const { inactivityMs, totalMs } = resolveRoundDeadlineMs();
-                let passTimedOut: "inactivity" | "total" | null = null;
-                let passInactivityTimer: ReturnType<typeof setTimeout> | null = null;
-                let passTotalTimer: ReturnType<typeof setTimeout> | null = null;
-                const armPassDeadline = () => {
-                  if (passInactivityTimer) clearTimeout(passInactivityTimer);
-                  passInactivityTimer = setTimeout(() => {
-                    passTimedOut = "inactivity";
-                    passAbortController.abort();
-                  }, inactivityMs);
-                  if (typeof passInactivityTimer.unref === "function") passInactivityTimer.unref();
-                };
-                armPassDeadline();
-                passTotalTimer = setTimeout(() => {
-                  passTimedOut = "total";
-                  passAbortController.abort();
-                }, totalMs);
-                if (typeof passTotalTimer.unref === "function") passTotalTimer.unref();
-
-                try {
-                  for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
-                    model: activeModel,
-                    messages: fitContextWindow(conversationMessages, {
-                      isArtifactTurn: isArtifactRequest,
-                    }),
-                    signal: AbortSignal.any([
-                      turnAbortController.signal,
-                      passAbortController.signal,
-                    ]),
-                    reasoning_effort: synthOptions.reasoning_effort,
-                    options: synthOptions,
-                  })) {
-                    if (chunk.finish_reason) {
-                      lastFinishReason = chunk.finish_reason;
-                    }
-                    if (typeof chunk.promptTokens === "number") {
-                      roundPromptTokens.push(chunk.promptTokens);
-                    } else if (typeof chunk.prompt_eval_count === "number") {
-                      roundPromptTokens.push(chunk.prompt_eval_count);
-                    }
-                    if (typeof chunk.outputTokens === "number") {
-                      turnOutputTokens = chunk.outputTokens;
-                    } else if (typeof chunk.eval_count === "number") {
-                      turnOutputTokens = chunk.eval_count;
-                    }
-                    if (chunk.message?.thinking) {
-                      passThinking += chunk.message.thinking;
-                      armPassDeadline();
-                      const currentCumulativeThought =
-                        accumulatedThoughts.length > 0
-                          ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
-                          : passThinking;
-                      streamSnapshot.maybeWrite(
-                        accumulatedStreamedTokens,
-                        currentCumulativeThought
-                      );
-                      await sendEvent({ type: "thinking", content: chunk.message.thinking });
-                      await sendEvent({ type: "thought", thought: currentCumulativeThought });
-                    }
-                    if (chunk.message?.content) {
-                      passContent += chunk.message.content;
-                      accumulatedStreamedTokens = appendNarrationChunk(
-                        accumulatedStreamedTokens,
-                        chunk.message.content
-                      );
-                      armPassDeadline();
-                      if (accumulatedStreamedTokens.length > MAX_STREAMED_CONTENT_CHARS) {
-                        accumulatedStreamedTokens += TURN_SIZE_LIMIT_MARKER;
-                        streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
-                        await sendEvent({ type: "token", content: TURN_SIZE_LIMIT_MARKER });
-                        passAbortController.abort();
-                        break;
-                      }
-                      const currentCumulativeThought =
-                        accumulatedThoughts.length > 0
-                          ? passThinking
-                            ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
-                            : accumulatedThoughts.join("\n\n")
-                          : passThinking || undefined;
-                      streamSnapshot.maybeWrite(
-                        accumulatedStreamedTokens,
-                        currentCumulativeThought
-                      );
-                      await sendEvent({ type: "token", content: chunk.message.content });
-                    }
-                  }
-                } catch (err: unknown) {
-                  if (passAbortController.signal.aborted && !turnAbortController.signal.aborted) {
-                    console.log(`[DBG] synthesis pass aborted timedOut=${passTimedOut}`);
-                  } else {
-                    throw err;
-                  }
-                } finally {
-                  if (passInactivityTimer) clearTimeout(passInactivityTimer);
-                  if (passTotalTimer) clearTimeout(passTotalTimer);
-                }
-                return { content: passContent, thinking: passThinking };
-              };
+              const runSynthesisPass = () =>
+                executeSynthesisPass({
+                  llmBaseUrl: getLlmBaseUrl(),
+                  activeModel,
+                  conversationMessages,
+                  isArtifactRequest,
+                  turnAbortSignal: turnAbortController.signal,
+                  synthOptions,
+                  accumulatedThoughts,
+                  getAccumulatedStreamedTokens: () => accumulatedStreamedTokens,
+                  setAccumulatedStreamedTokens: (next) => {
+                    accumulatedStreamedTokens = next;
+                  },
+                  onFinishReason: (reason) => {
+                    lastFinishReason = reason;
+                  },
+                  onPromptTokens: (tokens) => {
+                    roundPromptTokens.push(tokens);
+                  },
+                  onOutputTokens: (tokens) => {
+                    turnOutputTokens = tokens;
+                  },
+                  maybeWriteSnapshot: (content, thought) => {
+                    streamSnapshot.maybeWrite(content, thought);
+                  },
+                  sendEvent,
+                  streamChat: streamLlmChat,
+                });
 
               let synthResult = await runSynthesisPass();
               let synthesisPasses = 1;
@@ -2807,7 +2499,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               };
               threadStore.addMessage(activeThreadId, assistantMsgToSave);
               assistantPersisted = true;
-              if (clientDisconnected || req.signal.aborted) {
+              if (sseWriter.isClientDisconnected() || req.signal.aborted) {
                 console.log(
                   `[ChatRoute] Detached turn completed server-side for thread ${activeThreadId} (status: ${turnStatus || "completed"}).`
                 );
@@ -2933,7 +2625,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             });
           } finally {
             runTurnFinallyRan = true;
-            clearInterval(heartbeatInterval);
+            sseWriter.stopHeartbeat();
             if (activeThreadId) {
               activeExecutionSet.delete(activeThreadId);
               clearTurnActive(activeThreadId);
@@ -2960,37 +2652,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             // job-queue-isolation: drain the readable before close so a client that
             // abandoned the stream (no req.signal abort) cannot leave writer.close()
             // blocked on unread chunks — which would stall the serialized job queue.
-            startReadableDrain();
-            try {
-              if (clientDisconnected) {
-                // Client gone: abort the stream outright so the serialized queue
-                // tail settles even if the readable is locked by an abandoned reader.
-                try {
-                  writer.abort(new Error("client disconnected")).catch(() => {});
-                } catch {}
-              } else {
-                const closePromise = writer.close();
-                closePromise.catch(() => {});
-                let closeTimeoutId: ReturnType<typeof setTimeout> | undefined;
-                try {
-                  await Promise.race([
-                    closePromise,
-                    new Promise((_, reject) => {
-                      closeTimeoutId = setTimeout(
-                        () => reject(new Error("writer close timeout")),
-                        1000
-                      );
-                    }),
-                  ]);
-                } finally {
-                  if (closeTimeoutId !== undefined) clearTimeout(closeTimeoutId);
-                }
-              }
-            } catch {
-              try {
-                writer.abort(new Error("stream abandoned")).catch(() => {});
-              } catch {}
-            }
+            await sseWriter.closeWriterWithTimeout(1000);
           }
         },
       }

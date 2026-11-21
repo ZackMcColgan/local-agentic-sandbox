@@ -117,17 +117,43 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
   });
 
   describe("CHAT-1: Post-Tool Synthesis Thinking Emission", () => {
-    it("statically verifies route.ts emits thinking events inside the post-tool synthesis loop", () => {
-      const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(routePath, "utf8");
+    it("verifies runSynthesisPass emits thinking events inside the post-tool synthesis loop", async () => {
+      const { runSynthesisPass } = await import("../lib/chat/turnEngine");
+      const events: Record<string, unknown>[] = [];
+      let streamed = "";
+      const ac = new AbortController();
 
+      const res = await runSynthesisPass({
+        llmBaseUrl: "http://127.0.0.1:11434",
+        activeModel: "test-model",
+        conversationMessages: [{ role: "user", content: "hi" }],
+        isArtifactRequest: false,
+        turnAbortSignal: ac.signal,
+        synthOptions: {},
+        accumulatedThoughts: [],
+        getAccumulatedStreamedTokens: () => streamed,
+        setAccumulatedStreamedTokens: (next) => {
+          streamed = next;
+        },
+        onFinishReason: () => {},
+        onPromptTokens: () => {},
+        onOutputTokens: () => {},
+        maybeWriteSnapshot: () => {},
+        sendEvent: async (ev) => {
+          events.push(ev);
+        },
+        streamChat: async function* () {
+          yield { message: { thinking: "synthesizing..." } };
+          yield { message: { content: "done" }, finish_reason: "stop" };
+        },
+        deadlines: { inactivityMs: 5000, totalMs: 10000 },
+        log: () => {},
+      });
+
+      assert.equal(res.thinking, "synthesizing...");
       assert.ok(
-        content.includes('type: "thinking"') || content.includes("type: 'thinking'"),
-        "route.ts post-tool synthesis must emit thinking events"
-      );
-      assert.ok(
-        content.includes("chunk.message?.thinking"),
-        "route.ts must check chunk.message?.thinking during synthesis"
+        events.some((e) => e.type === "thinking" && e.content === "synthesizing..."),
+        "post-tool synthesis must emit thinking events"
       );
     });
   });

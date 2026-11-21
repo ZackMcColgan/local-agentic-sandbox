@@ -836,17 +836,24 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
   });
 
   describe("Task 11: Zero Remaining Ollama Touchpoints & Standalone llama-server Supervisor", () => {
-    it("web-ui/app/api/chat/route.ts triageComplexity uses getLLMProvider().chat instead of raw /api/chat", () => {
+    it("web-ui/lib/chat/triage.ts _triageComplexity uses provider chat instead of raw /api/chat", async () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       const content = fs.readFileSync(routePath, "utf8");
       assert.ok(
         !content.includes("/api/chat"),
         "web-ui/app/api/chat/route.ts must not contain raw /api/chat calls"
       );
-      assert.ok(
-        content.includes("getLLMProvider().chat("),
-        "triageComplexity must delegate to getLLMProvider().chat"
-      );
+      const { _triageComplexity } = await import("../lib/chat/triage");
+      let calledChat = false;
+      const result = await _triageComplexity("refactor module", "http://127.0.0.1:11434", "fast", {
+        chat: async () => {
+          calledChat = true;
+          return { message: { role: "assistant", content: '{"complexity":"DEEP_SYNTHESIS"}' } };
+        },
+        warn: () => {},
+      });
+      assert.equal(calledChat, true, "triageComplexity must delegate to provider chat");
+      assert.equal(result, "DEEP_SYNTHESIS");
     });
 
     it("web-ui/app/api/sandbox-status/route.ts uses getLLMProvider().healthCheck and listModels instead of /api/tags", () => {
