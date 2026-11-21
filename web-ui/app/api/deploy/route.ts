@@ -159,7 +159,14 @@ export async function POST(req: NextRequest) {
         new SelfDeployPipeline(
           body.dryRun
             ? {
-                commandRunner: async () => ({ exitCode: 0, stdout: "ok\n", stderr: "" }),
+                commandRunner: async (file: string, args: string[]) => {
+                  const fullCmd = [file, ...args].join(" ");
+                  if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+                    // A real `ctr images ls name==<image>` listing names the image.
+                    return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+                  }
+                  return { exitCode: 0, stdout: "ok\n", stderr: "" };
+                },
                 healthChecker: async () => ({ status: 200, ok: true }),
               }
             : undefined
