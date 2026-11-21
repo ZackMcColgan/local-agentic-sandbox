@@ -74,6 +74,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/codeValidation.test.ts"],
   },
   {
+    match: (p) => p.includes("lib/subagents/testBaseline") || p.includes("testBaseline.test.ts"),
+    tests: ["tests/testBaseline.test.ts", "tests/blockingGateRevert.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("threadStore.ts") ||
       p.includes("app/api/threads/route.ts") ||
