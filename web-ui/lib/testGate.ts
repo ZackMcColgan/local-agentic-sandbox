@@ -872,6 +872,15 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/checkpointSaver.test.ts", "tests/langgraphSupervisorNodes.test.ts"],
   },
   {
+    match: (p) => p.includes("lib/subagents/stepExecutor") || p.includes("stepExecutor.test.ts"),
+    tests: [
+      "tests/stepExecutor.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/canonicalLifecycle.test.ts",
+      "tests/punchlistBackendFixes.test.ts",
+    ],
+  },
+  {
     match: (p) => p.includes("lib/subagents/supervisor"),
     tests: [
       "tests/supervisor.test.ts",
