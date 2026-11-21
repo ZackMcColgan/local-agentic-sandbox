@@ -19,6 +19,7 @@ export interface BoardItem {
   title: string;
   brief: string;
   dependencies: string[];
+  allowlist?: string[];
   status: BoardStatus;
   author: "Owner";
   source: BoardSource;
@@ -37,6 +38,7 @@ export interface CreateBoardItemInput {
   title: string;
   brief: string;
   dependencies?: string[];
+  allowlist?: string[];
   status?: BoardStatus;
   author: "Owner";
   source: BoardSource;
@@ -52,6 +54,7 @@ export interface UpdateBoardItemInput {
   title?: string;
   brief?: string;
   dependencies?: string[];
+  allowlist?: string[];
   status?: BoardStatus;
   parkedReason?: string;
   needsAttention?: boolean;
@@ -189,12 +192,21 @@ export class BoardStore {
     const id = input.id || `item-${crypto.randomBytes(4).toString("hex")}`;
     const key = input.key || `#${items.length + 1}`;
 
+    const normalizedAllowlist = Array.isArray(input.allowlist)
+      ? input.allowlist
+          .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          .map((entry) => entry.trim())
+      : undefined;
+
     const item: BoardItem = {
       id,
       key,
       title: input.title.trim(),
       brief: input.brief.trim(),
       dependencies: input.dependencies ?? [],
+      ...(normalizedAllowlist && normalizedAllowlist.length > 0
+        ? { allowlist: normalizedAllowlist }
+        : {}),
       status,
       author: "Owner",
       source: input.source,

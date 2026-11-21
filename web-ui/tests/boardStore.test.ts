@@ -175,4 +175,40 @@ describe("BoardStore", () => {
     assert.equal(seeded2.length, countAfterFirst + 1);
     assert.ok(seeded2.some((i: BoardItem) => i.title === "custom-owner-item"));
   });
+
+  it("persists optional allowlist when supplied and omits it when absent", () => {
+    const withAllowlist = store.create({
+      key: "#50",
+      title: "scoped-item",
+      brief: "Has explicit file allowlist",
+      dependencies: [],
+      allowlist: ["web-ui/lib/board/boardStore.ts", "web-ui/tests/boardStore.test.ts"],
+      author: "Owner",
+      source: "manual",
+    });
+
+    assert.deepEqual(withAllowlist.allowlist, [
+      "web-ui/lib/board/boardStore.ts",
+      "web-ui/tests/boardStore.test.ts",
+    ]);
+
+    const withoutAllowlist = store.create({
+      key: "#51",
+      title: "unscoped-item",
+      brief: "No allowlist supplied",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+    });
+
+    assert.equal("allowlist" in withoutAllowlist, false);
+    assert.equal(withoutAllowlist.allowlist, undefined);
+
+    const reloaded = new BoardStore(tmpDir);
+    assert.deepEqual(reloaded.get(withAllowlist.id)?.allowlist, [
+      "web-ui/lib/board/boardStore.ts",
+      "web-ui/tests/boardStore.test.ts",
+    ]);
+    assert.equal("allowlist" in (reloaded.get(withoutAllowlist.id) ?? {}), false);
+  });
 });

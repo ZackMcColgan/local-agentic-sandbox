@@ -519,6 +519,7 @@ export async function confirmMonsterIntake(
       title: item.title,
       brief: formatFiledBrief(item),
       dependencies: resolvedDeps,
+      ...(item.fileAllowlist.length > 0 ? { allowlist: item.fileAllowlist } : {}),
       status: "queued",
       author: "Owner",
       source: "assistant",

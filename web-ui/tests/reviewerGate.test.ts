@@ -40,6 +40,18 @@ describe("reviewerGate — mechanical checks", () => {
     const result = runMechanicalChecks(makeCleanInput());
     assert.equal(result.verdict, "PASS");
     assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "enforced");
+  });
+
+  it("records allowlist as not-declared/skipped (not per-file violations) when item has no declared allowlist", () => {
+    const result = runMechanicalChecks(makeCleanInput({ allowlist: [] }));
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "not-declared");
+    assert.ok(
+      result.notes.some((n) => /not[- ]declared|skipped/i.test(n) && /allowlist/i.test(n)),
+      "expected not-declared/skipped allowlist note in evidence",
+    );
   });
 
   it("FAILs an allowlist violation with the offending file named", () => {
