@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { execSync } from "node:child_process";
 import {
   createBuilderWorker,
   createCriticWorker,
@@ -236,7 +237,6 @@ describe("Phase A — No fabricated SHAs (A2c)", () => {
     const tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), "workspaceroot-"));
     const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "nogit-"));
     try {
-      const { execSync } = require("child_process");
       execSync("git init", { cwd: tempRepo, stdio: "ignore" });
       execSync("git config user.email 'test@test.com'", { cwd: tempRepo, stdio: "ignore" });
       execSync("git config user.name 'Test'", { cwd: tempRepo, stdio: "ignore" });

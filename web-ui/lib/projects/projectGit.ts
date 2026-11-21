@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { ProjectRecord } from "./projectStore";
+import { ProjectRecord, getFileReviews, setFileReviewStatus } from "./projectStore";
 
 export interface ProjectTreeNode {
   name: string;
@@ -208,8 +208,6 @@ export function getProjectDiffSummary(
   assertAllowedProjectPath(project, ".");
   const base = baseSha || project.base_branch || "HEAD~1";
 
-  // Import store review helpers dynamically or from store
-  const { getFileReviews } = require("./projectStore");
   const reviews = getFileReviews(taskId) as Array<{
     file_path: string;
     status: "pending" | "accepted" | "reverted";
@@ -280,7 +278,6 @@ export function acceptProjectFile(
   filePath: string
 ): { file_path: string; status: string; task_id: string; [key: string]: unknown } {
   assertAllowedProjectPath(project, filePath);
-  const { setFileReviewStatus } = require("./projectStore");
   return setFileReviewStatus(taskId, filePath, "accepted");
 }
 
@@ -314,7 +311,6 @@ export function revertProjectFile(
 
   runGit(project, ["commit", "-m", `revert: restore ${filePath} from ${baseSha}`]);
 
-  const { setFileReviewStatus } = require("./projectStore");
   return setFileReviewStatus(taskId, filePath, "reverted");
 }
 
@@ -322,7 +318,6 @@ export function finalizeProjectReview(
   project: ProjectRecord,
   taskId: string
 ): { finalized: boolean; acceptedCount: number; revertedCount: number } {
-  const { getFileReviews } = require("./projectStore");
   const reviews = getFileReviews(taskId) as Array<{ status: string }>;
   const acceptedCount = reviews.filter((r) => r.status === "accepted").length;
   const revertedCount = reviews.filter((r) => r.status === "reverted").length;

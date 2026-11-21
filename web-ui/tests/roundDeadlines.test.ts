@@ -252,8 +252,8 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
   }
 }
 
-test("(1) exports the pinned round deadline constants", () => {
-  const mod = require("../lib/contextBudget.js");
+test("(1) exports the pinned round deadline constants", async () => {
+  const mod = await import("../lib/contextBudget.js");
   assert.equal(
     mod.ROUND_INACTIVITY_DEADLINE_MS,
     180_000,
