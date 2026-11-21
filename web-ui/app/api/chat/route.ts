@@ -192,55 +192,6 @@ interface ChatInputMessage {
 }
 
 /**
- * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
- * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
- */
-async function _triageComplexity(
-  userQuery: string,
-  llmBaseUrl: string,
-  triageModel: string = DEFAULT_SUBAGENT_MODEL
-): Promise<"SIMPLE_EXECUTION" | "DEEP_SYNTHESIS"> {
-  try {
-    const data = await getLLMProvider().chat(llmBaseUrl, {
-      model: triageModel,
-      messages: [
-        {
-          role: "system",
-          content: `Classify this user request into COMPLEXITY: 'SIMPLE_EXECUTION' or 'DEEP_SYNTHESIS'.
-SIMPLE_EXECUTION: file navigation, git branch operations, running tests/commands, inspecting logs, small bug fixes, direct tool calls.
-DEEP_SYNTHESIS: novel system architecture, complex algorithm design, full module refactoring, difficult multi-step planning.
-Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "reasoning": "brief explanation"}`,
-        },
-        {
-          role: "user",
-          content: userQuery,
-        },
-      ],
-      format: "json",
-      keep_alive: "24h",
-      options: {
-        temperature: 0.1,
-        num_ctx: 2048,
-        num_predict: 128,
-      },
-    });
-
-    const rawContent = (data.message?.content || "{}")
-      .replace(/^```json\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-    const parsed = JSON.parse(rawContent || "{}");
-    if (parsed.complexity === "DEEP_SYNTHESIS") {
-      return "DEEP_SYNTHESIS";
-    }
-    return "SIMPLE_EXECUTION";
-  } catch (err) {
-    console.warn("[Triage] Error classifying complexity, defaulting to SIMPLE_EXECUTION:", err);
-    return "SIMPLE_EXECUTION";
-  }
-}
-
-/**
  * Unified streaming generator delegating to the resolved LLMProvider (Ollama or llama.cpp)
  */
 async function* streamLlmChat(
