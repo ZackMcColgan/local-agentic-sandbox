@@ -1299,6 +1299,8 @@ export class ThreadStore {
       taskId: params.taskId,
       scope: params.scope,
       isTest: params.isTest ?? false,
+      ...(params.isSubagent !== undefined ? { isSubagent: params.isSubagent } : {}),
+      ...(params.isScheduled !== undefined ? { isScheduled: params.isScheduled } : {}),
       ...(params.chunkBudget !== undefined ? { chunkBudget: params.chunkBudget } : {}),
       messages: params.initialPrompt
         ? [
