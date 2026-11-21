@@ -562,3 +562,32 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("A9: createThread persists isSubagent and isScheduled when provided and omits them when absent", async () => {
+  const dir = makeTempDir("thread-flags-");
+  try {
+    const store = new ThreadStore(dir);
+    store.stopSupervisorSweep();
+
+    const subagent = store.createThread({ title: "Subagent Thread", isSubagent: true, isScheduled: false });
+    const scheduled = store.createThread({ title: "Scheduled Thread", isScheduled: true });
+    const plain = store.createThread({ title: "Plain Thread" });
+
+    const reloadedSubagent = await store.getThread(subagent.id);
+    assert.ok(reloadedSubagent);
+    assert.equal(reloadedSubagent.isSubagent, true);
+    assert.equal(reloadedSubagent.isScheduled, false);
+
+    const reloadedScheduled = await store.getThread(scheduled.id);
+    assert.ok(reloadedScheduled);
+    assert.equal(reloadedScheduled.isScheduled, true);
+    assert.equal("isSubagent" in reloadedScheduled, false);
+
+    const reloadedPlain = await store.getThread(plain.id);
+    assert.ok(reloadedPlain);
+    assert.equal("isSubagent" in reloadedPlain, false);
+    assert.equal("isScheduled" in reloadedPlain, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
