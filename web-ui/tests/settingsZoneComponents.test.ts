@@ -14,7 +14,10 @@ import { MemoryZone } from "../components/settings/MemoryZone";
 import { AboutZone } from "../components/settings/AboutZone";
 import { TracesZone } from "../components/settings/TracesZone";
 import { DangerZone } from "../components/settings/DangerZone";
-import { getHostCardPresentation, formatEngineActionMessage } from "../components/settings/hostCard";
+import {
+  getHostCardPresentation,
+  formatEngineActionMessage,
+} from "../components/settings/hostCard";
 
 describe("Settings zone components — Step 1 (Top zones)", () => {
   let win: GlobalWindow;
@@ -129,8 +132,8 @@ describe("Settings zone components — Step 1 (Top zones)", () => {
     });
     assert.deepEqual(actions, ["stop", "restart"]);
 
-    const modelRow = Array.from(container.querySelectorAll("div")).find((d) =>
-      d.textContent?.includes("Default model") && d.className.includes("cursor-pointer")
+    const modelRow = Array.from(container.querySelectorAll("div")).find(
+      (d) => d.textContent?.includes("Default model") && d.className.includes("cursor-pointer")
     );
     assert.ok(modelRow, "Default model row exists");
     await act(async () => {

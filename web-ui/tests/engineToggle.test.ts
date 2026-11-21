@@ -112,7 +112,8 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
       assert.ok(runningHtml.includes("Stop"), "Must include Stop button");
       assert.ok(runningHtml.includes("Restart"), "Must include Restart button");
       assert.ok(
-        runningHtml.includes('disabled=""') && runningHtml.includes('aria-label="Start llama-server"'),
+        runningHtml.includes('disabled=""') &&
+          runningHtml.includes('aria-label="Start llama-server"'),
         "Start button must disable when engine is running"
       );
 
@@ -127,7 +128,8 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
         })
       );
       assert.ok(
-        stoppedHtml.includes('disabled=""') && stoppedHtml.includes('aria-label="Stop llama-server"'),
+        stoppedHtml.includes('disabled=""') &&
+          stoppedHtml.includes('aria-label="Stop llama-server"'),
         "Stop button must disable when engine is stopped"
       );
     });

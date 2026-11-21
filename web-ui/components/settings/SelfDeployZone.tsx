@@ -89,9 +89,7 @@ export function SelfDeployZone({
 
             <div
               className={
-                deployHistoryExpanded
-                  ? "space-y-2 max-h-[220px] overflow-y-auto pr-1"
-                  : "space-y-2"
+                deployHistoryExpanded ? "space-y-2 max-h-[220px] overflow-y-auto pr-1" : "space-y-2"
               }
             >
               {visibleDeployHistory.map((item) => {
