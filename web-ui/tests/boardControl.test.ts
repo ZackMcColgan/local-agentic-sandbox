@@ -6,8 +6,10 @@ import path from "node:path";
 import { NextRequest } from "next/server";
 import {
   BoardControlStore,
+  extractThreadIdFromLink,
   type BoardControlState,
 } from "../lib/board/boardControlStore";
+import { BoardStore } from "../lib/board/boardStore";
 import { GET as getBoardControl, POST as postBoardControl } from "../app/api/board/control/route";
 import {
   registerTurnAbortController,
@@ -204,5 +206,46 @@ describe("BoardControlStore & /api/board/control", () => {
     const getBody2 = await getRes2.json();
     assert.equal(getBody2.control.state, "running");
     assert.equal(getBody2.control.drainBudget, 2);
+  });
+
+  it("extracts thread IDs from /?thread=<id> and legacy /threads/<id> links and returns null for others", async () => {
+    assert.equal(extractThreadIdFromLink("/?thread=thread-new-1"), "thread-new-1");
+    assert.equal(extractThreadIdFromLink("?thread=thread-new-2&tab=chat"), "thread-new-2");
+    assert.equal(extractThreadIdFromLink("/threads/thread-legacy-1"), "thread-legacy-1");
+    assert.equal(extractThreadIdFromLink("/threads/thread-legacy-2/"), "thread-legacy-2");
+    assert.equal(extractThreadIdFromLink(""), null);
+    assert.equal(extractThreadIdFromLink("   "), null);
+    assert.equal(extractThreadIdFromLink("/"), null);
+    assert.equal(extractThreadIdFromLink("/?other=123"), null);
+    assert.equal(extractThreadIdFromLink("/unknown/path"), null);
+    assert.equal(extractThreadIdFromLink(undefined), null);
+
+    // Also verify Stop collects the parsed ID from a working board item with /?thread=<id>
+    const boardStore = new BoardStore(tmpBoardDir);
+    boardStore.create({
+      key: "#77",
+      title: "Working item with query link",
+      brief: "Test stop abort",
+      status: "working",
+      threadLink: "/?thread=thread-from-board-77",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const abortedIds: string[] = [];
+    const store = new BoardControlStore(tmpBoardDir, {
+      abortTurn: (id) => {
+        abortedIds.push(id);
+        return true;
+      },
+      clearTurn: () => {},
+      unloadModels: async () => [],
+    });
+
+    await store.applyAction("stop");
+    assert.ok(
+      abortedIds.includes("thread-from-board-77"),
+      `expected abortedIds to include 'thread-from-board-77', got ${JSON.stringify(abortedIds)}`
+    );
   });
 });
