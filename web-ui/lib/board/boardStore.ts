@@ -87,6 +87,20 @@ export function isItemEligible(item: BoardItem, allItems: BoardItem[]): boolean 
   });
 }
 
+function allocateNextKey(items: BoardItem[]): string {
+  let maxKey = 0;
+  for (const item of items) {
+    const match = /^#(\d+)$/.exec(item.key.trim());
+    if (match) {
+      const num = Number.parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > maxKey) {
+        maxKey = num;
+      }
+    }
+  }
+  return `#${maxKey + 1}`;
+}
+
 export const BOARD_STORE_VERSION = 2;
 
 export class BoardStore {
@@ -190,7 +204,7 @@ export class BoardStore {
     const items = this.readAll();
     const now = new Date().toISOString();
     const id = input.id || `item-${crypto.randomBytes(4).toString("hex")}`;
-    const key = input.key || `#${items.length + 1}`;
+    const key = input.key || allocateNextKey(items);
 
     const normalizedAllowlist = Array.isArray(input.allowlist)
       ? input.allowlist

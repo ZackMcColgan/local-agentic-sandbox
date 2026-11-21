@@ -211,4 +211,53 @@ describe("BoardStore", () => {
     ]);
     assert.equal("allowlist" in (reloaded.get(withoutAllowlist.id) ?? {}), false);
   });
+
+  it("allocates new keys one past the maximum existing numeric key without colliding after gaps", () => {
+    store.create({
+      key: "#1",
+      title: "first",
+      brief: "Item 1",
+      author: "Owner",
+      source: "manual",
+    });
+    store.create({
+      key: "#15",
+      title: "fifteenth",
+      brief: "Item 15 (simulating gaps from deletions)",
+      author: "Owner",
+      source: "manual",
+    });
+    store.create({
+      key: "CUSTOM-X",
+      title: "custom",
+      brief: "Non-numeric key",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const autoNext = store.create({
+      title: "auto-allocated",
+      brief: "Should be #16, not #4",
+      author: "Owner",
+      source: "manual",
+    });
+    assert.equal(autoNext.key, "#16");
+
+    const explicit = store.create({
+      key: "#42",
+      title: "explicit-key",
+      brief: "Explicit key respected",
+      author: "Owner",
+      source: "manual",
+    });
+    assert.equal(explicit.key, "#42");
+
+    const afterExplicit = store.create({
+      title: "after-explicit",
+      brief: "Should be #43",
+      author: "Owner",
+      source: "manual",
+    });
+    assert.equal(afterExplicit.key, "#43");
+  });
 });
