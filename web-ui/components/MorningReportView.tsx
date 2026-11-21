@@ -49,6 +49,54 @@ interface MorningReportViewProps {
   onAdjustFlag?: (flagId: string, newInstruction: string) => Promise<void> | void;
 }
 
+export interface MorningReportKpis {
+  total: number;
+  completed: number;
+  stalled: number;
+  failed: number;
+  totalDurationSeconds: number;
+  totalDurationFormatted: string;
+}
+
+function formatKpiDuration(totalSeconds: number): string {
+  const safeSec = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safeSec / 3600);
+  const minutes = Math.floor((safeSec % 3600) / 60);
+  const seconds = safeSec % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+export function computeMorningReportKpis(tasks: OvernightTaskEntry[]): MorningReportKpis {
+  let completed = 0;
+  let failed = 0;
+  let stalled = 0;
+  let totalDurationSeconds = 0;
+
+  for (const t of tasks) {
+    if (t.status === "completed") {
+      completed++;
+    } else if (t.status === "failed") {
+      failed++;
+    } else {
+      stalled++;
+    }
+    if (typeof t.durationSeconds === "number" && Number.isFinite(t.durationSeconds) && t.durationSeconds > 0) {
+      totalDurationSeconds += t.durationSeconds;
+    }
+  }
+
+  return {
+    total: completed + failed + stalled,
+    completed,
+    stalled,
+    failed,
+    totalDurationSeconds,
+    totalDurationFormatted: formatKpiDuration(totalDurationSeconds)
+  };
+}
+
 export function MorningReportView({
   report,
   overnightReport: propOvernightReport,
@@ -185,13 +233,7 @@ export function MorningReportView({
 
   const displayTasks = filteredTasks.length > 0 ? filteredTasks : uniqueTasks;
 
-  const kpis = React.useMemo(() => {
-    const total = displayTasks.length;
-    const completed = displayTasks.filter((t) => t.status === "completed").length;
-    const stalled = displayTasks.filter((t) => t.status === "parked").length;
-    const failed = displayTasks.filter((t) => t.status === "failed").length;
-    return { total, completed, stalled, failed };
-  }, [displayTasks]);
+  const kpis = React.useMemo(() => computeMorningReportKpis(displayTasks), [displayTasks]);
 
   const visibleTasks = showAllTasks ? displayTasks : displayTasks.slice(0, TASK_LIST_CAP);
 
@@ -321,7 +363,7 @@ export function MorningReportView({
             >
               <span className="inline-flex items-baseline gap-1.5">
                 <span className="text-slate-500 dark:text-zinc-400">Total</span>
-                <span className="font-semibold text-slate-900 dark:text-zinc-100">{overnight.totalDurationFormatted}</span>
+                <span className="font-semibold text-slate-900 dark:text-zinc-100">{kpis.totalDurationFormatted}</span>
               </span>
               <span className="text-slate-300 dark:text-zinc-400">·</span>
               <span className="inline-flex items-baseline gap-1.5">

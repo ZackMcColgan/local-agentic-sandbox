@@ -1406,6 +1406,15 @@ export class ThreadStore {
     return thread.tokenEconomics ?? computeThreadTokenEconomics(thread);
   }
 
+  async clearThreadMessages(threadId: string): Promise<Thread | null> {
+    const thread = await this.getThread(threadId);
+    if (!thread) return null;
+    thread.messages = [];
+    thread.updatedAt = new Date().toISOString();
+    this.saveThread(thread);
+    return thread;
+  }
+
   async deleteThread(threadId: string): Promise<boolean> {
     // 1. Abort any active streaming turn first & clear live presence
     abortActiveTurn(threadId);

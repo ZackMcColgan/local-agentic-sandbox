@@ -477,7 +477,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ thread, task: manifest }, { status: 201 });
     }
 
-    // 2. Default: Create New Thread
+    // 2. Action: Durably clear persisted messages on an existing thread
+    if (body.action === "clearMessages") {
+      const targetThreadId = typeof body.threadId === "string" ? body.threadId.trim() : "";
+      if (!targetThreadId) {
+        return NextResponse.json({ error: "threadId is required" }, { status: 400 });
+      }
+      const cleared = await threadStore.clearThreadMessages(targetThreadId);
+      if (!cleared) {
+        return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+      }
+      return NextResponse.json({ thread: cleared }, { status: 200 });
+    }
+
+    // 3. Default: Create New Thread
     const thread = threadStore.createThread({
       title: body.title,
       model: body.model,
