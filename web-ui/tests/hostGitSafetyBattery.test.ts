@@ -323,11 +323,11 @@ process.exit(1);
     assert.match(bOffRes.error, /disabled in bridge configuration/);
 
     // 2. Settings key off (web-ui admission)
-    const settingsAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY");
+    const settingsAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY", false);
     assert.equal(settingsAdmitted, false);
 
     // 3. Both keys off
-    const bothAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "DISABLED");
+    const bothAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "DISABLED", false);
     assert.equal(bothAdmitted, false);
   });
 

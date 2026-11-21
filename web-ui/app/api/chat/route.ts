@@ -791,7 +791,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         const includeUnattendedGit = shouldAdvertiseUnattendedGitTools(
           hostSettings.allowUnattendedHostGit,
           threadGitCapability,
-          hostStatus.runnerState
+          hostStatus.runnerState,
+          isProhibitedContext
         );
 
         const gitTools = includeUnattendedGit

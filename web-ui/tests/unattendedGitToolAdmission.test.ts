@@ -32,30 +32,36 @@ describe("Unattended Host Git Tool Admission & Settings (Part 1)", () => {
   describe("Two-Key Admission Gate (Key a: Settings Switch)", () => {
     it("advertises zero git verbs when settings switch is false even if capability is present and runner is ready", () => {
       const capability = { repo: "local-agentic-sandbox", branch: "feature/my-task" };
-      const admitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY");
+      const admitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY", false);
       assert.equal(admitted, false);
     });
 
     it("advertises zero git verbs when capability is missing even if settings switch is true", () => {
-      const admittedNoCap = shouldAdvertiseUnattendedGitTools(true, null, "READY");
+      const admittedNoCap = shouldAdvertiseUnattendedGitTools(true, null, "READY", false);
       assert.equal(admittedNoCap, false);
 
-      const admittedEmptyCap = shouldAdvertiseUnattendedGitTools(true, { repo: "", branch: "" }, "READY");
+      const admittedEmptyCap = shouldAdvertiseUnattendedGitTools(true, { repo: "", branch: "" }, "READY", false);
       assert.equal(admittedEmptyCap, false);
     });
 
     it("advertises zero git verbs when host runner is not ready even if settings and capability are valid", () => {
       const capability = { repo: "local-agentic-sandbox", branch: "feature/my-task" };
-      const admittedDisabled = shouldAdvertiseUnattendedGitTools(true, capability, "DISABLED");
+      const admittedDisabled = shouldAdvertiseUnattendedGitTools(true, capability, "DISABLED", false);
       assert.equal(admittedDisabled, false);
 
-      const admittedUnavailable = shouldAdvertiseUnattendedGitTools(true, capability, "UNAVAILABLE");
+      const admittedUnavailable = shouldAdvertiseUnattendedGitTools(true, capability, "UNAVAILABLE", false);
       assert.equal(admittedUnavailable, false);
     });
 
-    it("admits git verbs only when settings is true, capability is valid, and runner is READY", () => {
+    it("advertises zero git verbs in a prohibited context even when settings, capability, and runner are ready", () => {
       const capability = { repo: "local-agentic-sandbox", branch: "feature/my-task" };
-      const admitted = shouldAdvertiseUnattendedGitTools(true, capability, "READY");
+      const admitted = shouldAdvertiseUnattendedGitTools(true, capability, "READY", true);
+      assert.equal(admitted, false);
+    });
+
+    it("admits git verbs only when settings is true, capability is valid, runner is READY, and context is not prohibited", () => {
+      const capability = { repo: "local-agentic-sandbox", branch: "feature/my-task" };
+      const admitted = shouldAdvertiseUnattendedGitTools(true, capability, "READY", false);
       assert.equal(admitted, true);
     });
 

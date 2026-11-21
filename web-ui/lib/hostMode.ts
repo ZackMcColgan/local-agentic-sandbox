@@ -658,9 +658,11 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
 
 export function shouldAdvertiseUnattendedGitTools(
   allowUnattendedHostGit: boolean,
-  capability?: { repo: string; branch: string } | null,
-  runnerHealthy?: boolean | HostRunnerState
+  capability: { repo: string; branch: string } | null | undefined,
+  runnerHealthy: boolean | HostRunnerState | undefined,
+  isProhibitedContext: boolean
 ): boolean {
+  if (isProhibitedContext) return false;
   if (allowUnattendedHostGit !== true) return false;
   if (!capability || !capability.repo || !capability.branch) return false;
   if (runnerHealthy === true || runnerHealthy === "READY") return true;
