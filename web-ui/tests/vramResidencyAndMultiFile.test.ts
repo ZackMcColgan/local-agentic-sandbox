@@ -11,7 +11,8 @@ import {
   fetchModelSizes,
   fetchLoadedModels,
   enforceResidency,
-  keepAliveFor
+  keepAliveFor,
+  unloadAllModelsWithResult
 } from "../lib/subagents/residency";
 import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
@@ -182,6 +183,25 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         content.includes("searchOracleCodebase(userPrompt)"),
         "chat/route.ts must wire searchOracleCodebase directly without dead embedding swap"
       );
+    });
+
+    it("unloadAllModelsWithResult returns not_applicable when engine does not support unload (404 on /api/ps)", async () => {
+      process.env.LLM_ENGINE = "ollama";
+      const mockFetch: typeof fetch = async () => new Response("Not Found", { status: 404 });
+      const res = await unloadAllModelsWithResult("http://mock-openai-server", mockFetch);
+      assert.equal(res.status, "not_applicable");
+      assert.deepEqual(res.unloaded, []);
+      assert.ok(
+        (res.reason || "").toLowerCase().includes("not applicable"),
+        `Expected 'not applicable' reason, got: ${res.reason}`
+      );
+    });
+
+    it("unloadAllModelsWithResult returns not_applicable for llamacpp engine", async () => {
+      process.env.LLM_ENGINE = "llamacpp";
+      const res = await unloadAllModelsWithResult("http://mock-llamacpp");
+      assert.equal(res.status, "not_applicable");
+      assert.deepEqual(res.unloaded, []);
     });
   });
 

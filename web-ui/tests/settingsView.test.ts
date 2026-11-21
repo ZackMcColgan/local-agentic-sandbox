@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SettingsView, getHostCardPresentation } from "../components/SettingsView";
+import { SettingsView, getHostCardPresentation, formatEngineActionMessage } from "../components/SettingsView";
 import { ProjectsView } from "../components/ProjectsView";
 
 describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
@@ -109,5 +109,22 @@ describe("Settings Danger Zone title polarity", () => {
     );
     assert.equal(html.includes("Disable self-deploy"), false, "Should not invert switch title as 'Disable self-deploy'");
     assert.ok(html.includes("Enable self-deploy"), "Should label switch as 'Enable self-deploy'");
+  });
+});
+
+describe("Settings engine unload/stop honesty", () => {
+  it("does not claim VRAM released when engine returns 404 / unsupported", () => {
+    const msg = formatEngineActionMessage("stop", false, 404, { success: false });
+    assert.equal(msg.toLowerCase().includes("vram released"), false);
+    assert.equal(msg.toLowerCase().includes("reclaimed"), false);
+    assert.ok(msg.toLowerCase().includes("not applicable"), `Expected 'not applicable' message, got: ${msg}`);
+  });
+
+  it("claims VRAM released only when engine confirms unload", () => {
+    const confirmed = formatEngineActionMessage("stop", true, 200, { success: true, vramReleased: true });
+    assert.ok(confirmed.toLowerCase().includes("vram"), `Expected VRAM confirmation, got: ${confirmed}`);
+
+    const unconfirmed = formatEngineActionMessage("stop", true, 200, { success: true });
+    assert.equal(unconfirmed.toLowerCase().includes("vram"), false, "Should not claim VRAM released without confirmation");
   });
 });

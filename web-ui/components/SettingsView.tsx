@@ -74,6 +74,30 @@ export function getHostCardPresentation(settings: {
   };
 }
 
+export function formatEngineActionMessage(
+  action: "start" | "stop" | "restart",
+  ok: boolean,
+  status: number,
+  json: { success?: boolean; message?: string; error?: string; vramReleased?: boolean }
+): string {
+  if (!ok || json.success === false) {
+    if (status === 404 || status === 405 || status === 501) {
+      return "VRAM unload / engine control is not applicable to this engine.";
+    }
+    return json.error || `Engine ${action} failed (HTTP ${status}).`;
+  }
+  if (json.message) {
+    return json.message;
+  }
+  if (action === "stop") {
+    return json.vramReleased ? "Engine stopped and VRAM released." : "Engine stopped.";
+  }
+  if (action === "start") {
+    return "Engine starting up...";
+  }
+  return "Engine restarted.";
+}
+
 export interface SettingsViewProps {
   onBack?: () => void;
   onClose?: () => void;
@@ -374,13 +398,7 @@ export function SettingsView({
         body: JSON.stringify({ action })
       });
       const json = await res.json().catch(() => ({}));
-      if (json.message) {
-        setEngineMessage(json.message);
-      } else if (action === "stop") {
-        setEngineMessage("Engine stopped.");
-      } else if (action === "start") {
-        setEngineMessage("Engine starting up...");
-      }
+      setEngineMessage(formatEngineActionMessage(action, res.ok, res.status, json));
     } catch (err: any) {
       setEngineMessage(`Failed: ${err.message}`);
     } finally {

@@ -240,6 +240,83 @@ export async function enforceResidency(
   return actions;
 }
 
+export interface UnloadModelsResult {
+  status: "unloaded" | "not_applicable" | "failed";
+  unloaded: string[];
+  reason?: string;
+}
+
+/**
+ * Unloads all models currently resident in Ollama VRAM and returns an explicit
+ * status so callers can distinguish confirmed unloads from engines where unload
+ * is not applicable (e.g. llama.cpp or OpenAI-compatible servers returning 404).
+ */
+export async function unloadAllModelsWithResult(
+  baseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  fetchImpl: typeof fetch = fetch
+): Promise<UnloadModelsResult> {
+  if (resolveLLMEngine() === "llamacpp") {
+    return {
+      status: "not_applicable",
+      unloaded: [],
+      reason: "not applicable to this engine"
+    };
+  }
+  const unloaded: string[] = [];
+  try {
+    const psRes = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
+    if (psRes.status === 404 || psRes.status === 405 || psRes.status === 501) {
+      return {
+        status: "not_applicable",
+        unloaded: [],
+        reason: "not applicable to this engine"
+      };
+    }
+    if (!psRes.ok) {
+      return {
+        status: "failed",
+        unloaded: [],
+        reason: `GET /api/ps failed: HTTP ${psRes.status}`
+      };
+    }
+    const data: any = await psRes.json();
+    const loaded: { name: string }[] = (data.models || []).map((m: any) => ({
+      name: m.name || ""
+    })).filter((m: { name: string }) => Boolean(m.name));
+
+    for (const m of loaded) {
+      const genRes = await fetchImpl(`${baseUrl}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: m.name, keep_alive: 0 })
+      });
+      if (genRes.status === 404 || genRes.status === 405 || genRes.status === 501) {
+        return {
+          status: "not_applicable",
+          unloaded,
+          reason: "not applicable to this engine"
+        };
+      }
+      if (!genRes.ok) {
+        return {
+          status: "failed",
+          unloaded,
+          reason: `POST /api/generate failed: HTTP ${genRes.status}`
+        };
+      }
+      unloaded.push(m.name);
+    }
+    return { status: "unloaded", unloaded };
+  } catch (err: any) {
+    console.warn("Notice: could not unload models from LLM:", err.message);
+    return {
+      status: "failed",
+      unloaded,
+      reason: err?.message || "Unload failed"
+    };
+  }
+}
+
 /**
  * Immediately unloads all models currently resident in Ollama VRAM.
  * Sends POST /api/generate with keep_alive: 0 for every loaded model.
@@ -249,22 +326,6 @@ export async function unloadAllModels(
   baseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
-  if (resolveLLMEngine() === "llamacpp") {
-    return [];
-  }
-  const unloaded: string[] = [];
-  try {
-    const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
-    for (const m of loaded) {
-      await fetchImpl(`${baseUrl}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: m.name, keep_alive: 0 })
-      });
-      unloaded.push(m.name);
-    }
-  } catch (err: any) {
-    console.warn("Notice: could not unload models from LLM:", err.message);
-  }
-  return unloaded;
+  const result = await unloadAllModelsWithResult(baseUrl, fetchImpl);
+  return result.unloaded;
 }
