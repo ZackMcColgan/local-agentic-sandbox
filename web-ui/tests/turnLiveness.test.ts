@@ -10,9 +10,8 @@ import {
   ThreadStore,
   activeExecutionSet,
   markTurnActive,
-  TURN_STALL_WINDOW_MS,
-  computeTurnLiveness,
 } from "../lib/threads/threadStore";
+import { TURN_STALL_WINDOW_MS, computeTurnLiveness } from "../lib/threads/liveness";
 import { ThrottledStreamSnapshot, STREAM_SNAPSHOT_INTERVAL_MS } from "../lib/streamSnapshot";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import type { Thread } from "../lib/threads/threadStore";
@@ -296,7 +295,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("server wiring: chat route persists traces at round boundaries and touches the heartbeat", () => {
+  it("server wiring: chat route persists traces at round boundaries and touches the heartbeat", async () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
     // Loose call-shape assertions: the call may wrap across lines, the traces
     // accumulator may be camelCased (accumulatedTraces / roundTraces), and the
@@ -312,29 +311,68 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       /touchActiveTurn\s*\(\s*activeThreadId\s*\)/,
       "round boundary must refresh the turn heartbeat"
     );
-    const storeSrc = fs.readFileSync(
-      path.resolve(__dirname, "../lib/threads/threadStore.ts"),
-      "utf8"
+    assert.equal(typeof TURN_STALL_WINDOW_MS, "number");
+    assert.ok(TURN_STALL_WINDOW_MS > 0, "TURN_STALL_WINDOW_MS must be positive");
+
+    const nowMs = Date.parse("2026-11-21T12:00:00.000Z");
+    const freshIso = new Date(nowMs).toISOString();
+    const staleIso = new Date(nowMs - TURN_STALL_WINDOW_MS - 1000).toISOString();
+    assert.equal(
+      computeTurnLiveness(
+        {
+          id: "t-alive",
+          title: "alive",
+          status: "running",
+          createdAt: freshIso,
+          updatedAt: freshIso,
+          model: "m",
+          reasoningEffort: "medium",
+          messages: [],
+        },
+        nowMs
+      ),
+      "alive"
     );
-    assert.match(
-      storeSrc,
-      /export\s+const\s+TURN_STALL_WINDOW_MS\b/,
-      "store must export the stale window constant"
+    assert.equal(
+      computeTurnLiveness(
+        {
+          id: "t-stalled",
+          title: "stalled",
+          status: "running",
+          createdAt: staleIso,
+          updatedAt: staleIso,
+          model: "m",
+          reasoningEffort: "medium",
+          messages: [],
+        },
+        nowMs
+      ),
+      "stalled"
     );
-    // Accepts either export form (function declaration or arrow const).
-    assert.match(
-      storeSrc,
-      /export\s+(?:const|function)\s+computeTurnLiveness\b/,
-      "store must export the liveness derivation"
+    assert.equal(
+      computeTurnLiveness(
+        {
+          id: "t-settled",
+          title: "settled",
+          status: "completed",
+          createdAt: staleIso,
+          updatedAt: staleIso,
+          model: "m",
+          reasoningEffort: "medium",
+          messages: [],
+        },
+        nowMs
+      ),
+      "settled"
     );
-    // Thread record carries a liveness field; the alive/stalled/settled union may
-    // be expressed inline or via a named type alias, so the members are matched
-    // across the file rather than against one exact literal layout.
-    assert.match(storeSrc, /\bliveness\?\s*:/, "Thread record must carry a liveness field");
-    assert.match(
-      storeSrc,
-      /"alive"[\s\S]*"stalled"[\s\S]*"settled"/,
-      "liveness must be the alive/stalled/settled union"
-    );
+
+    const { store, dir } = makeStore();
+    try {
+      const created = store.createThread({ id: "t-liveness-roundtrip", title: "liveness" });
+      const loaded = await store.getThread(created.id);
+      assert.ok(loaded?.liveness === "alive" || loaded?.liveness === "stalled" || loaded?.liveness === "settled");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
