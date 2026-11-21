@@ -49,6 +49,12 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("LiveRunBlock.tsx") ||
+      p.includes("liveRunBlockPreview.test.ts"),
+    tests: ["tests/liveRunBlockPreview.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("ciSpeed.test.ts") ||
       p.includes(".github/workflows/ci.yml") ||
       p.includes(".github/workflows/chaos.yml"),

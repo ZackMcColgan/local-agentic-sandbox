@@ -38,6 +38,36 @@ interface LiveRunBlockProps {
   liveTraces?: ExecutionTraceItem[];
 }
 
+export function resolveDeliverableFile(task: TaskManifest): string | undefined {
+  const journalMatch = task.journal?.find((j) => {
+    const txt = j.message || (j as any).entry;
+    return typeof txt === "string" && txt.toLowerCase().includes("committed");
+  });
+  const journalFile = journalMatch
+    ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
+    : undefined;
+
+  return (
+    task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
+    task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
+    journalFile
+  );
+}
+
+export function buildDeliverableFileUrl(deliverableFile: string): string {
+  return `/api/files?path=${encodeURIComponent(deliverableFile)}`;
+}
+
+export function resolveCodePreviewContent(
+  deliverableFile: string,
+  loadedContent: string | null
+): string {
+  if (loadedContent !== null) {
+    return loadedContent;
+  }
+  return `// Deliverable committed: ${deliverableFile}`;
+}
+
 export function LiveRunBlock({
   task,
   onStopRun,
@@ -51,6 +81,7 @@ export function LiveRunBlock({
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
+  const [deliverableCode, setDeliverableCode] = useState<string | null>(null);
   const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
 
   useEffect(() => {
@@ -88,6 +119,35 @@ export function LiveRunBlock({
   const isStopped = status === "cancelled" || status === "stopped";
   const isCompleted = status === "completed";
   const isFailed = status === "failed" || status === "parked";
+
+  const deliverableFile = isCompleted ? resolveDeliverableFile(task) : undefined;
+  const isDeliverableSvg = deliverableFile ? deliverableFile.toLowerCase().endsWith(".svg") : false;
+  const isDeliverableHtml = deliverableFile
+    ? deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm")
+    : false;
+
+  useEffect(() => {
+    if (!isCompleted || !deliverableFile || isDeliverableSvg || isDeliverableHtml) {
+      setDeliverableCode(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(buildDeliverableFileUrl(deliverableFile))
+      .then((res) => (res.ok ? res.text() : null))
+      .then((text) => {
+        if (!cancelled) {
+          setDeliverableCode(text);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDeliverableCode(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCompleted, deliverableFile, isDeliverableSvg, isDeliverableHtml]);
 
   // Real-time elapsed timer while task is actively running
   useEffect(() => {
@@ -358,22 +418,10 @@ export function LiveRunBlock({
       })()}
 
       {/* Deliverable Badge & Inline Graphic/Code Preview when Completed */}
-      {isCompleted && (() => {
-        const journalMatch = task.journal?.find((j) => {
-          const txt = j.message || (j as any).entry;
-          return typeof txt === "string" && txt.toLowerCase().includes("committed");
-        });
-        const journalFile = journalMatch
-          ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
-          : undefined;
-
-        const deliverableFile =
-          task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
-          task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
-          journalFile;
-        if (!deliverableFile) return null;
-        const isSvg = deliverableFile.toLowerCase().endsWith(".svg");
-        const isHtml = deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm");
+      {isCompleted && deliverableFile && (() => {
+        const isSvg = isDeliverableSvg;
+        const isHtml = isDeliverableHtml;
+        const deliverableUrl = buildDeliverableFileUrl(deliverableFile);
         return (
           <div className="space-y-3 pt-1">
             <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
@@ -391,7 +439,7 @@ export function LiveRunBlock({
             {isSvg ? (
               <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <SvgViewer
-                  url={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                  url={deliverableUrl}
                   title={deliverableFile}
                   initialTab="preview"
                 />
@@ -401,7 +449,7 @@ export function LiveRunBlock({
                 <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{deliverableFile}</span>
                   <a
-                    href={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    href={deliverableUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px]"
@@ -413,7 +461,7 @@ export function LiveRunBlock({
                 </div>
                 <div className="p-2 bg-white dark:bg-black min-h-[220px]">
                   <iframe
-                    src={`/api/files?path=${encodeURIComponent(deliverableFile)}`}
+                    src={deliverableUrl}
                     sandbox="allow-scripts"
                     className="w-full h-64 border-0 rounded-xl bg-white"
                     title={deliverableFile}
@@ -421,24 +469,7 @@ export function LiveRunBlock({
                 </div>
               </div>
             ) : (() => {
-              // Extract generated deliverable content from milestone diffSummary or state
-              const milestoneWithDiff = task.milestones?.find(m => m.diffSummary && m.diffSummary.trim().length > 0);
-              let codeSnippet = "";
-              if (milestoneWithDiff?.diffSummary) {
-                // Parse git diff additions
-                const lines = milestoneWithDiff.diffSummary.split("\n");
-                const addedLines = lines
-                  .filter(l => l.startsWith("+") && !l.startsWith("+++"))
-                  .map(l => l.slice(1));
-                if (addedLines.length > 0) {
-                  codeSnippet = addedLines.join("\n");
-                }
-              }
-
-              if (!codeSnippet) {
-                codeSnippet = `// Deliverable committed: ${deliverableFile}`;
-              }
-
+              const codeSnippet = resolveCodePreviewContent(deliverableFile, deliverableCode);
               const ext = deliverableFile.split(".").pop() || "typescript";
               return (
                 <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
