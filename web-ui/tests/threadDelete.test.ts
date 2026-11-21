@@ -201,4 +201,64 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     const updatedManifest: TaskManifest = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
     assert.strictEqual(updatedManifest.status, "cancelled", "Retained checkpoint status must be set to cancelled");
   });
+
+  it("5. deleteThread removes .handoff.json and -runlog.md sidecars for real task threads while retaining cancelled checkpoint", async () => {
+    const realThreadId = "thread-sidecar-task-5";
+    const taskId = "task-sidecar-5";
+
+    const manifest: TaskManifest = {
+      taskId,
+      goal: "Sidecar cleanup test",
+      scope: "PROJECT",
+      status: "active",
+      milestones: [],
+      journal: [],
+      toolchain: "node:22",
+      branchName: "feat/test",
+      currentMilestoneIndex: 0,
+      checkpoints: [],
+      ambiguityFlags: [],
+      updatedAt: new Date().toISOString(),
+      startedAt: new Date().toISOString()
+    };
+
+    supervisor.saveCheckpoint(manifest);
+    const checkpointFile = supervisor.getCheckpointFilePath(taskId);
+    const checkpointDir = path.dirname(checkpointFile);
+    const handoffFile = path.join(checkpointDir, `${taskId}.handoff.json`);
+    const runlogFile = path.join(checkpointDir, `${taskId}-runlog.md`);
+    fs.writeFileSync(handoffFile, JSON.stringify({ chunkComplete: false }), "utf8");
+    fs.writeFileSync(runlogFile, "# Runlog\n", "utf8");
+
+    store.createThread({ id: realThreadId, title: "Task With Sidecars", taskId });
+
+    const result = await store.deleteThread(realThreadId);
+    assert.strictEqual(result, true);
+
+    assert.strictEqual(fs.existsSync(handoffFile), false, ".handoff.json must be removed on deleteThread");
+    assert.strictEqual(fs.existsSync(runlogFile), false, "-runlog.md must be removed on deleteThread");
+    assert.strictEqual(fs.existsSync(checkpointFile), true, "Checkpoint manifest must still be retained for real task thread");
+    const updatedManifest: TaskManifest = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
+    assert.strictEqual(updatedManifest.status, "cancelled");
+  });
+
+  it("6. deleteThread removes .handoff.json, -runlog.md, and -lg-checkpoint.json sidecars for plain non-task threads", async () => {
+    const threadId = "thread-plain-sidecar-6";
+    store.createThread({ id: threadId, title: "Plain Thread With Sidecars" });
+
+    const checkpointDir = path.dirname(supervisor.getCheckpointFilePath(threadId));
+    const handoffFile = path.join(checkpointDir, `${threadId}.handoff.json`);
+    const runlogFile = path.join(checkpointDir, `${threadId}-runlog.md`);
+    const lgCheckpointFile = path.join(checkpointDir, `${threadId}-lg-checkpoint.json`);
+    fs.writeFileSync(handoffFile, "{}", "utf8");
+    fs.writeFileSync(runlogFile, "# Plain runlog\n", "utf8");
+    fs.writeFileSync(lgCheckpointFile, "{}", "utf8");
+
+    const result = await store.deleteThread(threadId);
+    assert.strictEqual(result, true);
+
+    assert.strictEqual(fs.existsSync(handoffFile), false, ".handoff.json must be removed");
+    assert.strictEqual(fs.existsSync(runlogFile), false, "-runlog.md must be removed");
+    assert.strictEqual(fs.existsSync(lgCheckpointFile), false, "-lg-checkpoint.json must be removed for non-task thread");
+  });
 });
