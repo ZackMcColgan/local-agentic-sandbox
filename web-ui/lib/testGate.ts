@@ -867,6 +867,33 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Subagents & Supervisor
   {
+    match: (p) =>
+      p.includes("lib/subagents/checkpointSaver") || p.includes("checkpointSaver.test.ts"),
+    tests: ["tests/checkpointSaver.test.ts", "tests/langgraphSupervisorNodes.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/subagents/stepExecutor") || p.includes("stepExecutor.test.ts"),
+    tests: [
+      "tests/stepExecutor.test.ts",
+      "tests/productionTestRunnerWiring.test.ts",
+      "tests/canonicalLifecycle.test.ts",
+      "tests/punchlistBackendFixes.test.ts",
+    ],
+  },
+  {
+    match: (p) => p.includes("lib/subagents/verification") || p.includes("verification.test.ts"),
+    tests: ["tests/verification.test.ts", "tests/p3FinishAndHandoffWiring.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/subagents/probes") || p.includes("probes.test.ts"),
+    tests: ["tests/probes.test.ts", "tests/langgraphSupervisorNodes.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/subagents/overnightGraph") || p.includes("overnightGraph.test.ts"),
+    tests: ["tests/overnightGraph.test.ts", "tests/langgraphSupervisorNodes.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/supervisor"),
     tests: [
       "tests/supervisor.test.ts",
