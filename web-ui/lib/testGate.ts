@@ -49,6 +49,14 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("threadStore.ts") ||
+      p.includes("app/api/threads/route.ts") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("threadClearMessages.test.ts"),
+    tests: ["tests/threadClearMessages.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("LiveRunBlock.tsx") ||
       p.includes("liveRunBlockStatus.test.ts"),
     tests: ["tests/liveRunBlockStatus.test.ts"],

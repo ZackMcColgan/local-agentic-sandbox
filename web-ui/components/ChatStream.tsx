@@ -2405,7 +2405,19 @@ export function ChatStream({
                 )}
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    const targetThreadId = activeThreadId || threadId;
+                    if (targetThreadId) {
+                      try {
+                        await fetch("/api/threads", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "clearMessages", threadId: targetThreadId })
+                        });
+                      } catch {
+                        // Best-effort persistence when offline
+                      }
+                    }
                     const seed = clearChatHistory(activeModel);
                     setMessages(seed);
                   }}
