@@ -288,3 +288,39 @@ test("rollback S3 setImage failure surfaces rollbackVerified=false and failure i
   assert.equal(result.needsAttention, true);
   assert.match(result.evidence, /rollback kubectl error/);
 });
+
+test("S3 setImage and S4 verifyDeployment use buildAndImport builtTag instead of input targetTag", async () => {
+  let setTag = "";
+  let verifiedTag = "";
+  const deps = makeBaseDeps({
+    buildAndImport: async () => ({
+      built: true,
+      imported: true,
+      imagePresentInNode: true,
+      builtTag: "local-agentic-sandbox-web-ui:v-abc1234-xyz",
+      detail: "built v-abc1234-xyz",
+    }),
+    setImage: async (tag) => {
+      setTag = tag;
+      return { ok: true };
+    },
+    verifyDeployment: async (tag) => {
+      verifiedTag = tag;
+      return {
+        ok: true,
+        rolloutSuccess: true,
+        podRunningZeroRestarts: true,
+        gatewayStatus: 200,
+        threadListLoads: true,
+        observedTag: tag,
+      };
+    },
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "deployed");
+  assert.equal(setTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
+  assert.equal(verifiedTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
+  assert.equal(result.deployTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
+});

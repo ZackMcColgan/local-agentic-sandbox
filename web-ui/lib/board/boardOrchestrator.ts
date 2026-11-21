@@ -388,7 +388,8 @@ export class BoardOrchestrator {
     const deployInput: DeployInput = this.deps.selfDeploy?.getDeployInput
       ? this.deps.selfDeploy.getDeployInput(item, merge)
       : {
-          targetTag: merge.targetTag ?? `local-agentic-sandbox:${merge.mergeSha.slice(0, 7)}`,
+          targetTag:
+            merge.targetTag ?? `local-agentic-sandbox-web-ui:${merge.mergeSha.slice(0, 7)}`,
           developSha: merge.mergeSha,
         };
 

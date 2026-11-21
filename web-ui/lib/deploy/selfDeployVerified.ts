@@ -37,6 +37,7 @@ export interface BuildImportResult {
   built: boolean;
   imported: boolean;
   imagePresentInNode: boolean;
+  builtTag?: string;
   detail: string;
 }
 
@@ -119,8 +120,10 @@ export async function runSelfDeployVerified(
     };
   }
 
+  const deployTag = s2.builtTag ?? input.targetTag;
+
   // S3: Set image
-  const s3 = await deps.setImage(input.targetTag);
+  const s3 = await deps.setImage(deployTag);
   if (!s3.ok) {
     return {
       mode: "execute",
@@ -133,7 +136,7 @@ export async function runSelfDeployVerified(
   }
 
   // S4: Verify rollout, pod Running 0 restarts, gateway 200, thread list loads
-  const s4 = await deps.verifyDeployment(input.targetTag);
+  const s4 = await deps.verifyDeployment(deployTag);
   if (!s4.ok) {
     const rollbackSet = await deps.setImage(s1.tag);
     if (!rollbackSet.ok) {
@@ -167,10 +170,10 @@ export async function runSelfDeployVerified(
     mode: "execute",
     status: "deployed",
     rollbackTarget: s1.tag,
-    deployTag: input.targetTag,
+    deployTag,
     prodEqualsDevelop: true,
     needsAttention: false,
-    evidence: `Deployed ${input.targetTag} (develop ${input.developSha}); gateway ${s4.gatewayStatus}`,
+    evidence: `Deployed ${deployTag} (develop ${input.developSha}); gateway ${s4.gatewayStatus}`,
   };
 }
 
