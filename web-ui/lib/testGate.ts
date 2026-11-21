@@ -801,6 +801,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatMessageRender.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("components/chat/approvals") ||
+      p.includes("components/chat/compactionPill") ||
+      p.includes("chatApprovalsAndCompaction.test.ts"),
+    tests: ["tests/chatApprovalsAndCompaction.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
     tests: ["tests/chatMcpClients.test.ts"],
   },

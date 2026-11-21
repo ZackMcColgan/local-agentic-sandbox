@@ -52,17 +52,8 @@ import { CanvasDiffCard, CanvasFileOpenButton } from "../ArtifactCanvas";
 import { resolveTurnStatusPhase } from "../../lib/chatStatus";
 import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
+import { CompactionPill } from "./compactionPill";
 import type { ChatMessage } from "../ChatStream";
-
-// Human-readable labels for the CompactionAction union emitted by
-// fitConversationToBudget (web-ui/lib/contextBudget.ts:816-820) and persisted on
-// thread messages as compactionActions (web-ui/lib/threads/threadStore.ts:66).
-const COMPACTION_ACTION_LABELS: Record<string, string> = {
-  compaction: "Compaction",
-  elide_tool_outputs: "Elide tool outputs",
-  drop_old_turns: "Drop old turns",
-  truncate_oversize: "Truncate oversize",
-};
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
 // "Show full brief" toggle so a pasted job brief never walls off the thread.
@@ -275,51 +266,11 @@ export function ChatMessageItem({
                 m.compactedThisTurn &&
                 m.tokensBeforeCompaction !== undefined &&
                 m.tokensAfterCompaction !== undefined && (
-                  <div className="flex flex-col gap-1 w-fit">
-                    <div
-                      data-testid="compaction-turn-note"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
-                    >
-                      <span>
-                        History compacted: {m.tokensBeforeCompaction.toLocaleString()} →{" "}
-                        {m.tokensAfterCompaction.toLocaleString()} tokens
-                      </span>
-                    </div>
-                    {/* COMPACTION ACTIONS (compaction-pill): the chat route stores the real
-                CompactionAction[] from fitConversationToBudget (contextBudget.ts:816-820)
-                on the thread record; render them as capped chips under the pill line. */}
-                    {m.compactionActions &&
-                      m.compactionActions.length > 0 &&
-                      (() => {
-                        const CAP = 3;
-                        const shown = m.compactionActions.slice(0, CAP);
-                        const overflow = m.compactionActions.length - shown.length;
-                        return (
-                          <div
-                            data-testid="compaction-action-chips"
-                            className="flex flex-wrap items-center gap-1.5"
-                          >
-                            {shown.map((action, i) => (
-                              <span
-                                key={`${action}-${i}`}
-                                data-testid="compaction-action-chip"
-                                className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
-                              >
-                                {COMPACTION_ACTION_LABELS[action] ?? action}
-                              </span>
-                            ))}
-                            {overflow > 0 && (
-                              <span
-                                data-testid="compaction-action-overflow"
-                                className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
-                              >
-                                +{overflow} more
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                  </div>
+                  <CompactionPill
+                    tokensBeforeCompaction={m.tokensBeforeCompaction}
+                    tokensAfterCompaction={m.tokensAfterCompaction}
+                    compactionActions={m.compactionActions}
+                  />
                 )}
               {m.status === "streaming" && (
                 <div
