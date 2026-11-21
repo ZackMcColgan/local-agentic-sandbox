@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProjectTree } from "../components/projects/ProjectTree";
 import { FileReviewPanel } from "../components/projects/FileReviewPanel";
+import { ProjectTaskList } from "../components/projects/ProjectTaskList";
 import type { ProjectRecord } from "../lib/projects/projectStore";
 
 const sampleProject: ProjectRecord = {
@@ -144,5 +145,26 @@ describe("FileReviewPanel characterization", () => {
     assert.ok(html.includes("src/b.ts"));
     assert.ok(html.includes("Modified (M)"));
     assert.ok(html.includes("Added (A)"));
+  });
+});
+
+describe("ProjectTaskList characterization", () => {
+  it("renders composer form and active task banner when a task is running", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProjectTaskList, {
+        projectName: "Alpha Repo",
+        baseBranch: "develop",
+        activeTaskId: "task-42",
+        onSubmitTask: async () => {},
+      })
+    );
+
+    assert.ok(html.includes("Active Overnight Task Running"));
+    assert.ok(html.includes("task-42"));
+    assert.ok(html.includes("Compose Autonomous Task for Alpha Repo"));
+    assert.ok(html.includes("develop"));
+    assert.ok(html.includes("Flash-Next"));
+    assert.ok(html.includes("Schedule 2:00 AM"));
+    assert.ok(html.includes("Run Overnight Now"));
   });
 });
