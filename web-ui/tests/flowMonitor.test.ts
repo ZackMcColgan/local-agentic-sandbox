@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   FLOW_MONITOR_STAGE2_DEFAULT,
+  REQUIRED_PR_CHECKS,
   isFlowMonitorStage2Enabled,
   evaluatePrChecks,
   isVerdictValidForHead,
@@ -31,6 +32,7 @@ function makeItem(overrides: Partial<FlowMonitorBoardItem> = {}): FlowMonitorBoa
 }
 
 const REAL_CI_CHECK_NAMES = [
+  "Lint & Format",
   "Typecheck (full error report)",
   "Unit Tests & Static Analysis",
   "Code Coverage Report",
@@ -40,7 +42,7 @@ const REAL_CI_CHECK_NAMES = [
   "Playwright UI (Shard 3/3)",
 ] as const;
 
-function allSevenGreenChecks(): PrCheckResult[] {
+function allEightGreenChecks(): PrCheckResult[] {
   return REAL_CI_CHECK_NAMES.map((name) => ({
     name,
     status: "COMPLETED",
@@ -57,16 +59,17 @@ describe("flow-monitor", () => {
     assert.equal(isFlowMonitorStage2Enabled(true, { FLOW_MONITOR_STAGE2: "false" }), true);
   });
 
-  it("returns green verdict only when ALL SEVEN real CI checks pass on the PR head SHA, and voids on head change", () => {
-    const verdict = evaluatePrChecks("sha-abc123", allSevenGreenChecks());
+  it("returns green verdict only when ALL EIGHT real CI checks pass on the PR head SHA, and voids on head change", () => {
+    assert.deepEqual([...REQUIRED_PR_CHECKS], [...REAL_CI_CHECK_NAMES]);
+    const verdict = evaluatePrChecks("sha-abc123", allEightGreenChecks());
     assert.equal(verdict.status, "green");
     assert.equal(verdict.headSha, "sha-abc123");
     assert.equal(isVerdictValidForHead(verdict, "sha-abc123"), true);
     assert.equal(isVerdictValidForHead(verdict, "sha-def456"), false);
 
-    // Any one of the 7 missing -> running
+    // Any one of the 8 missing -> running
     for (const missingName of REAL_CI_CHECK_NAMES) {
-      const incomplete = allSevenGreenChecks().filter((c) => c.name !== missingName);
+      const incomplete = allEightGreenChecks().filter((c) => c.name !== missingName);
       const incompleteVerdict = evaluatePrChecks("sha-abc123", incomplete);
       assert.equal(
         incompleteVerdict.status,
@@ -78,7 +81,7 @@ describe("flow-monitor", () => {
 
   it("reports a PR whose checks are still running as running, never green or red", () => {
     for (const runningName of REAL_CI_CHECK_NAMES) {
-      const checks = allSevenGreenChecks().map((c) =>
+      const checks = allEightGreenChecks().map((c) =>
         c.name === runningName ? { name: c.name, status: "IN_PROGRESS", conclusion: null } : c
       );
       const verdict = evaluatePrChecks("sha-running", checks);
@@ -87,9 +90,9 @@ describe("flow-monitor", () => {
     }
   });
 
-  it("reports red when any one of the 7 real CI checks fails", () => {
+  it("reports red when any one of the 8 real CI checks fails", () => {
     for (const failingName of REAL_CI_CHECK_NAMES) {
-      const checks = allSevenGreenChecks().map((c) =>
+      const checks = allEightGreenChecks().map((c) =>
         c.name === failingName
           ? {
               name: c.name,

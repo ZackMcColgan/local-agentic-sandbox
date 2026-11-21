@@ -104,6 +104,7 @@ test("1. PR opened triggers shadow monitorPrToConclusion: logs CI state and neve
           return {
             headSha: "sha-pr-101",
             checks: [
+              { name: "Lint & Format", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Typecheck (full error report)", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Unit Tests & Static Analysis", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Code Coverage Report", status: "COMPLETED", conclusion: "SUCCESS" },
