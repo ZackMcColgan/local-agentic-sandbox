@@ -120,7 +120,8 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
 
     const server = makeScriptedEngineServer();
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
     process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
     process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
@@ -144,7 +145,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
         id: threadId,
         title: "Chunk Gate Test Thread",
         isTest: true,
-      } as any);
+      } as unknown as Parameters<typeof store.createThread>[0]);
 
       const { NextRequest } = await import("next/server");
       const chatRouteModule = await import("../app/api/chat/route");
@@ -159,7 +160,9 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
           model: "swift-15-27b-mtp",
         }),
       });
-      const res = await chatRouteModule.POST(req as any);
+      const res = await chatRouteModule.POST(
+        req as unknown as Parameters<typeof chatRouteModule.POST>[0]
+      );
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let sseOutput = "";

@@ -4,19 +4,14 @@ import { spawnSync, execSync } from "child_process";
 import {
   createOvernightGraph,
   FileCheckpointSaver,
-  OvernightSupervisor,
   getRealGitSha,
 } from "../lib/subagents/supervisor.js";
 import { WorkerPool } from "../lib/subagents/workerPool.js";
-import { generatePlanSpec } from "../lib/subagents/planner.js";
 import {
   generateArchitectureDiagram,
   discoverRepoState,
 } from "../lib/diagram/architectureGenerator.js";
-import {
-  generateMorningReport,
-  formatMorningReportMarkdown,
-} from "../lib/subagents/morningReport.js";
+import { generateMorningReport } from "../lib/subagents/morningReport.js";
 import { runTestGate, parseTapCounts } from "../lib/testGate.js";
 
 async function runOvernightDogfood() {
@@ -43,7 +38,6 @@ async function runOvernightDogfood() {
   );
   const checkpointer = new FileCheckpointSaver(checkpointDir);
   const workerPool = new WorkerPool();
-  const supervisor = new OvernightSupervisor({ checkpointDirectory: checkpointDir });
 
   // 1. Create and compile wired LangGraph StateGraph
   const graph = createOvernightGraph({ checkpointer, workerPool });
@@ -122,9 +116,10 @@ async function runOvernightDogfood() {
     try {
       const res = execSync(cmd, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
       return parseTapCounts(res);
-    } catch (err: any) {
-      const stdout = err.stdout ? err.stdout.toString() : "";
-      const stderr = err.stderr ? err.stderr.toString() : "";
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
       const counts = parseTapCounts(stdout + "\n" + stderr);
       if (counts.passed === 0 && counts.failed === 0) {
         return { passed: 0, failed: 1 };

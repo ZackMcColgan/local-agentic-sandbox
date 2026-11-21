@@ -227,8 +227,8 @@ export async function notify(
     });
 
     return true;
-  } catch (err: any) {
-    let safeErr = String(err?.message || "Network error");
+  } catch (err: unknown) {
+    let safeErr = String(err instanceof Error ? err.message : "Network error");
     if (cfg.botToken) {
       safeErr = safeErr.split(cfg.botToken).join("[REDACTED]");
     }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
-import { Milestone, AssertionContract } from "../lib/subagents/types.js";
+import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,

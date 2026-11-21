@@ -94,11 +94,12 @@ async function defaultCommandRunner(command: string): Promise<CommandRunnerResul
     const timeout = isBuild ? 600000 : 60000;
     const { stdout, stderr } = await execAsync(command, { timeout });
     return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const e = err as { code?: unknown; stdout?: string; stderr?: string; message?: string };
     return {
-      exitCode: typeof err?.code === "number" ? err.code : 1,
-      stdout: err?.stdout || "",
-      stderr: err?.stderr || err?.message || String(err),
+      exitCode: typeof e?.code === "number" ? e.code : 1,
+      stdout: e?.stdout || "",
+      stderr: e?.stderr || e?.message || String(err),
     };
   }
 }
@@ -165,9 +166,9 @@ export class DeployPipeline {
         stage.status = "completed";
         stage.detail = detail;
         return true;
-      } catch (err: any) {
+      } catch (err: unknown) {
         stage.status = "failed";
-        stage.detail = err?.message || String(err);
+        stage.detail = err instanceof Error ? err.message : String(err);
         return false;
       }
     };

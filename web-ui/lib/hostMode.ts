@@ -14,7 +14,7 @@ export interface HostApprovalRequest {
   id: string;
   threadId: string;
   tool: string;
-  args: any;
+  args: Record<string, unknown>;
   riskReason: string;
   status: "pending" | "approved" | "rejected";
   createdAt: number;
@@ -25,9 +25,9 @@ export interface HostContinuationEntry {
   approvalId: string;
   threadId: string;
   tool: string;
-  args: any;
+  args: Record<string, unknown>;
   status: "executed" | "rejected" | "expired" | "error";
-  result?: any;
+  result?: unknown;
   error?: string;
   createdAt: number;
   expiresAt: number; // createdAt + 5 * 60 * 1000 (5 minutes)
@@ -62,7 +62,7 @@ export function getPendingApprovals(
 export function createPendingApproval(
   threadId: string,
   tool: string,
-  args: any,
+  args: Record<string, unknown>,
   riskReason: string,
   now: number = Date.now()
 ): HostApprovalRequest {
@@ -205,7 +205,11 @@ export interface HostStatusResponse {
 
 export async function determineHostRunnerState(hostAccess: boolean): Promise<HostStatusResponse> {
   const manifest = getBridgeManifest();
-  let probe: any = null;
+  let probe: {
+    status?: string;
+    protocolVersion?: number;
+    bridgeSourceSha256?: string;
+  } | null = null;
 
   try {
     const res = await fetch(`${getHostRunnerBaseUrl()}/health`, {
@@ -302,13 +306,22 @@ export function getHostStateDirective(state: HostRunnerState, reason?: string): 
   }
 }
 
-export function generateHostFileDiff(tool: string, args: any, result: any): TurnFileDiff | null {
+export function generateHostFileDiff(
+  tool: string,
+  args: Record<string, unknown> | undefined | null,
+  result: unknown
+): TurnFileDiff | null {
+  const resObj =
+    result && typeof result === "object"
+      ? (result as { preImageExists?: boolean; preImageContent?: string })
+      : null;
   if (
     (tool === "host_write_file" || tool === "host_replace_string") &&
-    result &&
-    result.preImageExists &&
-    typeof result.preImageContent === "string" &&
-    args?.path
+    resObj &&
+    resObj.preImageExists &&
+    typeof resObj.preImageContent === "string" &&
+    typeof args?.path === "string" &&
+    args.path
   ) {
     let afterContent: string | null = null;
     if (tool === "host_write_file") {
@@ -322,23 +335,23 @@ export function generateHostFileDiff(tool: string, args: any, result: any): Turn
         // Mirror the bridge core's literal semantics: no $-pattern
         // substitution, and replaceAll replaces every occurrence.
         if (args.replaceAll === true) {
-          afterContent = result.preImageContent.split(args.oldString).join(args.newString);
+          afterContent = resObj.preImageContent.split(args.oldString).join(args.newString);
         } else {
-          const idx = result.preImageContent.indexOf(args.oldString);
+          const idx = resObj.preImageContent.indexOf(args.oldString);
           afterContent =
             idx === -1
               ? null
-              : result.preImageContent.slice(0, idx) +
+              : resObj.preImageContent.slice(0, idx) +
                 args.newString +
-                result.preImageContent.slice(idx + args.oldString.length);
+                resObj.preImageContent.slice(idx + args.oldString.length);
         }
       } else if (typeof args.newString === "string") {
         afterContent = args.newString;
       }
     }
 
-    if (afterContent !== null && afterContent !== result.preImageContent) {
-      return computeUnifiedFileDiff(args.path, result.preImageContent, afterContent);
+    if (afterContent !== null && afterContent !== resObj.preImageContent) {
+      return computeUnifiedFileDiff(args.path, resObj.preImageContent, afterContent);
     }
   }
   return null;
@@ -348,11 +361,17 @@ import { lintHostCommand } from "./commandDialectGuard";
 
 export async function executeHostTool(
   tool: string,
-  args: any,
+  args: Record<string, unknown>,
   approvalId?: string,
-  capability?: any,
-  mergeGrant?: any
-): Promise<any> {
+  capability?: unknown,
+  mergeGrant?: unknown
+): Promise<{
+  ok?: boolean;
+  success?: boolean;
+  error?: string;
+  dialectGuard?: { ruleIds: string[]; traceNotes: string[] };
+  [key: string]: unknown;
+}> {
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
   let dialectGuard: { ruleIds: string[]; traceNotes: string[] } | undefined;
@@ -405,10 +424,9 @@ export async function executeHostTool(
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch (err: any) {
-    throw new Error(
-      `Host runner daemon disconnected mid-turn: ${err?.message || "connection error"}`
-    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : undefined;
+    throw new Error(`Host runner daemon disconnected mid-turn: ${msg || "connection error"}`);
   }
 
   if (!res.ok) {

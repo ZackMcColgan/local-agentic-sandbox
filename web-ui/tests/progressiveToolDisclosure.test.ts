@@ -2,17 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   DESCRIBE_TOOL_NAME,
-  DESCRIBE_TOOL_SCHEMA,
   buildLayer1Tools,
   buildToolRegistry,
   describeTool,
   calculateToolTokenSavings,
   toOneLiner,
   KNOWN_ONE_LINERS,
-  deriveToolSignature,
 } from "../lib/progressiveTools";
 import { z } from "zod";
-import { estimateTokens } from "../lib/contextBudget";
 
 describe("Progressive Tool Disclosure Suite (Fix D1)", () => {
   const sampleMcpTools = [

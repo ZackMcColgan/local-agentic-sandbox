@@ -90,7 +90,7 @@ export async function workspacePatchFile(
             ? ts.ScriptKind.JS
             : ts.ScriptKind.TS;
     const sf = ts.createSourceFile(safePath, content, ts.ScriptTarget.Latest, true, scriptKind);
-    const diags = (sf as any).parseDiagnostics as ts.Diagnostic[] | undefined;
+    const diags = (sf as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics;
     if (diags && diags.length > 0) {
       const msg = ts.flattenDiagnosticMessageText(diags[0].messageText, "\n");
       throw new Error(`AST syntax gate rejected patch for ${relativePath}: ${msg}`);

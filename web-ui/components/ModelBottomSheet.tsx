@@ -27,11 +27,9 @@ export function ModelBottomSheet({
 }: ModelBottomSheetProps) {
   const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
   const [engineLoading, setEngineLoading] = useState(false);
-  const [confirmingStop, setConfirmingStop] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
 
   useEffect(() => {
-    setConfirmingStop(false);
     setEngineError(null);
   }, [isOpen]);
 
@@ -62,7 +60,6 @@ export function ModelBottomSheet({
     const action = engineStatus === "running" ? "stop" : "start";
     setEngineLoading(true);
     setEngineError(null);
-    setConfirmingStop(false);
     try {
       const res = await fetch("/api/engine", {
         method: "POST",

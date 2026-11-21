@@ -73,7 +73,9 @@ function sendChatStream(payload, timeoutMs = 120000) {
             } else if (ev.type === "done" && ev.content) {
               assistantContent = ev.content;
             }
-          } catch {}
+          } catch {
+            /* ignore malformed SSE JSON chunk */
+          }
         }
       });
 
@@ -279,6 +281,8 @@ main().catch((err) => {
   console.error("\n❌ Live Battery Error:", err.message);
   try {
     run(`kubectl set env deployment/browser-mcp SEARCH_FORCE_EMPTY_RESULTS- -n ${K8S_NAMESPACE}`);
-  } catch {}
+  } catch {
+    /* best-effort cleanup of test env hook */
+  }
   process.exit(1);
 });

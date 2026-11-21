@@ -9,7 +9,7 @@ import { SettingsView } from "../components/SettingsView";
 describe("Phase 3: Job Chunking Settings UI", () => {
   it("1. Renders Job chunking toggle with default ON (aria-checked=true) and honest copy", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView as any, {
+      React.createElement(SettingsView as unknown as React.ComponentType<Record<string, unknown>>, {
         theme: "dark",
         onThemeChange: () => {},
         onResetOnboarding: () => {},

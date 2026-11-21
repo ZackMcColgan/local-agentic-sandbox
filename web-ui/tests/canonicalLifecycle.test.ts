@@ -76,7 +76,7 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
 
       // Track testRunner iterations
       let m2TestIteration = 0;
-      const testRunner = async (milestone: Milestone, targetFile: string, repoRoot: string) => {
+      const testRunner = async (milestone: Milestone) => {
         if (milestone.id === "M2") {
           m2TestIteration++;
           if (m2TestIteration === 1) {
@@ -101,7 +101,7 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
       // Mock workerPool with controlled builder and critic generate responses
       const mockWorkerPool = new WorkerPool({
         scope: "PROJECT",
-        generate: async (options: any) => {
+        generate: async (options: { prompt?: string }) => {
           const prompt = options.prompt || "";
           if (
             prompt.includes("strict, adversarial code review critic") ||

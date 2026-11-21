@@ -62,8 +62,8 @@ function readComp(rel: string): string {
     fs.writeFileSync(path.join(tmpDir, "board.json"), JSON.stringify(staleItems), "utf8");
     const store = new BoardStore(tmpDir);
     const migrated = store.list();
-    assert.equal(migrated.find((i: any) => i.id === "item-15")?.status, "done");
-    assert.equal(migrated.find((i: any) => i.id === "item-22")?.status, "done");
+    assert.equal(migrated.find((i) => i.id === "item-15")?.status, "done");
+    assert.equal(migrated.find((i) => i.id === "item-22")?.status, "done");
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -132,17 +132,6 @@ function readComp(rel: string): string {
   // Sanctioned amber tokens in ChatStream.tsx only:
   // - Owner-directed DISCONNECTED warning banner (bg-amber-50, dark:bg-amber-950/40, border-amber-300, dark:border-amber-800/60, text-amber-800, dark:text-amber-200, text-amber-600, dark:text-amber-400)
   // - Established 70-85K context meter band (text-amber-600, dark:text-amber-400, bg-amber-500)
-  const chatStreamAmberAllowlist = new Set([
-    "bg-amber-50",
-    "dark:bg-amber-950/40",
-    "border-amber-300",
-    "dark:border-amber-800/60",
-    "text-amber-800",
-    "dark:text-amber-200",
-    "text-amber-600",
-    "dark:text-amber-400",
-    "bg-amber-500",
-  ]);
 
   // Emerald is the sole primary brand accent across surfaces; amber is restricted to sanctioned warnings.
   for (const f of purgedFiles) {

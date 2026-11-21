@@ -1,14 +1,10 @@
 "use strict";
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Activity,
-  Clock,
-  Cpu,
   ShieldCheck,
-  Terminal,
-  Layers,
   RefreshCw,
   ChevronDown,
   ChevronRight,
@@ -26,7 +22,7 @@ export interface AgentSpan {
   endTime?: number;
   durationMs?: number;
   status: "ok" | "error";
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface TraceSession {
@@ -109,7 +105,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [expandedSpanId, setExpandedSpanId] = useState<string | null>(null);
 
-  const fetchTraceData = async () => {
+  const fetchTraceData = useCallback(async () => {
     setIsLoading(true);
     try {
       const url = sessionId
@@ -129,11 +125,11 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [sessionId]);
 
   useEffect(() => {
     fetchTraceData();
-  }, [sessionId]);
+  }, [fetchTraceData]);
 
   // Compute timing offsets and spans
   const spans = session?.spans || [];

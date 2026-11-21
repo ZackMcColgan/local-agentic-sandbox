@@ -64,9 +64,9 @@ export function loadOperatorMemory(customPath?: string): OperatorMemory {
       text: typeof parsed.text === "string" ? parsed.text : "",
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.warn(
-      `[OperatorMemory] Warning: corrupted memory JSON at ${filePath} (${err.message}). Starting with empty memory.`
+      `[OperatorMemory] Warning: corrupted memory JSON at ${filePath} (${err instanceof Error ? err.message : String(err)}). Starting with empty memory.`
     );
     return emptyMemory;
   }
@@ -105,17 +105,19 @@ export function saveOperatorMemory(text: string, customPath?: string): OperatorM
     fs.writeFileSync(tempPath, payload, "utf8");
     try {
       fs.renameSync(tempPath, filePath);
-    } catch (renameErr) {
+    } catch {
       fs.copyFileSync(tempPath, filePath);
       fs.unlinkSync(tempPath);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (fs.existsSync(tempPath)) {
       try {
         fs.unlinkSync(tempPath);
       } catch (_) {}
     }
-    throw new Error(`[OperatorMemory] Failed to write memory to ${filePath}: ${err.message}`);
+    throw new Error(
+      `[OperatorMemory] Failed to write memory to ${filePath}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   return { text, updatedAt };

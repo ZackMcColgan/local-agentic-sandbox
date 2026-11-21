@@ -2,10 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createRequire } from "module";
-import {
-  MORNING_REPORT_CHECKPOINT_DIR,
-  getCanonicalCheckpointDir,
-} from "../subagents/morningReport";
+import { getCanonicalCheckpointDir } from "../subagents/morningReport";
 import type { SlotUtilizationMetrics } from "../slotScheduler";
 
 const requireModule = createRequire(import.meta.url);
@@ -463,7 +460,7 @@ export class RunLedger {
       throw new Error(`Run ${runId} is in status '${existing.status}' and cannot be resumed`);
     }
 
-    let completedIdsFromCheckpoint = new Set<string>(
+    const completedIdsFromCheckpoint = new Set<string>(
       existing.milestoneSummary.filter((m) => m.status === "completed").map((m) => m.id)
     );
 

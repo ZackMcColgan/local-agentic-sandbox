@@ -44,7 +44,7 @@ function runTestFile(filePath, timeoutMs = 120000) {
         } else {
           child.kill("SIGKILL");
         }
-      } catch (err) {
+      } catch {
         // ignore
       }
     }, timeoutMs);

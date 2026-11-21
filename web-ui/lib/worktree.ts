@@ -16,8 +16,9 @@ const GIT_LOCK_RETRIES = 3;
 function sleep(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function errorText(err: any): string {
-  return [err?.message, err?.stderr, err?.stdout].filter(Boolean).map(String).join("\n");
+function errorText(err: unknown): string {
+  const e = err as { message?: unknown; stderr?: unknown; stdout?: unknown } | null | undefined;
+  return [e?.message, e?.stderr, e?.stdout].filter(Boolean).map(String).join("\n");
 }
 const LOCK_OR_RACE_RE =
   /\.lock\b|unable to create|could not lock|cannot lock ref|already exists|is not a working tree/i;
@@ -46,9 +47,10 @@ function git(args: string[], cwd: string): string {
         timeout: GIT_TIMEOUT_MS,
         stdio: ["ignore", "pipe", "pipe"],
       }).trim();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const text = errorText(err);
-      const timedOut = err?.code === "ETIMEDOUT" || /timed out/i.test(text);
+      const code = (err as { code?: string } | null)?.code;
+      const timedOut = code === "ETIMEDOUT" || /timed out/i.test(text);
       const lockOrRace = LOCK_OR_RACE_RE.test(text);
       if ((!timedOut && !lockOrRace) || attempt >= GIT_LOCK_RETRIES) throw err;
       attempt += 1;
@@ -78,10 +80,11 @@ export function createJobWorktree(repoRoot: string, jobId: string): WorktreeHand
     try {
       git(["worktree", "add", "-b", branch, path, "HEAD"], repoRoot);
       return { jobId, path, branch };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const text = errorText(err);
+      const code = (err as { code?: string } | null)?.code;
       const retryable =
-        err?.code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
+        code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
       if (!retryable || attempt >= GIT_LOCK_RETRIES) throw err;
       sleep(150 * (attempt + 1) + (process.pid % 97));
     }

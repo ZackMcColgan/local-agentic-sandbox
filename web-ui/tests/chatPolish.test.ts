@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { ChatStream } from "../components/ChatStream";
-import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 import {
   resolveTurnStatusPhase,
@@ -18,7 +17,6 @@ import os from "os";
 import {
   captureWorkspacePreImage,
   collectTurnModifiedFileDiffs,
-  computeUnifiedFileDiff,
   MAX_DIFF_LINES_CAP,
   TurnFileDiff,
 } from "../lib/chatDiffs";
@@ -203,16 +201,13 @@ Use \`run_command\` for shell actions.
   // -------------------------------------------------------------
   describe("S7 — Navigation: Back to sessions", () => {
     it("renders visible Back button on both mobile and desktop (no sm:hidden)", () => {
-      let backCalled = false;
       const html = renderToString(
         React.createElement(ChatStream, {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
           threadTitle: "Fix login flow",
-          onBackToList: () => {
-            backCalled = true;
-          },
+          onBackToList: () => {},
           messages: [],
         })
       );
@@ -254,8 +249,10 @@ Use \`run_command\` for shell actions.
   // F4.6 — Compacted Turn Note
   // -------------------------------------------------------------
   describe("F4.6 — Compacted Turn Note", () => {
+    type ChatMessagesProp = React.ComponentProps<typeof ChatStream>["messages"];
+
     it("renders compaction turn note badge when assistant message has compactedThisTurn=true and token stats", () => {
-      const messagesWithCompaction: any[] = [
+      const messagesWithCompaction = [
         {
           id: "m-user-1",
           role: "user" as const,
@@ -269,7 +266,7 @@ Use \`run_command\` for shell actions.
           tokensBeforeCompaction: 88400,
           tokensAfterCompaction: 14200,
         },
-      ];
+      ] as unknown as ChatMessagesProp;
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -292,14 +289,14 @@ Use \`run_command\` for shell actions.
     });
 
     it("does NOT render compaction turn note badge when compactedThisTurn is false or omitted", () => {
-      const messagesWithoutCompaction: any[] = [
+      const messagesWithoutCompaction = [
         {
           id: "m-asst-2",
           role: "assistant" as const,
           content: "Standard assistant reply without compaction.",
           compactedThisTurn: false,
         },
-      ];
+      ] as unknown as ChatMessagesProp;
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -317,7 +314,7 @@ Use \`run_command\` for shell actions.
     });
 
     it("renders compaction action chips under the pill when the message carries compactionActions", () => {
-      const messagesWithActions: any[] = [
+      const messagesWithActions = [
         {
           id: "m-asst-actions",
           role: "assistant" as const,
@@ -327,7 +324,7 @@ Use \`run_command\` for shell actions.
           tokensAfterCompaction: 14200,
           compactionActions: ["elide_tool_outputs", "drop_old_turns", "truncate_oversize"],
         },
-      ];
+      ] as unknown as ChatMessagesProp;
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -362,7 +359,7 @@ Use \`run_command\` for shell actions.
     });
 
     it("caps action chips and shows a '+N more' overflow when the action list exceeds the cap", () => {
-      const messagesOverflow: any[] = [
+      const messagesOverflow = [
         {
           id: "m-asst-overflow",
           role: "assistant" as const,
@@ -378,7 +375,7 @@ Use \`run_command\` for shell actions.
             "drop_old_turns",
           ],
         },
-      ];
+      ] as unknown as ChatMessagesProp;
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -398,7 +395,7 @@ Use \`run_command\` for shell actions.
     });
 
     it("renders the pill line unchanged when a compaction has no actions", () => {
-      const messagesNoActions: any[] = [
+      const messagesNoActions = [
         {
           id: "m-asst-no-actions",
           role: "assistant" as const,
@@ -408,7 +405,7 @@ Use \`run_command\` for shell actions.
           tokensAfterCompaction: 14200,
           compactionActions: undefined,
         },
-      ];
+      ] as unknown as ChatMessagesProp;
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -647,7 +644,7 @@ Use \`run_command\` for shell actions.
       assert.equal(diffs.length, 2, "Must extract exactly 2 diff items, ignoring read-only tools");
 
       // Check write item
-      const writeItem = diffs.find((d: any) => d.path === "src/utils/math.ts");
+      const writeItem = diffs.find((d) => d.path === "src/utils/math.ts");
       assert.ok(writeItem, "Must extract workspace_write_file item");
       assert.equal(writeItem.tool, "workspace_write_file");
       assert.equal(writeItem.addedLines, 2);
@@ -658,7 +655,7 @@ Use \`run_command\` for shell actions.
       );
 
       // Check patch item
-      const patchItem = diffs.find((d: any) => d.path === "src/index.ts");
+      const patchItem = diffs.find((d) => d.path === "src/index.ts");
       assert.ok(patchItem, "Must extract workspace_patch_file item");
       assert.equal(patchItem.addedLines, 2);
       assert.equal(patchItem.removedLines, 1);
@@ -673,7 +670,7 @@ Use \`run_command\` for shell actions.
     });
 
     it('ChatStream renders data-testid="chat-diff-card" with +added/-removed badges and Copy path button on assistant file-write turns', () => {
-      const messages: any[] = [
+      const messages = [
         {
           id: "m-write-1",
           role: "assistant",
@@ -688,7 +685,7 @@ Use \`run_command\` for shell actions.
             },
           ],
         },
-      ];
+      ] as unknown as React.ComponentProps<typeof ChatStream>["messages"];
 
       const html = renderToString(
         React.createElement(ChatStream, {
@@ -807,14 +804,14 @@ Use \`run_command\` for shell actions.
         removedLines: 1,
       };
 
-      const messages: any[] = [
+      const messages = [
         {
           id: "m-persisted-1",
           role: "assistant",
           content: "Modified persisted file.",
           diffs: [persistedDiff],
         },
-      ];
+      ] as unknown as React.ComponentProps<typeof ChatStream>["messages"];
 
       const html = renderToString(
         React.createElement(ChatStream, {

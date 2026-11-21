@@ -18,7 +18,6 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
-const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 const DEFAULT_BINARY_PATH =
@@ -267,7 +266,9 @@ function createControlServer(state, options = {}) {
       } else {
         try {
           res.destroy();
-        } catch {}
+        } catch {
+          /* ignore response destroy error */
+        }
       }
     });
 
@@ -300,7 +301,6 @@ function startStandaloneSupervisor(options = {}) {
   writeLog(`[llama-standalone] Control token: ${controlToken}`);
 
   const binaryPath = options.binaryPath || DEFAULT_BINARY_PATH;
-  const args = buildLlamaServerArgs(options);
   const env = buildLlamaServerEnv(process.env, { binaryPath });
   const backendPort = options.port || options.backendPort || DEFAULT_BACKEND_PORT;
   const bridgePort = options.bridgePort || DEFAULT_BRIDGE_PORT;

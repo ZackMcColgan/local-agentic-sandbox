@@ -5,11 +5,8 @@ import os from "os";
 import path from "path";
 
 import { createProductionStepExecutor } from "../lib/subagents/supervisor";
-import {
-  formatTestFailureForBuilder,
-  extractFailingTestFromCiLog,
-} from "../lib/ci/workerCiFeedback";
-import type { Milestone, TaskManifest } from "../lib/subagents/types";
+import { formatTestFailureForBuilder } from "../lib/ci/workerCiFeedback";
+import type { Milestone } from "../lib/subagents/types";
 
 describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Retries", () => {
   const savedEnv = { ...process.env };
@@ -62,7 +59,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       };
 
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") return mockBuilder.executeMilestoneWork();
           if (job.role === "critic") return mockCritic.evaluateMilestoneDiff();
           return {};
@@ -74,7 +71,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
       // Call without options.testRunner
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
         repoRoot: tmpDir,
       });
 
@@ -119,9 +118,8 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
         criticRounds: 0,
       };
 
-      let criticReceivedFeedback: string[] = [];
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") {
             return {
               diff: "+ const x = 0;",
@@ -145,11 +143,13 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       };
 
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
         repoRoot: tmpDir,
       });
 
-      const outcome = await executor(mockMilestone, 1);
+      await executor(mockMilestone, 1);
 
       assert.ok(
         mockMilestone.lastError,

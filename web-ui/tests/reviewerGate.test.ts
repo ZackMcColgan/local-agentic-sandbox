@@ -10,7 +10,6 @@ import {
   createAgreementLedger,
   isMergeAuthorized,
   type MechanicalCheckInput,
-  type ReviewerVerdict,
 } from "../lib/board/reviewerGate";
 
 const CLEAN_DIFF = [

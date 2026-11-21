@@ -63,14 +63,22 @@ describe("LiveRunBlock — Deliverable Code Preview", () => {
   });
 
   it("2. Resolves deliverable file and builds /api/files?path=... URL matching SVG/HTML branches", () => {
-    const mod = LiveRunBlockModule as any;
+    const mod = LiveRunBlockModule as unknown as {
+      resolveDeliverableFile: (task: unknown) => string | null;
+      buildDeliverableFileUrl: (file: string | null) => string;
+      resolveCodePreviewContent: (file: string, content: string | null) => string;
+    };
     const file = mod.resolveDeliverableFile(sampleTaskWithDiff);
     assert.strictEqual(file, "src/helper.ts");
     assert.strictEqual(mod.buildDeliverableFileUrl(file), "/api/files?path=src%2Fhelper.ts");
   });
 
   it("3. Returns actual loaded file content when available, never additions-only diff reconstruction", () => {
-    const mod = LiveRunBlockModule as any;
+    const mod = LiveRunBlockModule as unknown as {
+      resolveDeliverableFile: (task: unknown) => string | null;
+      buildDeliverableFileUrl: (file: string | null) => string;
+      resolveCodePreviewContent: (file: string, content: string | null) => string;
+    };
     const realFileContent = [
       "export function add(a: number, b: number) {",
       "  const sum = a + b;",
@@ -83,7 +91,11 @@ describe("LiveRunBlock — Deliverable Code Preview", () => {
   });
 
   it("4. Falls back to committed-file placeholder when file cannot be loaded", () => {
-    const mod = LiveRunBlockModule as any;
+    const mod = LiveRunBlockModule as unknown as {
+      resolveDeliverableFile: (task: unknown) => string | null;
+      buildDeliverableFileUrl: (file: string | null) => string;
+      resolveCodePreviewContent: (file: string, content: string | null) => string;
+    };
     const fallback = mod.resolveCodePreviewContent("src/helper.ts", null);
     assert.strictEqual(fallback, "// Deliverable committed: src/helper.ts");
   });

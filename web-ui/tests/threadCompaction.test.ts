@@ -110,7 +110,7 @@ describe("Thread Compaction Boundary & Restore Suite", () => {
       const prep1 = store.prepareTurnConversationMessages(thread1, clientMessages1, 100000);
       assert.equal(prep1.compactedThisTurn, false);
       // Should NOT contain raw m1..m4; should start with summary, then m5..m10, then new user prompt
-      const rolesAndContents = prep1.messages.map((m: any) => ({
+      const rolesAndContents = prep1.messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -247,7 +247,6 @@ describe("Thread Compaction Boundary & Restore Suite", () => {
       assert.ok(data2.tokensAfter <= data2.tokensBefore, "tokensAfter must never increase tokens");
 
       // Step 3: Add 2 new messages (1 turn) and compact a third time
-      const updatedThread = (await store.getThread(thread.id))!;
       store.addMessage(thread.id, {
         id: "m9",
         role: "user",

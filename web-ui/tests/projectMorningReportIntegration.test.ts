@@ -9,23 +9,10 @@ import { renderToString } from "react-dom/server";
 import { Window } from "happy-dom";
 
 import { TaskManifest } from "../lib/subagents/types";
-import {
-  generateOvernightMorningReport,
-  generateMorningReport,
-} from "../lib/subagents/morningReport";
+import { generateOvernightMorningReport } from "../lib/subagents/morningReport";
 import { MorningReportView } from "../components/MorningReportView";
-import {
-  registerProject,
-  createProjectTask,
-  getProject,
-  getFileReviews,
-} from "../lib/projects/projectStore";
-import {
-  runGit,
-  getProjectDiffSummary,
-  acceptProjectFile,
-  revertProjectFile,
-} from "../lib/projects/projectGit";
+import { registerProject, getFileReviews } from "../lib/projects/projectStore";
+import { runGit } from "../lib/projects/projectGit";
 import {
   runProjectOvernightTask,
   setEngineRunningCheckOverride,
@@ -155,7 +142,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
   it("Item 3: MorningReportView renders project badge and review link for project tasks, omits them for standalone tasks", () => {
     const sharedStartedAt = new Date(Date.now() - 60000).toISOString();
     const sharedNow = new Date().toISOString();
-    const projectTaskEntry: any = {
+    const projectTaskEntry = {
       taskId: "task-view-proj",
       goal: "Build payment gateway",
       branch: "feat/payment",
@@ -176,7 +163,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       reviewUrl: "/projects?projectId=proj-payment-gw&tab=diffs",
     };
 
-    const standaloneTaskEntry: any = {
+    const standaloneTaskEntry = {
       taskId: "task-view-standalone",
       goal: "Generate standalone chart",
       branch: "feat/chart",
@@ -194,7 +181,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       testsFailed: 0,
     };
 
-    const overnightReport: any = {
+    const overnightReport = {
       reportId: "rep-view-test",
       generatedAt: new Date().toISOString(),
       windowLabel: "Autonomous Run",
@@ -208,7 +195,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       artifactsProduced: [],
       attentionItems: [],
       summaryMarkdown: "",
-    };
+    } as unknown as NonNullable<React.ComponentProps<typeof MorningReportView>["overnightReport"]>;
 
     const html = renderToString(
       React.createElement(MorningReportView, {
@@ -251,7 +238,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       projectId: project.project_id,
       prompt: "Implement user management module",
       executeInline: true,
-      milestonesExecutor: async (proj, branch) => {
+      milestonesExecutor: async (proj) => {
         // Milestone 1: modify index.ts and create user.ts
         fs.writeFileSync(
           path.join(testRepoDir, "index.ts"),

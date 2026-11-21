@@ -9,8 +9,11 @@ export async function GET() {
   try {
     const memory = loadOperatorMemory();
     return NextResponse.json({ text: memory.text, updatedAt: memory.updatedAt });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -34,7 +37,10 @@ export async function PUT(req: Request) {
       text: saved.text,
       updatedAt: saved.updatedAt,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

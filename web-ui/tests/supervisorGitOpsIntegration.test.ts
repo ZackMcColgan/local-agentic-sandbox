@@ -80,7 +80,7 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
   });
 
   describe("2. Threads API Branch Format & GitOps Defaults", () => {
-    let origExecute: any;
+    let origExecute: typeof OvernightSupervisor.prototype.executeTaskWithRecovery;
     before(() => {
       origExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
       OvernightSupervisor.prototype.executeTaskWithRecovery = async function (t: TaskManifest) {
@@ -203,7 +203,7 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
         updatedAt: new Date().toISOString(),
       };
 
-      const mockStepExecutor = async (m: any) => {
+      const mockStepExecutor = async () => {
         return {
           status: "completed",
           gitSha: "commit-sha-abc123",
@@ -214,7 +214,9 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
       };
 
       const result = await supervisor.executeTaskWithRecovery(task, {
-        stepExecutor: mockStepExecutor as any,
+        stepExecutor: mockStepExecutor as unknown as NonNullable<
+          Parameters<typeof supervisor.executeTaskWithRecovery>[1]
+        >["stepExecutor"],
         gitOps: mockGitOps,
         gateRunner: async () => {
           gateRan = true;

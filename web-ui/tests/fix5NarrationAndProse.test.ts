@@ -9,7 +9,7 @@ import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
 function startMockOllamaServer(
-  handler: (callIndex: number, body: any, res: http.ServerResponse) => void
+  handler: (callIndex: number, body: Record<string, unknown>, res: http.ServerResponse) => void
 ): Promise<{ server: http.Server; url: string }> {
   let callIndex = 0;
   const server = http.createServer((req, res) => {
@@ -22,7 +22,7 @@ function startMockOllamaServer(
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const idx = callIndex++;
-      let body: any = {};
+      let body: Record<string, unknown> = {};
       try {
         body = JSON.parse(raw);
       } catch {}
@@ -31,8 +31,9 @@ function startMockOllamaServer(
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as any;
-      resolve({ server, url: `http://127.0.0.1:${addr.port}` });
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      resolve({ server, url: `http://127.0.0.1:${port}` });
     });
   });
 }

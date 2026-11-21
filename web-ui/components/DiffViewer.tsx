@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import {
-  GitCommit,
   GitBranch,
   FileCode,
   ChevronDown,

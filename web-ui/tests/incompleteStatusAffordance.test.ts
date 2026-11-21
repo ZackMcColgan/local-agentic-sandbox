@@ -16,7 +16,9 @@ import { ChatStream } from "../components/ChatStream";
 
 const DISCONNECT_MARKER = "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
 
-function render(messages: any[]): string {
+function render(
+  messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]>
+): string {
   return renderToString(
     React.createElement(ChatStream, {
       onTracesUpdate: () => {},

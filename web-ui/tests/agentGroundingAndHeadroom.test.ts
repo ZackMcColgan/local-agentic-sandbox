@@ -98,43 +98,49 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
   describe("Structural Grounding Gate in runChatToolLoop", () => {
     it("forces web search when model tries to answer live real-time query with 0 tool calls", async () => {
       let callCount = 0;
-      const fakeStream = async function* (payload: any) {
-        callCount++;
-        if (callCount === 1) {
-          // Round 0: model attempts to answer without calling search_web
-          yield { message: { content: "I checked wttr.in and the weather is sunny and 75F!" } };
-        } else {
-          // Round 1: model executes search_web after grounding enforcement directive
-          yield {
-            message: {
-              content: "",
-              tool_calls: [
-                {
-                  function: {
-                    name: "search_web",
-                    arguments: JSON.stringify({ query: "Austin weather" }),
+      const fakeStream: Parameters<typeof runChatToolLoop>[0]["streamLlmChat"] =
+        async function* () {
+          callCount++;
+          if (callCount === 1) {
+            // Round 0: model attempts to answer without calling search_web
+            yield { message: { content: "I checked wttr.in and the weather is sunny and 75F!" } };
+          } else {
+            // Round 1: model executes search_web after grounding enforcement directive
+            yield {
+              message: {
+                content: "",
+                tool_calls: [
+                  {
+                    function: {
+                      name: "search_web",
+                      arguments: JSON.stringify({ query: "Austin weather" }),
+                    },
                   },
-                },
-              ],
-            },
-          };
-        }
-      };
+                ],
+              },
+            };
+          }
+        };
 
-      const messages: any[] = [{ role: "user", content: "What is the weather in Austin today?" }];
+      const messages: Parameters<typeof runChatToolLoop>[0]["conversationMessages"] = [
+        { role: "user", content: "What is the weather in Austin today?" },
+      ];
 
-      const result = await runChatToolLoop({
+      await runChatToolLoop({
         conversationMessages: messages,
         maxToolRounds: 4,
-        streamLlmChat: fakeStream as any,
-        executeTool: async (toolCall: any) => ({ result: "Sunny, 75F" }),
+        streamLlmChat: fakeStream,
+        executeTool: async () => ({ result: "Sunny, 75F" }),
       });
 
       // The gate should have rejected round 0 and forced round 1
       assert.ok(callCount >= 2, `Expected at least 2 rounds, got ${callCount}`);
       // Verify grounding directive was injected into conversationMessages
       const systemMsg = messages.find(
-        (m) => m.role === "system" && m.content.includes("GROUNDING ENFORCEMENT")
+        (m) =>
+          m.role === "system" &&
+          typeof m.content === "string" &&
+          m.content.includes("GROUNDING ENFORCEMENT")
       );
       assert.ok(systemMsg, "Expected GROUNDING ENFORCEMENT directive to be injected");
     });

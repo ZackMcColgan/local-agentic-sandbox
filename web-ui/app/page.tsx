@@ -10,21 +10,14 @@ import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
-import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { TaskManifest, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
-  Layers,
-  ShieldCheck,
-  Globe,
-  Cpu,
   ArrowLeft,
   Hammer,
-  Shield,
-  Activity,
-  FolderTree,
   Menu,
   MessageSquare,
   Sun,
@@ -44,14 +37,8 @@ import type { BoardControlAction, BoardControlState } from "@/lib/board/boardCon
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import {
-  PRESET_MODEL_PROFILES,
-  ModelProfile,
-  AgentMode,
-  DEFAULT_AGENT_MODE,
-  DEFAULT_PRIMARY_MODEL,
-} from "@/config/models";
-import { getInitialWelcomeMessage, loadChatHistory, saveChatHistory } from "@/lib/chatHistory";
+import { AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getInitialWelcomeMessage } from "@/lib/chatHistory";
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -64,13 +51,7 @@ export default function Home() {
 
   // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
-  const [status, setStatus] = useState({
-    llm: "INITIALIZING",
-    ollama: "INITIALIZING",
-    mcp: "INITIALIZING",
-    airGapped: true,
-  });
-  const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
+  const agentMode: AgentMode = DEFAULT_AGENT_MODE;
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("preferred_model");
@@ -86,8 +67,16 @@ export default function Home() {
     return "low";
   });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
-  const [securityPosture, setSecurityPosture] = useState<any>(undefined);
+  const [securityPosture, setSecurityPosture] = useState<
+    | {
+        execution_uid: string;
+        root_filesystem: string;
+        capabilities: string;
+        tmpfs_buffer: string;
+        provenance_level: string;
+      }
+    | undefined
+  >(undefined);
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -142,7 +131,9 @@ export default function Home() {
   };
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
-  const [deployHistory, setDeployHistory] = useState<any[]>([]);
+  const [deployHistory, setDeployHistory] = useState<
+    NonNullable<React.ComponentProps<typeof SettingsView>["deployHistory"]>
+  >([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -153,12 +144,10 @@ export default function Home() {
     path: string;
     content: string;
   } | null>(null);
-  const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
   const skipThreadLoadRef = useRef<string | null>(null);
 
   const handlePreviewWorkspaceFile = async (filePath: string) => {
     try {
-      setIsLoadingFilePreview(true);
       const res = await fetch(`/api/files?path=${encodeURIComponent(filePath)}&format=json`);
       if (res.ok) {
         const data = await res.json();
@@ -168,10 +157,11 @@ export default function Home() {
         const text = await textRes.text();
         setSelectedWorkspaceFile({ path: filePath, content: text });
       }
-    } catch (err: any) {
-      console.warn("[WorkspacePreview] Failed to preview file:", err.message);
-    } finally {
-      setIsLoadingFilePreview(false);
+    } catch (err: unknown) {
+      console.warn(
+        "[WorkspacePreview] Failed to preview file:",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   };
 
@@ -244,21 +234,10 @@ export default function Home() {
       const res = await fetch("/api/sandbox-status");
       if (res.ok) {
         const data = await res.json();
-        const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
         const llmModels =
           data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
-        const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
-        setStatus({
-          llm: llmStatus,
-          ollama: llmStatus,
-          mcp: data.services?.mcp_server?.status || "OFFLINE",
-          airGapped: true,
-        });
         if (llmModels) {
           setInstalledModels(llmModels);
-        }
-        if (llmProfiles) {
-          setProfiles(llmProfiles);
         }
         setSecurityPosture(data.security_posture);
       }
@@ -273,12 +252,7 @@ export default function Home() {
         }
       } catch {}
     } catch {
-      setStatus({
-        llm: "UNREACHABLE",
-        ollama: "UNREACHABLE",
-        mcp: "UNREACHABLE",
-        airGapped: true,
-      });
+      // Best-effort status refresh
     }
   };
 
@@ -352,7 +326,7 @@ export default function Home() {
           action: "executeSelfDeploy",
           taskId,
           threadId: selectedThreadId,
-          branchName: activeTask?.branchName || (activeTask as any)?.branch,
+          branchName: activeTask?.branchName || (activeTask as { branch?: string } | null)?.branch,
         }),
       });
       if (res.ok) {
@@ -389,7 +363,6 @@ export default function Home() {
         if (Array.isArray(data.threads)) {
           setThreads(data.threads);
           if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
-            const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
             const urlParams =
               typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");
@@ -468,12 +441,19 @@ export default function Home() {
     }
   };
 
+  const fetchThreadsRef = useRef(fetchThreads);
+  fetchThreadsRef.current = fetchThreads;
+  const fetchActiveTaskRef = useRef(fetchActiveTask);
+  fetchActiveTaskRef.current = fetchActiveTask;
+  const selectedThreadIdRef = useRef(selectedThreadId);
+  selectedThreadIdRef.current = selectedThreadId;
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
-    fetchThreads(true);
-    fetchActiveTask();
+    fetchThreadsRef.current(true);
+    fetchActiveTaskRef.current();
     fetchMorningReport();
   }, []);
 
@@ -506,8 +486,8 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json();
           if (data.thread) {
-            setSelectedModel(data.thread.model || selectedModel);
-            setReasoningEffort(data.thread.reasoningEffort || reasoningEffort);
+            setSelectedModel((prev) => data.thread.model || prev);
+            setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
               setMessages(data.thread.messages);
             }
@@ -564,21 +544,24 @@ export default function Home() {
   }, [selectedThreadId, isThreadLiveStreaming]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
+  const activeTaskId = activeTask?.taskId;
+  const activeTaskStatus = activeTask?.status;
   useEffect(() => {
-    if (!activeTask || (activeTask.status !== "active" && activeTask.status !== "planning")) return;
-    if (activeTask.taskId?.startsWith("sim-")) return;
+    if (!activeTaskId || (activeTaskStatus !== "active" && activeTaskStatus !== "planning")) return;
+    if (activeTaskId.startsWith("sim-")) return;
 
     const pollTask = async () => {
       try {
-        const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`);
+        const res = await fetch(`/api/tasks?taskId=${activeTaskId}`);
         if (res.ok) {
           const data = await res.json();
           if (data.task) {
             setActiveTask(data.task);
             if (data.task.status !== "active") {
-              fetchThreads(false);
-              if (selectedThreadId) {
-                fetch(`/api/threads/${selectedThreadId}`)
+              fetchThreadsRef.current(false);
+              const currentThreadId = selectedThreadIdRef.current;
+              if (currentThreadId) {
+                fetch(`/api/threads/${currentThreadId}`)
                   .then((r) => r.json())
                   .then((td) => {
                     if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
@@ -600,7 +583,7 @@ export default function Home() {
 
     const interval = setInterval(pollTask, 2000);
     return () => clearInterval(interval);
-  }, [activeTask?.taskId, activeTask?.status]);
+  }, [activeTaskId, activeTaskStatus]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -696,7 +679,7 @@ export default function Home() {
   // Launch a multi-milestone builder task inside the thread
   const handleLaunchTask = async (
     goal: string,
-    attachments?: any[],
+    attachments?: unknown[],
     scope?: TaskScope,
     autoDeployOnGreen?: boolean
   ) => {
@@ -1305,11 +1288,11 @@ export default function Home() {
                     const traceFiles: string[] = [];
                     const activeMessages = currentThread?.messages || messages;
                     activeMessages.forEach((m) => {
-                      m.traces?.forEach((t: any) => {
+                      m.traces?.forEach((t) => {
                         if (
                           (t.tool === "workspace_write_file" ||
                             t.tool === "workspace_patch_file") &&
-                          t.args?.path
+                          typeof t.args?.path === "string"
                         ) {
                           traceFiles.push(t.args.path);
                         }

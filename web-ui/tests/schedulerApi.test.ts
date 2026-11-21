@@ -120,7 +120,6 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       });
       await postSchedule(postReq);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const res = await getSchedules();
       assert.equal(res.status, 200);
       const data = await res.json();
@@ -154,11 +153,10 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const delData = await delRes.json();
       assert.equal(delData.success, true);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const getRes = await getSchedules();
       const getData = await getRes.json();
       assert.equal(
-        getData.schedules.some((s: any) => s.id === id),
+        getData.schedules.some((s: { id: string }) => s.id === id),
         false
       );
     } finally {
@@ -188,11 +186,10 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const delData = await delRes.json();
       assert.equal(delData.success, true);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const getRes = await getSchedules();
       const getData = await getRes.json();
       assert.equal(
-        getData.schedules.some((s: any) => s.id === id),
+        getData.schedules.some((s: { id: string }) => s.id === id),
         false
       );
     } finally {

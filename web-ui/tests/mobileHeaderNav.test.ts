@@ -80,30 +80,19 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
       },
     ];
 
-    let selectedThread: string | null = null;
-    let closed = false;
-    let newSessionFired = false;
-    let navigatedTo: string | null = null;
-
     const html = renderToString(
       React.createElement(NavigationDrawer, {
         isOpen: true,
-        onClose: () => {
-          closed = true;
-        },
+        onClose: () => {},
         activeView: "sessions",
-        onNavigate: (view) => {
-          navigatedTo = view;
-        },
-        onNewSession: () => {
-          newSessionFired = true;
-        },
+        onNavigate: () => {},
+        onNewSession: () => {},
         pendingSkillsCount: 2,
-        threads: sampleThreads as any,
+        threads: sampleThreads as unknown as React.ComponentProps<
+          typeof NavigationDrawer
+        >["threads"],
         selectedThreadId: "t1",
-        onSelectThread: (id) => {
-          selectedThread = id;
-        },
+        onSelectThread: () => {},
       })
     );
 

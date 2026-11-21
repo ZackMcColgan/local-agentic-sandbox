@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, Lock, HardDrive, Cpu, UserCheck, Zap, Activity } from "lucide-react";
+import { ShieldCheck, Lock, HardDrive, UserCheck, Zap, Activity } from "lucide-react";
 
 interface SandboxGaugeProps {
   securityPosture?: {

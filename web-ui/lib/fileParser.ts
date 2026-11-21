@@ -35,7 +35,9 @@ export async function parseAttachment(
     try {
       const pdfModule = await import("pdf-parse");
       if (typeof pdfModule === "function") {
-        const data = await (pdfModule as any)(buffer);
+        const data = await (pdfModule as unknown as (buf: Buffer) => Promise<{ text: string }>)(
+          buffer
+        );
         return {
           name,
           type,
@@ -43,7 +45,11 @@ export async function parseAttachment(
           textContent: data.text,
         };
       } else if (pdfModule.PDFParse) {
-        const parser = new (pdfModule.PDFParse as any)({ data: buffer });
+        const ParserCtor = pdfModule.PDFParse as unknown as new (opts: { data: Buffer }) => {
+          load: () => Promise<void>;
+          getText: () => Promise<string>;
+        };
+        const parser = new ParserCtor({ data: buffer });
         await parser.load();
         const text = await parser.getText();
         return {
@@ -53,13 +59,14 @@ export async function parseAttachment(
           textContent: text,
         };
       }
-    } catch (err: any) {
-      console.warn(`[FileParser] Error parsing PDF ${name}:`, err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[FileParser] Error parsing PDF ${name}:`, msg);
       return {
         name,
         type,
         size,
-        textContent: `[Error reading PDF ${name}: ${err.message}]`,
+        textContent: `[Error reading PDF ${name}: ${msg}]`,
       };
     }
   }
@@ -78,13 +85,14 @@ export async function parseAttachment(
         size,
         textContent: result.value,
       };
-    } catch (err: any) {
-      console.warn(`[FileParser] Error parsing DOCX ${name}:`, err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[FileParser] Error parsing DOCX ${name}:`, msg);
       return {
         name,
         type,
         size,
-        textContent: `[Error reading DOCX ${name}: ${err.message}]`,
+        textContent: `[Error reading DOCX ${name}: ${msg}]`,
       };
     }
   }

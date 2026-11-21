@@ -17,7 +17,6 @@ import {
   handleLiveTurnChunkBudget,
   resolveThreadChunkBudget,
   resolveChunkHandoffTarget,
-  type ChunkBudgetConfig,
   type ChunkHandoffBrief,
 } from "../lib/jobChunking";
 import { readMilestoneHandoff } from "../lib/subagents/finishVerificationGate";

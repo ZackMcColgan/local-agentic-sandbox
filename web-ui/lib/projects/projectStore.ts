@@ -124,20 +124,23 @@ export function validateProjectPath(rawPath: string): {
     }
 
     return { valid: true, canonicalPath };
-  } catch (err: any) {
-    return { valid: false, error: `Failed to inspect path: ${err.message}` };
+  } catch (err: unknown) {
+    return {
+      valid: false,
+      error: `Failed to inspect path: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
-function getDb(dbOverride?: any) {
+type SqliteDb = ReturnType<ReturnType<typeof getSharedRunLedger>["getDatabase"]>;
+
+function getDb(dbOverride?: SqliteDb) {
   const db = dbOverride || getSharedRunLedger().getDatabase();
   initProjectStore(db);
   return db;
 }
 
-let schemaInitialized = false;
-
-export function initProjectStore(dbOverride?: any): void {
+export function initProjectStore(dbOverride?: SqliteDb): void {
   const db = dbOverride || getSharedRunLedger().getDatabase();
   try {
     db.exec("PRAGMA journal_mode = WAL;");
@@ -179,10 +182,9 @@ export function initProjectStore(dbOverride?: any): void {
       UNIQUE(task_id, file_path)
     );
   `);
-  schemaInitialized = true;
 }
 
-export function registerProject(input: RegisterProjectInput, dbOverride?: any): ProjectRecord {
+export function registerProject(input: RegisterProjectInput, dbOverride?: SqliteDb): ProjectRecord {
   const validation = validateProjectPath(input.rootPath);
   if (!validation.valid || !validation.canonicalPath) {
     throw new Error(validation.error || "Invalid project path");
@@ -215,14 +217,14 @@ export function registerProject(input: RegisterProjectInput, dbOverride?: any): 
   return getProject(projectId, db)!;
 }
 
-export function getProject(projectId: string, dbOverride?: any): ProjectRecord | null {
+export function getProject(projectId: string, dbOverride?: SqliteDb): ProjectRecord | null {
   const db = getDb(dbOverride);
   const row = db.prepare("SELECT * FROM projects WHERE project_id = ?").get(projectId) as
     ProjectRecord | undefined;
   return row || null;
 }
 
-export function getProjectByPath(rootPath: string, dbOverride?: any): ProjectRecord | null {
+export function getProjectByPath(rootPath: string, dbOverride?: SqliteDb): ProjectRecord | null {
   const validation = validateProjectPath(rootPath);
   const targetPath = validation.canonicalPath || path.resolve(rootPath);
   const db = getDb(dbOverride);
@@ -231,18 +233,18 @@ export function getProjectByPath(rootPath: string, dbOverride?: any): ProjectRec
   return row || null;
 }
 
-export function listProjects(dbOverride?: any): ProjectRecord[] {
+export function listProjects(dbOverride?: SqliteDb): ProjectRecord[] {
   const db = getDb(dbOverride);
   const rows = db
     .prepare("SELECT * FROM projects ORDER BY created_at DESC")
-    .all() as ProjectRecord[];
+    .all() as unknown as ProjectRecord[];
   return rows;
 }
 
 export function toggleAllowlist(
   projectId: string,
   allowlisted?: boolean,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectRecord {
   const db = getDb(dbOverride);
   const current = getProject(projectId, db);
@@ -262,7 +264,11 @@ export function toggleAllowlist(
   return getProject(projectId, db)!;
 }
 
-export function setActiveTaskId(projectId: string, taskId: string | null, dbOverride?: any): void {
+export function setActiveTaskId(
+  projectId: string,
+  taskId: string | null,
+  dbOverride?: SqliteDb
+): void {
   const db = getDb(dbOverride);
   const now = new Date().toISOString();
   db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(
@@ -272,7 +278,7 @@ export function setActiveTaskId(projectId: string, taskId: string | null, dbOver
   );
 }
 
-export function deleteProject(projectId: string, dbOverride?: any): boolean {
+export function deleteProject(projectId: string, dbOverride?: SqliteDb): boolean {
   const db = getDb(dbOverride);
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -294,7 +300,7 @@ export function deleteProject(projectId: string, dbOverride?: any): boolean {
 export function updateProject(
   projectId: string,
   updates: Partial<ProjectRecord>,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectRecord {
   const db = getDb(dbOverride);
   const current = getProject(projectId, db);
@@ -337,7 +343,7 @@ export interface ProjectTaskRecord {
 
 export function createProjectTask(
   input: { projectId: string; prompt: string; baseSha: string; branch: string; threadId?: string },
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const project = getProject(input.projectId, db);
@@ -387,25 +393,25 @@ export function createProjectTask(
   return getProjectTask(taskId, db)!;
 }
 
-export function getProjectTask(taskId: string, dbOverride?: any): ProjectTaskRecord | null {
+export function getProjectTask(taskId: string, dbOverride?: SqliteDb): ProjectTaskRecord | null {
   const db = getDb(dbOverride);
   const row = db.prepare("SELECT * FROM project_tasks WHERE task_id = ?").get(taskId) as
     ProjectTaskRecord | undefined;
   return row || null;
 }
 
-export function listProjectTasks(projectId: string, dbOverride?: any): ProjectTaskRecord[] {
+export function listProjectTasks(projectId: string, dbOverride?: SqliteDb): ProjectTaskRecord[] {
   const db = getDb(dbOverride);
   const rows = db
     .prepare("SELECT * FROM project_tasks WHERE project_id = ? ORDER BY created_at DESC")
-    .all(projectId) as ProjectTaskRecord[];
+    .all(projectId) as unknown as ProjectTaskRecord[];
   return rows;
 }
 
 export function updateProjectTask(
   taskId: string,
   updates: Partial<ProjectTaskRecord>,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
@@ -433,7 +439,7 @@ export function updateProjectTask(
 export function completeProjectTask(
   taskId: string,
   headSha: string,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
@@ -456,7 +462,7 @@ export function completeProjectTask(
 export function parkProjectTask(
   taskId: string,
   reason?: string,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
@@ -480,7 +486,7 @@ export function parkProjectTask(
 export function cancelProjectTask(
   taskId: string,
   reason?: string,
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
@@ -509,11 +515,11 @@ export interface ProjectFileReviewRecord {
   reviewed_at?: string | null;
 }
 
-export function getFileReviews(taskId: string, dbOverride?: any): ProjectFileReviewRecord[] {
+export function getFileReviews(taskId: string, dbOverride?: SqliteDb): ProjectFileReviewRecord[] {
   const db = getDb(dbOverride);
   const rows = db
     .prepare("SELECT * FROM project_file_reviews WHERE task_id = ?")
-    .all(taskId) as ProjectFileReviewRecord[];
+    .all(taskId) as unknown as ProjectFileReviewRecord[];
   return rows;
 }
 
@@ -521,7 +527,7 @@ export function setFileReviewStatus(
   taskId: string,
   filePath: string,
   status: "pending" | "accepted" | "reverted",
-  dbOverride?: any
+  dbOverride?: SqliteDb
 ): ProjectFileReviewRecord {
   const db = getDb(dbOverride);
   const normalizedPath = filePath.replace(/\\/g, "/");
@@ -539,7 +545,7 @@ export function setFileReviewStatus(
     );
     return db
       .prepare("SELECT * FROM project_file_reviews WHERE id = ?")
-      .get(existing.id) as ProjectFileReviewRecord;
+      .get(existing.id) as unknown as ProjectFileReviewRecord;
   } else {
     const id = `rev_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     db.prepare(
@@ -550,6 +556,6 @@ export function setFileReviewStatus(
     ).run(id, taskId, normalizedPath, status, now);
     return db
       .prepare("SELECT * FROM project_file_reviews WHERE id = ?")
-      .get(id) as ProjectFileReviewRecord;
+      .get(id) as unknown as ProjectFileReviewRecord;
   }
 }

@@ -13,6 +13,22 @@ export const DEADLINES = {
 export type HangClassification =
   "TURN-DIED" | "STREAM-DIED-TURN-LIVED" | "ENGINE-WEDGED" | "UI-HUNG" | "QUEUED";
 
+export interface LiveThreadMessage {
+  id?: string;
+  role?: string;
+  content?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export interface LiveThread {
+  id?: string;
+  title?: string;
+  status?: string;
+  messages: LiveThreadMessage[];
+  [key: string]: unknown;
+}
+
 let stopRecoveryCount = 0;
 
 export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Promise<void> {
@@ -22,8 +38,8 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
     try {
       const res = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
-        const slots = await res.json();
-        const busy = slots.some((s: any) => s.is_processing);
+        const slots = (await res.json()) as Array<{ is_processing?: boolean }>;
+        const busy = slots.some((s) => s.is_processing);
         if (!busy) return;
       }
     } catch {}
@@ -39,9 +55,11 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
     try {
       const thRes = await fetch(`${baseUrl}/api/threads`);
       if (thRes.ok) {
-        const thData = await thRes.json();
+        const thData = (await thRes.json()) as {
+          threads?: Array<{ id?: string; status?: string }>;
+        };
         const activeThreads =
-          thData.threads?.filter((t: any) => t.status === "active" || t.status === "running") || [];
+          thData.threads?.filter((t) => t.status === "active" || t.status === "running") || [];
         for (const active of activeThreads) {
           console.warn(
             `[WATCHDOG RECOVERY] Stopping active occupant thread '${active.id}' via POST /api/threads/${active.id}...`
@@ -53,8 +71,10 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
           });
         }
       }
-    } catch (e: any) {
-      console.warn(`[WATCHDOG RECOVERY] Product stop call failed: ${e.message}`);
+    } catch (e: unknown) {
+      console.warn(
+        `[WATCHDOG RECOVERY] Product stop call failed: ${e instanceof Error ? e.message : String(e)}`
+      );
     }
 
     // Wait <= 60s for slot to clear after stop
@@ -65,8 +85,8 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
           signal: AbortSignal.timeout(3000),
         });
         if (res.ok) {
-          const slots = await res.json();
-          const busy = slots.some((s: any) => s.is_processing);
+          const slots = (await res.json()) as Array<{ is_processing?: boolean }>;
+          const busy = slots.some((s) => s.is_processing);
           if (!busy) {
             console.log(`[WATCHDOG RECOVERY] Slot cleared successfully after product stop.`);
             return;
@@ -140,7 +160,7 @@ export async function awaitTurnCompletion(
   threadId: string,
   timeoutMs: number,
   specName: string
-): Promise<{ thread: any; durationSec: number }> {
+): Promise<{ thread: LiveThread; durationSec: number }> {
   const start = Date.now();
   let lastHeartbeat = Date.now();
   let lastObservedStatus: string | undefined;
@@ -151,13 +171,13 @@ export async function awaitTurnCompletion(
     try {
       const res = await page.request.get(`${baseUrl}/api/threads/${threadId}`);
       if (res.ok()) {
-        const data = await res.json();
+        const data = (await res.json()) as { thread?: LiveThread; activeTurn?: unknown };
         const thread = data.thread;
         const activeTurn = data.activeTurn;
         const lastMsg = thread?.messages?.[thread?.messages?.length - 1];
         const lastAssistant = [...(thread?.messages || [])]
           .reverse()
-          .find((m: any) => m.role === "assistant");
+          .find((m) => m.role === "assistant");
         lastObservedStatus = lastAssistant?.status || lastMsg?.status;
         lastContentLength = lastAssistant?.content?.length || 0;
 
@@ -178,6 +198,7 @@ export async function awaitTurnCompletion(
         if (
           sawActivity &&
           !activeTurn &&
+          thread &&
           lastAssistant &&
           (lastAssistant.status === "completed" || !lastAssistant.status)
         ) {
@@ -206,8 +227,8 @@ export async function awaitTurnCompletion(
       signal: AbortSignal.timeout(3000),
     });
     if (slotRes.ok) {
-      const slots = await slotRes.json();
-      slotBusy = slots.some((s: any) => s.is_processing);
+      const slots = (await slotRes.json()) as Array<{ is_processing?: boolean }>;
+      slotBusy = slots.some((s) => s.is_processing);
     }
   } catch {}
 
@@ -228,8 +249,8 @@ export async function awaitTurnCompletion(
         signal: AbortSignal.timeout(3000),
       });
       if (verifyRes.ok) {
-        const verifySlots = await verifyRes.json();
-        isTrulyWedged = verifySlots.some((s: any) => s.is_processing);
+        const verifySlots = (await verifyRes.json()) as Array<{ is_processing?: boolean }>;
+        isTrulyWedged = verifySlots.some((s) => s.is_processing);
       }
     } catch {
       isTrulyWedged = true;
@@ -249,12 +270,12 @@ export async function awaitTurnCompletion(
     classification = "UI-HUNG";
   }
 
-  const err = new Error(
+  const err: Error & { classification?: HangClassification; threadId?: string } = new Error(
     `[${classification}] Spec '${specName}' timed out after ${timeoutMs / 1000}s on thread '${threadId}'. ` +
       `Observed status: ${lastObservedStatus}, Content len: ${lastContentLength}, Slot busy: ${slotBusy}, ` +
       `Pod restarts: ${podRestarts}, Evidence saved to: ${screenshotPath}`
   );
-  (err as any).classification = classification;
-  (err as any).threadId = threadId;
+  err.classification = classification;
+  err.threadId = threadId;
   throw err;
 }

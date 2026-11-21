@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
-import { convertDrawioToSvg, sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
+import { isDrawioXml } from "../lib/svgUtils";
 import { createCriticWorker, getResolvedGitSha } from "../lib/subagents/workerPool";
 import { Milestone } from "../lib/subagents/types";
 import { checkDrawio, getFixtureDrawioSvg, logServiceMode } from "./helpers/serviceMocks.js";

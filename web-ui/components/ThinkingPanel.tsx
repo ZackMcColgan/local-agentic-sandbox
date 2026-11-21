@@ -145,7 +145,7 @@ export function ThinkingPanel({
   const headerTitle = isStreaming
     ? "Thinking"
     : effectiveDurationMs != null && effectiveDurationMs > 0
-      ? `Thought for ${formatElapsedDuration(Math.max(1, Math.floor(effectiveDurationMs / 1000)))}`
+      ? formatThoughtLabel(Math.max(1000, Math.floor(effectiveDurationMs / 1000) * 1000))
       : "Thought";
 
   return (
@@ -261,7 +261,6 @@ export function ThinkingPanel({
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
-            const isValidating = phaseItem.phase === "validating";
 
             const Icon = isPlanning ? Map : isBuilding ? Cog : CheckCircle2;
             const isInProgress = phaseItem.status === "in_progress";

@@ -5,6 +5,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 import { registerWorkspaceTools } from "../src/tools/workspaceTools.js";
 
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
+
 describe("workspace_grep ReDoS & Regex Security Suite", () => {
   let mcp: McpServer;
 
@@ -21,8 +32,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
   });
 
   it("safely rejects catastrophic-backtracking nested quantifier patterns (ReDoS)", async () => {
-    // @ts-ignore
-    const grepHandler = mcp._registeredTools["workspace_grep"].handler;
+    const grepHandler = getRegisteredTools(mcp)["workspace_grep"].handler;
 
     const dangerousPatterns = ["(a+)+$", "(a|aa)+$", "([a-zA-Z]+)*$", "([0-9]+)+", "(.*a){10}"];
 
@@ -43,8 +53,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
   });
 
   it("safely rejects excessively long regex patterns to guard against resource exhaustion", async () => {
-    // @ts-ignore
-    const grepHandler = mcp._registeredTools["workspace_grep"].handler;
+    const grepHandler = getRegisteredTools(mcp)["workspace_grep"].handler;
 
     const hugePattern = "a".repeat(600);
     const res = await grepHandler({ pattern: hugePattern });
@@ -54,8 +63,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
   });
 
   it("handles malformed/invalid regex patterns gracefully without throwing uncaught exceptions", async () => {
-    // @ts-ignore
-    const grepHandler = mcp._registeredTools["workspace_grep"].handler;
+    const grepHandler = getRegisteredTools(mcp)["workspace_grep"].handler;
 
     const res = await grepHandler({ pattern: "[unclosed-bracket(" });
     const data = JSON.parse(res.content[0].text);
@@ -64,8 +72,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
   });
 
   it("preserves standard safe regex and substring searches without regression", async () => {
-    // @ts-ignore
-    const grepHandler = mcp._registeredTools["workspace_grep"].handler;
+    const grepHandler = getRegisteredTools(mcp)["workspace_grep"].handler;
 
     const validPatterns = [
       "sample_test",

@@ -111,16 +111,38 @@ export function isWebResearchTool(toolName: string, tier?: string): boolean {
   return WEB_RESEARCH_TOOL_NAMES.has(toolName) || tier === "browser";
 }
 
-export function filterToolsForWebBudget(
-  llmTools: any[],
+export interface ContextToolCall {
+  id?: string;
+  type?: string;
+  name?: string;
+  arguments?: unknown;
+  function?: { name?: string; arguments?: string | Record<string, unknown> };
+}
+
+export interface ContextMessage {
+  role: string;
+  content: string;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ContextToolCall[];
+  [key: string]: unknown;
+}
+
+export type FittedMessages = ContextMessage[] & {
+  evictedCount?: number;
+  estimatedTokens?: number;
+};
+
+export function filterToolsForWebBudget<T extends { name?: string; function?: { name?: string } }>(
+  llmTools: T[],
   webResearchCallsUsed: number,
   maxWebCalls: number = MAX_WEB_RESEARCH_CALLS
-): any[] {
+): T[] {
   if (webResearchCallsUsed < maxWebCalls) {
     return llmTools;
   }
   return llmTools.filter((t) => {
-    const name = t.function?.name || t.name;
+    const name = t.function?.name || t.name || "";
     return !WEB_RESEARCH_TOOL_NAMES.has(name);
   });
 }
@@ -169,7 +191,7 @@ export function shouldRunPostToolSynthesis(params: {
   userPrompt: string;
   assistantContent: string;
   lingeringToolCallsCount: number;
-  traces: Array<{ tool: string; args?: any; result?: any }>;
+  traces: Array<{ tool: string; args?: Record<string, unknown>; result?: unknown }>;
 }): boolean {
   if (
     (params.traces.length > 0 && params.lingeringToolCallsCount > 0) ||
@@ -202,15 +224,16 @@ export function shouldRunPostToolSynthesis(params: {
  * Conservative token estimator: Math.ceil(text.length / 4).
  * Handles string, message object, or message arrays.
  */
-export function estimateTokens(input: any): number {
+export function estimateTokens(input: unknown): number {
   if (!input) return 0;
   if (typeof input === "string") {
     return Math.ceil(input.length / 4);
   }
   if (Array.isArray(input)) {
     let chars = 0;
-    for (const msg of input) {
-      if (!msg) continue;
+    for (const rawMsg of input) {
+      if (!rawMsg || typeof rawMsg !== "object") continue;
+      const msg = rawMsg as Record<string, unknown>;
       if (typeof msg.content === "string") {
         chars += msg.content.length;
       } else if (msg.content) {
@@ -223,15 +246,16 @@ export function estimateTokens(input: any): number {
     return Math.ceil(chars / 4);
   }
   if (typeof input === "object") {
+    const obj = input as Record<string, unknown>;
     let chars = 0;
-    if (typeof input.content === "string") {
-      chars += input.content.length;
-    } else if (input.content) {
-      chars += JSON.stringify(input.content).length;
+    if (typeof obj.content === "string") {
+      chars += obj.content.length;
+    } else if (obj.content) {
+      chars += JSON.stringify(obj.content).length;
     }
-    if (input.role) chars += String(input.role).length;
-    if (input.name) chars += String(input.name).length;
-    if (input.tool_calls) chars += JSON.stringify(input.tool_calls).length;
+    if (obj.role) chars += String(obj.role).length;
+    if (obj.name) chars += String(obj.name).length;
+    if (obj.tool_calls) chars += JSON.stringify(obj.tool_calls).length;
     return Math.ceil(chars / 4);
   }
   return Math.ceil(String(input).length / 4);
@@ -242,7 +266,7 @@ export function estimateTokens(input: any): number {
  * or inserts a system message at index 0 if not present.
  * Guarantees role === "system" never appears at index > 0.
  */
-export function mergeSystemDirective<T extends { role?: string; content?: any }>(
+export function mergeSystemDirective<T extends { role?: string; content?: unknown }>(
   messages: T[],
   directive: string
 ): T[] {
@@ -286,15 +310,15 @@ export function isLiveRealTimeIntent(userPrompt: string): boolean {
   );
 }
 
-export function hasWebResearchResults(messages: any[]): boolean {
+export function hasWebResearchResults(messages: ContextMessage[]): boolean {
   if (!Array.isArray(messages)) return false;
   return messages.some((m) => {
     if (m?.role === "tool" && (m?.name === "search_web" || m?.name === "fetch_webpage_markdown")) {
       return true;
     }
     if (m?.tool_calls && Array.isArray(m.tool_calls)) {
-      return m.tool_calls.some((tc: any) =>
-        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name)
+      return m.tool_calls.some((tc) =>
+        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name || "")
       );
     }
     return false;
@@ -313,7 +337,7 @@ export function resolveRoundModelOptions(params: {
   round?: number;
   isArtifactTurn?: boolean;
   numKeep?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }): {
   num_ctx: number;
   num_predict?: number;
@@ -353,7 +377,7 @@ export function resolveRoundModelOptions(params: {
 
 export interface FitContextOptions {
   maxContentTokens?: number;
-  tools?: any[];
+  tools?: unknown[];
   isArtifactTurn?: boolean;
   reserveOutputTokens?: number;
   outputHeadroomTokens?: number;
@@ -370,7 +394,10 @@ export interface FitContextOptions {
  * - The first message if role === "system"
  * - The last message with role === "user"
  */
-export function fitContextWindow(messages: any[], options?: FitContextOptions): any[] {
+export function fitContextWindow(
+  messages: ContextMessage[],
+  options?: FitContextOptions
+): FittedMessages {
   if (!Array.isArray(messages) || messages.length === 0) {
     return [];
   }
@@ -392,7 +419,7 @@ export function fitContextWindow(messages: any[], options?: FitContextOptions): 
         : JSON.stringify(source[0].content || "");
   }
 
-  const nonSystemMessages: any[] = [];
+  const nonSystemMessages: ContextMessage[] = [];
   for (let i = 0; i < source.length; i++) {
     const m = source[i];
     if (i === 0 && hasLeadingSystem) {
@@ -410,7 +437,7 @@ export function fitContextWindow(messages: any[], options?: FitContextOptions): 
     }
   }
 
-  const working: any[] = [];
+  const working: ContextMessage[] = [];
   if (hasLeadingSystem || consolidatedSystemContent) {
     working.push({
       role: "system",
@@ -462,14 +489,14 @@ export function fitContextWindow(messages: any[], options?: FitContextOptions): 
   let evictedCount = 0;
 
   if (estimateTokens(working) <= maxTokens) {
-    const res: any = working;
+    const res: FittedMessages = working;
     res.evictedCount = 0;
     res.estimatedTokens = estimateTokens(working);
     return res;
   }
 
   // Identify protected indices
-  const isProtected = (idx: number, arr: any[]): boolean => {
+  const isProtected = (idx: number, arr: ContextMessage[]): boolean => {
     if (idx === 0 && arr[0]?.role === "system") {
       return true;
     }
@@ -575,7 +602,7 @@ export function fitContextWindow(messages: any[], options?: FitContextOptions): 
     evictedCount++;
   }
 
-  const result: any = working;
+  const result: FittedMessages = working;
   result.evictedCount = evictedCount;
   result.estimatedTokens = estimateTokens(working);
   return result;
@@ -598,30 +625,30 @@ export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): 
 }
 
 export interface RunChatToolLoopOptions {
-  conversationMessages: any[];
+  conversationMessages: ContextMessage[];
   activeModel?: string;
   effectiveReasoningEffort?: "low" | "medium" | "xhigh";
-  llmTools?: any[];
+  llmTools?: Array<{ name?: string; function?: { name?: string }; [key: string]: unknown }>;
   /** @deprecated backward-compat alias */
-  ollamaTools?: any[];
+  ollamaTools?: Array<{ name?: string; function?: { name?: string }; [key: string]: unknown }>;
   maxToolRounds?: number;
   maxContentTokens?: number;
-  streamLlmChat?: (payload: any) => AsyncIterable<{
+  streamLlmChat?: (payload: Record<string, unknown>) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
-      tool_calls?: any[];
+      tool_calls?: ContextToolCall[];
     };
   }>;
   /** @deprecated backward-compat alias */
-  streamOllamaChat?: (payload: any) => AsyncIterable<{
+  streamOllamaChat?: (payload: Record<string, unknown>) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
-      tool_calls?: any[];
+      tool_calls?: ContextToolCall[];
     };
   }>;
-  executeTool: (toolCall: any) => Promise<any>;
+  executeTool: (toolCall: ContextToolCall) => Promise<unknown>;
 }
 
 /**
@@ -690,7 +717,7 @@ export async function runChatToolLoop(
       mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
@@ -712,7 +739,7 @@ export async function runChatToolLoop(
     }
 
     let fullRoundContent = "";
-    let toolCallsFromMessage: any[] = [];
+    const toolCallsFromMessage: ContextToolCall[] = [];
 
     for await (const chunk of streamChatFn(payload)) {
       if (chunk.message?.content) {
@@ -756,7 +783,7 @@ export async function runChatToolLoop(
 
     for (const toolCall of toolCallsFromMessage) {
       const toolResult = await executeTool(toolCall);
-      const toolName = toolCall.function?.name || toolCall.name;
+      const toolName = toolCall.function?.name || toolCall.name || "";
       if (isWebResearchTool(toolName)) webResearchCalls++;
       const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
       conversationMessages.push({
@@ -768,7 +795,7 @@ export async function runChatToolLoop(
       });
     }
 
-    lastRoundTools = toolCallsFromMessage.map((tc: any) => tc.function?.name || tc.name || "");
+    lastRoundTools = toolCallsFromMessage.map((tc) => tc.function?.name || tc.name || "");
     round++;
   }
 
@@ -835,7 +862,7 @@ export type CompactionAction =
   "compaction" | "elide_tool_outputs" | "drop_old_turns" | "truncate_oversize";
 
 export interface FitConversationResult {
-  messages: any[];
+  messages: ContextMessage[];
   compacted: boolean;
   actions: CompactionAction[];
   tokensBefore: number;
@@ -851,7 +878,7 @@ export interface FitConversationResult {
  * - Rung (d): Truncate oversize payload (preserving system prompt)
  */
 export function fitConversationToBudget(
-  messages: any[],
+  messages: ContextMessage[],
   options?: {
     budgetTokens?: number;
     compactionThreshold?: number;
@@ -884,7 +911,7 @@ export function fitConversationToBudget(
       preserveRecentMessages: options?.preserveRecentMessages ?? 4,
     });
     if (compactRes.compacted) {
-      workingMessages = compactRes.messages;
+      workingMessages = compactRes.messages.map((m) => ({ ...m }));
       actions.push("compaction");
     }
   }

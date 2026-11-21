@@ -135,7 +135,7 @@ describe("P3.2 / P3.3: Supervisor finishVerificationGate & milestoneHandoff wiri
           files: [artifact],
           gatePassed: true,
         },
-      } as any);
+      } as unknown as Parameters<typeof supervisor.executeTaskWithRecovery>[1]);
 
       assert.strictEqual(result.status, "completed");
       assert.strictEqual(result.completionStamp, "completed-unverified");
@@ -196,7 +196,7 @@ describe("P3.2 / P3.3: Supervisor finishVerificationGate & milestoneHandoff wiri
           files: [artifact],
           gatePassed: true,
         },
-      } as any);
+      } as unknown as Parameters<typeof supervisor.executeTaskWithRecovery>[1]);
 
       assert.strictEqual(result.status, "completed");
       assert.strictEqual(result.completionStamp, "completed");

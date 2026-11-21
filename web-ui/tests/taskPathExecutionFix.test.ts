@@ -338,7 +338,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
     const repoDir = makeTempDir("item2-chunk-repo-");
     const ckptDir = makeTempDir("item2-chunk-ckpt-");
     const origFetch = globalThis.fetch;
-    const resumeCalls: Array<{ url: string; body: any }> = [];
+    const resumeCalls: Array<{ url: string; body?: { action?: string } }> = [];
 
     try {
       initTempGitRepo(repoDir);
@@ -400,8 +400,12 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
         ambiguityFlags: [],
         journal: [],
       };
-      (task as any).threadId = threadId;
-      (task as any).chunkBudget = { maxRounds: 2 };
+      const extTask = task as TaskManifest & {
+        threadId?: string;
+        chunkBudget?: { maxRounds: number };
+      };
+      extTask.threadId = threadId;
+      extTask.chunkBudget = { maxRounds: 2 };
 
       const result = await supervisor.executeTaskWithRecovery(task, {
         repoRoot: repoDir,
@@ -463,10 +467,10 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
 
   it("5. LlamaCppProvider.generate() forwards reasoning_effort to the engine call", async () => {
     const provider = new LlamaCppProvider("strata");
-    let capturedBody: any = null;
+    const capturedBodies: Array<{ reasoning_effort?: string }> = [];
 
     const mockFetch: typeof fetch = async (_url, init) => {
-      capturedBody = JSON.parse(String(init?.body || "{}"));
+      capturedBodies.push(JSON.parse(String(init?.body || "{}")));
       const sse =
         'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
       return new Response(sse, {
@@ -485,6 +489,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       { fetchImpl: mockFetch }
     );
 
+    const capturedBody = capturedBodies[0];
     assert.equal(res.text, "hello");
     assert.ok(capturedBody, "Expected fetchImpl to receive request body");
     assert.equal(

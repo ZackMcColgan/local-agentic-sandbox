@@ -29,14 +29,21 @@ describe("qa-7 helper — latestRoundPromptTokens", () => {
       { roundPromptTokens: [0, -5, 22100] },
       { roundPromptTokens: [] },
       { role: "user" },
-    ] as any);
+    ] as unknown as Parameters<typeof latestRoundPromptTokens>[0]);
     assert.equal(v, 22100);
   });
 
   it("returns 0 when no round data exists", () => {
     assert.equal(latestRoundPromptTokens([]), 0);
     assert.equal(latestRoundPromptTokens(undefined), 0);
-    assert.equal(latestRoundPromptTokens([{ content: "hi" } as any]), 0);
+    assert.equal(
+      latestRoundPromptTokens([
+        { content: "hi" } as unknown as NonNullable<
+          Parameters<typeof latestRoundPromptTokens>[0]
+        >[number],
+      ]),
+      0
+    );
   });
 });
 
@@ -50,7 +57,7 @@ describe("qa-7 snapshot — round prompt tokens ride mid-turn snapshots", () => 
     };
     let now = 100000;
     const snap = new ThrottledStreamSnapshot(
-      sink as any,
+      sink as unknown as ConstructorParameters<typeof ThrottledStreamSnapshot>[0],
       "thread-1",
       "assistant-1",
       1000,
@@ -74,7 +81,7 @@ describe("qa-7 snapshot — round prompt tokens ride mid-turn snapshots", () => 
 });
 
 describe("qa-7 meter — ChatStream pill hydrates from the record", () => {
-  function renderChat(messages: any[]) {
+  function renderChat(messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]>) {
     return renderToString(
       React.createElement(ChatStream, {
         onTracesUpdate: () => {},

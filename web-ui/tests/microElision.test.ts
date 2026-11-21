@@ -35,8 +35,22 @@ function filler(chars: number): string {
  * `size` chars. Assistant messages carry tool_calls with the args so the
  * elision pass can recover the path/command target from the paired call.
  */
-function buildToolConversation(count: number, size: number): any[] {
-  const messages: any[] = [
+type ElisionTestMessage = {
+  role: string;
+  content: string;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  }>;
+  elided?: boolean;
+  elidedFrom?: ElisionMeta & { originalContent?: string };
+};
+
+function buildToolConversation(count: number, size: number): ElisionTestMessage[] {
+  const messages: ElisionTestMessage[] = [
     { role: "system", content: "You are a test agent." },
     { role: "user", content: "Read a bunch of files and summarize." },
   ];
@@ -133,24 +147,24 @@ describe("Micro-elision (c): stub metadata", () => {
   it("a stub carries tool + path + original size + round metadata", () => {
     const messages = buildToolConversation(6, 6000);
     applyMicroElision(messages, 6);
-    const oldest = messages.find((m) => m.role === "tool" && m.elided) as any;
+    const oldest = messages.find((m) => m.role === "tool" && m.elided);
     assert.ok(oldest, "at least one stub must exist");
     assert.match(oldest.content, /tool=workspace_read_file/, "stub must name the tool");
     assert.match(oldest.content, /target=src\/module-0\.ts/, "stub must carry the path");
     assert.match(oldest.content, /originalChars=\d+/, "stub must carry the original size");
     assert.match(oldest.content, /round=\d+/, "stub must carry the round number");
-    assert.equal(oldest.elidedFrom.tool, "workspace_read_file");
-    assert.equal(oldest.elidedFrom.target, "src/module-0.ts");
-    assert.equal(oldest.elidedFrom.targetKind, "path");
+    assert.equal(oldest.elidedFrom!.tool, "workspace_read_file");
+    assert.equal(oldest.elidedFrom!.target, "src/module-0.ts");
+    assert.equal(oldest.elidedFrom!.targetKind, "path");
     assert.equal(
-      oldest.elidedFrom.originalChars,
-      oldest.elidedFrom.originalContent?.length ?? oldest.elidedFrom.originalChars
+      oldest.elidedFrom!.originalChars,
+      oldest.elidedFrom!.originalContent?.length ?? oldest.elidedFrom!.originalChars
     );
     assert.ok(
-      oldest.elidedFrom.originalChars > MICRO_ELISION_MIN_RESULT_CHARS,
+      oldest.elidedFrom!.originalChars > MICRO_ELISION_MIN_RESULT_CHARS,
       "recorded size must be the real original size"
     );
-    assert.ok(typeof oldest.elidedFrom.round === "number");
+    assert.ok(typeof oldest.elidedFrom!.round === "number");
   });
 
   it("a stub for a command-bearing tool carries the command as the target", () => {
@@ -161,11 +175,11 @@ describe("Micro-elision (c): stub metadata", () => {
     applyMicroElision(messages, 8);
     const cmdStub = messages.find(
       (m) => m.role === "tool" && m.elided && m.name === "workspace_run_command"
-    ) as any;
+    );
     assert.ok(cmdStub, "a command-bearing result must have been stubbed");
     assert.match(cmdStub.content, /tool=workspace_run_command/);
     assert.match(cmdStub.content, /target=npm run test:gate/, "stub must carry the command");
-    assert.equal(cmdStub.elidedFrom.targetKind, "command");
+    assert.equal(cmdStub.elidedFrom!.targetKind, "command");
   });
 
   it("buildToolResultStub renders the metadata fields verbatim", () => {
@@ -235,7 +249,7 @@ describe("Micro-elision (c): idempotence across rounds", () => {
   it("changed underlying content is re-stubbed with fresh metadata, never emitted full-size", () => {
     const messages = buildToolConversation(6, 6000);
     applyMicroElision(messages, 6);
-    const oldest = messages.find((m) => m.role === "tool" && m.elided) as any;
+    const oldest = messages.find((m) => m.role === "tool" && m.elided);
     assert.ok(oldest);
 
     // The underlying file changed (e.g. a re-read after an edit): the model

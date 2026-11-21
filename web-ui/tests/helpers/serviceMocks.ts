@@ -125,7 +125,7 @@ function installFetchInterceptor() {
 
       if (url.includes("/api/generate")) {
         const bodyStr = typeof init?.body === "string" ? init.body : "";
-        let body: any = {};
+        let body: { prompt?: string; model?: string } = {};
         try {
           body = JSON.parse(bodyStr);
         } catch {}

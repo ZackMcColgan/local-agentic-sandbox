@@ -56,12 +56,14 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -69,9 +71,9 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
     act(() => {
       root.unmount();
     });
-    delete (globalThis as any).window;
-    delete (globalThis as any).document;
-    delete (globalThis as any).localStorage;
+    delete (globalThis as Record<string, unknown>).window;
+    delete (globalThis as Record<string, unknown>).document;
+    delete (globalThis as Record<string, unknown>).localStorage;
   });
 
   const toolRows = (): HTMLButtonElement[] =>
@@ -102,8 +104,8 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
         React.createElement(ChatStream, {
           ...baseProps,
           messages: [
-            { id: "u1", role: "user", content: "go", timestamp: new Date().toISOString() },
-          ] as any,
+            { id: "u1", role: "user" as const, content: "go", timestamp: new Date().toISOString() },
+          ],
           setMessages: () => {},
           activeTask,
           liveTraces: [trace("search_web")],
@@ -138,13 +140,18 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
     });
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: any) => {
-      const url = typeof input === "string" ? input : String(input?.url ?? "");
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url =
+        typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
       if (url.includes("/api/chat")) {
-        return { ok: true, status: 200, body: stream } as any;
+        return { ok: true, status: 200, body: stream } as unknown as Response;
       }
       // Any other background fetch (thread status/reconcile polls): benign JSON.
-      return { ok: true, status: 200, json: async () => ({ messages: [], thread: null }) } as any;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ messages: [], thread: null }),
+      } as unknown as Response;
     }) as typeof globalThis.fetch;
 
     try {
@@ -153,8 +160,13 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
           React.createElement(ChatStream, {
             ...baseProps,
             messages: [
-              { id: "u1", role: "user", content: "go", timestamp: new Date().toISOString() },
-            ] as any,
+              {
+                id: "u1",
+                role: "user" as const,
+                content: "go",
+                timestamp: new Date().toISOString(),
+              },
+            ],
             setMessages: () => {},
             activeTask: null,
           })
@@ -169,14 +181,27 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       await act(async () => {
         const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
         assert.ok(propsKey, "Composer textarea must have React props");
-        (textarea as any)[propsKey].onChange({ target: { value: "go" } });
+        (
+          textarea as unknown as Record<
+            string,
+            { onChange: (e: { target: { value: string } }) => void }
+          >
+        )[propsKey].onChange({ target: { value: "go" } });
       });
       const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
       assert.ok(sendBtn, "ChatStream must render the send-button control");
       await act(async () => {
         const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
-        if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
-          (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+        const sendProps = propsKey
+          ? (
+              sendBtn as unknown as Record<
+                string,
+                { onClick?: (e: { preventDefault: () => void }) => void } | undefined
+              >
+            )[propsKey]
+          : undefined;
+        if (sendProps?.onClick) {
+          sendProps.onClick({ preventDefault: () => {} });
         } else {
           sendBtn.click();
         }
@@ -218,10 +243,11 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
     });
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: any) => {
-      const url = typeof input === "string" ? input : String(input?.url ?? "");
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url =
+        typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
       if (url.includes("/api/chat")) {
-        return { ok: true, status: 200, body: stream } as any;
+        return { ok: true, status: 200, body: stream } as unknown as Response;
       }
       return {
         ok: true,
@@ -230,7 +256,7 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
           messages: [],
           thread: { id: "t-live-1", status: "stopped", liveness: "settled" },
         }),
-      } as any;
+      } as unknown as Response;
     }) as typeof globalThis.fetch;
 
     try {
@@ -239,8 +265,13 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
           React.createElement(ChatStream, {
             ...baseProps,
             messages: [
-              { id: "u1", role: "user", content: "go", timestamp: new Date().toISOString() },
-            ] as any,
+              {
+                id: "u1",
+                role: "user" as const,
+                content: "go",
+                timestamp: new Date().toISOString(),
+              },
+            ],
             setMessages: () => {},
             activeTask: null,
           })
@@ -251,14 +282,27 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       await act(async () => {
         const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
         if (propsKey) {
-          (textarea as any)[propsKey].onChange({ target: { value: "go" } });
+          (
+            textarea as unknown as Record<
+              string,
+              { onChange: (e: { target: { value: string } }) => void }
+            >
+          )[propsKey].onChange({ target: { value: "go" } });
         }
       });
       const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
       await act(async () => {
         const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
-        if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
-          (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+        const sendProps = propsKey
+          ? (
+              sendBtn as unknown as Record<
+                string,
+                { onClick?: (e: { preventDefault: () => void }) => void } | undefined
+              >
+            )[propsKey]
+          : undefined;
+        if (sendProps?.onClick) {
+          sendProps.onClick({ preventDefault: () => {} });
         } else {
           sendBtn.click();
         }
@@ -288,12 +332,14 @@ describe("trace duplication and live-trace scoping", () => {
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -301,9 +347,9 @@ describe("trace duplication and live-trace scoping", () => {
     act(() => {
       root.unmount();
     });
-    delete (globalThis as any).window;
-    delete (globalThis as any).document;
-    delete (globalThis as any).localStorage;
+    delete (globalThis as Record<string, unknown>).window;
+    delete (globalThis as Record<string, unknown>).document;
+    delete (globalThis as Record<string, unknown>).localStorage;
   });
 
   it("(b) parked LiveRunBlock renders 0 live rows when given another run's traces", async () => {
@@ -384,14 +430,27 @@ describe("trace duplication and live-trace scoping", () => {
         await act(async () => {
           const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
           if (propsKey) {
-            (textarea as any)[propsKey].onChange({ target: { value: "run 3 tools" } });
+            (
+              textarea as unknown as Record<
+                string,
+                { onChange: (e: { target: { value: string } }) => void }
+              >
+            )[propsKey].onChange({ target: { value: "run 3 tools" } });
           }
         });
         const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
         await act(async () => {
           const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
-          if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
-            (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+          const sendProps = propsKey
+            ? (
+                sendBtn as unknown as Record<
+                  string,
+                  { onClick?: (e: { preventDefault: () => void }) => void } | undefined
+                >
+              )[propsKey]
+            : undefined;
+          if (sendProps?.onClick) {
+            sendProps.onClick({ preventDefault: () => {} });
           } else {
             sendBtn.click();
           }
@@ -479,14 +538,27 @@ describe("trace duplication and live-trace scoping", () => {
         await act(async () => {
           const propsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
           if (propsKey) {
-            (textarea as any)[propsKey].onChange({ target: { value: "hi" } });
+            (
+              textarea as unknown as Record<
+                string,
+                { onChange: (e: { target: { value: string } }) => void }
+              >
+            )[propsKey].onChange({ target: { value: "hi" } });
           }
         });
         const sendBtn = container.querySelector('[data-testid="send-button"]') as HTMLButtonElement;
         await act(async () => {
           const propsKey = Object.keys(sendBtn).find((k) => k.startsWith("__reactProps"));
-          if (propsKey && (sendBtn as any)[propsKey]?.onClick) {
-            (sendBtn as any)[propsKey].onClick({ preventDefault: () => {} });
+          const sendProps = propsKey
+            ? (
+                sendBtn as unknown as Record<
+                  string,
+                  { onClick?: (e: { preventDefault: () => void }) => void } | undefined
+                >
+              )[propsKey]
+            : undefined;
+          if (sendProps?.onClick) {
+            sendProps.onClick({ preventDefault: () => {} });
           } else {
             sendBtn.click();
           }

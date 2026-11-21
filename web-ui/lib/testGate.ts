@@ -1363,6 +1363,8 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.includes("playwright.config") ||
     normalizedPath.includes("playwright.live.config") ||
     normalizedPath.endsWith("vitest.config.ts") ||
+    normalizedPath.endsWith("eslint.config.mjs") ||
+    normalizedPath.startsWith(".husky/") ||
     normalizedPath.includes("test-results") ||
     normalizedPath.includes("playwright-report") ||
     normalizedPath.includes("playwright-live-report") ||
@@ -1501,8 +1503,11 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
         }
       }
     }
-  } catch (err: any) {
-    console.warn("[test:gate] Notice: error inspecting git diff:", err.message);
+  } catch (err: unknown) {
+    console.warn(
+      "[test:gate] Notice: error inspecting git diff:",
+      err instanceof Error ? err.message : String(err)
+    );
   }
 
   return Array.from(files);
@@ -1695,12 +1700,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       timeout: remainingTime,
     });
     if (tscOut) testOutput += tscOut;
-  } catch (err: any) {
-    const stdout = err.stdout ? err.stdout.toString() : "";
-    const stderr = err.stderr ? err.stderr.toString() : "";
+  } catch (err: unknown) {
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+    const stdout = e.stdout ? e.stdout.toString() : "";
+    const stderr = e.stderr ? e.stderr.toString() : "";
     testOutput += `${stdout}\n${stderr}`;
     failedCount += 1;
-    runError = `TypeScript typecheck (tsc --noEmit) failed: ${err.message}`;
+    runError = `TypeScript typecheck (tsc --noEmit) failed: ${e.message ?? String(err)}`;
   }
 
   // 1. Run web-ui tsx tests in batches to stay safely under Windows command-line limits
@@ -1741,9 +1747,15 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
           passedCount += counts.passed;
           failedCount += counts.failed;
         }
-      } catch (err: any) {
-        const stdout = err.stdout ? err.stdout.toString() : "";
-        const stderr = err.stderr ? err.stderr.toString() : "";
+      } catch (err: unknown) {
+        const e = err as {
+          stdout?: Buffer | string;
+          stderr?: Buffer | string;
+          message?: string;
+          code?: string;
+        };
+        const stdout = e.stdout ? e.stdout.toString() : "";
+        const stderr = e.stderr ? e.stderr.toString() : "";
         const batchOutput = `${stdout}\n${stderr}`;
         testOutput += batchOutput;
         const counts = parseTapCounts(batchOutput);
@@ -1753,10 +1765,10 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
           passedCount += counts.passed;
           failedCount += counts.failed > 0 ? counts.failed : 1;
         }
-        runError = runError ?? err.message;
+        runError = runError ?? e.message ?? String(err);
         if (
-          err.code === "ETIMEDOUT" ||
-          (err.message && (err.message.includes("ETIMEDOUT") || err.message.includes("timed out")))
+          e.code === "ETIMEDOUT" ||
+          (e.message && (e.message.includes("ETIMEDOUT") || e.message.includes("timed out")))
         ) {
           break;
         }
@@ -1781,12 +1793,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
           });
           testOutput += `\n--- Playwright Stage Build ---\n${buildOut}`;
           buildOk = true;
-        } catch (err: any) {
-          const stdout = err.stdout ? err.stdout.toString() : "";
-          const stderr = err.stderr ? err.stderr.toString() : "";
+        } catch (err: unknown) {
+          const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+          const stdout = e.stdout ? e.stdout.toString() : "";
+          const stderr = e.stderr ? e.stderr.toString() : "";
           testOutput += `\n--- Playwright Stage Build Failure ---\n${stdout}\n${stderr}`;
           failedCount += 1;
-          runError = `Playwright pre-build failed: ${err.message}`;
+          runError = `Playwright pre-build failed: ${e.message ?? String(err)}`;
         }
       }
 
@@ -1812,9 +1825,10 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
             failedCount += counts.failed;
             testOutput += `\n[Playwright Spec Stage] passed=${counts.passed} failed=${counts.failed}\n`;
           }
-        } catch (err: any) {
-          const stdout = err.stdout ? err.stdout.toString() : "";
-          const stderr = err.stderr ? err.stderr.toString() : "";
+        } catch (err: unknown) {
+          const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+          const stdout = e.stdout ? e.stdout.toString() : "";
+          const stderr = e.stderr ? e.stderr.toString() : "";
           testOutput += `\n--- Playwright Spec Stage ---\n${stdout}\n${stderr}`;
           try {
             const counts = parsePlaywrightReport(reportPath);
@@ -1828,7 +1842,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
           } catch {
             failedCount += 1;
           }
-          runError = err.message;
+          runError = e.message ?? String(err);
         }
       }
     } finally {
@@ -1859,9 +1873,10 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         passedCount += counts.passed;
         failedCount += counts.failed;
       }
-    } catch (err: any) {
-      const stdout = err.stdout ? err.stdout.toString() : "";
-      const stderr = err.stderr ? err.stderr.toString() : "";
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
       testOutput += `\n--- MCP Server Failure ---\n${stdout}\n${stderr}`;
       const counts = parseTapCounts(stdout + "\n" + stderr);
       if (counts.passed === 0 && counts.failed === 0) {
@@ -1870,7 +1885,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         passedCount += counts.passed;
         failedCount += counts.failed > 0 ? counts.failed : 1;
       }
-      runError = err.message;
+      runError = e.message ?? String(err);
     }
   }
 
@@ -1897,9 +1912,10 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         passedCount += counts.passed;
         failedCount += counts.failed;
       }
-    } catch (err: any) {
-      const stdout = err.stdout ? err.stdout.toString() : "";
-      const stderr = err.stderr ? err.stderr.toString() : "";
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
       testOutput += `\n--- Browser MCP Failure ---\n${stdout}\n${stderr}`;
       const counts = parseTapCounts(stdout + "\n" + stderr);
       if (counts.passed === 0 && counts.failed === 0) {
@@ -1908,7 +1924,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
         passedCount += counts.passed;
         failedCount += counts.failed > 0 ? counts.failed : 1;
       }
-      runError = err.message;
+      runError = e.message ?? String(err);
     }
   }
 

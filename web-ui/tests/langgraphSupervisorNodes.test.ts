@@ -3,11 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import {
-  createOvernightGraph,
-  FileCheckpointSaver,
-  getRealGitSha,
-} from "../lib/subagents/supervisor";
+import { createOvernightGraph, FileCheckpointSaver } from "../lib/subagents/supervisor";
 import { WorkerPool } from "../lib/subagents/workerPool";
 import { Milestone } from "../lib/subagents/types";
 import {

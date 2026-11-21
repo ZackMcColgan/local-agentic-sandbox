@@ -32,7 +32,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const interrupted = interrupt ? interruptActiveTurnStream(id) : false;
 
     return NextResponse.json({ success: true, pendingCount, interrupted }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Failed to append steer" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    return NextResponse.json({ error: message || "Failed to append steer" }, { status: 500 });
   }
 }

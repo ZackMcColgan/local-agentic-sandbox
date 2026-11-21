@@ -2,12 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { POST } from "../app/api/chat/route";
-import { NextRequest } from "next/server";
 import {
   ThreadStore,
   activeExecutionSet,
-  registerTurnAbortController,
   clearTurnAbortController,
 } from "../lib/threads/threadStore";
 import {
@@ -182,9 +179,9 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
   fs.mkdirSync(tmpThreadsDir, { recursive: true });
   process.env.THREADS_DIR = tmpThreadsDir;
 
-  let fakeServer: any;
+  let fakeServer: import("node:http").Server | undefined;
   let serverPort: number;
-  let prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
+  const prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
   const prevLlmUrl = process.env.LLM_BASE_URL;
   const prevOllamaUrl = process.env.OLLAMA_BASE_URL;
   const prevMcpUrl = process.env.MCP_SERVER_URL;
@@ -268,8 +265,10 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
       });
     });
 
-    await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-    serverPort = fakeServer.address().port;
+    const srv = fakeServer;
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const addr = srv.address();
+    serverPort = typeof addr === "object" && addr ? addr.port : 0;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
     process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${serverPort}`;
     process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${serverPort}`;
@@ -300,7 +299,7 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
       }),
     });
 
-    const res = await chatRoutePost(req as any);
+    const res = await chatRoutePost(req as unknown as Parameters<typeof chatRoutePost>[0]);
     assert.ok(res.body, "Response should have body stream");
     const reader = res.body.getReader();
 
@@ -320,7 +319,8 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
     assert.equal(clientState.state, "transient_disconnected");
 
     // Wait for detached turn to finish in threadStore
-    let finalAsstMsg: any = null;
+    let finalAsstMsg:
+      NonNullable<Awaited<ReturnType<typeof store.getThread>>>["messages"][number] | null = null;
     for (let i = 0; i < 50; i++) {
       const thread = await store.getThread(threadId);
       const asst = thread?.messages.find((m) => m.id === "a-sever-1");

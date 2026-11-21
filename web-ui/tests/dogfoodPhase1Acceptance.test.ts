@@ -5,11 +5,7 @@ import fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
 import { generatePlanSpec } from "../lib/subagents/planner.js";
-import {
-  createBuilderWorker,
-  createCriticWorker,
-  WorkerPool,
-} from "../lib/subagents/workerPool.js";
+import { createCriticWorker, WorkerPool } from "../lib/subagents/workerPool.js";
 import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
 import {
   generateMorningReport,

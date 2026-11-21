@@ -9,10 +9,17 @@ import {
 } from "../components/SettingsView";
 import { ProjectsView } from "../components/ProjectsView";
 
+const SettingsViewComponent = SettingsView as unknown as React.ComponentType<
+  Record<string, unknown>
+>;
+const ProjectsViewComponent = ProjectsView as unknown as React.ComponentType<
+  Record<string, unknown>
+>;
+
 describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
   it("SettingsView displays 'Flash-Next' and 'Low' by default", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView as any, {
+      React.createElement(SettingsViewComponent, {
         theme: "dark",
         onThemeChange: () => {},
         onResetOnboarding: () => {},
@@ -32,7 +39,7 @@ describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
   });
 
   it("ProjectsView displays 'Engine: Flash-Next' instead of 'Swift 1.5'", () => {
-    const html = renderToStaticMarkup(React.createElement(ProjectsView as any, {}));
+    const html = renderToStaticMarkup(React.createElement(ProjectsViewComponent, {}));
     assert.equal(
       html.includes("Swift 1.5"),
       false,
@@ -44,7 +51,7 @@ describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
 describe("E7: Settings view nits (UI-043)", () => {
   it("Self-Deploy section contains href='#settings-danger-zone' matching id='settings-danger-zone'", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView as any, {
+      React.createElement(SettingsViewComponent, {
         theme: "dark",
         onThemeChange: () => {},
         onResetOnboarding: () => {},
@@ -66,7 +73,7 @@ describe("E7: Settings view nits (UI-043)", () => {
 describe("Settings engine card honesty", () => {
   it("does not fabricate llama.cpp identity, GPU name, or 16,384 MB VRAM when unreported", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView as any, {
+      React.createElement(SettingsViewComponent, {
         theme: "dark",
         onThemeChange: () => {},
       })
@@ -126,7 +133,7 @@ describe("Settings host card MISMATCH state", () => {
 describe("Settings Danger Zone title polarity", () => {
   it("labels the self-deploy switch as 'Enable self-deploy' matching ON=enabled / OFF=disabled", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SettingsView as any, {
+      React.createElement(SettingsViewComponent, {
         theme: "dark",
         onThemeChange: () => {},
         selfDeployEnabled: false,

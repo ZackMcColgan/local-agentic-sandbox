@@ -552,7 +552,7 @@ export async function indexWorkspaceCodebase(
         body: JSON.stringify({ points: slice }),
       });
     }
-  } catch (err: any) {
+  } catch {
     // Qdrant sync notice: fallback to inMemoryChunkIndex
   }
 

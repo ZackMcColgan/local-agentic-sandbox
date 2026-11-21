@@ -9,7 +9,7 @@ import {
   createCriticWorker,
   type WorkspaceRepoMap,
 } from "../lib/subagents/workerPool";
-import { Planner, generatePlanSpec, type PlanSpec } from "../lib/subagents/planner";
+import { Planner } from "../lib/subagents/planner";
 import type { Milestone } from "../lib/subagents/types";
 
 describe("Sprint A3 — Real ExplorerWorker Repo-Map Indexer, Multi-File Planner & Chunked Diff Critic", () => {
@@ -114,7 +114,7 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
   describe("Task 2: Inject WorkspaceRepoMap into Planner.generatePlan", () => {
     it("Planner.generatePlan is callable and accepts repoMap to target real files and test commands", async () => {
       let promptSent = "";
-      const mockGenerate = async (opts: any) => {
+      const mockGenerate = async (opts: { prompt: string }) => {
         promptSent = opts.prompt;
         return {
           text: JSON.stringify({
@@ -182,8 +182,8 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
       let numPredictPassed = 0;
       let diffLengthInPrompt = 0;
 
-      const mockGenerate = async (opts: any) => {
-        numPredictPassed = opts.options?.num_predict;
+      const mockGenerate = async (opts: { prompt: string; options?: { num_predict?: number } }) => {
+        numPredictPassed = opts.options?.num_predict ?? 0;
         diffLengthInPrompt = opts.prompt.length;
         return {
           text: JSON.stringify({

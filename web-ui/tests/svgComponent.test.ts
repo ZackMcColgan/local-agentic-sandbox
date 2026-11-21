@@ -4,6 +4,7 @@ import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { SvgViewer } from "../components/SvgViewer.js";
+import type { TaskManifest } from "../lib/subagents/types.js";
 import { checkDrawio, logServiceMode } from "./helpers/serviceMocks.js";
 
 describe("SVG Viewer Component Suite", () => {
@@ -18,11 +19,11 @@ describe("SVG Viewer Component Suite", () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -91,21 +92,22 @@ describe("SVG Viewer Component Suite", () => {
     let createdBlob: Blob | null = null;
     let clickedDownloadName = "";
 
-    const origCreateObjectURL = (globalThis as any).URL.createObjectURL;
-    const origRevokeObjectURL = (globalThis as any).URL.revokeObjectURL;
-    (globalThis as any).URL.createObjectURL = (blob: Blob) => {
+    const origCreateObjectURL = globalThis.URL.createObjectURL;
+    const origRevokeObjectURL = globalThis.URL.revokeObjectURL;
+    globalThis.URL.createObjectURL = (blob: Blob) => {
       createdBlob = blob;
       return "blob:mock-url";
     };
-    (globalThis as any).URL.revokeObjectURL = () => {};
+    globalThis.URL.revokeObjectURL = () => {};
 
     const origAppendChild = win.document.body.appendChild.bind(win.document.body);
-    win.document.body.appendChild = ((node: any) => {
-      if (node.tagName === "A" && node.download) {
-        clickedDownloadName = node.download;
+    win.document.body.appendChild = ((node: unknown) => {
+      const el = node as { tagName?: string; download?: string };
+      if (el.tagName === "A" && el.download) {
+        clickedDownloadName = el.download;
       }
-      return origAppendChild(node);
-    }) as any;
+      return origAppendChild(node as Parameters<typeof origAppendChild>[0]);
+    }) as typeof win.document.body.appendChild;
 
     try {
       // 1. Weather card HTML
@@ -130,7 +132,7 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "weather-card.html");
-      assert.equal((createdBlob as any)?.type, "text/html;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "text/html;charset=utf-8");
 
       // 2. chart.drawio
       root.unmount();
@@ -158,7 +160,7 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "chart.drawio");
-      assert.equal((createdBlob as any)?.type, "application/xml;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "application/xml;charset=utf-8");
 
       // 3. diagram.svg
       root.unmount();
@@ -184,10 +186,10 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "diagram.svg");
-      assert.equal((createdBlob as any)?.type, "image/svg+xml;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "image/svg+xml;charset=utf-8");
     } finally {
-      (globalThis as any).URL.createObjectURL = origCreateObjectURL;
-      (globalThis as any).URL.revokeObjectURL = origRevokeObjectURL;
+      globalThis.URL.createObjectURL = origCreateObjectURL;
+      globalThis.URL.revokeObjectURL = origRevokeObjectURL;
       win.document.body.appendChild = origAppendChild;
     }
   });
@@ -195,17 +197,13 @@ describe("SVG Viewer Component Suite", () => {
   it("fetches and renders SVG from file URL", async () => {
     const remoteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#3b82f6"/></svg>`;
 
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/files?path=docs/architecture.drawio.svg")) {
-        return {
-          ok: true,
-          status: 200,
-          text: async () => remoteSvg,
-        } as any;
+        return new Response(remoteSvg, { status: 200 });
       }
-      return { ok: false, status: 404 } as any;
-    };
+      return new Response("", { status: 404 });
+    }) as typeof globalThis.fetch;
 
     root = createRoot(container);
     await act(async () => {
@@ -538,7 +536,7 @@ describe("SVG Viewer Component Suite", () => {
   it("LiveRunBlock renders sandboxed HTML iframe preview for .html deliverables, and SvgViewer for .svg", async () => {
     const { LiveRunBlock } = await import("../components/LiveRunBlock.js");
 
-    const htmlTask: any = {
+    const htmlTask = {
       id: "task-html-1",
       title: "Weather Report Generator",
       status: "completed",
@@ -550,7 +548,7 @@ describe("SVG Viewer Component Suite", () => {
           plannedFiles: ["spanish-fort-weather.html"],
         },
       ],
-    };
+    } as unknown as TaskManifest;
 
     root = createRoot(container);
     await act(async () => {
@@ -578,7 +576,7 @@ describe("SVG Viewer Component Suite", () => {
     root = null;
 
     // Test SVG deliverable continues to render SvgViewer
-    const svgTask: any = {
+    const svgTask = {
       id: "task-svg-1",
       title: "Chart Generator",
       status: "completed",
@@ -590,7 +588,7 @@ describe("SVG Viewer Component Suite", () => {
           plannedFiles: ["architecture.svg"],
         },
       ],
-    };
+    } as unknown as TaskManifest;
 
     root = createRoot(container);
     await act(async () => {

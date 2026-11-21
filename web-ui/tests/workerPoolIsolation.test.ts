@@ -66,7 +66,7 @@ describe("WorkerPool Concurrency, Worktree Isolation & Abort-Race Guard (P1.2)",
         await new Promise((r) => setTimeout(r, 100));
         return fs.existsSync(path.join(worktreePath, "job2-dirty.txt"));
       },
-    } as any);
+    } as unknown as Parameters<typeof pool.executeJob>[0]);
 
     const job2 = pool.executeJob({
       id: "wt-2",
@@ -79,7 +79,7 @@ describe("WorkerPool Concurrency, Worktree Isolation & Abort-Race Guard (P1.2)",
         await new Promise((r) => setTimeout(r, 100));
         return fs.existsSync(path.join(worktreePath, "job1-dirty.txt"));
       },
-    } as any);
+    } as unknown as Parameters<typeof pool.executeJob>[0]);
 
     const [j1SawJ2, j2SawJ1] = await Promise.all([job1, job2]);
     assert.strictEqual(j1SawJ2, false, "Job 1 must not see Job 2 uncommitted changes");
@@ -109,7 +109,7 @@ describe("WorkerPool Concurrency, Worktree Isolation & Abort-Race Guard (P1.2)",
         await new Promise((r) => setTimeout(r, 200));
         return "SHOULD_NOT_COMPLETE";
       },
-    } as any);
+    } as unknown as Parameters<typeof pool.executeJob>[0]);
 
     setTimeout(() => ac.abort(), 30);
 

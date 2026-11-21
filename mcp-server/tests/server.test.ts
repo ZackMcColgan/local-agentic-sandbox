@@ -29,7 +29,7 @@ describe("MCP Server Express Endpoints", () => {
     });
 
     const server = app.listen(0);
-    const port = (server.address() as any).port;
+    const port = (server.address() as { port: number }).port;
 
     try {
       const res = await fetch(`http://127.0.0.1:${port}/health`);
@@ -40,7 +40,7 @@ describe("MCP Server Express Endpoints", () => {
       assert.equal(data.security.network_egress, "BLOCKED");
       assert.equal(data.security.capabilities, "DROPPED_ALL");
     } finally {
-      (server as any).closeAllConnections?.();
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
     }
   });
@@ -78,16 +78,17 @@ describe("MCP Server Express Endpoints", () => {
         res.setHeader("Content-Type", mime);
         res.setHeader("Content-Length", stat.size.toString());
         res.send(content);
-      } catch (err: any) {
-        if (err.message.includes("Path traversal")) {
-          return res.status(403).json({ error: err.message });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("Path traversal")) {
+          return res.status(403).json({ error: message });
         }
-        res.status(404).json({ error: err.message });
+        res.status(404).json({ error: message });
       }
     });
 
     const server = app.listen(0);
-    const port = (server.address() as any).port;
+    const port = (server.address() as { port: number }).port;
 
     try {
       // 1. Success case
@@ -109,7 +110,7 @@ describe("MCP Server Express Endpoints", () => {
       const badReqRes = await fetch(`http://127.0.0.1:${port}/files`);
       assert.equal(badReqRes.status, 400);
     } finally {
-      (server as any).closeAllConnections?.();
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
       await fs.unlink(testSvgPath).catch(() => {});
     }
@@ -154,7 +155,7 @@ describe("MCP Server Express Endpoints", () => {
   });
 
   it("files endpoint serves all allowed file extensions with correct MIME types and rejects unallowed types with 415", async () => {
-    const { resolveSafePath, WORKSPACE_DIR } = await import("../src/tools/workspaceTools.js");
+    const { WORKSPACE_DIR } = await import("../src/tools/workspaceTools.js");
     const { handleFilesRequest } = await import("../src/index.js");
     const fs = (await import("fs/promises")).default;
     const path = (await import("path")).default;
@@ -180,7 +181,7 @@ describe("MCP Server Express Endpoints", () => {
     app.get("/files", handleFilesRequest);
 
     const server = app.listen(0);
-    const port = (server.address() as any).port;
+    const port = (server.address() as { port: number }).port;
 
     try {
       for (const tf of testFiles) {
@@ -198,7 +199,7 @@ describe("MCP Server Express Endpoints", () => {
       const badRes = await fetch(`http://127.0.0.1:${port}/files?path=bad_program.exe`);
       assert.equal(badRes.status, 415, "Expected 415 for unallowed .exe file");
     } finally {
-      (server as any).closeAllConnections?.();
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
       for (const tf of testFiles) {
         await fs.unlink(path.join(WORKSPACE_DIR, tf.name)).catch(() => {});

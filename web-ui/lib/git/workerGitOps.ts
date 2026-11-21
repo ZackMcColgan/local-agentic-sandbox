@@ -130,11 +130,12 @@ export class WorkerGitOps {
             timeout: 120000,
           });
           return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const e = err as { code?: unknown; stdout?: string; stderr?: string; message?: string };
           return {
-            exitCode: typeof err?.code === "number" ? err.code : 1,
-            stdout: err?.stdout || "",
-            stderr: err?.stderr || err?.message || String(err),
+            exitCode: typeof e?.code === "number" ? e.code : 1,
+            stdout: e?.stdout || "",
+            stderr: e?.stderr || e?.message || String(err),
           };
         }
       });

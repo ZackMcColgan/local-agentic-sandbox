@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
@@ -78,8 +80,6 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
 
   it("3. Action Sheet and Confirm Dialog structure adheres to permanent deletion contract", () => {
     // Read ThreadsSidebar.tsx source code to verify modal/dialog and event handlers
-    const fs = require("fs");
-    const path = require("path");
     const sidebarSrc = fs.readFileSync(
       path.resolve(__dirname, "../components/ThreadsSidebar.tsx"),
       "utf-8"
@@ -127,8 +127,6 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
   });
 
   it("4. App page handleDeleteThread returns UI to neutral state when deleting active thread", () => {
-    const fs = require("fs");
-    const path = require("path");
     const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8");
 
     const deleteHandlerMatch = pageSrc.match(
@@ -183,8 +181,6 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
   });
 
   it("6. NavigationDrawer source implements touch long-press handler, action sheet, confirm dialog, and focus trap", () => {
-    const fs = require("fs");
-    const path = require("path");
     const drawerSrc = fs.readFileSync(
       path.resolve(__dirname, "../components/NavigationDrawer.tsx"),
       "utf-8"
@@ -229,9 +225,6 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
   });
 
   it("7. Confirm-dialog copy is truthful per thread kind (matches threadStore.deleteThread behavior)", () => {
-    const fs = require("fs");
-    const path = require("path");
-
     for (const rel of ["../components/ThreadsSidebar.tsx", "../components/NavigationDrawer.tsx"]) {
       const src = fs.readFileSync(path.resolve(__dirname, rel), "utf-8");
 
@@ -262,8 +255,6 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
   });
 
   it("8. ChatStream overflow Delete session requires confirmation dialog instead of calling onDeleteThread directly", () => {
-    const fs = require("fs");
-    const path = require("path");
     const chatSrc = fs.readFileSync(
       path.resolve(__dirname, "../components/ChatStream.tsx"),
       "utf-8"

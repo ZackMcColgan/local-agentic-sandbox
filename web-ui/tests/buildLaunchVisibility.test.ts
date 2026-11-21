@@ -40,7 +40,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
   });
 
   it("Test A: POST /api/threads action='launchTask' returns 201 immediately with status 'planning' while planner is blocked", async () => {
-    let plannerStarted = false;
     let finishPlanner: (() => void) | null = null;
 
     const plannerPromise = new Promise<void>((resolve) => {
@@ -48,7 +47,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     });
 
     setPlanSpecGenerator(async (input) => {
-      plannerStarted = true;
       await plannerPromise;
       return {
         taskId: input.taskId,
@@ -219,8 +217,12 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     const data = await res.json();
 
     assert.ok(Array.isArray(data.tasks), "Response must contain 'tasks' array");
-    const foundPlanning = data.tasks.find((t: any) => t.taskId === "task-test-planning-1");
-    const foundParked = data.tasks.find((t: any) => t.taskId === "task-test-parked-2");
+    const foundPlanning = data.tasks.find(
+      (t: { taskId: string; status: string }) => t.taskId === "task-test-planning-1"
+    );
+    const foundParked = data.tasks.find(
+      (t: { taskId: string; status: string }) => t.taskId === "task-test-parked-2"
+    );
 
     assert.ok(foundPlanning, "Tasks list must include planning task");
     assert.equal(foundPlanning.status, "planning");
@@ -301,7 +303,8 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
       "Milestone builderThinking must match full longThinking"
     );
     const journalThinking = data.task.journal.find(
-      (j: any) => j.role === "builder" && j.message?.includes("Builder reasoning:")
+      (j: { role: string; message?: string }) =>
+        j.role === "builder" && j.message?.includes("Builder reasoning:")
     );
     assert.ok(journalThinking, "Journal entry for builder reasoning must exist");
     assert.ok(

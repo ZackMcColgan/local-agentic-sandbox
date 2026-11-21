@@ -1,7 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import path from "path";
-import { resolveAffectedTests, runTestGate, TestGateOptions } from "../lib/testGate.js";
+import { resolveAffectedTests, runTestGate } from "../lib/testGate.js";
 import {
   checkOllama,
   enableOllamaMock,

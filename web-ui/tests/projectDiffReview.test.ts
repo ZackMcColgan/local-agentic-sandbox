@@ -7,19 +7,12 @@ import { execFileSync } from "node:child_process";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import {
-  registerProject,
-  createProjectTask,
-  getProject,
-  getFileReviews,
-  setFileReviewStatus,
-} from "../lib/projects/projectStore";
+import { registerProject, createProjectTask, getFileReviews } from "../lib/projects/projectStore";
 import {
   runGit,
   getProjectDiffSummary,
   acceptProjectFile,
   revertProjectFile,
-  finalizeProjectReview,
 } from "../lib/projects/projectGit";
 import {
   GET as getProjectDiff,
@@ -69,11 +62,11 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     execFileSync("git", ["commit", "-m", "Initial base commit"], { cwd: testRepoDir });
 
     // Happy DOM
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -202,7 +195,6 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     });
 
     const originalContent1 = fs.readFileSync(path.join(testRepoDir, "src", "existing1.ts"), "utf8");
-    const originalContent2 = fs.readFileSync(path.join(testRepoDir, "src", "existing2.ts"), "utf8");
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
 
     const branch = "feat/task-revert-mod";

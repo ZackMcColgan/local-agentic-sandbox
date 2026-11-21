@@ -10,8 +10,12 @@ import { NextRequest } from "next/server";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
+type OllamaRequestBody = {
+  messages?: Array<{ role?: string; content?: string }>;
+};
+
 function startMockOllamaServer(
-  handler: (callIndex: number, body: any, res: http.ServerResponse) => void
+  handler: (callIndex: number, body: OllamaRequestBody, res: http.ServerResponse) => void
 ): Promise<{ server: http.Server; url: string }> {
   let callIndex = 0;
   const server = http.createServer((req, res) => {
@@ -24,7 +28,7 @@ function startMockOllamaServer(
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const idx = callIndex++;
-      let body: any = {};
+      let body: OllamaRequestBody = {};
       try {
         body = JSON.parse(raw);
       } catch {}
@@ -33,7 +37,7 @@ function startMockOllamaServer(
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as any;
+      const addr = server.address() as { port: number };
       resolve({ server, url: `http://127.0.0.1:${addr.port}` });
     });
   });
@@ -56,7 +60,7 @@ describe("P2.1: Tool-call integrity", () => {
       },
     ];
     const layer1 = buildLayer1Tools(tools);
-    const readTool = layer1.find((t: any) => t.function?.name === "workspace_read_file");
+    const readTool = layer1.find((t) => t.function?.name === "workspace_read_file");
     assert.ok(readTool, "workspace_read_file should be in layer1");
     assert.ok(
       readTool.function.description.length <= 120,
@@ -174,8 +178,8 @@ describe("P2.1: Tool-call integrity", () => {
             }) + "\n"
           );
         } else {
-          const toolMsgs = (body.messages || []).filter((m: any) => m.role === "tool");
-          seenToolResult = toolMsgs.map((m: any) => m.content).join("\n");
+          const toolMsgs = (body.messages || []).filter((m) => m.role === "tool");
+          seenToolResult = toolMsgs.map((m) => m.content || "").join("\n");
           res.write(
             JSON.stringify({
               model: "qwen2.5-coder:32b",
@@ -230,7 +234,7 @@ describe("P2.1: Tool-call integrity", () => {
             }) + "\n"
           );
         } else {
-          toolMsgCount = (body.messages || []).filter((m: any) => m.role === "tool").length;
+          toolMsgCount = (body.messages || []).filter((m) => m.role === "tool").length;
           res.write(
             JSON.stringify({
               model: "qwen2.5-coder:32b",

@@ -36,10 +36,14 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
 
   beforeEach(() => {
     mockStorage = new MockLocalStorage();
-    (globalThis as any).window = {
+    const g = globalThis as unknown as {
+      window: { localStorage: MockLocalStorage };
+      localStorage: MockLocalStorage;
+    };
+    g.window = {
       localStorage: mockStorage,
     };
-    (globalThis as any).localStorage = mockStorage;
+    g.localStorage = mockStorage;
   });
 
   it("provides valid initial-welcome seed message", () => {
@@ -235,7 +239,7 @@ describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
       { id: "u1", role: "user", content: "hi", timestamp: 1 },
       { id: "a1", role: "assistant", content: "First part.", timestamp: 2 },
       { id: "a2", role: "assistant", content: "Second part.", timestamp: 3 },
-    ] as any[];
+    ] as unknown as ChatMessage[];
 
     const result = deduplicateStreamMessages(msgs);
     assert.equal(result.length, 2);
@@ -258,12 +262,12 @@ describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
         content: "Second part.",
         traces: [{ name: "t3" }, { name: "t4" }],
       },
-    ] as any[];
+    ] as unknown as ChatMessage[];
 
     const result = deduplicateStreamMessages(msgs);
     assert.equal(result.length, 2);
     assert.deepEqual(
-      result.flatMap((m) => m.traces || []).map((t) => t.name),
+      result.flatMap((m) => m.traces || []).map((t) => (t as unknown as { name?: string }).name),
       ["t1", "t2", "t3", "t4"]
     );
   });

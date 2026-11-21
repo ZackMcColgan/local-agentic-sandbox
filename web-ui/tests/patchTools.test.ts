@@ -12,9 +12,20 @@ const bridgeServerSource = fs.readFileSync(
   "utf8"
 );
 
+type ToolDef = {
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      properties: Record<string, { type?: string }>;
+      required: string[];
+    };
+  };
+};
+
 describe("patch tools: host_replace_string is defined for the model", () => {
   it("HOST_TOOLS_DEFINITIONS contains host_replace_string with the edit schema", () => {
-    const defs = HOST_TOOLS_DEFINITIONS as any[];
+    const defs = HOST_TOOLS_DEFINITIONS as unknown as ToolDef[];
     const entry = defs.find((d) => d?.function?.name === "host_replace_string");
     assert.ok(entry, "host_replace_string must be defined in HOST_TOOLS_DEFINITIONS");
     const params = entry.function.parameters;
@@ -32,7 +43,7 @@ describe("patch tools: host_replace_string is defined for the model", () => {
   });
 
   it("the description steers the model to prefer it over host_write_file for existing files", () => {
-    const defs = HOST_TOOLS_DEFINITIONS as any[];
+    const defs = HOST_TOOLS_DEFINITIONS as unknown as ToolDef[];
     const entry = defs.find((d) => d?.function?.name === "host_replace_string");
     assert.ok(entry);
     assert.match(
@@ -108,7 +119,7 @@ describe("patch tools: replace semantics core (host-bridge/replaceString)", () =
 
 describe("patch tools: diff preview agrees with the replace core", () => {
   it("generateHostFileDiff renders the single-replace result", () => {
-    const diff: any = generateHostFileDiff(
+    const diff = generateHostFileDiff(
       "host_replace_string",
       { path: "C:\\repo\\f.ts", oldString: "b", newString: "X" },
       { preImageExists: true, preImageContent: "a b a" }
@@ -118,7 +129,7 @@ describe("patch tools: diff preview agrees with the replace core", () => {
   });
 
   it("generateHostFileDiff renders replaceAll results and literal dollar text", () => {
-    const diff: any = generateHostFileDiff(
+    const diff = generateHostFileDiff(
       "host_replace_string",
       { path: "C:\\repo\\f.ts", oldString: "b", newString: "$&", replaceAll: true },
       { preImageExists: true, preImageContent: "a b a b" }
@@ -142,7 +153,15 @@ describe("patch tools: workspace_patch_file is advertised to chat turns", () => 
 
   it("progressive tools carry the one-liner and the full schema", () => {
     assert.ok(KNOWN_ONE_LINERS["workspace_patch_file"], "one-liner missing");
-    const schema: any = (DEFAULT_TOOL_SCHEMAS as any)["workspace_patch_file"];
+    const schema = (
+      DEFAULT_TOOL_SCHEMAS as Record<
+        string,
+        {
+          name: string;
+          parameters: { properties: Record<string, unknown>; required: string[] };
+        }
+      >
+    )["workspace_patch_file"];
     assert.ok(schema, "DEFAULT_TOOL_SCHEMAS entry missing");
     assert.equal(schema.name, "workspace_patch_file");
     assert.ok(schema.parameters.properties.path, "schema needs path");

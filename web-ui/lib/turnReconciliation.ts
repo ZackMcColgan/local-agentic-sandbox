@@ -1,15 +1,14 @@
-import { ChatMessage } from "@/components/ChatStream";
-
 /**
  * Helper for formatting caught SSE writer error with name, message, and first stack line.
  */
-export function formatSseWriterError(err: any): string {
+export function formatSseWriterError(err: unknown): string {
   if (!err) return "UnknownError";
-  const name = err.name || "Error";
-  const message = err.message || String(err);
+  const e = err as { name?: string; message?: string; stack?: string };
+  const name = e.name || "Error";
+  const message = e.message || String(err);
   let stackLine = "";
-  if (typeof err.stack === "string") {
-    const lines = err.stack.split("\n");
+  if (typeof e.stack === "string") {
+    const lines = e.stack.split("\n");
     const found = lines.find((l: string) => l.trim().startsWith("at "));
     if (found) {
       stackLine = ` | ${found.trim()}`;

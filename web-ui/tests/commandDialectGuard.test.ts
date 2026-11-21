@@ -73,19 +73,22 @@ describe("command-dialect-guard", () => {
 
   it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on && rewrite", async () => {
     const origFetch = globalThis.fetch;
-    let capturedBody: any = null;
-    globalThis.fetch = (async (_url: any, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { args?: { command?: string } } | null = null;
+    globalThis.fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return {
         ok: true,
         json: async () => ({ ok: true, stdout: "done" }),
-      } as any;
-    }) as any;
+      } as unknown as Response;
+    };
     try {
       const result = await executeHostTool("host_run_powershell", {
         command: "echo a && echo b",
       });
-      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.equal(
+        (capturedBody as unknown as { args?: { command?: string } } | null)?.args?.command,
+        "echo a ; echo b"
+      );
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-and"));
       assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and")));
@@ -96,19 +99,22 @@ describe("command-dialect-guard", () => {
 
   it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on || rewrite", async () => {
     const origFetch = globalThis.fetch;
-    let capturedBody: any = null;
-    globalThis.fetch = (async (_url: any, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { args?: { command?: string } } | null = null;
+    globalThis.fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return {
         ok: true,
         json: async () => ({ ok: true, stdout: "done" }),
-      } as any;
-    }) as any;
+      } as unknown as Response;
+    };
     try {
       const result = await executeHostTool("host_run_powershell", {
         command: "echo a || echo b",
       });
-      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.equal(
+        (capturedBody as unknown as { args?: { command?: string } } | null)?.args?.command,
+        "echo a ; echo b"
+      );
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-or"));
       assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or")));

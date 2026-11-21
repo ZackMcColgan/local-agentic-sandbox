@@ -7,7 +7,7 @@ export interface ModelOptions {
   num_predict?: number;
   top_p?: number;
   top_k?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -221,7 +221,13 @@ export interface HumanReadableTrace {
 export function formatHumanReadableTrace(trace: {
   tool: string;
   durationMs?: number;
-  args?: any;
+  args?: {
+    command?: string;
+    path?: string;
+    filePath?: string;
+    query?: string;
+    [key: string]: unknown;
+  };
   tier?: "sandbox" | "browser" | "workspace" | "host" | string;
 }): HumanReadableTrace {
   const durationSec = trace.durationMs ? (trace.durationMs / 1000).toFixed(1) + "s" : "";
@@ -404,7 +410,9 @@ export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
   }
 
   const rawStr =
-    typeof rawError === "string" ? rawError : (rawError as any).message || String(rawError);
+    typeof rawError === "string"
+      ? rawError
+      : (rawError as { message?: string }).message || String(rawError);
   const trimmed = rawStr.trim();
 
   // Attempt to find and parse JSON payload within the error string
@@ -461,7 +469,15 @@ export interface ChatFileDiffItem {
  * Extracts diff stats and unified previews from assistant trace objects
  * for file write and patch operations (workspace_write_file, workspace_patch_file, host_write_file).
  */
-export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffItem[] {
+export function extractFileWriteDiffsFromTraces(
+  traces?: Array<{
+    id?: string;
+    tool?: string;
+    name?: string;
+    status?: string;
+    args?: Record<string, unknown>;
+  }>
+): ChatFileDiffItem[] {
   if (!Array.isArray(traces) || traces.length === 0) {
     return [];
   }

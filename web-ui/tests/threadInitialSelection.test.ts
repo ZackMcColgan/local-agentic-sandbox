@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-// @ts-ignore - resolved at test time
 import { pickMostRecentlyActiveThread } from "../lib/liveActivity";
 
 describe("UI-009: fresh load opens the most recently active thread", () => {

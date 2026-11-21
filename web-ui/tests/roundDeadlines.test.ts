@@ -38,7 +38,12 @@ const SIZE_LIMIT_MARKER = "Turn ended: a tool call exceeded the per-message size
 
 interface ScriptStep {
   /** Chunks emitted for this completion. Each entry is one SSE delta line. */
-  chunks: Array<{ content?: string; thinking?: string; toolCall?: any; finishReason?: string }>;
+  chunks: Array<{
+    content?: string;
+    thinking?: string;
+    toolCall?: Record<string, unknown>;
+    finishReason?: string;
+  }>;
   /** Millisecond delay between emitted chunks (silence between chunks). */
   chunkDelayMs?: number;
   /** Millisecond delay before the first chunk (silent stall). */
@@ -109,7 +114,7 @@ function makeScriptedOllamaServer(script: ScriptStep[]) {
       for (const ch of step.chunks) {
         if (step.chunkDelayMs) await sleep(step.chunkDelayMs);
         if (clientGone || res.writableEnded) return;
-        const msg: any = { role: "assistant" };
+        const msg: Record<string, unknown> = { role: "assistant" };
         if (ch.content) msg.content = ch.content;
         if (ch.thinking) msg.thinking = ch.thinking;
         if (ch.toolCall) msg.tool_calls = [ch.toolCall];
@@ -175,7 +180,7 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
 
   const { server, getCompletionCount, destroyOpenResponses } = makeScriptedOllamaServer(script);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-  const port = (server.address() as any).port;
+  const port = (server.address() as { port: number }).port;
   process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
@@ -216,7 +221,7 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
         enableTools: true,
       }),
     });
-    const res = await chatRouteModule.POST(req as any);
+    const res = await chatRouteModule.POST(req);
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let raw = "";
@@ -227,7 +232,7 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
     }
 
     const thread = await store.getThread(threadId);
-    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    const asst = thread?.messages.find((m) => m.id === "a-1");
     return {
       asst,
       raw,
@@ -247,8 +252,8 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
   }
 }
 
-test("(1) exports the pinned round deadline constants", () => {
-  const mod = require("../lib/contextBudget.js");
+test("(1) exports the pinned round deadline constants", async () => {
+  const mod = await import("../lib/contextBudget.js");
   assert.equal(
     mod.ROUND_INACTIVITY_DEADLINE_MS,
     180_000,
@@ -462,12 +467,11 @@ test("(9) per-round finish_reason recorded on the turn record (forensics)", asyn
     ROUND_TOTAL_DEADLINE_MS: "60000",
   });
   assert.ok(asst, "assistant message must exist");
+  const roundFinishReasons = (asst as unknown as { roundFinishReasons?: string[] })
+    .roundFinishReasons;
+  assert.ok(Array.isArray(roundFinishReasons), "turn record must carry per-round finish_reasons");
   assert.ok(
-    Array.isArray((asst as any).roundFinishReasons),
-    "turn record must carry per-round finish_reasons"
-  );
-  assert.ok(
-    (asst as any).roundFinishReasons.includes("stop"),
+    roundFinishReasons.includes("stop"),
     "round finish reasons must include the round's finish_reason"
   );
 });
@@ -479,7 +483,7 @@ test("(10) a healthy continuous stream completes UNTOUCHED (calibration guard)",
   // ratio (total well above the stream duration) prove the wrapper does not
   // touch healthy rounds.
   const chunks = Array.from({ length: 200 }, (_, i) => ({ content: `tok${i} ` }));
-  const { asst, raw, completionCount, slotIdle } = await runTurn([{ chunks, chunkDelayMs: 10 }], {
+  const { asst, completionCount, slotIdle } = await runTurn([{ chunks, chunkDelayMs: 10 }], {
     ROUND_INACTIVITY_DEADLINE_MS: "2000",
     ROUND_TOTAL_DEADLINE_MS: "5000",
   });

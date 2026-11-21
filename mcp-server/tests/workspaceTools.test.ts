@@ -5,6 +5,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 import { registerWorkspaceTools } from "../src/tools/workspaceTools.js";
 
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
+
 describe("Workspace & Git Tools Suite", () => {
   let mcp: McpServer;
 
@@ -21,8 +32,7 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("registers all 9 autonomous workspace & git tools", () => {
-    // @ts-ignore
-    const tools = mcp._registeredTools;
+    const tools = getRegisteredTools(mcp);
     const requiredTools = [
       "workspace_get_tree",
       "workspace_grep",
@@ -41,10 +51,8 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("writes and reads files within workspace, supporting code and .drawio.svg diagrams", async () => {
-    // @ts-ignore
-    const writeHandler = mcp._registeredTools["workspace_write_file"].handler;
-    // @ts-ignore
-    const readHandler = mcp._registeredTools["workspace_read_file"].handler;
+    const writeHandler = getRegisteredTools(mcp)["workspace_write_file"].handler;
+    const readHandler = getRegisteredTools(mcp)["workspace_read_file"].handler;
 
     // 1. Write Python test file
     const writeResult = await writeHandler({
@@ -73,8 +81,7 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("strictly rejects path traversal attempts outside workspace", async () => {
-    // @ts-ignore
-    const readHandler = mcp._registeredTools["workspace_read_file"].handler;
+    const readHandler = getRegisteredTools(mcp)["workspace_read_file"].handler;
 
     const res = await readHandler({
       path: "../../../etc/shadow",
@@ -85,10 +92,8 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("executes workspace_get_tree and workspace_grep", async () => {
-    // @ts-ignore
-    const treeHandler = mcp._registeredTools["workspace_get_tree"].handler;
-    // @ts-ignore
-    const grepHandler = mcp._registeredTools["workspace_grep"].handler;
+    const treeHandler = getRegisteredTools(mcp)["workspace_get_tree"].handler;
+    const grepHandler = getRegisteredTools(mcp)["workspace_grep"].handler;
 
     const treeRes = await treeHandler({ max_depth: 3 });
     const treeData = JSON.parse(treeRes.content[0].text);
@@ -102,8 +107,7 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("executes commands and checks exit codes with workspace_run_command", async () => {
-    // @ts-ignore
-    const cmdHandler = mcp._registeredTools["workspace_run_command"].handler;
+    const cmdHandler = getRegisteredTools(mcp)["workspace_run_command"].handler;
 
     const res = await cmdHandler({
       command: "node -e \"console.log('hello autonomous sandbox')\"",
@@ -115,12 +119,9 @@ describe("Workspace & Git Tools Suite", () => {
   });
 
   it("performs git operations (status, checkout_branch, commit)", async () => {
-    // @ts-ignore
-    const statusHandler = mcp._registeredTools["git_status"].handler;
-    // @ts-ignore
-    const checkoutHandler = mcp._registeredTools["git_checkout_branch"].handler;
-    // @ts-ignore
-    const commitHandler = mcp._registeredTools["git_commit"].handler;
+    const statusHandler = getRegisteredTools(mcp)["git_status"].handler;
+    const checkoutHandler = getRegisteredTools(mcp)["git_checkout_branch"].handler;
+    const commitHandler = getRegisteredTools(mcp)["git_commit"].handler;
 
     // Checkout a new autonomous branch
     const branchName = `agent/test-suite-${Date.now()}`;
@@ -133,8 +134,7 @@ describe("Workspace & Git Tools Suite", () => {
     assert.equal(checkoutData.current_branch, branchName);
 
     // Write file to commit
-    // @ts-ignore
-    const writeHandler = mcp._registeredTools["workspace_write_file"].handler;
+    const writeHandler = getRegisteredTools(mcp)["workspace_write_file"].handler;
     await writeHandler({
       path: "commit_test.txt",
       content: `Autonomous commit test ${Date.now()}`,
@@ -154,8 +154,7 @@ describe("Workspace & Git Tools Suite", () => {
     assert.equal(statusData.branch, branchName);
 
     // Inspect git_diff
-    // @ts-ignore
-    const diffHandler = mcp._registeredTools["git_diff"].handler;
+    const diffHandler = getRegisteredTools(mcp)["git_diff"].handler;
     const diffRes = await diffHandler({});
     const diffData = JSON.parse(diffRes.content[0].text);
     assert.equal(diffData.status, "SUCCESS");

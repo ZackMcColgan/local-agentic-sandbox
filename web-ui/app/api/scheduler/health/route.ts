@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
@@ -98,14 +98,16 @@ export async function GET() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           total = parsed.length;
-          const enabledSchedules = parsed.filter((s: any) => s && s.enabled);
+          const enabledSchedules = (
+            parsed as Array<{ enabled?: boolean; nextRun?: unknown } | null>
+          ).filter((s) => s && s.enabled);
           enabled = enabledSchedules.length;
 
           // Find earliest nextRun among enabled schedules
           const validNextRuns = enabledSchedules
-            .map((s: any) => s.nextRun)
-            .filter((nr: any) => typeof nr === "string" && !isNaN(new Date(nr).getTime()))
-            .sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
+            .map((s) => s?.nextRun)
+            .filter((nr): nr is string => typeof nr === "string" && !isNaN(new Date(nr).getTime()))
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
           if (validNextRuns.length > 0) {
             nextRun = validNextRuns[0];

@@ -8,7 +8,6 @@ import {
   AlertCircle,
   StopCircle,
   Hammer,
-  Cpu,
   ArrowRight,
   FolderGit2,
   GitBranch,
@@ -56,11 +55,27 @@ export function BuildsView({
             : Array.isArray(data.threads)
               ? data.threads
               : [];
-        const boardTasks: TaskManifest[] = rawItems.map((t: any) => ({
-          taskId: t.taskId || t.id || t.threadId,
+        interface BoardItemRaw {
+          taskId?: string;
+          id?: string;
+          threadId?: string;
+          title?: string;
+          goal?: string;
+          brief?: string;
+          status?: string;
+          toolchain?: string;
+          branchName?: string;
+          milestones?: TaskManifest["milestones"];
+          createdAt?: string;
+          updatedAt?: string;
+        }
+        const boardTasks: TaskManifest[] = (rawItems as BoardItemRaw[]).map((t) => ({
+          taskId: t.taskId || t.id || t.threadId || "",
           goal: t.title || t.goal || t.brief || "Board Item",
-          status: t.status === "working" ? "active" : t.status || "paused",
-          toolchain: t.toolchain || "node:22",
+          status: (t.status === "working"
+            ? "active"
+            : t.status || "paused") as TaskManifest["status"],
+          toolchain: (t.toolchain || "node:22") as TaskManifest["toolchain"],
           branchName: t.branchName || "main",
           milestones: Array.isArray(t.milestones) ? t.milestones : [],
           currentMilestoneIndex: 0,

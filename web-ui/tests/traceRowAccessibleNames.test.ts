@@ -33,12 +33,15 @@ describe("UI-011a: trace rows carry accessible names", () => {
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -46,9 +49,12 @@ describe("UI-011a: trace rows carry accessible names", () => {
     act(() => {
       root.unmount();
     });
-    delete (globalThis as any).window;
-    delete (globalThis as any).document;
-    delete (globalThis as any).localStorage;
+    const g = globalThis as unknown as Partial<
+      Record<"window" | "document" | "localStorage", unknown>
+    >;
+    delete g.window;
+    delete g.document;
+    delete g.localStorage;
   });
 
   const toolRows = (): HTMLButtonElement[] =>
@@ -92,7 +98,7 @@ describe("UI-011a: trace rows carry accessible names", () => {
               timestamp: new Date().toISOString(),
               traces: [trace("workspace_grep")],
             },
-          ] as any,
+          ] as unknown as React.ComponentProps<typeof ChatStream>["messages"],
           setMessages: () => {},
           activeTask: null,
         })

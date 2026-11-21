@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { BoardStore, getBoardStore, type BoardItem } from "./boardStore";
 import {
@@ -91,8 +90,12 @@ export function repairAndParseIntakeJson(rawText: string): { items: unknown[] } 
   // 1. Direct parse
   try {
     const parsed = JSON.parse(cleaned);
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).items)) {
-      return { items: (parsed as any).items };
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { items?: unknown[] }).items)
+    ) {
+      return { items: (parsed as { items: unknown[] }).items };
     }
   } catch {
     // Fall through to extraction & repair
@@ -107,8 +110,12 @@ export function repairAndParseIntakeJson(rawText: string): { items: unknown[] } 
 
   try {
     const parsed = JSON.parse(candidate);
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).items)) {
-      return { items: (parsed as any).items };
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { items?: unknown[] }).items)
+    ) {
+      return { items: (parsed as { items: unknown[] }).items };
     }
   } catch {
     // Fall through to truncation repair
@@ -157,8 +164,12 @@ export function repairAndParseIntakeJson(rawText: string): { items: unknown[] } 
     }
 
     const parsed = JSON.parse(repaired);
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).items)) {
-      return { items: (parsed as any).items };
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { items?: unknown[] }).items)
+    ) {
+      return { items: (parsed as { items: unknown[] }).items };
     }
   } catch {
     // Unable to repair
@@ -225,7 +236,7 @@ export function validateIntakeStack(
       reasons.push(`${label} (${title || "untitled"}) is missing non-empty acceptanceCriteria`);
     }
 
-    let dependencies: string[] = [];
+    const dependencies: string[] = [];
     if (obj.dependencies !== undefined) {
       if (!Array.isArray(obj.dependencies)) {
         reasons.push(`${label} (${title || "untitled"}) dependencies must be an array of strings`);

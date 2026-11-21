@@ -12,8 +12,11 @@ COPY mcp-server/package*.json ./mcp-server/
 COPY browser-mcp/package*.json ./browser-mcp/
 COPY host-bridge/package*.json ./host-bridge/
 
-# Install from root (honors workspace config)
-RUN npm ci --workspaces
+# Install from root (honors workspace config).
+# --ignore-scripts: the root prepare script installs git hooks, which are
+# meaningless inside an image (nothing commits here); without this flag the
+# build fails on "husky: not found" (exit 127).
+RUN npm ci --workspaces --ignore-scripts
 
 # ==========================================
 # Stage 2: Build Next.js application

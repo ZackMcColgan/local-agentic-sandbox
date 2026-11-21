@@ -1,5 +1,4 @@
 import { SimulationScenario } from "./types";
-import { TaskManifest } from "../subagents/types";
 
 export const SIMULATION_SCENARIOS: Record<string, SimulationScenario> = {
   "chat-fast": {

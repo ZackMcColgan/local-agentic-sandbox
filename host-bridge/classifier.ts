@@ -34,7 +34,10 @@ export interface DestructiveCheckResult {
 /**
  * Evaluates whether a host tool action is destructive according to PR #44 audited behavior.
  */
-export function isDestructiveHostAction(tool: string, args: any): DestructiveCheckResult {
+export function isDestructiveHostAction(
+  tool: string,
+  args: Record<string, unknown> | undefined | null
+): DestructiveCheckResult {
   if (tool === "host_delete_path") {
     return {
       isDestructive: true,

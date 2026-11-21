@@ -4,7 +4,6 @@ import fs from "fs";
 import path from "path";
 import {
   MAX_WEB_RESEARCH_CALLS,
-  WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   WEB_RESEARCH_TOOL_NAMES,
   isWebResearchTool,
   filterToolsForWebBudget,
@@ -46,7 +45,7 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       for (const calls of [0, 1, 2, 50, 99]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 5, `Expected 5 tools for ${calls} calls used`);
-        const names = filtered.map((t) => t.function?.name || t.name);
+        const names = filtered.map((t) => t.function?.name);
         assert.ok(names.includes("search_web"));
         assert.ok(names.includes("fetch_webpage_markdown"));
         assert.ok(names.includes("workspace_write_file"));
@@ -59,7 +58,7 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       for (const calls of [100, 101, 150]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 3, `Expected 3 tools for ${calls} calls used`);
-        const names = filtered.map((t) => t.function?.name || t.name);
+        const names = filtered.map((t) => t.function?.name);
         assert.ok(!names.includes("search_web"), "search_web must be withheld");
         assert.ok(
           !names.includes("fetch_webpage_markdown"),

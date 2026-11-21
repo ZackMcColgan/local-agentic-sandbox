@@ -31,7 +31,9 @@ function runSnippet(code, env = {}) {
     if (fs.existsSync(runnerFile)) {
       try {
         fs.unlinkSync(runnerFile);
-      } catch (_) {}
+      } catch {
+        /* ignore temp runner cleanup error */
+      }
     }
   }
 }
@@ -54,7 +56,6 @@ for (const pref of extracted) {
 runSnippet(sessionA_Code, { USER_PROFILE_PATH: profilePath });
 
 // Session B in a completely separate process
-const sessionB_Id = "session_B_" + Date.now();
 const sessionB_Code = `
 import { loadUserProfile, formatProfileForContext } from "${profileModulePath}";
 const profile = loadUserProfile();

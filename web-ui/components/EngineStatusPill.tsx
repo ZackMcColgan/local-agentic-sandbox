@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Play, RotateCw, Square } from "lucide-react";
+import { Play, Square } from "lucide-react";
 
 export interface EngineStatusData {
   status: "running" | "stopped" | "starting" | "unknown";

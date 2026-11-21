@@ -35,7 +35,7 @@ describe("Browser-MCP Connectivity — Internet Egress & Failure Handling", () =
     supervisor.saveCheckpoint(manifest);
 
     // Mock worker step that calls search_web
-    const stepExecutorWithBrowserMcp = async (m: Milestone, attempt: number) => {
+    const stepExecutorWithBrowserMcp = async () => {
       const query = "SVG path syntax documentation";
       const searchResults = [
         {
@@ -95,7 +95,7 @@ describe("Browser-MCP Connectivity — Internet Egress & Failure Handling", () =
     supervisor.saveCheckpoint(manifest);
 
     // Mock browser-mcp outage
-    const stepExecutorWithFailingBrowser = async (m: Milestone, attempt: number) => {
+    const stepExecutorWithFailingBrowser = async () => {
       throw new Error("browser-mcp error: 502 Bad Gateway connecting to egress-mesh scraper");
     };
 

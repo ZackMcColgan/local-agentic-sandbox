@@ -48,7 +48,7 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
     supervisor.saveCheckpoint(manifest);
 
     // Mock planner/builder/critic execution: all milestones succeed
-    const mockStepExecutor = async (milestone: Milestone, attempt: number) => {
+    const mockStepExecutor = async (milestone: Milestone) => {
       const sha = `sha-${milestone.id}-${Date.now().toString(36)}`;
       const diff = `+ export function ${milestone.id}() { return true; }`;
       return {

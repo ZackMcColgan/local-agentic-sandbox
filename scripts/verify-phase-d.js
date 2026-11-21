@@ -9,7 +9,6 @@ import { execSync } from "child_process";
 import assert from "node:assert/strict";
 
 import {
-  generateOllamaEmbedding,
   ingestDocsToQdrant,
   searchSemanticMemory,
   getQdrantCollectionInfo,
@@ -19,9 +18,7 @@ import {
 import {
   recordObservedPattern,
   approveSkillCandidate,
-  rejectSkillCandidate,
   listActiveSkills,
-  loadPendingQueue,
 } from "../web-ui/lib/subagents/skillGate.ts";
 
 setTimeout(() => {

@@ -9,10 +9,6 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
-  Clock,
-  CheckCircle2,
-  StopCircle,
-  AlertCircle,
   X,
   FileText,
   Settings,
@@ -45,7 +41,6 @@ export function ThreadsSidebar({
   onDeleteThread,
   onNavigate,
   onOpenDrawer,
-  onCollapse,
   hideDock = false,
   isLoadingThreads = false,
 }: ThreadsSidebarProps) {
@@ -438,9 +433,9 @@ export function ThreadsSidebar({
                     >
                       {deriveThreadDisplayTitle(thread.title)}
                     </h2>
-                    {(thread as any).matchSnippet && (
+                    {(thread as { matchSnippet?: string }).matchSnippet && (
                       <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
-                        {(thread as any).matchSnippet}
+                        {(thread as { matchSnippet?: string }).matchSnippet}
                       </p>
                     )}
 
@@ -507,11 +502,11 @@ export function ThreadsSidebar({
                     )}
                     {livenessBadge ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                        {`${progressChars} chars · ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
                       </span>
-                    ) : ((thread as any).totalTraces ?? progressTraces) > 0 ? (
+                    ) : ((thread as { totalTraces?: number }).totalTraces ?? progressTraces) > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`· ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                        {`· ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
                       </span>
                     ) : null}
                   </div>

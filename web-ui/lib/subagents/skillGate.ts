@@ -52,7 +52,7 @@ export function loadPendingQueue(skillsDir?: string): SkillGateStore {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
-  } catch (err) {
+  } catch {
     return { version: 1, candidates: {}, updatedAt: new Date().toISOString() };
   }
 }

@@ -27,7 +27,9 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
   };
 
   it("1. Missing status does NOT default to active/running", () => {
-    const missingStatus = deriveRunCardStatus({ status: undefined as any });
+    const missingStatus = deriveRunCardStatus({
+      status: undefined as unknown as TaskManifest["status"],
+    });
     assert.strictEqual(missingStatus.isRunning, false);
     assert.notStrictEqual(missingStatus.headerLabel, "Live run");
   });
@@ -92,7 +94,7 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
       "completed",
       "crashed",
     ] as const) {
-      const info = deriveRunCardStatus({ status: status as any });
+      const info = deriveRunCardStatus({ status: status as unknown as TaskManifest["status"] });
       const label = formatRunTimerLabel(info, 750);
       assert.ok(
         !label.startsWith("Running for"),

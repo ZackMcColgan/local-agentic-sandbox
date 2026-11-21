@@ -7,6 +7,17 @@ import {
   evaluateContentQuality,
 } from "../src/tools/browser.js";
 
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
+
 describe("Browser MCP Toolchain Suite", () => {
   let mcp: McpServer;
 
@@ -20,8 +31,7 @@ describe("Browser MCP Toolchain Suite", () => {
   describe("Tool Registration", () => {
     it("registers search_web and fetch_webpage_markdown tools", () => {
       registerBrowserTools(mcp);
-      // @ts-ignore
-      const tools = mcp._registeredTools;
+      const tools = getRegisteredTools(mcp);
       assert.ok(tools["search_web"], "search_web should be registered");
       assert.ok(tools["fetch_webpage_markdown"], "fetch_webpage_markdown should be registered");
     });
@@ -31,8 +41,7 @@ describe("Browser MCP Toolchain Suite", () => {
       try {
         process.env.SEARCH_FORCE_EMPTY_RESULTS = "1";
         registerBrowserTools(mcp);
-        // @ts-ignore
-        const handler = mcp._registeredTools["search_web"].handler;
+        const handler = getRegisteredTools(mcp)["search_web"].handler;
         const res = await handler({ query: "weather in Spanish Fort AL", limit: 5 });
         assert.ok(res.content && res.content[0], "Response content should be present");
         const parsed = JSON.parse(res.content[0].text);
@@ -50,8 +59,7 @@ describe("Browser MCP Toolchain Suite", () => {
   describe("SSRF Security Boundary", () => {
     it("blocks SSRF attempts to localhost and loopback IPs", async () => {
       registerBrowserTools(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["fetch_webpage_markdown"].handler;
+      const toolHandler = getRegisteredTools(mcp)["fetch_webpage_markdown"].handler;
 
       const testUrls = [
         "http://localhost:3000/secret",

@@ -216,7 +216,7 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
     it("adds Content-Disposition: attachment; filename=... on MCP-proxy fallback download", async () => {
       const origFetch = global.fetch;
       try {
-        global.fetch = (async (url: any, options: any) => {
+        global.fetch = (async (url: string | URL | Request) => {
           if (String(url).includes("remote-report.md")) {
             const content = Buffer.from("# Remote Report\nAll systems operational.");
             return new Response(content, {
@@ -225,7 +225,7 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
             });
           }
           return new Response("Not found", { status: 404 });
-        }) as any;
+        }) as typeof fetch;
 
         const req = new NextRequest(
           "http://localhost:3000/api/files?path=remote-report.md&download=1"

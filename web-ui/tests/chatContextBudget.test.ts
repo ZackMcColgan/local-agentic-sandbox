@@ -15,7 +15,15 @@ import {
   canContinueToolLoop,
   fitConversationToBudget,
   HIGH_WATER_BANKING_DIRECTIVE,
+  type ContextMessage,
+  type ContextToolCall,
 } from "../lib/contextBudget.js";
+
+interface CapturedChatPayload {
+  messages: ContextMessage[];
+  tools?: unknown[];
+  options?: { num_predict?: number; temperature?: number; [key: string]: unknown };
+}
 
 describe("Chat Context-Budget Enforcement Suite", () => {
   describe("Task 1 (P0): fitContextWindow & Protected Message Retention", () => {
@@ -156,7 +164,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
       // The longer message (user) was truncated
       const fittedUser = fitted.find((m) => m.role === "user");
-      assert.ok(fittedUser.content.includes("...[truncated]"));
+      assert.ok(fittedUser && fittedUser.content.includes("...[truncated]"));
     });
   });
 
@@ -226,15 +234,15 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
   describe("Task 3 (P1): Per-Round Enforcement & Final-Round Forced Synthesis", () => {
     it("enforces context budget <= 6000 tokens on EVERY round across multi-round tool accumulation", async () => {
-      const capturedPayloads: any[] = [];
-      const messages: any[] = [
+      const capturedPayloads: CapturedChatPayload[] = [];
+      const messages: ContextMessage[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
         { role: "user", content: "Perform deep research across 3 search rounds." },
       ];
 
       let callCount = 0;
-      const mockStreamChat = async function* (payload: any) {
-        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+      const mockStreamChat = async function* (payload: Record<string, unknown>) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)) as CapturedChatPayload);
         callCount++;
         if (callCount <= 2) {
           // Model emits tool call on rounds 0 and 1
@@ -262,7 +270,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         }
       };
 
-      const mockExecuteTool = async (toolCall: any) => {
+      const mockExecuteTool = async (toolCall: ContextToolCall) => {
         // Return tool result to simulate tool accumulation
         return {
           status: "SUCCESS",
@@ -299,16 +307,16 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         );
 
         // System prompt and user query must remain in every round payload
-        const sysMsg = payload.messages.find((m: any) => m.role === "system");
+        const sysMsg = payload.messages.find((m) => m.role === "system");
         assert.ok(sysMsg, `Round ${idx + 1} must preserve system prompt`);
-        const userMsg = payload.messages.find((m: any) => m.role === "user");
+        const userMsg = payload.messages.find((m) => m.role === "user");
         assert.ok(userMsg, `Round ${idx + 1} must preserve user query`);
       });
     });
 
     it("forces synthesis on the final round: omits tools from payload, appends directive, and finishes with text", async () => {
-      const capturedPayloads: any[] = [];
-      const messages: any[] = [
+      const capturedPayloads: CapturedChatPayload[] = [];
+      const messages: ContextMessage[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
         { role: "user", content: "Keep gathering data endlessly." },
       ];
@@ -316,12 +324,12 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const MAX_ROUNDS = 4;
       let callCount = 0;
 
-      const mockStreamChat = async function* (payload: any) {
-        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+      const mockStreamChat = async function* (payload: Record<string, unknown>) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)) as CapturedChatPayload);
         callCount++;
 
         // If tools are present, the model aggressively attempts more tool calls
-        if (payload.tools && payload.tools.length > 0) {
+        if (Array.isArray(payload.tools) && payload.tools.length > 0) {
           yield {
             message: {
               content: "",
@@ -345,7 +353,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         }
       };
 
-      const mockExecuteTool = async (toolCall: any) => {
+      const mockExecuteTool = async (_toolCall: ContextToolCall) => {
         return { status: "SUCCESS", result: "sample tool data" };
       };
 
@@ -370,8 +378,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       // Rounds 0, 1, 2 must include tools
       for (let i = 0; i < MAX_ROUNDS - 1; i++) {
+        const roundTools = capturedPayloads[i].tools;
         assert.ok(
-          Array.isArray(capturedPayloads[i].tools) && capturedPayloads[i].tools.length > 0,
+          Array.isArray(roundTools) && roundTools.length > 0,
           `Round ${i} must include tools`
         );
       }
@@ -392,9 +401,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         `Final round payload must include the synthesis directive in system message`
       );
       // Invariant: zero system messages at index > 0
-      const midSystem = finalPayload.messages.filter(
-        (m: any, idx: number) => idx > 0 && m.role === "system"
-      );
+      const midSystem = finalPayload.messages.filter((m, idx) => idx > 0 && m.role === "system");
       assert.equal(
         midSystem.length,
         0,
@@ -435,7 +442,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
   describe("Task 3: Jinja 500 Elimination & System Message Invariant", () => {
     it("mergeSystemDirective never places a system message at index > 0", async () => {
       const { mergeSystemDirective, WEB_BUDGET_EXHAUSTED_DIRECTIVE } =
-        (await import("../lib/contextBudget.js")) as any;
+        await import("../lib/contextBudget.js");
       assert.ok(
         typeof mergeSystemDirective === "function",
         "mergeSystemDirective must be exported"
@@ -458,7 +465,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("mergeSystemDirective inserts at index 0 when no leading system message exists", async () => {
-      const { mergeSystemDirective } = (await import("../lib/contextBudget.js")) as any;
+      const { mergeSystemDirective } = await import("../lib/contextBudget.js");
 
       const messages = [{ role: "user", content: "Hello" }];
 
@@ -471,7 +478,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("mergeSystemDirective does not duplicate directive when called multiple times with same text", async () => {
-      const { mergeSystemDirective } = (await import("../lib/contextBudget.js")) as any;
+      const { mergeSystemDirective } = await import("../lib/contextBudget.js");
 
       const messages = [{ role: "system", content: "Initial prompt" }];
 
@@ -542,7 +549,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const fittedWithTools = fitContextWindow(messages, {
         maxContentTokens: 6000,
         tools: mockTools,
-      } as any);
+      });
       const totalFittedTokens = estimateTokens(fittedWithTools);
       const toolSchemaTokens = estimateTokens(JSON.stringify(mockTools));
 
@@ -596,7 +603,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
   describe("Task 4 (WS-B): Artifact Output Headroom Reservation & Fast Synthesis Reasoning", () => {
     it("reserves >= 3,000 tokens of output headroom in an 8,192-token context window on artifact turns", async () => {
-      const { ARTIFACT_OUTPUT_HEADROOM_TOKENS } = (await import("../lib/contextBudget.js")) as any;
+      const { ARTIFACT_OUTPUT_HEADROOM_TOKENS } = await import("../lib/contextBudget.js");
       assert.equal(ARTIFACT_OUTPUT_HEADROOM_TOKENS, 3000);
 
       const mockTools = Array.from({ length: 8 }, (_, i) => ({
@@ -620,7 +627,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         maxContentTokens: 8192,
         isArtifactTurn: true,
         tools: mockTools,
-      } as any);
+      });
 
       const inputTokens = estimateTokens(fitted);
       assert.ok(
@@ -633,7 +640,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("resolveRoundModelOptions drops effort to 'low' and defaults num_predict to 16384 on artifact synthesis/post-tool rounds", async () => {
-      const { resolveRoundModelOptions } = (await import("../lib/contextBudget.js")) as any;
+      const { resolveRoundModelOptions } = await import("../lib/contextBudget.js");
       assert.equal(typeof resolveRoundModelOptions, "function");
 
       // Round 0 (before tool calls) for artifact requests
@@ -686,17 +693,17 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const { extractSvgsFromMessage } = await import("../lib/svgUtils.js");
       const completeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><rect width="800" height="500" fill="#0f172a"/><text x="40" y="80" fill="#38bdf8">Spanish Fort, AL — 78°F Sunny</text></svg>`;
 
-      const conversationMessages: any[] = [
+      const conversationMessages: ContextMessage[] = [
         { role: "system", content: "System instructions for artifact creation." },
         { role: "user", content: "Create an SVG weather card for Spanish Fort AL" },
       ];
 
-      const capturedPayloads: any[] = [];
-      const traces: any[] = [];
+      const capturedPayloads: CapturedChatPayload[] = [];
+      const traces: Array<{ tool: string; args: Record<string, unknown>; result: unknown }> = [];
       let roundIdx = 0;
 
-      const mockStreamChat = async function* (payload: any) {
-        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+      const mockStreamChat = async function* (payload: Record<string, unknown>) {
+        capturedPayloads.push(JSON.parse(JSON.stringify(payload)) as CapturedChatPayload);
         roundIdx++;
         if (roundIdx === 1) {
           yield {
@@ -738,12 +745,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         }
       };
 
-      const mockExecuteTool = async (toolCall: any) => {
-        const name = toolCall.function?.name;
-        const args =
+      const mockExecuteTool = async (toolCall: ContextToolCall) => {
+        const name = toolCall.function?.name ?? "";
+        const args = (
           typeof toolCall.function?.arguments === "string"
             ? JSON.parse(toolCall.function.arguments)
-            : toolCall.function?.arguments;
+            : toolCall.function?.arguments || {}
+        ) as Record<string, unknown>;
         const result =
           name === "search_web"
             ? { status: "SUCCESS", raw_markdown: "W".repeat(12000) }
@@ -777,8 +785,8 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       }
 
       // Round 2+ (after tool calls completed on artifact turn) defaults num_predict to 16384 and uses fast effort
-      assert.equal(capturedPayloads[1].options.num_predict, 16384);
-      assert.equal(capturedPayloads[1].options.temperature, 0.2);
+      assert.equal(capturedPayloads[1].options?.num_predict, 16384);
+      assert.equal(capturedPayloads[1].options?.temperature, 0.2);
 
       const extracted = extractSvgsFromMessage({
         id: "msg-1",
@@ -799,7 +807,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         round: 1,
         model: "swift-15-27b-mtp",
         isArtifactTurn: false,
-      } as any);
+      } as unknown as Parameters<typeof resolveRoundModelOptions>[0]);
       assert.equal(opts.num_ctx, 131072, "num_ctx must equal 131072");
     });
 
@@ -808,7 +816,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         role: "system",
         content: "You are an autonomous engineering assistant. " + "S".repeat(4000),
       };
-      const messages: any[] = [systemMessage];
+      const messages: ContextMessage[] = [systemMessage];
       for (let i = 0; i < 5; i++) {
         messages.push({
           role: "user",
@@ -834,20 +842,20 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         isArtifactTurn: true,
         outputHeadroomTokens: 3000,
         toolSchemaTokens: 1000,
-      } as any);
+      } as unknown as Parameters<typeof fitContextWindow>[1]);
 
       assert.equal(
-        (result as any).evictedCount,
+        result.evictedCount,
         0,
         "No messages should be evicted under the 100,000 budget"
       );
       assert.ok(
-        (result as any).estimatedTokens >= 48000,
-        `Expected estimatedTokens >= 48000, got ${(result as any).estimatedTokens}`
+        (result.estimatedTokens ?? 0) >= 48000,
+        `Expected estimatedTokens >= 48000, got ${result.estimatedTokens}`
       );
       assert.ok(
-        (result as any).estimatedTokens <= CHAT_CONTEXT_BUDGET_TOKENS - 4000,
-        `Expected estimatedTokens <= ${CHAT_CONTEXT_BUDGET_TOKENS - 4000}, got ${(result as any).estimatedTokens}`
+        (result.estimatedTokens ?? 0) <= CHAT_CONTEXT_BUDGET_TOKENS - 4000,
+        `Expected estimatedTokens <= ${CHAT_CONTEXT_BUDGET_TOKENS - 4000}, got ${result.estimatedTokens}`
       );
       assert.equal(
         result.length,
@@ -864,7 +872,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         role: "system",
         content: "You are an autonomous engineering assistant. " + "S".repeat(2000),
       };
-      const messages: any[] = [systemMsg];
+      const messages: ContextMessage[] = [systemMsg];
       for (let i = 0; i < 4; i++) {
         messages.push({ role: "user", content: `Query ${i + 1}: ` + "U".repeat(38000) });
         messages.push({ role: "assistant", content: `Answer ${i + 1}: ` + "A".repeat(38000) });
@@ -923,7 +931,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("ladder rung (a): compaction alone fits conversation when intermediate turns can be summarized", () => {
-      const messages: any[] = [
+      const messages: ContextMessage[] = [
         { role: "system", content: "System instructions" },
         { role: "user", content: "Turn 1: " + "1".repeat(60000) },
         { role: "assistant", content: "Turn 1 response: " + "A".repeat(60000) },
@@ -948,7 +956,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("ladder rung (b): older tool outputs elided when compaction alone is insufficient", () => {
-      const messages: any[] = [
+      const messages: ContextMessage[] = [
         { role: "system", content: "System instructions" },
         { role: "user", content: "Analyze logs" },
         {
@@ -984,7 +992,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
     it("ladder rung (c): oldest non-system turns dropped when tool elision is still insufficient", () => {
       // Conversation with very large user and assistant text turns (no tools to elide)
-      const messages: any[] = [
+      const messages: ContextMessage[] = [
         { role: "system", content: "System prompt" },
         { role: "user", content: "Gigantic user request 1: " + "U".repeat(150000) },
         { role: "assistant", content: "Gigantic assistant reply 1: " + "A".repeat(150000) },
@@ -1011,7 +1019,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
     it("ladder rung (d) & adversarial payload guarantee: 64K-char output + many medium outputs always fitted <= budget and system prompt preserved", () => {
       // Adversarial payload: huge tool outputs and messages
-      const messages: any[] = [
+      const messages: ContextMessage[] = [
         { role: "system", content: "System prompt verbatim" },
         { role: "user", content: "Adversarial stress test" },
         { role: "assistant", content: "Working..." },

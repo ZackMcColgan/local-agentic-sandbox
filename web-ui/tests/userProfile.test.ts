@@ -5,7 +5,6 @@ import path from "path";
 import os from "os";
 import {
   loadUserProfile,
-  saveUserProfile,
   recordProfileEntry,
   extractDurablePreferences,
   formatProfileForContext,

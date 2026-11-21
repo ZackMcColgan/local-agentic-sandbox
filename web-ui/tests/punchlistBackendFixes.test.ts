@@ -76,7 +76,9 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
 
       const builder = new BuilderWorker({
         workspaceRoot: tmpDir,
-        generate: mockGenerate as any,
+        generate: mockGenerate as unknown as NonNullable<
+          NonNullable<ConstructorParameters<typeof BuilderWorker>[0]>["generate"]
+        >,
       });
 
       // Spy on patchFile method
@@ -293,14 +295,14 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
     const controller = new AbortController();
 
     let stepsExecuted = 0;
-    const mockStepExecutor = async (m: any) => {
+    const mockStepExecutor = async () => {
       stepsExecuted++;
       // Abort after first milestone
       controller.abort();
       return { status: "completed", targetFile: "file.ts", diff: "diff" };
     };
 
-    const task: any = {
+    const task = {
       taskId: "task-abort-loop-test",
       status: "active",
       currentMilestoneIndex: 0,
@@ -324,11 +326,13 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
           acceptanceCriteria: [],
         },
       ],
-    };
+    } as unknown as Parameters<typeof supervisor.executeTaskWithRecovery>[0];
 
     try {
       const res = await supervisor.executeTaskWithRecovery(task, {
-        stepExecutor: mockStepExecutor as any,
+        stepExecutor: mockStepExecutor as unknown as NonNullable<
+          Parameters<typeof supervisor.executeTaskWithRecovery>[1]
+        >["stepExecutor"],
         signal: controller.signal,
       });
 
@@ -344,14 +348,14 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
     const { createProductionStepExecutor } = await import("../lib/subagents/supervisor.js");
     let signalReceived: AbortSignal | undefined;
 
-    const mockWorkerPool: any = {
+    const mockWorkerPool = {
       getModelForRole: () => "swift-15-27b-mtp",
       keepAliveFor: () => "24h",
-      executeJob: async (job: any) => {
+      executeJob: async (job: { abortSignal?: AbortSignal }) => {
         signalReceived = job.abortSignal;
         return { diff: "diff", gitSha: "a".repeat(40), targetFile: "test.ts" };
       },
-    };
+    } as unknown as NonNullable<Parameters<typeof createProductionStepExecutor>[0]>["workerPool"];
 
     const controller = new AbortController();
     const executor = createProductionStepExecutor({
@@ -359,14 +363,14 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
       signal: controller.signal,
     });
 
-    const milestone: any = {
+    const milestone = {
       id: "M1",
       title: "M1",
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
       acceptanceCriteria: [],
-    };
+    } as unknown as Parameters<typeof executor>[0];
 
     await executor(milestone, 1);
     assert.equal(
@@ -615,10 +619,12 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
       [],
       "Manifest must have empty milestones when planning fails"
     );
-    const plannerEntries = (body.manifest.journal || []).filter((j: any) => j.role === "planner");
+    const plannerEntries = (body.manifest.journal || []).filter(
+      (j: { role?: string; message?: unknown }) => j.role === "planner"
+    );
     assert.ok(plannerEntries.length >= 1, "Journal must contain a planner entry");
     assert.ok(
-      plannerEntries.some((j: any) =>
+      plannerEntries.some((j: { role?: string; message?: unknown }) =>
         String(j.message).includes("Planner could not resolve a valid artifact file target")
       ),
       `Planner journal entry must record the planner error verbatim, got: ${JSON.stringify(plannerEntries)}`
@@ -650,7 +656,9 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
       "Task must not be in activeExecutionSet"
     );
 
-    const journalMessages = (body.manifest.journal || []).map((j: any) => String(j.message));
+    const journalMessages = (body.manifest.journal || []).map((j: { message?: unknown }) =>
+      String(j.message)
+    );
     assert.ok(
       journalMessages.some((m: string) =>
         m.includes("Planner could not resolve a valid artifact file target")

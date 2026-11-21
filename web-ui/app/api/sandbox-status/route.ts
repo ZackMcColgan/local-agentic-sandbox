@@ -4,7 +4,6 @@ import { getLLMProvider } from "@/lib/llm/provider";
 
 const LLM_BASE_URL =
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://llm-service:11434";
-const OLLAMA_URL = LLM_BASE_URL; // backward-compat alias
 const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
 const ACTIVE_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 

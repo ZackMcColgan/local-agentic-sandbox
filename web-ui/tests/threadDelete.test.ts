@@ -8,7 +8,6 @@ import {
   registerTurnAbortController,
   markTurnActive,
   getActiveTurn,
-  resolveThreadsDir,
 } from "../lib/threads/threadStore";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
 import { TaskManifest } from "../lib/subagents/types";
@@ -35,7 +34,7 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
 
   it("1. deleteThread removes record JSON, <threadId>/ subdirectory recursively, and .steer.json sidecar (nothing else changes)", async () => {
     const threadId = "thread-del-cleanup-1";
-    const thread = store.createThread({ id: threadId, title: "Cleanup Target" });
+    store.createThread({ id: threadId, title: "Cleanup Target" });
 
     // Create thread files subdirectory with subfiles
     const subDir = path.join(tmpDir, threadId, "files");

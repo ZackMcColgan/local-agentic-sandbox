@@ -11,8 +11,11 @@ export async function GET() {
     const workspaceDir = process.env.WORKSPACE_DIR;
     const schedules = await listSchedules(workspaceDir ? { workspaceDir } : undefined);
     return NextResponse.json({ schedules }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -40,9 +43,9 @@ export async function POST(req: Request | NextRequest) {
     let nextRun: string;
     try {
       nextRun = calculateNextRun(cronExpression).toISOString();
-    } catch (err: any) {
+    } catch (err: unknown) {
       return NextResponse.json(
-        { error: `Invalid cron expression: ${err.message}` },
+        { error: `Invalid cron expression: ${err instanceof Error ? err.message : String(err)}` },
         { status: 400 }
       );
     }
@@ -54,8 +57,11 @@ export async function POST(req: Request | NextRequest) {
       workspaceDir ? { workspaceDir } : undefined
     );
     return NextResponse.json({ id, nextRun }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -70,7 +76,10 @@ export async function DELETE(req: Request | NextRequest) {
     const workspaceDir = process.env.WORKSPACE_DIR;
     await cancelSchedule(id, workspaceDir ? { workspaceDir } : undefined);
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

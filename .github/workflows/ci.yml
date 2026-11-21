@@ -30,6 +30,10 @@ jobs:
         run: |
           npx prettier --check .
 
+      - name: Run ESLint
+        run: |
+          npx eslint . --max-warnings 0
+
   typecheck:
     name: Typecheck (full error report)
     runs-on: ubuntu-24.04

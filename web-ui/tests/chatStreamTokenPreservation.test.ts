@@ -27,7 +27,7 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
     it("keeps the done content unchanged when nothing was streamed", () => {
       assert.equal(mergeStreamedTokens("", "Final synthesis content"), "Final synthesis content");
       assert.equal(
-        mergeStreamedTokens(undefined as any, "Final synthesis content"),
+        mergeStreamedTokens(undefined as unknown as string, "Final synthesis content"),
         "Final synthesis content"
       );
     });
@@ -133,7 +133,7 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
           model: "swift-15-27b-mtp",
         }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       await drain(res);
 
       const thread = await store.getThread(threadId);
@@ -167,7 +167,7 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
           model: "swift-15-27b-mtp",
         }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       await drain(res);
 
       const files = fs.readdirSync(tmpThreadsDir);

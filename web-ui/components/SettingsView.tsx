@@ -19,9 +19,8 @@ import {
   GitBranch,
   Terminal,
 } from "lucide-react";
-import { useTheme, Theme } from "../lib/hooks/useTheme";
+import { useTheme } from "../lib/hooks/useTheme";
 import { formatModelDisplayLabel, formatMessageTimestamp } from "../lib/chatUtils";
-import { EngineStatusPill } from "./EngineStatusPill";
 import { version as APP_VERSION } from "../package.json";
 const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
@@ -143,10 +142,7 @@ export function SettingsView({
   onClose,
   selectedModel = DEFAULT_PRIMARY_MODEL,
   defaultModel,
-  models,
-  onDefaultModelChange,
   reasoningEffort = "low",
-  onReasoningEffortChange,
   onOpenModelSheet,
   theme: propsTheme,
   onThemeChange: propsOnThemeChange,
@@ -400,7 +396,7 @@ export function SettingsView({
         setEngineData(json);
       }
     } catch {
-      setEngineData((prev: any) => ({ ...prev, status: "stopped", reachable: false }));
+      setEngineData((prev) => ({ ...prev, status: "stopped", reachable: false }));
     }
   };
 
@@ -429,8 +425,9 @@ export function SettingsView({
       });
       const json = await res.json().catch(() => ({}));
       setEngineMessage(formatEngineActionMessage(action, res.ok, res.status, json));
-    } catch (err: any) {
-      setEngineMessage(`Failed: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setEngineMessage(`Failed: ${message}`);
     } finally {
       setEngineLoading(false);
       setTimeout(fetchEngineStatus, 1500);

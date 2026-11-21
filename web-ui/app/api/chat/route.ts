@@ -37,24 +37,19 @@ import {
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
-  AGENT_MODES,
-  isReasoningEffortSupported,
   getModelProfile,
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import {
-  computeModelOptions,
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
-  parseThinkingAndContent,
   joinNarrationChunks,
 } from "@/lib/chatUtils";
 import {
   fitContextWindow,
   clampToolOutput,
-  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
   MAX_WEB_RESEARCH_CALLS,
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   isWebResearchTool,
@@ -94,10 +89,7 @@ import {
   buildToolRegistry,
   describeTool,
 } from "@/lib/progressiveTools";
-import {
-  compactConversationHistory,
-  resolveCompactionStrategy,
-} from "@/lib/conversationCompaction";
+import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
@@ -105,7 +97,6 @@ import {
   isDestructiveHostAction,
   createPendingApproval,
   consumeContinuationEntry,
-  checkHostRunnerHealth,
   determineHostRunnerState,
   shouldAdvertiseHostTools,
   shouldAdvertiseUnattendedGitTools,
@@ -175,12 +166,30 @@ const ADVERTISED_TOOLS = new Set([
 
 interface TraceItem {
   tool: string;
-  args: Record<string, any>;
-  result: any;
+  args: Record<string, unknown>;
+  result: unknown;
   durationMs: number;
   timestamp: string;
   model: string;
   tier?: "sandbox" | "browser" | "workspace" | "host";
+}
+
+interface LlmToolCall {
+  id?: string;
+  type?: string;
+  function: {
+    name: string;
+    arguments: string | Record<string, unknown>;
+  };
+}
+
+interface ChatInputMessage {
+  id?: string;
+  role: string;
+  content: string;
+  timestamp?: string;
+  tool_calls?: LlmToolCall[];
+  [key: string]: unknown;
 }
 
 async function connectMcpClient(url: string, name: string) {
@@ -196,8 +205,11 @@ async function connectMcpClient(url: string, name: string) {
       `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
     );
     return { client, transport, tools: toolsResult.tools };
-  } catch (err: any) {
-    console.warn(`[Orchestrator] Could not connect to MCP at ${sseUrl}:`, err.message);
+  } catch (err: unknown) {
+    console.warn(
+      `[Orchestrator] Could not connect to MCP at ${sseUrl}:`,
+      err instanceof Error ? err.message : String(err)
+    );
     if (client) {
       try {
         await client.close();
@@ -216,7 +228,7 @@ async function connectMcpClient(url: string, name: string) {
  * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
  * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
  */
-async function triageComplexity(
+async function _triageComplexity(
   userQuery: string,
   llmBaseUrl: string,
   triageModel: string = DEFAULT_SUBAGENT_MODEL
@@ -264,21 +276,21 @@ Output JSON strictly: {"complexity": "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS", "rea
 /**
  * Unified streaming generator delegating to the resolved LLMProvider (Ollama or llama.cpp)
  */
-async function* streamLlmChat(llmBaseUrl: string, payload: any) {
+async function* streamLlmChat(
+  llmBaseUrl: string,
+  payload: Parameters<ReturnType<typeof getLLMProvider>["streamChat"]>[1]
+) {
   const provider = getLLMProvider();
   yield* provider.streamChat(llmBaseUrl, payload);
 }
-
-// Backward-compat alias
-const streamOllamaChat = streamLlmChat;
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
   const toolClientMap = new Map<
     string,
-    { client: Client; tier: "sandbox" | "browser" | "workspace" | "host" }
+    { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" }
   >();
-  let rootSpan: any = null;
+  let rootSpan: ReturnType<TelemetryTracer["startSpan"]> | null = null;
 
   try {
     const {
@@ -297,9 +309,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 });
     }
 
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const typedMessages = messages as ChatInputMessage[];
+    const lastUserMsg = [...typedMessages].reverse().find((m) => m.role === "user");
     const userPrompt = lastUserMsg?.content || "";
-    const priorUserMsg = [...messages].reverse().filter((m: any) => m.role === "user")[1];
+    const priorUserMsg = [...typedMessages].reverse().filter((m) => m.role === "user")[1];
     const priorUserPrompt: string =
       typeof priorUserMsg?.content === "string" ? priorUserMsg.content : "";
 
@@ -319,7 +332,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Resolve Active Model via Tri-Mode Dispatcher
     let activeModel = requestedModel;
-    let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
+    const triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
     let invalidRequestedModel: string | null = null;
 
     if (
@@ -348,7 +361,12 @@ export async function POST(req: NextRequest) {
         : null;
     const threadsDir = resolveThreadsDir();
     const threadStore = new ThreadStore(threadsDir);
-    let threadData: any = null;
+    let threadData:
+      | (NonNullable<Awaited<ReturnType<ThreadStore["getThread"]>>> & {
+          gitCapability?: Parameters<typeof shouldAdvertiseUnattendedGitTools>[1];
+          mergeGrant?: Parameters<typeof executeHostTool>[4];
+        })
+      | null = null;
     const hostSettings = getHostSettings();
     let threadHostAccess = hostSettings.hostAccessEnabled;
 
@@ -369,7 +387,7 @@ export async function POST(req: NextRequest) {
         // Turn Start (PIN 2 User Message): save user message immediately to threadStore
         if (lastUserMsg && userPrompt.trim()) {
           const alreadyPresent = (threadData.messages || []).some(
-            (m: any) => m.id === userMessageId || (m.role === "user" && m.content === userPrompt)
+            (m) => m.id === userMessageId || (m.role === "user" && m.content === userPrompt)
           );
           if (!alreadyPresent) {
             const userMsgToSave = {
@@ -383,8 +401,11 @@ export async function POST(req: NextRequest) {
             threadData = await threadStore.getThread(activeThreadId);
           }
         }
-      } catch (err: any) {
-        console.warn("[ChatRoute] Turn start persistence warning:", err.message);
+      } catch (err: unknown) {
+        console.warn(
+          "[ChatRoute] Turn start persistence warning:",
+          err instanceof Error ? err.message : String(err)
+        );
       }
 
       // CHAT-8: keep the thread honestly live while the turn runs so mid-turn
@@ -419,7 +440,6 @@ export async function POST(req: NextRequest) {
     );
 
     const threadOutputsDir = activeThreadId ? path.join(threadsDir, activeThreadId, "files") : null;
-    const threadOutputsRelPath = activeThreadId ? `${activeThreadId}/files` : null;
     if (threadOutputsDir) {
       try {
         fs.mkdirSync(threadOutputsDir, { recursive: true, mode: 0o770 });
@@ -549,8 +569,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // unchanged re-read, carrying path + content hash + the earlier trace/round
     // reference. Declared with the other turn state so both persist paths carry it.
     const turnReadDedups: ReadDedupMeta[] = [];
-    let accumulatedThoughts: string[] = [];
-    const turnStartMs = Date.now();
+    const accumulatedThoughts: string[] = [];
     let thinkingEndMs: number | null = null;
     let firstLlmRequestMs: number | null = null;
     let thinkingMsAcc = 0;
@@ -590,7 +609,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           role: "assistant" as const,
           content: abortContent,
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
-          traces: traces.length > 0 ? (traces as any) : undefined,
+          traces:
+            traces.length > 0
+              ? (traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])
+              : undefined,
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
           modelUsed: activeModel,
@@ -641,7 +663,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     };
     req.signal.addEventListener("abort", cleanupClientSignal);
 
-    const sendEvent = async (data: any) => {
+    const sendEvent = async (data: Record<string, unknown>) => {
       if (clientDisconnected || req.signal.aborted) {
         clearInterval(heartbeatInterval);
         return;
@@ -665,10 +687,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             req.signal.addEventListener("abort", onAbort, { once: true });
           }),
         ]);
-      } catch (err: any) {
+      } catch (err: unknown) {
         clearInterval(heartbeatInterval);
         clientDisconnected = true;
-        if (!req.signal.aborted && err?.message === "writer timeout") {
+        const errMessage = err instanceof Error ? err.message : undefined;
+        if (!req.signal.aborted && errMessage === "writer timeout") {
           // Idle reader (client stopped consuming): abort the writable so the
           // readable errors out and later writes skip instantly instead of
           // waiting the timeout again each event.
@@ -780,7 +803,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               shouldConsultLocalOracle(userPrompt)
             ) {
               try {
-                let timer: any = null;
+                let timer: ReturnType<typeof setTimeout> | null = null;
                 const timeoutPromise = new Promise<{ contextSnippet: string; citations: string[] }>(
                   (resolve) => {
                     timer = setTimeout(() => resolve({ contextSnippet: "", citations: [] }), 2500);
@@ -801,8 +824,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   oracleSnippet = lookupResult.contextSnippet;
                   oracleCitations = lookupResult.citations;
                 }
-              } catch (err: any) {
-                console.warn("[ChatRoute] Oracle codebase retrieval warning:", err.message);
+              } catch (err: unknown) {
+                console.warn(
+                  "[ChatRoute] Oracle codebase retrieval warning:",
+                  err instanceof Error ? err.message : String(err)
+                );
               }
             }
 
@@ -816,8 +842,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                     origin: fact.origin,
                   });
                 }
-              } catch (err: any) {
-                console.warn("[ChatRoute] Failed to record durable preferences:", err.message);
+              } catch (err: unknown) {
+                console.warn(
+                  "[ChatRoute] Failed to record durable preferences:",
+                  err instanceof Error ? err.message : String(err)
+                );
               }
             }
 
@@ -877,7 +906,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               : [];
 
             for (const ht of hostTools) {
-              toolClientMap.set(ht.name, { client: null as any, tier: "host" });
+              toolClientMap.set(ht.name, { client: null, tier: "host" });
             }
 
             // Unattended Git Tool Admission: requires Key (a) Settings ON + explicit capability + READY runner
@@ -899,7 +928,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               : [];
 
             for (const gt of gitTools) {
-              toolClientMap.set(gt.name, { client: null as any, tier: "host" });
+              toolClientMap.set(gt.name, { client: null, tier: "host" });
             }
 
             const allTools = [
@@ -976,7 +1005,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const hostDirective =
               "\n\n" + getHostStateDirective(hostStatus.runnerState, hostStatus.reason);
 
-            if (!conversationMessages.some((m: any) => m.role === "system")) {
+            if (!conversationMessages.some((m) => m.role === "system")) {
               conversationMessages.unshift({
                 role: "system",
                 content: assembleSystemPrompt(
@@ -988,7 +1017,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 ),
               });
             } else {
-              const sysIdx = conversationMessages.findIndex((m: any) => m.role === "system");
+              const sysIdx = conversationMessages.findIndex((m) => m.role === "system");
               conversationMessages[sysIdx].content +=
                 profileContext + formatMemoryForContext(memoryText) + hostDirective;
             }
@@ -1064,11 +1093,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             }
 
             // Helper to detect tool calls from message.tool_calls OR XML / JSON blocks
-            const getEffectiveToolCalls = (msg: any) => {
+            const getEffectiveToolCalls = (msg: {
+              content: string;
+              tool_calls?: LlmToolCall[];
+            }): LlmToolCall[] => {
               if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
                 return msg.tool_calls;
               }
-              return parseToolCallsFromText(msg.content, toolClientMap);
+              return parseToolCallsFromText(msg.content, toolClientMap) as LlmToolCall[];
             };
 
             // Send initial metadata
@@ -1089,7 +1121,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               },
             });
 
-            let currentAssistantMessage: any = { role: "assistant", content: "" };
+            let currentAssistantMessage: {
+              role: "assistant";
+              content: string;
+              tool_calls?: LlmToolCall[];
+            } = { role: "assistant", content: "" };
             let round = 0;
             // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
             // TOOL_ROUND_BACKSTOP is only the runaway guard.
@@ -1113,9 +1149,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const roundFinishReasons: string[] = [];
             let consecutiveDeadlineAborts = 0;
             let consecutiveLengthTruncations = 0;
-            let turnEndedByTimeout = false;
-            let turnEndedBySizeLimit = false;
-            let turnEndedByTruncation = false;
             let honestEndMarker = "";
             // Text carried across a length-truncated auto-continue: the final answer
             // must contain EVERY produced half, never just the last round.
@@ -1139,7 +1172,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
 
             const turnStartMs = Date.now();
-            const chunkBudget = resolveThreadChunkBudget(threadData as any);
+            const chunkBudget = resolveThreadChunkBudget(threadData ?? undefined);
             const chunkWorkspaceRoot = _worktree?.path || resolveJobRepoRoot() || process.cwd();
             const { jobId: chunkJobId, handoffPath: chunkHandoffPath } = resolveChunkHandoffTarget({
               taskId: threadData?.taskId,
@@ -1238,7 +1271,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                         }
                       );
                       if (!hybridResult.noop) {
-                        const rebuilt: any[] = threadStore.buildModelMessages(threadData);
+                        const rebuilt: Array<{
+                          role: string;
+                          content: string;
+                          [key: string]: unknown;
+                        }> = threadStore.buildModelMessages(threadData);
                         const liveSystem =
                           conversationMessages[0]?.role === "system"
                             ? conversationMessages[0]
@@ -1258,7 +1295,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                         if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
                           const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
                           const hasInFlightTools = inFlightTail.some(
-                            (m: any) =>
+                            (m) =>
                               m?.role === "tool" ||
                               (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
                           );
@@ -1357,7 +1394,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 }
               }
 
-              const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan.spanId, {
+              const reasoningSpan = tracer.startSpan("model.reasoning", rootSpan?.spanId, {
                 model: activeModel,
                 round,
               });
@@ -1400,8 +1437,8 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 `[DBG] dispatch round ${round} inactivity=${inactivityMs} total=${totalMs}`
               );
               let roundTimedOut: "inactivity" | "total" | null = null;
-              let roundInactivityTimer: any = null;
-              let roundTotalTimer: any = null;
+              let roundInactivityTimer: ReturnType<typeof setTimeout> | null = null;
+              let roundTotalTimer: ReturnType<typeof setTimeout> | null = null;
               const armRoundDeadline = () => {
                 if (roundInactivityTimer) clearTimeout(roundInactivityTimer);
                 roundInactivityTimer = setTimeout(() => {
@@ -1417,7 +1454,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               }, totalMs);
               if (typeof roundTotalTimer.unref === "function") roundTotalTimer.unref();
 
-              const llmPayload: any = {
+              const llmPayload: Parameters<ReturnType<typeof getLLMProvider>["streamChat"]>[1] = {
                 model: activeModel,
                 messages: fitContextWindow(conversationMessages, {
                   tools: isFinalRound ? undefined : roundTools,
@@ -1437,7 +1474,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               let roundThinking = "";
               let roundFinishReason: string | undefined = undefined;
               let roundSizeCapped = false;
-              let toolCallsFromMessage: any[] = [];
+              const toolCallsFromMessage: LlmToolCall[] = [];
 
               try {
                 for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -1512,7 +1549,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                     toolCallsFromMessage.push(...chunk.message.tool_calls);
                   }
                 }
-              } catch (roundErr: any) {
+              } catch (roundErr: unknown) {
                 if (!roundAbortController.signal.aborted || turnAbortController.signal.aborted) {
                   throw roundErr;
                 }
@@ -1538,7 +1575,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 if (roundSizeCapped) {
                   // Size limit hit: the turn ends honestly. No retry — the content
                   // cap exists precisely to stop runaway generations.
-                  turnEndedBySizeLimit = true;
                   honestEndMarker = TURN_SIZE_LIMIT_MARKER;
                   reasoningSpan.end("ok", { roundSizeCapped: true });
                   break;
@@ -1549,7 +1585,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   if (consecutiveDeadlineAborts >= 2) {
                     // Second consecutive deadline-aborted round: end the turn with the
                     // honest marker. Never a silent endless retry.
-                    turnEndedByTimeout = true;
                     honestEndMarker = TURN_TIMEOUT_MARKER;
                     accumulatedStreamedTokens += TURN_TIMEOUT_MARKER;
                     streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
@@ -1601,7 +1636,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               if (
                 roundFinishReason === "length" &&
                 toolCallsFromMessage.length > 0 &&
-                toolCallsFromMessage.some((tc: any) => {
+                toolCallsFromMessage.some((tc) => {
                   const rawArgs = tc.function?.arguments;
                   if (typeof rawArgs !== "string") return false;
                   try {
@@ -1612,16 +1647,17 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   }
                 })
               ) {
-                const bad = toolCallsFromMessage.find((tc: any) => {
+                const bad = toolCallsFromMessage.find((tc) => {
                   try {
-                    JSON.parse(tc.function?.arguments);
+                    if (typeof tc.function?.arguments !== "string") return false;
+                    JSON.parse(tc.function.arguments);
                     return false;
                   } catch {
                     return true;
                   }
                 });
-                const byteSize = (bad?.function?.arguments || "").length;
-                turnEndedBySizeLimit = true;
+                const byteSize =
+                  typeof bad?.function?.arguments === "string" ? bad.function.arguments.length : 0;
                 const sizeMarker = `${TURN_SIZE_LIMIT_MARKER} (tool: ${bad?.function?.name}, arguments truncated at ${byteSize} bytes)`;
                 honestEndMarker = sizeMarker;
                 accumulatedStreamedTokens += sizeMarker;
@@ -1639,7 +1675,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
 
               const rawToolCalls = getEffectiveToolCalls(currentAssistantMessage);
               const seenKeys = new Set<string>();
-              const toolCalls = (rawToolCalls || []).filter((tc: any) => {
+              const toolCalls = (rawToolCalls || []).filter((tc) => {
                 const key =
                   tc.id ||
                   `${tc.function?.name}:${typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {})}`;
@@ -1707,7 +1743,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 ) {
                   consecutiveLengthTruncations++;
                   if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
-                    turnEndedByTruncation = true;
                     honestEndMarker = TURN_TRUNCATION_MARKER;
                     // Keep EVERY produced half: the final answer carries the earlier
                     // truncated rounds plus this one, never just the last round.
@@ -1775,7 +1810,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               }
 
               round++;
-              lastRoundTools = toolCalls.map((tc: any) => tc.function?.name || "");
+              lastRoundTools = toolCalls.map((tc) => tc.function?.name || "");
               const assistantMsgToPush = {
                 ...currentAssistantMessage,
                 tool_calls: toolCalls,
@@ -1787,15 +1822,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               for (const toolCall of toolCalls) {
                 if (turnAbortController.signal.aborted) break;
                 const toolName = toolCall.function.name;
-                let toolArgs: Record<string, any> = {};
+                let toolArgs: Record<string, unknown> = {};
                 let malformedArgsError: string | null = null;
                 if (typeof toolCall.function.arguments === "string") {
                   try {
                     toolArgs = toolCall.function.arguments.trim()
                       ? JSON.parse(toolCall.function.arguments)
                       : {};
-                  } catch (parseErr: any) {
-                    malformedArgsError = `Malformed JSON arguments for tool '${toolName}': ${parseErr?.message || "Invalid JSON"}`;
+                  } catch (parseErr: unknown) {
+                    const parseMsg = parseErr instanceof Error ? parseErr.message : undefined;
+                    malformedArgsError = `Malformed JSON arguments for tool '${toolName}': ${parseMsg || "Invalid JSON"}`;
                   }
                 } else if (
                   toolCall.function.arguments &&
@@ -1914,10 +1950,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                     }
                   }
                   if (typeof toolArgs.url === "string" && toolArgs.url.trim()) {
-                    toolArgs.url = toolArgs.url.trim();
-                    if (!/^https?:\/\//i.test(toolArgs.url)) {
-                      toolArgs.url = `https://${toolArgs.url}`;
-                    }
+                    const trimmedUrl = toolArgs.url.trim();
+                    toolArgs.url = /^https?:\/\//i.test(trimmedUrl)
+                      ? trimmedUrl
+                      : `https://${trimmedUrl}`;
                   }
                 } else if (toolName === "workspace_read_file") {
                   if (
@@ -1969,7 +2005,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 }
 
                 if (toolName === DESCRIBE_TOOL_NAME) {
-                  const targetTool = toolArgs.tool_name || toolArgs.name;
+                  const targetTool = String(toolArgs.tool_name || toolArgs.name || "");
                   const toolDesc = describeTool(targetTool, toolRegistry);
                   conversationMessages.push({
                     role: "tool",
@@ -2036,24 +2072,24 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   status: `Executing tool ${toolName}...`,
                 });
 
-                const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
+                const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
                   tool: toolName,
                   tier: target.tier,
                 });
 
-                let bashSpan: any = null;
+                let bashSpan: ReturnType<TelemetryTracer["startSpan"]> | null = null;
                 if (
                   toolName === "workspace_run_command" ||
                   toolName === "execute_sandboxed_python"
                 ) {
+                  const codeStr = typeof toolArgs.code === "string" ? toolArgs.code : "";
                   bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
-                    command:
-                      toolArgs.command || (toolArgs.code ? toolArgs.code.slice(0, 100) : "python"),
+                    command: toolArgs.command || (codeStr ? codeStr.slice(0, 100) : "python"),
                   });
                 }
 
                 const startTime = performance.now();
-                let result: any = null;
+                let result: unknown = null;
 
                 if (
                   (toolName === "workspace_write_file" || toolName === "workspace_patch_file") &&
@@ -2104,15 +2140,16 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                       if (hostDiff) {
                         turnHostDiffs.push(hostDiff);
                       }
-                    } catch (hostErr: any) {
+                    } catch (hostErr: unknown) {
+                      const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
                       result = {
                         success: false,
-                        error: hostErr?.message || "Host execution error",
+                        error: hostMsg || "Host execution error",
                         isError: true,
                       };
                     }
                   }
-                } else {
+                } else if (target.client) {
                   result = await target.client.callTool({
                     name: toolName,
                     arguments: toolArgs,
@@ -2127,7 +2164,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   if (
                     resultStr.includes('"status":"EXECUTION_ERROR"') ||
                     resultStr.includes('"exit_code":1') ||
-                    (result as any).isError
+                    Boolean((result as { isError?: boolean } | null)?.isError)
                   ) {
                     isExecutionError = true;
                   }
@@ -2265,10 +2302,15 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               // token throttle) and refresh the heartbeat so watchers read ALIVE in-flight work.
               const roundThought =
                 accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
-              streamSnapshot.maybeWrite(accumulatedStreamedTokens, roundThought, traces as any, {
-                force: true,
-                roundPromptTokens: [...roundPromptTokens],
-              });
+              streamSnapshot.maybeWrite(
+                accumulatedStreamedTokens,
+                roundThought,
+                traces as unknown as Parameters<typeof streamSnapshot.maybeWrite>[2],
+                {
+                  force: true,
+                  roundPromptTokens: [...roundPromptTokens],
+                }
+              );
               if (activeThreadId) {
                 touchActiveTurn(activeThreadId);
               }
@@ -2369,7 +2411,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 }
               }
 
-              const synthSpan = tracer.startSpan("model.synthesis", rootSpan.spanId, {
+              const synthSpan = tracer.startSpan("model.synthesis", rootSpan?.spanId, {
                 model: activeModel,
               });
               conversationMessages.push(currentAssistantMessage);
@@ -2486,7 +2528,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                       await sendEvent({ type: "token", content: chunk.message.content });
                     }
                   }
-                } catch (err: any) {
+                } catch (err: unknown) {
                   if (passAbortController.signal.aborted && !turnAbortController.signal.aborted) {
                     console.log(`[DBG] synthesis pass aborted timedOut=${passTimedOut}`);
                   } else {
@@ -2644,7 +2686,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
             const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
 
-            rootSpan.end("ok", {
+            rootSpan?.end("ok", {
               tracesCount: traces.length,
               modelUsed: activeModel,
             });
@@ -2716,7 +2758,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 content: cleanedContent,
                 thought:
                   accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
-                traces: traces.length > 0 ? (traces as any) : undefined,
+                traces:
+                  traces.length > 0
+                    ? (traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])
+                    : undefined,
                 completionStamp: finalCompletionStamp,
                 verificationGaps:
                   finalVerificationGaps.length > 0 ? finalVerificationGaps : undefined,
@@ -2815,23 +2860,24 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 traceId: tracer.getTraceId(),
               },
             });
-          } catch (err: any) {
+          } catch (err: unknown) {
+            const errObj = err as { message?: string; statusCode?: number };
+            const errMsg = String(errObj?.message || "");
             if (rootSpan) {
               try {
-                rootSpan.end("error", { error: err.message });
+                rootSpan.end("error", { error: errMsg });
               } catch {}
             }
             console.error("[Agent Orchestrator Streaming Error]:", err);
-            const errMsg = String(err?.message || "");
             const isEngineStopped =
               errMsg.includes("engine_stopped") ||
               errMsg.includes("LLM engine is stopped") ||
               errMsg.includes("ECONNREFUSED") ||
-              err?.statusCode === 503;
+              errObj?.statusCode === 503;
 
             const friendlyMessage = isEngineStopped
               ? "LLM engine is stopped. Start it from Settings or the status bar."
-              : err.message || "Internal orchestrator error";
+              : errMsg || "Internal orchestrator error";
 
             if (explicitStopped || turnAbortController.signal.aborted) {
               if (activeThreadId && !assistantPersisted) {
@@ -2861,7 +2907,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   content: errorContent,
                   thought:
                     accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
-                  traces: traces.length > 0 ? (traces as any) : undefined,
+                  traces:
+                    traces.length > 0
+                      ? (traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])
+                      : undefined,
                   attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
                   diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
                   modelUsed: activeModel,
@@ -2954,23 +3003,24 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         Connection: "keep-alive",
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errObj = err as { message?: string; statusCode?: number };
+    const errMsg = String(errObj?.message || "");
     if (rootSpan) {
       try {
-        rootSpan.end("error", { error: err.message });
+        rootSpan.end("error", { error: errMsg });
       } catch {}
     }
     console.error("[Agent Orchestrator Setup Error]:", err);
-    const errMsg = String(err?.message || "");
     const isEngineStopped =
       errMsg.includes("engine_stopped") ||
       errMsg.includes("LLM engine is stopped") ||
       errMsg.includes("ECONNREFUSED") ||
-      err?.statusCode === 503;
+      errObj?.statusCode === 503;
 
     const friendlyMessage = isEngineStopped
       ? "LLM engine is stopped. Start it from Settings or the status bar."
-      : err.message || "Internal orchestrator error";
+      : errMsg || "Internal orchestrator error";
 
     return NextResponse.json(
       {

@@ -188,7 +188,9 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
         updatedAt: new Date().toISOString(),
       };
 
-      supervisor.saveCheckpoint(completedTask as any);
+      supervisor.saveCheckpoint(
+        completedTask as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]
+      );
 
       const store = new FlywheelSkillsStore(dbPath);
       try {
@@ -239,7 +241,7 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
 
       const { generatePlanSpec } = await import("../lib/subagents/planner.js");
       let capturedPrompt = "";
-      const mockGenerate = async (options: any) => {
+      const mockGenerate = async (options: { prompt?: string }) => {
         capturedPrompt = options.prompt || "";
         return {
           text: JSON.stringify({
@@ -259,8 +261,8 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
       const plan = await generatePlanSpec({
         goal: "Create a modern weather SVG card with temperature indicator",
         scope: "SCRIPT",
-        generate: mockGenerate as any,
-      } as any);
+        generate: mockGenerate,
+      } as unknown as Parameters<typeof generatePlanSpec>[0]);
 
       assert.ok(plan.milestones.length > 0);
       assert.ok(

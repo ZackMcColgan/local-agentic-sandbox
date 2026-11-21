@@ -5,7 +5,6 @@ import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
 import {
-  initProjectStore,
   registerProject,
   toggleAllowlist,
   getProject,
@@ -19,9 +18,7 @@ import {
   setEngineRunningCheckOverride,
 } from "../lib/projects/projectRunner";
 import { POST as postTask } from "../app/api/projects/[id]/tasks/route";
-import { POST as postEngine } from "../app/api/engine/route";
 import { closeSharedRunLedger } from "../lib/ledger/runLedger";
-import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
 describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
   let tempDir: string;
@@ -202,7 +199,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
       projectId: project.project_id,
       prompt: "Add auth and db helpers",
       executeInline: true,
-      milestonesExecutor: async (proj, branch) => {
+      milestonesExecutor: async (proj) => {
         // Milestone 1
         fs.writeFileSync(path.join(proj.root_path, "auth.ts"), "export const auth = true;", "utf8");
         runGit(proj, ["add", "auth.ts"]);

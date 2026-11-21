@@ -96,15 +96,12 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
       completedAt: new Date().toISOString(),
     };
 
-    let deployRunCalledWith = "";
     const html = renderToString(
       React.createElement(BuildsView, {
         onOpenDrawer: () => {},
         activeTask: sampleTask,
         onSelectThread: () => {},
-        onDeployRun: (taskId: string) => {
-          deployRunCalledWith = taskId;
-        },
+        onDeployRun: () => {},
       })
     );
 

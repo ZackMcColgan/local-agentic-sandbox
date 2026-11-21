@@ -27,7 +27,7 @@ export interface GenerateResult {
   /** Time Ollama spent loading weights for this call (ms). >~1000ms means a cold load. */
   loadDurationMs?: number;
   totalDurationMs?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type GenerateFn = (req: GenerateRequest) => Promise<GenerateResult>;
@@ -124,11 +124,11 @@ export function createLlmGenerate(options?: {
           fetchImpl: options?.fetchImpl,
           scope: options?.scope || req.scope,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         throw new ModelUnavailableError(
           req.model,
           options?.baseUrl || process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080",
-          err?.message || String(err)
+          err instanceof Error ? err.message : String(err)
         );
       }
     };
@@ -152,7 +152,7 @@ export function createLlmGenerate(options?: {
     const requestedPredict =
       typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
     const effort = (req.reasoningEffort ||
-      (req.options as any)?.reasoningEffort ||
+      (req.options as { reasoningEffort?: string } | undefined)?.reasoningEffort ||
       "fast") as string;
     const thinkingBudget = getThinkingBudget(effort);
     const effectiveNumPredict = requestedPredict + thinkingBudget;
@@ -178,13 +178,12 @@ export function createLlmGenerate(options?: {
           options: requestOptions,
         }),
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
       throw new ModelUnavailableError(
         req.model,
         endpoint,
-        err?.name === "TimeoutError"
-          ? `timed out after ${timeoutMs}ms`
-          : err?.message || String(err)
+        e?.name === "TimeoutError" ? `timed out after ${timeoutMs}ms` : e?.message || String(err)
       );
     }
 
@@ -206,7 +205,7 @@ export function createLlmGenerate(options?: {
     let lastLogTime = Date.now();
 
     try {
-      if (res.body && typeof (res.body as any).getReader === "function") {
+      if (res.body && typeof (res.body as ReadableStream<Uint8Array>).getReader === "function") {
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
@@ -305,15 +304,15 @@ export function createLlmGenerate(options?: {
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new ModelUnavailableError(
         req.model,
         endpoint,
-        `stream read error: ${err?.message || String(err)}`
+        `stream read error: ${err instanceof Error ? err.message : String(err)}`
       );
     }
 
-    let text = accumulatedText.trim();
+    const text = accumulatedText.trim();
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }

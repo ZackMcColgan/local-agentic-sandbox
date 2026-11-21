@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-// @ts-ignore - resolved at test time
 import {
   extractCitations,
   hasCompletionLanguage,
@@ -43,7 +42,7 @@ describe("Evidence-linked job summaries", () => {
 
     assert.equal(result.flagged, true);
     assert.equal(result.completionStamp, "completed-unverified");
-    assert.ok(result.gaps.some((g: any) => g.kind === "commit" && g.claim.includes("deadbeef99")));
+    assert.ok(result.gaps.some((g) => g.kind === "commit" && g.claim.includes("deadbeef99")));
   });
 
   it("(d) cited PR number nonexistent returns completed-unverified with gap naming the PR", async () => {
@@ -55,7 +54,7 @@ describe("Evidence-linked job summaries", () => {
 
     assert.equal(result.flagged, true);
     assert.equal(result.completionStamp, "completed-unverified");
-    assert.ok(result.gaps.some((g: any) => g.kind === "pr" && g.claim.includes("9999")));
+    assert.ok(result.gaps.some((g) => g.kind === "pr" && g.claim.includes("9999")));
   });
 
   it("(e) non-completion text with no citations is NOT flagged", async () => {

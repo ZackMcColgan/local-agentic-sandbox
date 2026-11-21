@@ -12,7 +12,7 @@ const {
   getHostStateDirective,
   generateHostFileDiff,
   executeHostTool,
-} = hostModeLib as any;
+} = hostModeLib;
 
 describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () => {
   describe("PIN 1: CSPRNG UUID for Approvals", () => {
@@ -30,8 +30,6 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         "risk"
       );
 
-      const uuidV4Regex =
-        /^approval-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const generalUuidRegex =
         /^approval-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -279,7 +277,7 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
           async () => {
             await executeHostTool("host_run_powershell", { command: "Get-Process" });
           },
-          (err: any) => {
+          (err: unknown) => {
             return (
               err instanceof Error &&
               err.message.includes("Host runner daemon disconnected mid-turn:")

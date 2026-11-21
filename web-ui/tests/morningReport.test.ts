@@ -4,7 +4,10 @@ import {
   generateMorningReport,
   formatMorningReportMarkdown,
   MorningReportInput,
+  type OvernightMorningReport,
+  type OvernightTaskEntry,
 } from "../lib/subagents/morningReport.js";
+import type { TaskManifest } from "../lib/subagents/types.js";
 
 describe("Phase 1 — Morning Report Suite", () => {
   const sampleInput: MorningReportInput = {
@@ -154,7 +157,7 @@ describe("Phase 1 — Morning Report Suite", () => {
 
 describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window)", () => {
   it("generates an overnight report from a mix of completed, parked, and failed tasks", async () => {
-    const mod = (await import("../lib/subagents/morningReport.js")) as any;
+    const mod = await import("../lib/subagents/morningReport.js");
     assert.equal(
       typeof mod.generateOvernightMorningReport,
       "function",
@@ -278,7 +281,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       },
     ];
 
-    const report = mod.generateOvernightMorningReport(tasks);
+    const report = mod.generateOvernightMorningReport(tasks as unknown as TaskManifest[]);
 
     assert.equal(report.totalTasks, 3, "Should include all 3 tasks from the overnight window");
     assert.equal(report.completedCount, 1);
@@ -286,7 +289,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.equal(report.failedCount, 1);
 
     // Check task entries have status, duration, artifacts with preview links, and park/failure reasons
-    const completedEntry = report.tasks.find((t: any) => t.taskId === "task-101-completed");
+    const completedEntry = report.tasks.find((t) => t.taskId === "task-101-completed");
     assert.ok(completedEntry);
     assert.equal(completedEntry.status, "completed");
     assert.equal(completedEntry.durationFormatted, "3m 30s");
@@ -300,28 +303,28 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       "Artifact must include a working preview link"
     );
 
-    const parkedEntry = report.tasks.find((t: any) => t.taskId === "task-102-parked");
+    const parkedEntry = report.tasks.find((t) => t.taskId === "task-102-parked");
     assert.ok(parkedEntry);
     assert.equal(parkedEntry.status, "parked");
     assert.equal(parkedEntry.durationFormatted, "25m 0s");
-    assert.ok(parkedEntry.parkedReason.includes("OAuth client secret"));
+    assert.ok((parkedEntry.parkedReason ?? "").includes("OAuth client secret"));
 
-    const failedEntry = report.tasks.find((t: any) => t.taskId === "task-103-failed");
+    const failedEntry = report.tasks.find((t) => t.taskId === "task-103-failed");
     assert.ok(failedEntry);
     assert.equal(failedEntry.status, "failed");
     assert.equal(failedEntry.durationFormatted, "4m 15s");
-    assert.ok(failedEntry.errorSummary.includes("wasm-pack target binary missing"));
+    assert.ok((failedEntry.errorSummary ?? "").includes("wasm-pack target binary missing"));
 
     // What needs attention section must include both parked and failed tasks
     assert.equal(report.attentionItems.length, 2);
     assert.ok(
       report.attentionItems.some(
-        (item: any) => item.taskId === "task-102-parked" && item.status === "parked"
+        (item) => item.taskId === "task-102-parked" && item.status === "parked"
       )
     );
     assert.ok(
       report.attentionItems.some(
-        (item: any) => item.taskId === "task-103-failed" && item.status === "failed"
+        (item) => item.taskId === "task-103-failed" && item.status === "failed"
       )
     );
   });
@@ -330,7 +333,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     const fs = await import("fs");
     const path = await import("path");
     const os = await import("os");
-    const mod = (await import("../lib/subagents/morningReport.js")) as any;
+    const mod = await import("../lib/subagents/morningReport.js");
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "morning-report-test-"));
     try {
@@ -361,7 +364,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
           ambiguityFlags: [],
           journal: [],
         },
-      ]);
+      ] as unknown as TaskManifest[]);
 
       mod.persistOvernightMorningReport(report, tmpDir);
       const loaded = mod.loadPersistedOvernightMorningReport(tmpDir);
@@ -401,7 +404,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
-    } as any;
+    } as unknown as TaskManifest;
 
     supervisor.saveCheckpoint(manifest);
     await supervisor.syncOvernightMorningReport();
@@ -426,7 +429,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     const { generateOvernightMorningReport, generateMorningReport } =
       await import("../lib/subagents/morningReport.js");
 
-    const sampleTask: any = {
+    const sampleTask = {
       taskId: "task-single-001",
       goal: "Generate solitary report artifact",
       branchName: "feature/single-artifact",
@@ -447,7 +450,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
-    };
+    } as unknown as TaskManifest;
 
     const overnightReport = generateOvernightMorningReport([sampleTask]);
     const singleReport = generateMorningReport({
@@ -464,7 +467,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     });
 
     const html = renderToString(
-      React.createElement(MorningReportView as any, {
+      React.createElement(MorningReportView, {
         overnightReport,
         report: singleReport,
       })
@@ -487,7 +490,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
   it("generateOvernightMorningReport deduplicates candidate tasks by taskId", async () => {
     const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
 
-    const sampleTask1: any = {
+    const sampleTask1 = {
       taskId: "task-dup-001",
       goal: "First copy of task",
       branchName: "feature/task-dup",
@@ -500,9 +503,9 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
-    };
+    } as unknown as TaskManifest;
 
-    const sampleTask2: any = {
+    const sampleTask2: TaskManifest = {
       ...sampleTask1,
       goal: "Duplicate copy of task with same taskId",
     };
@@ -548,7 +551,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     it("generateOvernightMorningReport supports windowFilter: overnight, 24h, all", async () => {
       const { generateOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
 
-      const recentTask: any = {
+      const recentTask = {
         taskId: "task-recent-1",
         goal: "Recent 24h task",
         branchName: "feat/recent",
@@ -556,9 +559,9 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         status: "completed",
         startedAt: new Date(Date.now() - 3600000).toISOString(),
         milestones: [],
-      };
+      } as unknown as TaskManifest;
 
-      const oldTask: any = {
+      const oldTask = {
         taskId: "task-old-1",
         goal: "Old 48h task",
         branchName: "feat/old",
@@ -566,7 +569,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         status: "completed",
         startedAt: new Date(Date.now() - 172800000).toISOString(),
         milestones: [],
-      };
+      } as unknown as TaskManifest;
 
       const report24h = generateOvernightMorningReport([recentTask, oldTask], {
         windowFilter: "24h",
@@ -590,7 +593,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       const daytimeDate = new Date();
       daytimeDate.setHours(14, 0, 0, 0);
 
-      const daytimeTask: any = {
+      const daytimeTask: OvernightTaskEntry = {
         taskId: "task-daytime-1",
         goal: "Daytime build task",
         branch: "feat/daytime",
@@ -606,7 +609,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         testsFailed: 0,
       };
 
-      const overnightReport: any = {
+      const overnightReport: OvernightMorningReport = {
         reportId: "rep-daytime",
         generatedAt: daytimeDate.toISOString(),
         windowLabel: "Autonomous Run",
@@ -623,7 +626,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       };
 
       const html = renderToString(
-        React.createElement(MorningReportView as any, {
+        React.createElement(MorningReportView, {
           overnightReport,
         })
       );
@@ -708,8 +711,8 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
     };
 
     const html = renderToString(
-      React.createElement(MorningReportView as any, {
-        overnightReport,
+      React.createElement(MorningReportView, {
+        overnightReport: overnightReport as unknown as OvernightMorningReport,
       })
     );
 

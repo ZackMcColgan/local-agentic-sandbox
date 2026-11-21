@@ -1,19 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import {
   RotateCcw,
   Check,
-  Circle,
   Square,
   Sparkles,
-  Bot,
   FileCode,
   AlertCircle,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Clock,
   Loader2,
   Pause,
@@ -40,16 +36,18 @@ interface LiveRunBlockProps {
 
 export function resolveDeliverableFile(task: TaskManifest): string | undefined {
   const journalMatch = task.journal?.find((j) => {
-    const txt = j.message || (j as any).entry;
+    const txt = j.message || (j as { entry?: string }).entry;
     return typeof txt === "string" && txt.toLowerCase().includes("committed");
   });
   const journalFile = journalMatch
-    ? (journalMatch.message || (journalMatch as any).entry)?.match(/[\w\-./]+\.\w+/)?.[0]
+    ? (journalMatch.message || (journalMatch as { entry?: string }).entry)?.match(
+        /[\w\-./]+\.\w+/
+      )?.[0]
     : undefined;
 
   return (
     task.milestones?.flatMap((m) => m.plannedFiles || [])[0] ||
-    task.milestones?.flatMap((m) => (m as any).filesChanged || [])[0] ||
+    task.milestones?.flatMap((m) => (m as { filesChanged?: string[] }).filesChanged || [])[0] ||
     journalFile
   );
 }
@@ -165,7 +163,6 @@ export function LiveRunBlock({
   isStopping,
   liveTraces,
 }: LiveRunBlockProps) {
-  const [showAllThinking, setShowAllThinking] = useState(false);
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
   const [deliverableCode, setDeliverableCode] = useState<string | null>(null);
   const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
@@ -235,15 +232,17 @@ export function LiveRunBlock({
   }, [isCompleted, deliverableFile, isDeliverableSvg, isDeliverableHtml]);
 
   // Real-time elapsed timer while task is actively running; freeze at settle duration otherwise
+  const taskRef = useRef(task);
+  taskRef.current = task;
   useEffect(() => {
     if (!isRunning) {
-      setElapsedSeconds(computeRunElapsedSeconds(task));
+      setElapsedSeconds(computeRunElapsedSeconds(taskRef.current));
       return;
     }
     if (!task.startedAt) return;
 
     const updateElapsed = () => {
-      setElapsedSeconds(computeRunElapsedSeconds(task, Date.now()));
+      setElapsedSeconds(computeRunElapsedSeconds(taskRef.current, Date.now()));
     };
     updateElapsed();
 
@@ -255,7 +254,6 @@ export function LiveRunBlock({
   const totalMilestones = task.milestones?.length || 1;
   const completedCount = task.milestones?.filter((m) => m.status === "completed").length || 0;
   const activeIndex = Math.min(task.currentMilestoneIndex ?? completedCount, totalMilestones - 1);
-  const activeMilestone = task.milestones?.[activeIndex];
 
   // Derive worker thinking bullets from recent journal entries
   const rawThinkingEntries = (task.journal || [])
@@ -263,7 +261,6 @@ export function LiveRunBlock({
     .map((j) => j.message);
 
   const cleanedThinking = formatThinkingDisplay(rawThinkingEntries);
-  const displayedThinking = showAllThinking ? cleanedThinking : cleanedThinking.slice(-4);
 
   // Dynamic substep activity indicator based on worker journal entries
   const currentActivity = (() => {
@@ -411,7 +408,6 @@ export function LiveRunBlock({
               ((m.status as string) === "in_progress" ||
                 (m.status as string) === "active" ||
                 idx === activeIndex);
-            const isMilestonePending = !isMilestoneCompleted && !isMilestoneActive;
 
             return (
               <div key={m.id || idx} className="space-y-1.5">
@@ -506,7 +502,7 @@ export function LiveRunBlock({
             </div>
             {critiquedMilestone.criticCritique && (
               <p className="text-xs text-slate-600 dark:text-zinc-300 leading-relaxed italic pl-1">
-                "{critiquedMilestone.criticCritique}"
+                &ldquo;{critiquedMilestone.criticCritique}&rdquo;
               </p>
             )}
           </div>

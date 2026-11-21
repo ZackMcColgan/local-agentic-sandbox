@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { copyText } from "../lib/clipboard";
 
@@ -16,7 +16,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
         writable: true,
       });
     } else {
-      delete (globalThis as any).navigator;
+      delete (globalThis as unknown as { navigator?: unknown }).navigator;
     }
 
     if (originalDocument !== undefined) {
@@ -26,7 +26,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
         writable: true,
       });
     } else {
-      delete (globalThis as any).document;
+      delete (globalThis as unknown as { document?: unknown }).document;
     }
 
     if (originalWindow !== undefined) {
@@ -36,7 +36,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
         writable: true,
       });
     } else {
-      delete (globalThis as any).window;
+      delete (globalThis as unknown as { window?: unknown }).window;
     }
   });
 
@@ -61,8 +61,8 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
   });
 
   it("falls back to document.execCommand when navigator.clipboard is unavailable (plain HTTP LAN)", async () => {
-    let appendedChild: any = null;
-    let removedChild: any = null;
+    let appendedChild: { value?: string } | null = null;
+    let removedChild: unknown = null;
     let executedCommand = "";
     let selected = false;
     let focused = false;
@@ -76,7 +76,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
 
     Object.defineProperty(globalThis, "document", {
       value: {
-        createElement: (tag: string) => ({
+        createElement: (_tag: string) => ({
           style: {},
           value: "",
           setAttribute: () => {},
@@ -89,10 +89,10 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
           setSelectionRange: () => {},
         }),
         body: {
-          appendChild: (el: any) => {
+          appendChild: (el: { value?: string }) => {
             appendedChild = el;
           },
-          removeChild: (el: any) => {
+          removeChild: (el: unknown) => {
             removedChild = el;
           },
         },
@@ -110,7 +110,10 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
     assert.equal(executedCommand, "copy");
     assert.equal(selected, true);
     assert.equal(focused, true);
-    assert.equal(appendedChild.value, "http://192.168.50.254 LAN content");
+    assert.equal(
+      (appendedChild as { value?: string } | null)?.value,
+      "http://192.168.50.254 LAN content"
+    );
     assert.equal(removedChild, appendedChild);
   });
 
@@ -180,7 +183,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
   });
 
   it("returns false in SSR environment where window is undefined", async () => {
-    delete (globalThis as any).window;
+    delete (globalThis as unknown as { window?: unknown }).window;
     const result = await copyText("ssr text");
     assert.equal(result, false);
   });

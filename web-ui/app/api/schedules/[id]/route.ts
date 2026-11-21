@@ -15,7 +15,10 @@ export async function DELETE(
     const workspaceDir = process.env.WORKSPACE_DIR;
     await cancelSchedule(id, workspaceDir ? { workspaceDir } : undefined);
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

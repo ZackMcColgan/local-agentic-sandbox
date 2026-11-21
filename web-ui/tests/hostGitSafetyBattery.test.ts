@@ -177,7 +177,7 @@ process.exit(1);
     branch: "feature/canary-workflow",
   };
 
-  function setGhScenario(state: Record<string, any>) {
+  function setGhScenario(state: Record<string, unknown>) {
     fs.writeFileSync(GH_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
   }
 
@@ -319,7 +319,7 @@ process.exit(1);
         bridgeConfig
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /direct push to protected branch .* is forbidden/);
+      assert.match(res.error ?? "", /direct push to protected branch .* is forbidden/);
     }
   });
 
@@ -343,7 +343,7 @@ process.exit(1);
       bridgeConfig
     );
     assert.equal(addRuntime.success, false);
-    assert.match(addRuntime.error, /staging runtime directories is forbidden/);
+    assert.match(addRuntime.error ?? "", /staging runtime directories is forbidden/);
   });
 
   it("Case 7: job operating while tree carries tracked modification from someone else -> mutating verbs refuse", async () => {
@@ -352,7 +352,7 @@ process.exit(1);
 
     const pullRes = await executeGitVerb("host_git_pull_ff", {}, capability, bridgeConfig);
     assert.equal(pullRes.success, false);
-    assert.match(pullRes.error, /tracked modifications/);
+    assert.match(pullRes.error ?? "", /tracked modifications/);
 
     const checkoutRes = await executeGitVerb(
       "host_git_checkout",
@@ -361,7 +361,7 @@ process.exit(1);
       bridgeConfig
     );
     assert.equal(checkoutRes.success, false);
-    assert.match(checkoutRes.error, /tracked modifications/);
+    assert.match(checkoutRes.error ?? "", /tracked modifications/);
 
     // Restore README.md
     execSync("git checkout -- README.md", { cwd: WORKING_REPO, stdio: "ignore" });
@@ -372,7 +372,7 @@ process.exit(1);
     const bridgeOffConfig = { ...bridgeConfig, allowUnattendedGit: false };
     const bOffRes = await executeGitVerb("host_git_status", {}, capability, bridgeOffConfig);
     assert.equal(bOffRes.success, false);
-    assert.match(bOffRes.error, /disabled in bridge configuration/);
+    assert.match(bOffRes.error ?? "", /disabled in bridge configuration/);
 
     // 2. Settings key off (web-ui admission)
     const settingsAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY", false);
@@ -422,7 +422,7 @@ process.exit(1);
         bridgeConfig
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /No merge grant exists/);
+      assert.match(res.error ?? "", /No merge grant exists/);
     });
 
     it("Case 12: pr_merge with grant + scripted GREEN checks merges and consumes the grant", async () => {
@@ -452,7 +452,7 @@ process.exit(1);
         pendingGrant
       );
       assert.equal(pendingRes.success, false);
-      assert.match(pendingRes.error, /not all green/);
+      assert.match(pendingRes.error ?? "", /not all green/);
       assert.equal(pendingGrant.consumed, false);
 
       // 2. Failing check
@@ -466,7 +466,7 @@ process.exit(1);
         failingGrant
       );
       assert.equal(failingRes.success, false);
-      assert.match(failingRes.error, /not all green/);
+      assert.match(failingRes.error ?? "", /not all green/);
       assert.equal(failingGrant.consumed, false);
     });
 
@@ -481,7 +481,7 @@ process.exit(1);
         mainGrant
       );
       assert.equal(res.success, false);
-      assert.match(res.error, /instruction did not explicitly approve main base/);
+      assert.match(res.error ?? "", /instruction did not explicitly approve main base/);
       assert.equal(mainGrant.consumed, false);
     });
   });

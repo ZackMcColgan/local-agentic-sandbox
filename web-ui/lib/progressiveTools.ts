@@ -12,14 +12,19 @@ import { estimateTokens } from "./contextBudget";
 export interface ToolFunctionSpec {
   name: string;
   description?: string;
-  parameters?: Record<string, any>;
-  inputSchema?: Record<string, any>;
+  parameters?: {
+    type?: string;
+    properties?: Record<string, unknown>;
+    required?: string[];
+    [key: string]: unknown;
+  };
+  inputSchema?: Record<string, unknown>;
 }
 
 export interface McpToolItem {
   name: string;
   description?: string;
-  inputSchema?: Record<string, any>;
+  inputSchema?: Record<string, unknown>;
 }
 
 export const DESCRIBE_TOOL_NAME = "describe_tool";
@@ -244,12 +249,18 @@ export function toOneLiner(description?: string): string {
 /**
  * Derives a clean parameter signature `name(param, opt?)` from a tool's JSON schema properties.
  */
-export function deriveToolSignature(name: string, schema?: Record<string, any>): string {
-  if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
+export function deriveToolSignature(name: string, schema?: Record<string, unknown>): string {
+  if (
+    !schema ||
+    !schema.properties ||
+    Object.keys(schema.properties as Record<string, unknown>).length === 0
+  ) {
     return `${name}()`;
   }
-  const required = new Set<string>(schema.required || []);
-  const allProps = Object.keys(schema.properties);
+  const required = new Set<string>(
+    Array.isArray(schema.required) ? (schema.required as string[]) : []
+  );
+  const allProps = Object.keys(schema.properties as Record<string, unknown>);
   const requiredParams = allProps.filter((p) => required.has(p));
   const optionalParams = allProps.filter((p) => !required.has(p)).map((p) => `${p}?`);
   const params = [...requiredParams, ...optionalParams];
@@ -260,17 +271,32 @@ export function deriveToolSignature(name: string, schema?: Record<string, any>):
  * Builds Layer 1 lightweight tool definitions from raw MCP tools or full tool functions.
  * Layer 1 tools keep names and one-liner descriptions with flexible open schemas (~300 tokens total).
  */
+export interface Layer1ToolDefinition {
+  type: string;
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
+      [key: string]: unknown;
+    };
+  };
+}
+
 export function buildLayer1Tools(
   tools: Array<McpToolItem | { type?: string; function?: ToolFunctionSpec }>
-): any[] {
-  const layer1: any[] = [DESCRIBE_TOOL_SCHEMA];
+): Layer1ToolDefinition[] {
+  const layer1: Layer1ToolDefinition[] = [DESCRIBE_TOOL_SCHEMA];
   const listToIterate =
     tools.length > 0 ? tools : Object.keys(KNOWN_ONE_LINERS).map((name) => ({ name }));
 
   for (const t of listToIterate) {
     let name = "";
     let description = "";
-    let schema: Record<string, any> | undefined;
+    let schema: Record<string, unknown> | undefined;
 
     if ("function" in t && t.function) {
       name = t.function.name;
@@ -291,7 +317,7 @@ export function buildLayer1Tools(
       oneLiner = sig ? `${sig}: ${cleanDesc}` : cleanDesc;
     }
 
-    const toolParameters: Record<string, any> = { type: "object" };
+    const toolParameters: Record<string, unknown> = { type: "object" };
     if (name === "search_web") {
       toolParameters.properties = { query: { type: "string" } };
       toolParameters.required = ["query"];
@@ -369,8 +395,8 @@ export function describeTool(
  * Calculates token reduction between full schema tools and Layer 1 progressive disclosure tools.
  */
 export function calculateToolTokenSavings(
-  fullTools: any[],
-  layer1Tools: any[]
+  fullTools: unknown[],
+  layer1Tools: unknown[]
 ): { fullTokens: number; layer1Tokens: number; savings: number; percentage: number } {
   const fullTokens = estimateTokens(JSON.stringify(fullTools));
   const layer1Tokens = estimateTokens(JSON.stringify(layer1Tools));

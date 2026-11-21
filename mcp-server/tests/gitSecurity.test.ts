@@ -8,6 +8,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 import { registerWorkspaceTools } from "../src/tools/workspaceTools.js";
 
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
+
 describe("Task 2 — Git Shell Injection Security Suite", () => {
   let mcp: McpServer;
   let probeFile: string;
@@ -40,8 +51,7 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
   });
 
   it("prevents shell injection in git_checkout_branch via semicolon and command chaining", async () => {
-    // @ts-ignore
-    const checkoutHandler = mcp._registeredTools["git_checkout_branch"].handler;
+    const checkoutHandler = getRegisteredTools(mcp)["git_checkout_branch"].handler;
 
     // Hostile branch names containing shell metacharacters
     const touchCmd =
@@ -71,8 +81,7 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
   });
 
   it("prevents shell injection in git_checkout_branch via $(...) command substitution", async () => {
-    // @ts-ignore
-    const checkoutHandler = mcp._registeredTools["git_checkout_branch"].handler;
+    const checkoutHandler = getRegisteredTools(mcp)["git_checkout_branch"].handler;
 
     const touchCmd =
       process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
@@ -91,10 +100,8 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
   });
 
   it("prevents shell injection in git_commit via double-quote breaking and command chaining", async () => {
-    // @ts-ignore
-    const writeHandler = mcp._registeredTools["workspace_write_file"].handler;
-    // @ts-ignore
-    const commitHandler = mcp._registeredTools["git_commit"].handler;
+    const writeHandler = getRegisteredTools(mcp)["workspace_write_file"].handler;
+    const commitHandler = getRegisteredTools(mcp)["git_commit"].handler;
 
     // Stage a dummy file first
     await writeHandler({

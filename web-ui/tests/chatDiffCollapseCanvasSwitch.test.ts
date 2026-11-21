@@ -143,13 +143,16 @@ describe("UI-023/UI-024 — rendered UI", () => {
   let scrollRef: { current: HTMLDivElement | null };
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    (globalThis as any).window = win;
-    (globalThis as any).document = win.document;
-    (globalThis as any).localStorage = win.localStorage;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    (win.document.body as any).appendChild(container);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     scrollRef = { current: null };
   });
 
@@ -190,7 +193,7 @@ describe("UI-023/UI-024 — rendered UI", () => {
         diff: "+ const UNIQUE_DIFF_LINE = 1;\n+ second line",
         modifiedFiles: ["src/weather.html"],
         defaultOpen: false,
-      } as any)
+      } as unknown as React.ComponentProps<typeof DiffViewer>)
     );
     assert.ok(container.textContent?.includes("src/weather.html"), "header shows the file path");
     assert.ok(
@@ -226,13 +229,13 @@ describe("UI-023/UI-024 — rendered UI", () => {
     // The exact hand-off ChatStream performs after the fix.
     const diffs = items.map((d) => ({
       path: d.path,
-      diff: (d as any).diffFull ?? d.diffPreview,
+      diff: (d as { diffFull?: string; diffPreview: string }).diffFull ?? d.diffPreview,
       addedLines: d.addedLines,
       removedLines: d.removedLines,
     }));
     await renderTree(
       React.createElement(
-        CanvasProvider as any,
+        CanvasProvider as unknown as React.ComponentType<Record<string, unknown>>,
         { scrollElRef: scrollRef },
         React.createElement(CanvasDiffCard, { diffs }),
         React.createElement(ArtifactCanvasPane)

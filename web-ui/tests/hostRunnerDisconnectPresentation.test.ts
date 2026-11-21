@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-// @ts-ignore - resolved at test time
 import { classifyHostRunnerDisconnect } from "../lib/liveActivity";
 
 describe("UI-007: host-runner disconnect presentation", () => {

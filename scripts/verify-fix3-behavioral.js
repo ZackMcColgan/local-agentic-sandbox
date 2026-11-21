@@ -1,5 +1,4 @@
 const { exec } = require("child_process");
-const fs = require("fs");
 
 setTimeout(() => {
   console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
@@ -13,7 +12,9 @@ async function waitForPort(port, maxRetries = 20) {
         signal: AbortSignal.timeout(15000),
       });
       if (res.ok) return await res.json();
-    } catch {}
+    } catch {
+      /* retry until Chrome debug port is ready */
+    }
     await new Promise((r) => setTimeout(r, 400));
   }
   throw new Error(`Failed to connect to Chrome on port ${port}`);
@@ -191,7 +192,9 @@ async function testBehavioralSvg() {
   } finally {
     try {
       chrome.kill();
-    } catch {}
+    } catch {
+      /* ignore Chrome kill error */
+    }
   }
 }
 

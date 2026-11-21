@@ -3,12 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
-import {
-  recordTestBaseline,
-  compareAndRevertIfWorse,
-  type TestSnapshot,
-  type RevertResult,
-} from "../lib/subagents/workerPool.js";
+import { compareAndRevertIfWorse, type TestSnapshot } from "../lib/subagents/workerPool.js";
 
 describe("Phase 2 — Item 2: Blocking-Gate Revert Suite", () => {
   const testRepo = path.resolve(process.cwd(), "temp-test-revert-repo");

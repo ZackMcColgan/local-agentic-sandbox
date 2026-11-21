@@ -12,13 +12,16 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
-    globalThis.CustomEvent = win.CustomEvent as any;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
+    globalThis.CustomEvent = win.CustomEvent as unknown as typeof CustomEvent;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -34,25 +37,28 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
       "Very Long Session Title That Should Never Be Truncated In The Action Sheet Header";
     act(() => {
       root.render(
-        React.createElement(NavigationDrawer as any, {
-          isOpen: true,
-          onClose: () => {},
-          activeTab: "chat",
-          onSelectTab: () => {},
-          threads: [
-            {
-              id: "t-1",
-              title: longTitle,
-              updatedAt: Date.now(),
-              createdAt: Date.now(),
-              messageCount: 2,
-            } as any,
-          ],
-          activeThreadId: "t-1",
-          onSelectThread: () => {},
-          onNewThread: () => {},
-          onDeleteThread: () => {},
-        })
+        React.createElement(
+          NavigationDrawer as unknown as React.ComponentType<Record<string, unknown>>,
+          {
+            isOpen: true,
+            onClose: () => {},
+            activeTab: "chat",
+            onSelectTab: () => {},
+            threads: [
+              {
+                id: "t-1",
+                title: longTitle,
+                updatedAt: Date.now(),
+                createdAt: Date.now(),
+                messageCount: 2,
+              },
+            ],
+            activeThreadId: "t-1",
+            onSelectThread: () => {},
+            onNewThread: () => {},
+            onDeleteThread: () => {},
+          }
+        )
       );
     });
 
@@ -68,7 +74,7 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
     assert.ok(moreBtn, "Thread action sheet trigger button should exist");
 
     act(() => {
-      moreBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      moreBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     const sheet = container.querySelector("[data-testid='thread-action-sheet']");
@@ -94,7 +100,9 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
     // Mutual exclusion: another overlay opens -> action sheet closes
     act(() => {
       win.dispatchEvent(
-        new win.CustomEvent("ui:overlay-open", { detail: { source: "header-overflow" } }) as any
+        new win.CustomEvent("ui:overlay-open", {
+          detail: { source: "header-overflow" },
+        }) as unknown as Parameters<typeof win.dispatchEvent>[0]
       );
     });
 

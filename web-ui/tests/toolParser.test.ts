@@ -85,7 +85,10 @@ describe("Tool Parser & URL Normalization Suite", () => {
     it("extracts raw JSON object tool calls and supports Map for tool check", () => {
       const toolMap = new Map([["search_web", { tier: "browser" }]]);
       const text = `{"name": "search_web", "arguments": {"query": "bulk import jira"}}`;
-      const calls = parseToolCallsFromText(text, toolMap as any);
+      const calls = parseToolCallsFromText(
+        text,
+        toolMap as unknown as Parameters<typeof parseToolCallsFromText>[1]
+      );
       assert.equal(calls.length, 1);
       assert.equal(calls[0].function.name, "search_web");
       assert.equal(calls[0].function.arguments.query, "bulk import jira");

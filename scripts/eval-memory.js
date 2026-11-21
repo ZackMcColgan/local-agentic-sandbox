@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import {
   searchSemanticMemory,
-  getQdrantCollectionInfo,
   DEFAULT_QDRANT_COLLECTION,
 } from "../web-ui/lib/memory/semanticMemory.ts";
 
@@ -31,7 +30,6 @@ async function runMemoryEval() {
 
   for (const item of goldenSet.questions) {
     const res = await searchSemanticMemory(item.question, { collectionName });
-    const hasCitations = res.citations.length > 0;
     const matchedExpectedFile = res.citations.some((c) =>
       c.toLowerCase().includes(item.expectedFile.toLowerCase())
     );

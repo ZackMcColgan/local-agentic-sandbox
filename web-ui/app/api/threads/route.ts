@@ -28,8 +28,11 @@ export async function GET(req: Request) {
       ? await threadStore.listThreads()
       : await threadStore.listThreadSummaries(q);
     return NextResponse.json({ threads });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -163,9 +166,13 @@ export async function POST(req: Request) {
       }
 
       const activeThreadId = thread.id;
-      (manifest as any).threadId = activeThreadId;
+      const manifestExt = manifest as TaskManifest & {
+        threadId?: string;
+        chunkBudget?: unknown;
+      };
+      manifestExt.threadId = activeThreadId;
       if (chunkBudget !== undefined) {
-        (manifest as any).chunkBudget = chunkBudget;
+        manifestExt.chunkBudget = chunkBudget;
       }
 
       // Kick off actual execution — fire-and-forget so the API returns immediately.
@@ -296,8 +303,9 @@ export async function POST(req: Request) {
             }
             threadStore.saveThread(currentThread);
           }
-        } catch (planErr: any) {
-          const wasAborted = planController.signal.aborted || planErr?.name === "AbortError";
+        } catch (planErr: unknown) {
+          const planErrName = planErr instanceof Error ? planErr.name : undefined;
+          const wasAborted = planController.signal.aborted || planErrName === "AbortError";
           if (wasAborted) {
             console.log(`[threads] Planning aborted for task ${taskId}`);
             manifest.status = "cancelled";
@@ -326,7 +334,7 @@ export async function POST(req: Request) {
           }
           console.error(`[threads] Planning failed for task ${taskId}:`, planErr);
           manifest.status = "failed";
-          manifest.parkedReason = planErr?.message || String(planErr);
+          manifest.parkedReason = planErr instanceof Error ? planErr.message : String(planErr);
           manifest.journal.push({
             timestamp: new Date().toISOString(),
             role: "planner",
@@ -372,7 +380,7 @@ export async function POST(req: Request) {
               }
 
               const repoCandidates = [
-                (result as any).worktreePath,
+                (result as TaskManifest & { worktreePath?: string }).worktreePath,
                 process.env.WORKSPACE_DIR,
                 "/workspace",
                 process.cwd(),
@@ -444,7 +452,7 @@ export async function POST(req: Request) {
                 ...(Array.isArray(result.verificationGaps)
                   ? { verificationGaps: result.verificationGaps }
                   : {}),
-              } as any);
+              });
               threadStore.saveThread(currentThread);
             }
           } else {
@@ -461,9 +469,8 @@ export async function POST(req: Request) {
                 Array.isArray(result.journal) && result.journal.length > 0
                   ? [...result.journal]
                       .reverse()
-                      .find(
-                        (j: any) => typeof j?.message === "string" && j.message.trim().length > 0
-                      )?.message
+                      .find((j) => typeof j?.message === "string" && j.message.trim().length > 0)
+                      ?.message
                   : undefined;
               const reason =
                 result.errorSummary ||
@@ -481,17 +488,18 @@ export async function POST(req: Request) {
                 ...(Array.isArray(result.verificationGaps)
                   ? { verificationGaps: result.verificationGaps }
                   : {}),
-              } as any);
+              });
               threadStore.saveThread(currentThread);
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const errObj = err instanceof Error ? err : null;
           console.error(
             `[threads] task ${taskId} executeTaskWithRecovery threw:`,
-            err?.stack || err
+            errObj?.stack || err
           );
           manifest.status = "failed";
-          manifest.parkedReason = err?.message || String(err);
+          manifest.parkedReason = errObj?.message || String(err);
           manifest.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
@@ -543,7 +551,10 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ thread }, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

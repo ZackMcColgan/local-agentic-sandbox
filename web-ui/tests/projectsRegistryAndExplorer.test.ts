@@ -3,12 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync } from "node:child_process";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import {
-  initProjectStore,
   listProjects,
   getProject,
   registerProject,
@@ -70,11 +68,11 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
     fs.writeFileSync(path.join(outsideDir, "secret.txt"), "classified data", "utf8");
 
     // Happy DOM setup
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -262,7 +260,7 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
       const originalFetch = globalThis.fetch;
       let treeFetchCount = 0;
 
-      globalThis.fetch = (async (input: any) => {
+      globalThis.fetch = (async (input: string | URL | Request) => {
         const url = String(input);
         if (url.includes(`/api/projects/${proj.project_id}/files`)) {
           treeFetchCount += 1;
@@ -279,7 +277,7 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
           });
         }
         return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
-      }) as any;
+      }) as unknown as typeof fetch;
 
       try {
         await act(async () => {
@@ -499,7 +497,11 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
       assert.equal(getRes.status, 200);
       const getData = await getRes.json();
       assert.ok(Array.isArray(getData.projects));
-      assert.ok(getData.projects.some((p: any) => p.project_id === postData.project.project_id));
+      assert.ok(
+        getData.projects.some(
+          (p: { project_id?: string }) => p.project_id === postData.project.project_id
+        )
+      );
 
       // PATCH toggle allowlist
       const patchReq = new Request("http://localhost:3000/api/projects", {

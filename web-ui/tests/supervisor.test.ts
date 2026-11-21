@@ -319,7 +319,10 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       fs.writeFileSync(path.join(testRepo, "unrelated.txt"), "unrelated change", "utf8");
 
       const mockPool = new WorkerPool();
-      mockPool.executeJob = async (job: any) => {
+      mockPool.executeJob = (async (job: {
+        role: string;
+        taskFn: (signal: AbortSignal) => Promise<unknown>;
+      }) => {
         if (job.role === "builder") {
           return {
             diff: "+dummy modification",
@@ -340,7 +343,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
           };
         }
         return job.taskFn(new AbortController().signal);
-      };
+      }) as typeof mockPool.executeJob;
 
       const stepExecutor = createProductionStepExecutor({
         workerPool: mockPool,
@@ -416,7 +419,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const slowExecutor = async (m: Milestone, attempt: number) => {
+      const slowExecutor = async () => {
         // Simulate a 2s slow model inference
         await new Promise((resolve) => setTimeout(resolve, 2000));
         return {

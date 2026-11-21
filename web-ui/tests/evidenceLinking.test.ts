@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
-import { Milestone, EvidenceItem } from "../lib/subagents/types.js";
+import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,
@@ -60,7 +60,7 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
     const review = await critic.evaluateMilestoneDiff(milestone, {
       diff: "+ comment line only without criteria",
       forceEmptyEvidence: true,
-    } as any);
+    } as unknown as Parameters<typeof critic.evaluateMilestoneDiff>[1]);
 
     assert.equal(review.approved, false, "Empty evidence MUST fail-closed");
     assert.equal(review.abstained, true, "Empty evidence treated as abstain");
