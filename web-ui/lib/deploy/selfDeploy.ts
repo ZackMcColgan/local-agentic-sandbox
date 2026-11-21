@@ -331,6 +331,86 @@ export class SelfDeployPipeline {
     }
     timeline[0].status = "completed";
 
+    // Stage 1b: Save image and import into k8s node containerd
+    const k8sNode = process.env.K8S_NODE || "k3d-sandbox-server-0";
+    const tarPath = path.join(this.repoRoot, `.self-deploy-${deployId}.tar`);
+    const failImport = (detail: string): SelfDeployRecord => {
+      timeline[0].status = "failed";
+      timeline[0].detail = detail;
+      const record: SelfDeployRecord = {
+        deployId,
+        timestamp,
+        branchName: input.branchName,
+        previousSha: input.previousSha,
+        newSha: input.newSha,
+        status: "failed",
+        rollbackStatus: "none",
+        healthCheckResult: { status: 0, ok: false },
+        timeline,
+        errorMessage: detail,
+      };
+      inMemoryDeployHistory.unshift(record);
+      this.logToLedger(record);
+      return record;
+    };
+
+    try {
+      const saveRes = await this.commandRunner("docker", ["save", "-o", tarPath, newImage], {
+        cwd: this.repoRoot,
+      });
+      if (saveRes.exitCode !== 0) {
+        return failImport(`Docker save failed: ${saveRes.stderr || saveRes.stdout}`);
+      }
+
+      const mkdirRes = await this.commandRunner("docker", ["exec", k8sNode, "mkdir", "-p", "/images"]);
+      if (mkdirRes.exitCode !== 0) {
+        return failImport(`Node mkdir /images failed: ${mkdirRes.stderr || mkdirRes.stdout}`);
+      }
+
+      const cpRes = await this.commandRunner("docker", ["cp", tarPath, `${k8sNode}:/images/image.tar`]);
+      if (cpRes.exitCode !== 0) {
+        return failImport(`Docker cp to node failed: ${cpRes.stderr || cpRes.stdout}`);
+      }
+
+      const importRes = await this.commandRunner("docker", [
+        "exec",
+        k8sNode,
+        "ctr",
+        "-n",
+        "k8s.io",
+        "images",
+        "import",
+        "/images/image.tar",
+      ]);
+      if (importRes.exitCode !== 0) {
+        return failImport(`ctr images import failed: ${importRes.stderr || importRes.stdout}`);
+      }
+
+      await this.commandRunner("docker", ["exec", k8sNode, "rm", "-f", "/images/image.tar"]);
+
+      const verifyImportRes = await this.commandRunner("docker", [
+        "exec",
+        k8sNode,
+        "ctr",
+        "-n",
+        "k8s.io",
+        "images",
+        "ls",
+        `name==${newImage}`,
+      ]);
+      if (verifyImportRes.exitCode !== 0) {
+        return failImport(
+          `Image ${newImage} not found in node containerd after import: ${verifyImportRes.stderr || verifyImportRes.stdout}`
+        );
+      }
+    } finally {
+      try {
+        if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
+      } catch {
+        // ignore cleanup error
+      }
+    }
+
     // Stage 2: Rolling update k8s deployment
     timeline.push({
       stage: "rolling_update",

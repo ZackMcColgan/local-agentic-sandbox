@@ -438,4 +438,45 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       }
     }
   });
+
+  it("imports and verifies image in node containerd before kubectl set image, and aborts on import failure", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "self-deploy-import-"));
+    try {
+      const commands: string[] = [];
+      const pipeline = new SelfDeployPipeline({
+        enabled: true,
+        repoRoot: tmpDir,
+        commandRunner: async (cmd, args) => {
+          const full = `${cmd} ${args.join(" ")}`;
+          commands.push(full);
+          if (full.includes("ctr -n k8s.io images import")) {
+            return { exitCode: 1, stdout: "", stderr: "ctr import failed" };
+          }
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+      });
+
+      const result = await pipeline.executeSelfDeploy({
+        branchName: "feature/test",
+        previousSha: "1111111",
+        newSha: "2222222",
+        imageTag: "local-agentic-sandbox-web-ui:v-2222222",
+      });
+
+      assert.equal(result.status, "failed");
+      assert.match(result.errorMessage ?? "", /ctr images import failed/);
+      assert.equal(
+        commands.some((c) => c.startsWith("kubectl") && c.includes("set image")),
+        false,
+        "kubectl set image must not run when ctr import fails"
+      );
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignored on Windows EBUSY
+      }
+    }
+  });
 });
