@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-// @ts-ignore - resolved at test time
 import { verifyCompletionClaims, stampCompletion } from "../lib/finishVerification";
 
 describe("Phase 2: finish-verification against ground truth", () => {

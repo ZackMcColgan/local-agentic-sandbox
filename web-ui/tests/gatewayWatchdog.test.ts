@@ -4,7 +4,6 @@ import path from "node:path";
 import fs from "node:fs";
 
 // Import GatewayWatchdog from scripts/lan-bridge
-// @ts-ignore
 import { GatewayWatchdog } from "../../scripts/lan-bridge.js";
 
 describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {

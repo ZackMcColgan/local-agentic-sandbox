@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-// @ts-ignore - resolved at test time
 import { appendNarrationChunk } from "../lib/liveActivity";
 
 describe("UI-010: narration chunk separators", () => {

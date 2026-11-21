@@ -4,6 +4,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerCodeRunner } from "../src/tools/codeRunner.js";
 import { registerAttestation } from "../src/tools/attestation.js";
 
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
+
 describe("MCP Tools Suite", () => {
   let mcp: McpServer;
 
@@ -17,15 +28,13 @@ describe("MCP Tools Suite", () => {
   describe("CodeRunner Tool", () => {
     it("registers execute_sandboxed_python tool", () => {
       registerCodeRunner(mcp);
-      // @ts-ignore
-      const tools = mcp._registeredTools;
+      const tools = getRegisteredTools(mcp);
       assert.ok(tools["execute_sandboxed_python"], "execute_sandboxed_python should be registered");
     });
 
     it("executes valid python code and returns security boundary metadata", async () => {
       registerCodeRunner(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["execute_sandboxed_python"].handler;
+      const toolHandler = getRegisteredTools(mcp)["execute_sandboxed_python"].handler;
 
       const result = await toolHandler({
         code: "print(42)",
@@ -42,8 +51,7 @@ describe("MCP Tools Suite", () => {
 
     it("gracefully catches syntax errors and isolates failures", async () => {
       registerCodeRunner(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["execute_sandboxed_python"].handler;
+      const toolHandler = getRegisteredTools(mcp)["execute_sandboxed_python"].handler;
 
       const result = await toolHandler({
         code: "def broken_syntax(:\n  pass",
@@ -59,8 +67,7 @@ describe("MCP Tools Suite", () => {
   describe("Provenance & Docker Scout Attestation Tools", () => {
     it("registers verify_container_provenance and docker_scout_policy_gate tools", () => {
       registerAttestation(mcp);
-      // @ts-ignore
-      const tools = mcp._registeredTools;
+      const tools = getRegisteredTools(mcp);
       assert.ok(
         tools["verify_container_provenance"],
         "verify_container_provenance should be registered"
@@ -70,8 +77,7 @@ describe("MCP Tools Suite", () => {
 
     it("performs live runtime kernel security boundary probe", async () => {
       registerAttestation(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["verify_container_provenance"].handler;
+      const toolHandler = getRegisteredTools(mcp)["verify_container_provenance"].handler;
 
       const result = await toolHandler({
         image_uri:
@@ -92,8 +98,7 @@ describe("MCP Tools Suite", () => {
 
     it("evaluates docker scout policy gate safely with fallback notice", async () => {
       registerAttestation(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["docker_scout_policy_gate"].handler;
+      const toolHandler = getRegisteredTools(mcp)["docker_scout_policy_gate"].handler;
 
       const result = await toolHandler({
         image_uri: "local-agentic-sandbox/mcp-server:latest",
