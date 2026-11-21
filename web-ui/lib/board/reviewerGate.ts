@@ -206,6 +206,8 @@ export interface EvaluateReviewerGateOptions {
   brief: string;
   mechanicalInput: MechanicalCheckInput;
   stage3Enabled?: boolean;
+  ciAllGreen?: boolean;
+  finishVerificationClean?: boolean;
   issueReviewerThread: (params: {
     itemId: string;
     brief: string;
@@ -261,6 +263,13 @@ export async function evaluateReviewerGate(
   const stage3Enabled = isReviewerGateStage3Enabled(options.stage3Enabled);
   const shadowMode = !stage3Enabled;
 
+  const mergeAuthorized = isMergeAuthorized({
+    stage3Enabled,
+    ciAllGreen: options.ciAllGreen ?? false,
+    reviewerGateVerdict: verdict,
+    finishVerificationClean: options.finishVerificationClean ?? false,
+  });
+
   options.log?.(
     `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`,
   );
@@ -270,7 +279,7 @@ export async function evaluateReviewerGate(
     mechanical,
     reviewer,
     shadowMode,
-    mergeAuthorized: false,
+    mergeAuthorized,
   };
 }
 

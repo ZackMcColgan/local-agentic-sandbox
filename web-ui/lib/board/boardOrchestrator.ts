@@ -367,6 +367,7 @@ export class BoardOrchestrator {
         brief: item.brief,
         mechanicalInput,
         stage3Enabled,
+        ciAllGreen: result.flowMonitor?.verdict.status === "green",
         issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
         log: this.log,
       });
