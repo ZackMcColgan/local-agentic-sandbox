@@ -50,7 +50,7 @@ describe("Engine Control Route (/api/engine)", () => {
       assert.equal(json.model, "swift-15-27b-mtp");
     });
 
-    it("returns status 'stopped' and reachable false when supervisor is offline", async () => {
+    it("returns status 'stopped', reachable false, and null model/vram_mb when supervisor is offline", async () => {
       globalThis.fetch = (async () => {
         throw new Error("connect ECONNREFUSED 127.0.0.1:11434");
       }) as any;
@@ -62,7 +62,33 @@ describe("Engine Control Route (/api/engine)", () => {
       assert.equal(json.status, "stopped");
       assert.equal(json.reachable, false);
       assert.ok(json.error.includes("Supervisor offline"));
-      assert.equal(json.model, "qwen3.8-flash-next-gyro-gyro-s");
+      assert.equal(json.model, null);
+      assert.equal(json.vram_mb, null);
+    });
+
+    it("returns null vram_mb and null model on /health probe fallback when engine does not report them", async () => {
+      globalThis.fetch = (async (input: any) => {
+        const url = String(input);
+        if (url.endsWith("/control/status")) {
+          return new Response("Not Found", { status: 404 });
+        }
+        if (url.endsWith("/health")) {
+          return new Response(JSON.stringify({ loaded: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        return new Response("Not Found", { status: 404 });
+      }) as any;
+
+      const res = await GET();
+      assert.equal(res.status, 200);
+      const json = await res.json();
+
+      assert.equal(json.status, "running");
+      assert.equal(json.reachable, true);
+      assert.equal(json.model, null);
+      assert.equal(json.vram_mb, null);
     });
   });
 

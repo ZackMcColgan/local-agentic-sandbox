@@ -41,3 +41,21 @@ describe("E7: Settings view nits (UI-043)", () => {
     assert.equal(html.includes("Stop engine to reclaim 16GB VRAM."), false, "Expected duplicate VRAM sentence trimmed");
   });
 });
+
+describe("Settings engine card honesty", () => {
+  it("does not fabricate llama.cpp identity, GPU name, or 16,384 MB VRAM when unreported", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SettingsView as any, {
+        theme: "dark",
+        onThemeChange: () => {},
+      })
+    );
+    assert.equal(html.includes("Standalone llama.cpp"), false, "Should not hardcode 'Standalone llama.cpp'");
+    assert.equal(html.includes("AMD Radeon RX 9070 XT"), false, "Should not hardcode GPU model");
+    assert.equal(html.includes("16,384 MB"), false, "Should not fabricate 16,384 MB VRAM");
+    assert.ok(
+      html.toLowerCase().includes("not reported by this engine"),
+      "Should display explicit 'not reported by this engine' copy when VRAM is null"
+    );
+  });
+});

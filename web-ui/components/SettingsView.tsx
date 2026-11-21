@@ -56,11 +56,22 @@ export function SettingsView({
   const { theme, setTheme } = useTheme(propsTheme);
   const themeMode = theme;
   const [localSelfDeployEnabled, setLocalSelfDeployEnabled] = useState(propsSelfDeployEnabled ?? false);
-  const [engineData, setEngineData] = useState<any>({
-    status: "running",
-    reachable: true,
-    model: DEFAULT_PRIMARY_MODEL,
-    vram_mb: 16384
+  const [engineData, setEngineData] = useState<{
+    status: string;
+    reachable: boolean;
+    engine?: string | null;
+    backend?: string | null;
+    model?: string | null;
+    vram_mb?: number | null;
+    uptime_s?: number | null;
+    error?: string;
+  }>({
+    status: "unknown",
+    reachable: false,
+    engine: null,
+    backend: null,
+    model: null,
+    vram_mb: null
   });
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineMessage, setEngineMessage] = useState<string | null>(null);
@@ -310,7 +321,7 @@ export function SettingsView({
       if (json.message) {
         setEngineMessage(json.message);
       } else if (action === "stop") {
-        setEngineMessage("Engine stopped. 16GB VRAM reclaimed.");
+        setEngineMessage("Engine stopped.");
       } else if (action === "start") {
         setEngineMessage("Engine starting up...");
       }
@@ -494,10 +505,14 @@ export function SettingsView({
               <div>
                 <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Standalone llama.cpp</span>
+                  <span>{engineData.engine || (engineData.reachable ? "Inference Engine" : "Inference Engine")}</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Vulkan backend on AMD Radeon RX 9070 XT.
+                  {engineData.backend
+                    ? engineData.backend
+                    : engineData.reachable
+                      ? "Connected via local engine endpoint."
+                      : "Waiting for engine status."}
                 </p>
               </div>
 
@@ -527,13 +542,15 @@ export function SettingsView({
               <div>
                 <span className="text-slate-400 dark:text-zinc-400 block">Model</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.model || DEFAULT_PRIMARY_MODEL}
+                  {engineData.model || "Not reported by this engine"}
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 dark:text-zinc-400 block">VRAM Usage</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.status === "running" ? "~16,384 MB (Allocated)" : "0 MB (Reclaimed)"}
+                  {typeof engineData.vram_mb === "number"
+                    ? `${engineData.vram_mb.toLocaleString()} MB`
+                    : "Not reported by this engine"}
                 </span>
               </div>
             </div>
