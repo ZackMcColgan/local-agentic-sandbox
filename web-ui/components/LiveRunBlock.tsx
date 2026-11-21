@@ -68,6 +68,95 @@ export function resolveCodePreviewContent(
   return `// Deliverable committed: ${deliverableFile}`;
 }
 
+export interface RunCardStatusInfo {
+  status: string;
+  isPlanning: boolean;
+  isRunning: boolean;
+  isParked: boolean;
+  isPaused: boolean;
+  isCrashed: boolean;
+  isStopped: boolean;
+  isCompleted: boolean;
+  isFailed: boolean;
+  headerLabel: string;
+}
+
+export function deriveRunCardStatus(
+  task: Pick<TaskManifest, "status" | "parkedReason">
+): RunCardStatusInfo {
+  const status = typeof task.status === "string" ? task.status.trim() : "";
+  const isPlanning = status === "planning";
+  const isRunning = status === "active" || status === "in_progress" || isPlanning;
+  const isParked = status === "parked" || (status === "paused" && Boolean(task.parkedReason));
+  const isPaused = status === "paused" && !isParked;
+  const isCrashed = status === "crashed";
+  const isStopped = status === "cancelled" || status === "stopped";
+  const isCompleted = status === "completed";
+  const isFailed = status === "failed";
+
+  const headerLabel = isRunning
+    ? "Live run"
+    : isParked
+      ? "Run parked"
+      : isPaused
+        ? "Run paused"
+        : isFailed || isCrashed
+          ? "Run failed"
+          : isCompleted
+            ? "Run completed"
+            : isStopped
+              ? "Run stopped"
+              : "Run settled";
+
+  return {
+    status,
+    isPlanning,
+    isRunning,
+    isParked,
+    isPaused,
+    isCrashed,
+    isStopped,
+    isCompleted,
+    isFailed,
+    headerLabel
+  };
+}
+
+export function computeRunElapsedSeconds(
+  task: Pick<TaskManifest, "status" | "parkedReason" | "startedAt" | "completedAt" | "updatedAt">,
+  nowMs: number = Date.now()
+): number {
+  if (!task.startedAt) return 0;
+  const start = new Date(task.startedAt).getTime();
+  if (Number.isNaN(start)) return 0;
+
+  const { isRunning } = deriveRunCardStatus(task);
+  if (isRunning) {
+    return Math.max(0, Math.floor((nowMs - start) / 1000));
+  }
+
+  const settleTs = task.completedAt || task.updatedAt;
+  if (!settleTs) return 0;
+  const end = new Date(settleTs).getTime();
+  if (Number.isNaN(end)) return 0;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
+export function formatRunTimerLabel(
+  statusInfo: RunCardStatusInfo,
+  elapsedSeconds: number
+): string {
+  const formatted = formatElapsedDuration(elapsedSeconds);
+  if (statusInfo.isRunning) return `Running for ${formatted}`;
+  if (statusInfo.isCompleted) return `Completed in ${formatted}`;
+  if (statusInfo.isParked) return `Parked after ${formatted}`;
+  if (statusInfo.isPaused) return `Paused at ${formatted}`;
+  if (statusInfo.isStopped) return `Stopped after ${formatted}`;
+  if (statusInfo.isFailed) return `Failed after ${formatted}`;
+  if (statusInfo.isCrashed) return `Crashed after ${formatted}`;
+  return `Elapsed ${formatted}`;
+}
+
 export function LiveRunBlock({
   task,
   onStopRun,
@@ -101,24 +190,22 @@ export function LiveRunBlock({
       cancelled = true;
     };
   }, [selfDeployEnabled]);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
-    if (task.startedAt) {
-      const start = new Date(task.startedAt).getTime();
-      const endTs = task.completedAt || (task.status !== "active" && String(task.status) !== "in_progress" && task.status !== "planning" ? task.updatedAt : undefined);
-      const end = endTs ? new Date(endTs).getTime() : Date.now();
-      return Math.max(0, Math.floor((end - start) / 1000));
-    }
-    return 0;
-  });
+  const statusInfo = deriveRunCardStatus(task);
+  const {
+    status,
+    isPlanning,
+    isRunning,
+    isParked,
+    isPaused,
+    isCrashed,
+    isStopped,
+    isCompleted,
+    isFailed
+  } = statusInfo;
 
-  const status = String(task.status || "active");
-  const isPlanning = status === "planning";
-  const isRunning = status === "active" || status === "in_progress" || isPlanning;
-  const isPaused = status === "paused";
-  const isCrashed = status === "crashed";
-  const isStopped = status === "cancelled" || status === "stopped";
-  const isCompleted = status === "completed";
-  const isFailed = status === "failed" || status === "parked";
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() =>
+    computeRunElapsedSeconds(task)
+  );
 
   const deliverableFile = isCompleted ? resolveDeliverableFile(task) : undefined;
   const isDeliverableSvg = deliverableFile ? deliverableFile.toLowerCase().endsWith(".svg") : false;
@@ -149,19 +236,22 @@ export function LiveRunBlock({
     };
   }, [isCompleted, deliverableFile, isDeliverableSvg, isDeliverableHtml]);
 
-  // Real-time elapsed timer while task is actively running
+  // Real-time elapsed timer while task is actively running; freeze at settle duration otherwise
   useEffect(() => {
-    if (!isRunning || !task.startedAt) return;
+    if (!isRunning) {
+      setElapsedSeconds(computeRunElapsedSeconds(task));
+      return;
+    }
+    if (!task.startedAt) return;
 
-    const start = new Date(task.startedAt).getTime();
     const updateElapsed = () => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+      setElapsedSeconds(computeRunElapsedSeconds(task, Date.now()));
     };
     updateElapsed();
 
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [isRunning, task.startedAt]);
+  }, [isRunning, task.startedAt, task.completedAt, task.updatedAt, task.status, task.parkedReason]);
 
   // Calculate overall or active milestone progress percentage
   const totalMilestones = task.milestones?.length || 1;
@@ -220,17 +310,7 @@ export function LiveRunBlock({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-base font-bold text-stone-900 dark:text-stone-50">
-              {isRunning
-                ? "Live run"
-                : status === "parked"
-                  ? "Run parked"
-                  : isFailed || isCrashed
-                    ? "Run failed"
-                    : isCompleted
-                      ? "Run completed"
-                      : isStopped
-                        ? "Run stopped"
-                        : "Run paused"}
+              {statusInfo.headerLabel}
             </span>
             {isPlanning && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 dark:bg-[#1f1f28] text-stone-700 dark:text-stone-300 flex items-center gap-1.5 border border-stone-200 dark:border-white/[0.10]">
@@ -255,6 +335,11 @@ export function LiveRunBlock({
             {isStopped && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
                 • Stopped
+              </span>
+            )}
+            {isParked && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                • Parked
               </span>
             )}
             {isPaused && (
@@ -290,15 +375,7 @@ export function LiveRunBlock({
         {/* Elapsed Timer & Dynamic Activity */}
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400">
           <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>
-            {isCompleted
-              ? `Completed in ${formatElapsedDuration(elapsedSeconds)}`
-              : isPaused
-              ? `Paused at ${formatElapsedDuration(elapsedSeconds)}`
-              : isStopped
-              ? `Stopped after ${formatElapsedDuration(elapsedSeconds)}`
-              : `Running for ${formatElapsedDuration(elapsedSeconds)}`}
-          </span>
+          <span>{formatRunTimerLabel(statusInfo, elapsedSeconds)}</span>
         </div>
       </div>
 
@@ -554,6 +631,18 @@ export function LiveRunBlock({
         </div>
       )}
 
+      {/* Parked Run Banner */}
+      {isParked && task.parkedReason && (
+        <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/80 dark:bg-amber-950/40 flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+              Run parked: {task.parkedReason}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Failed Run Terminal Message */}
       {isFailed && (
         <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/70 bg-rose-50/80 dark:bg-rose-950/40 flex items-start gap-2.5">
@@ -650,8 +739,8 @@ export function LiveRunBlock({
         </div>
       )}
 
-      {/* Paused Controls: Resume / Restart */}
-      {isPaused && (onResumeRun || onRestartRun) && (
+      {/* Paused / Parked Controls: Resume / Restart */}
+      {(isPaused || isParked) && (onResumeRun || onRestartRun) && (
         <div className="flex items-center gap-2">
           {onResumeRun && (
             <button

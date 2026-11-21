@@ -50,6 +50,12 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("LiveRunBlock.tsx") ||
+      p.includes("liveRunBlockStatus.test.ts"),
+    tests: ["tests/liveRunBlockStatus.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("LiveRunBlock.tsx") ||
       p.includes("liveRunBlockPreview.test.ts"),
     tests: ["tests/liveRunBlockPreview.test.ts"],
   },
