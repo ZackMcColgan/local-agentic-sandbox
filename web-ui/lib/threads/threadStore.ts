@@ -1497,6 +1497,33 @@ export class ThreadStore {
       } catch {}
     }
 
+    // (2) Remove leaked task/thread sidecar files (.handoff.json, -runlog.md, and -lg-checkpoint.json for non-task/ghost threads)
+    const isRealTaskThread = Boolean(taskId && !isGhostTaskThread);
+    const sidecarDirs = Array.from(
+      new Set([
+        this.threadsDir,
+        path.dirname(this.supervisor.getCheckpointFilePath(taskId || threadId))
+      ])
+    );
+    const sidecarIds = Array.from(new Set([threadId, ...(taskId ? [taskId] : [])]));
+    const sidecarSuffixes = isRealTaskThread
+      ? [".handoff.json", "-runlog.md"]
+      : [".handoff.json", "-runlog.md", "-lg-checkpoint.json"];
+
+    for (const dir of sidecarDirs) {
+      for (const id of sidecarIds) {
+        for (const suffix of sidecarSuffixes) {
+          const sidecarPath = path.join(dir, `${id}${suffix}`);
+          if (fs.existsSync(sidecarPath)) {
+            try {
+              fs.unlinkSync(sidecarPath);
+              deletedAny = true;
+            } catch {}
+          }
+        }
+      }
+    }
+
     return deletedAny || isGhostTaskThread || Boolean(thread);
   }
 

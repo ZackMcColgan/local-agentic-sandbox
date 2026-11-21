@@ -47,10 +47,12 @@ export async function GET() {
           return NextResponse.json({
             status: healthData.loaded ? "running" : "starting",
             reachable: true,
-            model: healthData.model || "qwen3.8-flash-next-gyro-gyro-s",
-            vram_mb: 16000,
-            uptime_s: 3600,
-            pid: "active"
+            engine: healthData.engine || healthData.backend || "OpenAI-compatible server",
+            backend: healthData.backend ?? null,
+            model: healthData.model ?? null,
+            vram_mb: typeof healthData.vram_mb === "number" ? healthData.vram_mb : null,
+            uptime_s: typeof healthData.uptime_s === "number" ? healthData.uptime_s : null,
+            pid: healthData.pid ?? null
           });
         }
       } catch {}
@@ -69,15 +71,18 @@ export async function GET() {
     const data = await res.json();
     return NextResponse.json({
       reachable: true,
-      ...data
+      ...data,
+      model: data.model ?? null,
+      vram_mb: typeof data.vram_mb === "number" ? data.vram_mb : null
     });
   } catch (err: any) {
     return NextResponse.json({
       status: "stopped",
       reachable: false,
       error: `Supervisor offline: ${err.message}`,
-      model: "qwen3.8-flash-next-gyro-gyro-s",
-      vram_mb: 16384,
+      engine: null,
+      model: null,
+      vram_mb: null,
       uptime_s: 0
     });
   }

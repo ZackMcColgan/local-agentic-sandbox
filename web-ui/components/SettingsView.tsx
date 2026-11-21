@@ -20,6 +20,84 @@ export interface DeployHistoryItem {
   errorMessage?: string;
 }
 
+export type HostCardRunnerState = "DISABLED" | "READY" | "UNAVAILABLE" | "MISMATCH";
+
+export interface HostCardPresentation {
+  stripLabel: string;
+  badgeLabel: string;
+  reasonText: string;
+  dotClass: string;
+  badgeClass: string;
+}
+
+export function getHostCardPresentation(settings: {
+  hostAccessEnabled: boolean;
+  runnerAvailable: boolean;
+  runnerState?: HostCardRunnerState;
+  runnerReason?: string;
+}): HostCardPresentation {
+  if (!settings.hostAccessEnabled) {
+    return {
+      stripLabel: "Off",
+      badgeLabel: "Disabled",
+      reasonText: "Host access is disabled. New chat threads will not offer host tools.",
+      dotClass: "bg-slate-400 dark:bg-zinc-600",
+      badgeClass: "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400",
+    };
+  }
+  if (settings.runnerState === "MISMATCH") {
+    return {
+      stripLabel: "Runner mismatch",
+      badgeLabel: "Version Mismatch",
+      reasonText:
+        settings.runnerReason ||
+        "Host runner responded but does not match the expected build. Update the host runner to restore access.",
+      dotClass: "bg-amber-500",
+      badgeClass: "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300",
+    };
+  }
+  if (settings.runnerState === "READY" || settings.runnerAvailable) {
+    return {
+      stripLabel: "Connected",
+      badgeLabel: "Active",
+      reasonText: "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
+      dotClass: "bg-emerald-500",
+      badgeClass: "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
+    };
+  }
+  return {
+    stripLabel: "Runner offline",
+    badgeLabel: "Runner Offline",
+    reasonText: "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
+    dotClass: "bg-zinc-500",
+    badgeClass: "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400",
+  };
+}
+
+export function formatEngineActionMessage(
+  action: "start" | "stop" | "restart",
+  ok: boolean,
+  status: number,
+  json: { success?: boolean; message?: string; error?: string; vramReleased?: boolean }
+): string {
+  if (!ok || json.success === false) {
+    if (status === 404 || status === 405 || status === 501) {
+      return "VRAM unload / engine control is not applicable to this engine.";
+    }
+    return json.error || `Engine ${action} failed (HTTP ${status}).`;
+  }
+  if (json.message) {
+    return json.message;
+  }
+  if (action === "stop") {
+    return json.vramReleased ? "Engine stopped and VRAM released." : "Engine stopped.";
+  }
+  if (action === "start") {
+    return "Engine starting up...";
+  }
+  return "Engine restarted.";
+}
+
 export interface SettingsViewProps {
   onBack?: () => void;
   onClose?: () => void;
@@ -56,11 +134,22 @@ export function SettingsView({
   const { theme, setTheme } = useTheme(propsTheme);
   const themeMode = theme;
   const [localSelfDeployEnabled, setLocalSelfDeployEnabled] = useState(propsSelfDeployEnabled ?? false);
-  const [engineData, setEngineData] = useState<any>({
-    status: "running",
-    reachable: true,
-    model: DEFAULT_PRIMARY_MODEL,
-    vram_mb: 16384
+  const [engineData, setEngineData] = useState<{
+    status: string;
+    reachable: boolean;
+    engine?: string | null;
+    backend?: string | null;
+    model?: string | null;
+    vram_mb?: number | null;
+    uptime_s?: number | null;
+    error?: string;
+  }>({
+    status: "unknown",
+    reachable: false,
+    engine: null,
+    backend: null,
+    model: null,
+    vram_mb: null
   });
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineMessage, setEngineMessage] = useState<string | null>(null);
@@ -93,6 +182,8 @@ export function SettingsView({
     allowUnattendedHostGit: boolean;
     jobChunkingEnabled: boolean;
     runnerAvailable: boolean;
+    runnerState?: HostCardRunnerState;
+    runnerReason?: string;
     recentActivity: Array<{
       timestamp: string;
       verb: string;
@@ -307,13 +398,7 @@ export function SettingsView({
         body: JSON.stringify({ action })
       });
       const json = await res.json().catch(() => ({}));
-      if (json.message) {
-        setEngineMessage(json.message);
-      } else if (action === "stop") {
-        setEngineMessage("Engine stopped. 16GB VRAM reclaimed.");
-      } else if (action === "start") {
-        setEngineMessage("Engine starting up...");
-      }
+      setEngineMessage(formatEngineActionMessage(action, res.ok, res.status, json));
     } catch (err: any) {
       setEngineMessage(`Failed: ${err.message}`);
     } finally {
@@ -325,8 +410,9 @@ export function SettingsView({
   const activeModel = defaultModel || selectedModel;
   const engineStatusLabel = engineData.status === "running" ? "Running" : engineData.status === "starting" ? "Starting" : "Stopped";
   const engineDotClass = engineData.status === "running" ? "bg-emerald-500" : engineData.status === "starting" ? "bg-zinc-500 animate-pulse" : "bg-slate-400 dark:bg-zinc-600";
-  const hostStatusLabel = hostSettings.hostAccessEnabled ? (hostSettings.runnerAvailable ? "Connected" : "Runner offline") : "Off";
-  const hostDotClass = hostSettings.hostAccessEnabled && hostSettings.runnerAvailable ? "bg-emerald-500" : hostSettings.hostAccessEnabled ? "bg-zinc-500" : "bg-slate-400 dark:bg-zinc-600";
+  const hostPresentation = getHostCardPresentation(hostSettings);
+  const hostStatusLabel = hostPresentation.stripLabel;
+  const hostDotClass = hostPresentation.dotClass;
   const stripModel = engineData.model || activeModel;
   const latestDeploy = deployHistory.length > 0 ? [...deployHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : undefined;
   const latestDeployLabel = latestDeploy ? `${latestDeploy.newSha.slice(0, 7)} · ${latestDeploy.status === "rolled_back" || latestDeploy.rollbackStatus === "rolled_back" ? "Rolled back" : latestDeploy.status === "failed" ? "Failed" : "Deployed"}` : "No deploys yet";
@@ -494,10 +580,14 @@ export function SettingsView({
               <div>
                 <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Standalone llama.cpp</span>
+                  <span>{engineData.engine || (engineData.reachable ? "Inference Engine" : "Inference Engine")}</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Vulkan backend on AMD Radeon RX 9070 XT.
+                  {engineData.backend
+                    ? engineData.backend
+                    : engineData.reachable
+                      ? "Connected via local engine endpoint."
+                      : "Waiting for engine status."}
                 </p>
               </div>
 
@@ -527,13 +617,15 @@ export function SettingsView({
               <div>
                 <span className="text-slate-400 dark:text-zinc-400 block">Model</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.model || DEFAULT_PRIMARY_MODEL}
+                  {engineData.model || "Not reported by this engine"}
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 dark:text-zinc-400 block">VRAM Usage</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                  {engineData.status === "running" ? "~16,384 MB (Allocated)" : "0 MB (Reclaimed)"}
+                  {typeof engineData.vram_mb === "number"
+                    ? `${engineData.vram_mb.toLocaleString()} MB`
+                    : "Not reported by this engine"}
                 </span>
               </div>
             </div>
@@ -735,39 +827,17 @@ export function SettingsView({
                   data-testid="host-access-status-reason"
                   className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm"
                 >
-                  {hostSettings.hostAccessEnabled
-                    ? "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON."
-                    : "Host access is disabled. New chat threads will not offer host tools."}
+                  {hostPresentation.reasonText}
                 </p>
               </div>
 
               {/* Status Badge */}
               <div
                 data-testid="host-access-status-badge"
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                  hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
-                    ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
-                    : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
-                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400"
-                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${hostPresentation.badgeClass}`}
               >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    hostSettings.hostAccessEnabled && hostSettings.runnerAvailable
-                      ? "bg-emerald-500"
-                      : hostSettings.hostAccessEnabled && !hostSettings.runnerAvailable
-                      ? "bg-zinc-500"
-                      : "bg-slate-400 dark:bg-zinc-600"
-                  }`}
-                />
-                <span>
-                  {hostSettings.hostAccessEnabled
-                    ? hostSettings.runnerAvailable
-                      ? "Active"
-                      : "Runner Offline"
-                    : "Disabled"}
-                </span>
+                <span className={`h-2 w-2 rounded-full ${hostPresentation.dotClass}`} />
+                <span>{hostPresentation.badgeLabel}</span>
               </div>
             </div>
 
@@ -1262,7 +1332,7 @@ export function SettingsView({
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Disable self-deploy</span>
+                  <span>Enable self-deploy</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                   When OFF, self-deploy is completely disabled. Default is OFF.

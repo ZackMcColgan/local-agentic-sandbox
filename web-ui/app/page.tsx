@@ -1339,6 +1339,17 @@ export default function Home() {
               });
               await fetchProjects();
             }}
+            onDeleteProject={async (id) => {
+              const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+                method: "DELETE"
+              });
+              if (res.ok) {
+                if (selectedProjectId === id) {
+                  setSelectedProjectId(null);
+                }
+                await fetchProjects();
+              }
+            }}
             onOpenDrawer={() => setIsDrawerOpen(true)}
           />
         )}

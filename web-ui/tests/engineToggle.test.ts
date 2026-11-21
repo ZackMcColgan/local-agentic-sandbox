@@ -60,18 +60,18 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
   });
 
   describe("SettingsView Engine Management Section", () => {
-    it("displays Section 4: Engine Management with Standalone llama.cpp", () => {
+    it("displays Engine Management section with reported engine identity and honest VRAM fallback", () => {
       assert.ok(
         settingsFile.includes("Engine Management"),
         "SettingsView must contain 'Engine Management' heading"
       );
       assert.ok(
-        settingsFile.includes("Standalone llama.cpp"),
-        "SettingsView must indicate Standalone llama.cpp"
+        settingsFile.includes("engineData.engine"),
+        "SettingsView must derive engine identity from engineData"
       );
       assert.ok(
-        settingsFile.includes("16GB VRAM") || settingsFile.includes("16,384 MB"),
-        "SettingsView must display 16GB VRAM estimate"
+        settingsFile.includes("Not reported by this engine"),
+        "SettingsView must render explicit 'Not reported by this engine' fallback when VRAM is unreported"
       );
     });
 

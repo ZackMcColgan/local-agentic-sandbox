@@ -246,8 +246,21 @@ export function setActiveTaskId(projectId: string, taskId: string | null, dbOver
 
 export function deleteProject(projectId: string, dbOverride?: any): boolean {
   const db = getDb(dbOverride);
-  const res = db.prepare("DELETE FROM projects WHERE project_id = ?").run(projectId);
-  return res.changes > 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare(
+      "DELETE FROM project_file_reviews WHERE task_id IN (SELECT task_id FROM project_tasks WHERE project_id = ?)"
+    ).run(projectId);
+    db.prepare("DELETE FROM project_tasks WHERE project_id = ?").run(projectId);
+    const res = db.prepare("DELETE FROM projects WHERE project_id = ?").run(projectId);
+    db.exec("COMMIT");
+    return res.changes > 0;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {}
+    throw err;
+  }
 }
 
 export function updateProject(projectId: string, updates: Partial<ProjectRecord>, dbOverride?: any): ProjectRecord {
