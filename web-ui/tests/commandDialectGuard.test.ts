@@ -43,6 +43,34 @@ describe("command-dialect-guard", () => {
     assert.deepEqual(res.traceNotes, []);
   });
 
+  it("preserves && and || inside double and single quotes byte-identical", () => {
+    const doubleQuoted = 'echo "a && b"';
+    const resDouble = lintHostCommand(doubleQuoted);
+    assert.equal(resDouble.rejected, false);
+    assert.equal(resDouble.rewritten, false);
+    assert.equal(resDouble.command, doubleQuoted);
+    assert.deepEqual(resDouble.ruleIds, []);
+    assert.deepEqual(resDouble.traceNotes, []);
+
+    const singleQuoted = "echo 'a || b'";
+    const resSingle = lintHostCommand(singleQuoted);
+    assert.equal(resSingle.rejected, false);
+    assert.equal(resSingle.rewritten, false);
+    assert.equal(resSingle.command, singleQuoted);
+    assert.deepEqual(resSingle.ruleIds, []);
+    assert.deepEqual(resSingle.traceNotes, []);
+  });
+
+  it("rewrites unquoted chains while preserving quoted && and || literals", () => {
+    const cmd = `echo "a && b" && echo 'c || d'`;
+    const res = lintHostCommand(cmd);
+    assert.equal(res.rejected, false);
+    assert.equal(res.rewritten, true);
+    assert.equal(res.command, `echo "a && b" ; echo 'c || d'`);
+    assert.deepEqual(res.ruleIds, ["ps-chain-and"]);
+    assert.ok(res.traceNotes.some((n) => n.includes("ps-chain-and")));
+  });
+
   it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on && rewrite", async () => {
     const origFetch = globalThis.fetch;
     let capturedBody: any = null;
