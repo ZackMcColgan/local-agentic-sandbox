@@ -789,12 +789,15 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("lib/projects/") ||
       p.includes("app/api/projects") ||
-      p.includes("components/ProjectsView"),
+      p.includes("components/ProjectsView") ||
+      p.includes("components/projects/") ||
+      p.includes("projectsViewExtraction.test.ts"),
     tests: [
       "tests/projectsRegistryAndExplorer.test.ts",
       "tests/projectOvernightRunner.test.ts",
       "tests/projectDiffReview.test.ts",
       "tests/projectMorningReportIntegration.test.ts",
+      "tests/projectsViewExtraction.test.ts",
     ],
   },
   // Memory profile & durable facts
