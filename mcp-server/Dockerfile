@@ -14,8 +14,11 @@ COPY mcp-server/tsconfig.json ./mcp-server/
 COPY mcp-server/src ./mcp-server/src
 COPY mcp-server/tests ./mcp-server/tests
 
-# Install from root (honors workspace config)
-RUN npm ci --workspaces
+# Install from root (honors workspace config).
+# --ignore-scripts: the root prepare script installs git hooks, which are
+# meaningless inside an image (nothing commits here); without this flag the
+# build fails on "husky: not found" (exit 127).
+RUN npm ci --workspaces --ignore-scripts
 
 WORKDIR /build/mcp-server
 RUN npm run build
