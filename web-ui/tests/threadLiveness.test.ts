@@ -1,12 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   TURN_STALL_WINDOW_MS,
   ZOMBIE_TURN_AGE_CAP_MS,
   isRecordStaleBeyond,
   isZombiePresence,
   computeTurnLiveness,
-  type Thread,
-} from "../lib/threads/threadStore";
+} from "../lib/threads/liveness";
+import type { Thread } from "../lib/threads/types";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   const baseTime = new Date("2026-11-21T12:00:00.000Z").toISOString();
@@ -28,25 +29,25 @@ describe("thread liveness and zombie computation", () => {
 
   it("computeTurnLiveness returns 'settled' for non-live statuses", () => {
     for (const status of ["completed", "stopped", "failed", "paused", "needs_input"] as const) {
-      expect(computeTurnLiveness(makeThread({ status }), baseMs)).toBe("settled");
+      assert.equal(computeTurnLiveness(makeThread({ status }), baseMs), "settled");
     }
   });
 
   it("computeTurnLiveness returns 'alive' within TURN_STALL_WINDOW_MS and 'stalled' past it", () => {
     const thread = makeThread({ status: "running" });
-    expect(computeTurnLiveness(thread, baseMs + TURN_STALL_WINDOW_MS)).toBe("alive");
-    expect(computeTurnLiveness(thread, baseMs + TURN_STALL_WINDOW_MS + 1)).toBe("stalled");
+    assert.equal(computeTurnLiveness(thread, baseMs + TURN_STALL_WINDOW_MS), "alive");
+    assert.equal(computeTurnLiveness(thread, baseMs + TURN_STALL_WINDOW_MS + 1), "stalled");
   });
 
   it("computeTurnLiveness returns 'stalled' when timestamps are invalid", () => {
     const thread = makeThread({ status: "active", updatedAt: "not-a-date", createdAt: "" });
-    expect(computeTurnLiveness(thread, baseMs)).toBe("stalled");
+    assert.equal(computeTurnLiveness(thread, baseMs), "stalled");
   });
 
   it("isRecordStaleBeyond checks updatedAt against windowMs", () => {
     const thread = makeThread();
-    expect(isRecordStaleBeyond(thread, baseMs + 1000, 1000)).toBe(false);
-    expect(isRecordStaleBeyond(thread, baseMs + 1001, 1000)).toBe(true);
+    assert.equal(isRecordStaleBeyond(thread, baseMs + 1000, 1000), false);
+    assert.equal(isRecordStaleBeyond(thread, baseMs + 1001, 1000), true);
   });
 
   it("isZombiePresence requires BOTH presence age > ZOMBIE_TURN_AGE_CAP_MS and stale record", () => {
@@ -55,15 +56,19 @@ describe("thread liveness and zombie computation", () => {
       updatedAt: new Date(baseMs + ZOMBIE_TURN_AGE_CAP_MS).toISOString(),
     });
     // Ancient presence, fresh record -> NOT zombie
-    expect(isZombiePresence(presence, freshThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1000)).toBe(
+    assert.equal(
+      isZombiePresence(presence, freshThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1000),
       false
     );
 
     // Young presence, stale record -> NOT zombie
     const staleThread = makeThread({ updatedAt: new Date(baseMs).toISOString() });
-    expect(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS)).toBe(false);
+    assert.equal(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS), false);
 
     // Ancient presence AND stale record -> zombie
-    expect(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1)).toBe(true);
+    assert.equal(
+      isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1),
+      true
+    );
   });
 });
