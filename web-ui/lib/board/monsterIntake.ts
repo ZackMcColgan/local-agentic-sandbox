@@ -225,7 +225,7 @@ export function validateIntakeStack(
       reasons.push(`${label} (${title || "untitled"}) is missing non-empty acceptanceCriteria`);
     }
 
-    let dependencies: string[] = [];
+    const dependencies: string[] = [];
     if (obj.dependencies !== undefined) {
       if (!Array.isArray(obj.dependencies)) {
         reasons.push(`${label} (${title || "untitled"}) dependencies must be an array of strings`);

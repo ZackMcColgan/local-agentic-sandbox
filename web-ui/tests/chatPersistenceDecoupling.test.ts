@@ -46,7 +46,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       };
       store.addMessage(thread.id, userMsg);
 
-      let loaded = store.getFilePath(thread.id);
+      const loaded = store.getFilePath(thread.id);
       let data: Thread = JSON.parse(fs.readFileSync(loaded, "utf8"));
       assert.equal(data.messages.length, 1);
       assert.equal(data.messages[0].id, "msg-user-1");
@@ -456,7 +456,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       store.appendSteer(threadId, "Add tomorrow too");
 
       let roundCount = 0;
-      let recordedPrompts: any[] = [];
+      const recordedPrompts: any[] = [];
 
       roundHandler = (parsed, res) => {
         recordedPrompts.push(parsed);

@@ -147,7 +147,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      let recordedRequests: any[] = [];
+      const recordedRequests: any[] = [];
       roundHandler = (parsed, res) => {
         recordedRequests.push(parsed);
         roundCount++;
@@ -246,7 +246,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      let recordedRequests: any[] = [];
+      const recordedRequests: any[] = [];
       roundHandler = (parsed, res) => {
         recordedRequests.push(parsed);
         roundCount++;
@@ -358,7 +358,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      let recordedRequests: any[] = [];
+      const recordedRequests: any[] = [];
       let round1FirstTokenReceivedResolve!: () => void;
       const round1FirstTokenReceived = new Promise<void>((r) => {
         round1FirstTokenReceivedResolve = r;

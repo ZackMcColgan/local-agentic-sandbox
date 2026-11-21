@@ -184,7 +184,7 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
 
   let fakeServer: any;
   let serverPort: number;
-  let prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
+  const prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
   const prevLlmUrl = process.env.LLM_BASE_URL;
   const prevOllamaUrl = process.env.OLLAMA_BASE_URL;
   const prevMcpUrl = process.env.MCP_SERVER_URL;

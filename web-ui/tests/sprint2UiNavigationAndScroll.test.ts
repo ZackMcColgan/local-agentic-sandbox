@@ -72,8 +72,8 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     ) as HTMLDivElement;
     assert.ok(scrollContainer, "ChatStream must render a data-scroll-container element");
 
-    let mockScrollHeight = 1000;
-    let mockClientHeight = 500;
+    const mockScrollHeight = 1000;
+    const mockClientHeight = 500;
     let mockScrollTop = 500; // Initially at bottom: distanceFromBottom = 1000 - (500 + 500) = 0 <= 90
 
     Object.defineProperty(scrollContainer, "scrollHeight", {

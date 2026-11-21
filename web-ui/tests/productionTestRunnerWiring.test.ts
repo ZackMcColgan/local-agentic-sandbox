@@ -119,7 +119,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
         criticRounds: 0,
       };
 
-      let criticReceivedFeedback: string[] = [];
+      const criticReceivedFeedback: string[] = [];
       const mockPool = {
         executeJob: async (job: any) => {
           if (job.role === "builder") {

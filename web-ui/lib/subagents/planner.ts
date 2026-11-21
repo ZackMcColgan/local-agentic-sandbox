@@ -203,7 +203,7 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
       (f: string) => f && (f.includes(".test.") || f.includes(".spec.") || f.startsWith("tests/"))
     );
 
-  let acceptanceCriteria: AcceptanceCriterion[] =
+  const acceptanceCriteria: AcceptanceCriterion[] =
     Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
       ? m.acceptanceCriteria.map((ac: any, acIdx: number) => {
           let command = ac.command;

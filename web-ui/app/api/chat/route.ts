@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Resolve Active Model via Tri-Mode Dispatcher
     let activeModel = requestedModel;
-    let triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
+    const triageComplexityResult: "SIMPLE_EXECUTION" | "DEEP_SYNTHESIS" | null = null;
     let invalidRequestedModel: string | null = null;
 
     if (
@@ -549,7 +549,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // unchanged re-read, carrying path + content hash + the earlier trace/round
     // reference. Declared with the other turn state so both persist paths carry it.
     const turnReadDedups: ReadDedupMeta[] = [];
-    let accumulatedThoughts: string[] = [];
+    const accumulatedThoughts: string[] = [];
     const turnStartMs = Date.now();
     let thinkingEndMs: number | null = null;
     let firstLlmRequestMs: number | null = null;
@@ -1437,7 +1437,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
               let roundThinking = "";
               let roundFinishReason: string | undefined = undefined;
               let roundSizeCapped = false;
-              let toolCallsFromMessage: any[] = [];
+              const toolCallsFromMessage: any[] = [];
 
               try {
                 for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {

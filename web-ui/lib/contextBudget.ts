@@ -712,7 +712,7 @@ export async function runChatToolLoop(
     }
 
     let fullRoundContent = "";
-    let toolCallsFromMessage: any[] = [];
+    const toolCallsFromMessage: any[] = [];
 
     for await (const chunk of streamChatFn(payload)) {
       if (chunk.message?.content) {

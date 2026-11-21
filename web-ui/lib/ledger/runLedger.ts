@@ -463,7 +463,7 @@ export class RunLedger {
       throw new Error(`Run ${runId} is in status '${existing.status}' and cannot be resumed`);
     }
 
-    let completedIdsFromCheckpoint = new Set<string>(
+    const completedIdsFromCheckpoint = new Set<string>(
       existing.milestoneSummary.filter((m) => m.status === "completed").map((m) => m.id)
     );
 

@@ -313,7 +313,7 @@ export function createLlmGenerate(options?: {
       );
     }
 
-    let text = accumulatedText.trim();
+    const text = accumulatedText.trim();
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }

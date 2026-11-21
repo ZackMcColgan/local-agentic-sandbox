@@ -77,7 +77,7 @@ export async function setupStubbedEngineRoutes(
   });
 
   // 3. Threads API
-  let currentThreads = [...threads];
+  const currentThreads = [...threads];
   await page.route("**/api/threads**", async (route: Route) => {
     const req = route.request();
     if (req.method() === "POST") {
@@ -148,7 +148,7 @@ export async function setupStubbedEngineRoutes(
   });
 
   // 4. Projects API
-  let currentProjects = [...projects];
+  const currentProjects = [...projects];
   await page.route("**/api/projects", async (route: Route) => {
     const req = route.request();
     if (req.method() === "POST") {

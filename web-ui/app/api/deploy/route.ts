@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       } = body;
 
       let branchName = inputBranchName;
-      let previousSha = inputPrevSha || "develop";
+      const previousSha = inputPrevSha || "develop";
       let newSha = inputNewSha;
 
       let task: TaskManifest | null = null;

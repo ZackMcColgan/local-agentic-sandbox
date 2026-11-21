@@ -44,7 +44,7 @@ export function createHostServer(options: HostServerOptions = {}) {
   const host = options.host || "127.0.0.1";
 
   // Resolve secret from options or environment
-  let sharedSecret =
+  const sharedSecret =
     options.sharedSecret !== undefined
       ? options.sharedSecret
       : process.env.HOST_RUNNER_SHARED_SECRET;

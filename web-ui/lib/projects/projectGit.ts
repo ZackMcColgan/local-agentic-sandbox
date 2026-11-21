@@ -122,7 +122,7 @@ export function getProjectTree(
       }
 
       const fullPath = path.join(currentDir, entry.name);
-      let relativePath = path.relative(canonicalRoot, fullPath).replace(/\\/g, "/");
+      const relativePath = path.relative(canonicalRoot, fullPath).replace(/\\/g, "/");
 
       try {
         if (entry.isDirectory()) {
