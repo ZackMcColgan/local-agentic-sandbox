@@ -1,15 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync, execFileSync } from "child_process";
-import {
-  Milestone,
-  WorkerRole,
-  EvidenceItem,
-  ContractAssertionResult,
-  TestSnapshot,
-  RevertResult,
-} from "./types";
-import ts from "typescript";
+import { Milestone, WorkerRole, EvidenceItem, ContractAssertionResult } from "./types";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 export type { TestSnapshot, RevertResult } from "./types";
 import {
@@ -24,10 +15,35 @@ import {
   getCurrentSlotLease,
   getSharedSlotScheduler,
   PrioritySlotScheduler,
-  releaseCurrentSlotForWait,
   SlotPriority,
 } from "../slotScheduler";
-export { workspacePatchFile, type PatchItem, type PatchFileResult };
+import {
+  scanWorkspaceRepoMap,
+  getResolvedGitSha,
+  createUnifiedDiff,
+  type WorkspaceFileSymbol,
+  type WorkspaceRepoMap,
+} from "./repoMap";
+import {
+  synthesizeForFastGraphTest,
+  validateCodeAst,
+  normalizeErrorSignature,
+} from "./codeValidation";
+import { recordTestBaseline, compareAndRevertIfWorse } from "./testBaseline";
+export {
+  workspacePatchFile,
+  type PatchItem,
+  type PatchFileResult,
+  scanWorkspaceRepoMap,
+  getResolvedGitSha,
+  createUnifiedDiff,
+  type WorkspaceFileSymbol,
+  type WorkspaceRepoMap,
+  validateCodeAst,
+  normalizeErrorSignature,
+  recordTestBaseline,
+  compareAndRevertIfWorse,
+};
 
 export interface ModelRosterConfig {
   planner?: string;
@@ -108,158 +124,6 @@ export interface WorkerModelOptions {
   workspaceRoot?: string;
 }
 
-export interface WorkspaceFileSymbol {
-  path: string;
-  exports: string[];
-}
-
-export interface WorkspaceRepoMap {
-  root: string;
-  files: WorkspaceFileSymbol[];
-  treeSummary: string;
-  length: number;
-  toString(): string;
-}
-
-const IGNORED_SCAN_DIRS = new Set([
-  "node_modules",
-  ".git",
-  ".next",
-  "dist",
-  "build",
-  "coverage",
-  ".turbo",
-  "out",
-  ".cache",
-  "tmp",
-  "temp",
-  ".gemini",
-]);
-
-export function scanWorkspaceRepoMap(
-  rootDir: string,
-  options?: { query?: string; maxFiles?: number }
-): WorkspaceRepoMap {
-  const maxFiles = options?.maxFiles ?? 500;
-  const files: WorkspaceFileSymbol[] = [];
-  const query = options?.query?.toLowerCase();
-
-  function walk(currentDir: string) {
-    if (files.length >= maxFiles) return;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(currentDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (files.length >= maxFiles) break;
-      const fullPath = path.join(currentDir, entry.name);
-
-      if (entry.isDirectory()) {
-        if (!IGNORED_SCAN_DIRS.has(entry.name)) {
-          walk(fullPath);
-        }
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"].includes(ext)) {
-          const relPath = path.relative(rootDir, fullPath).replace(/\\/g, "/");
-          let exports: string[] = [];
-
-          try {
-            const content = fs.readFileSync(fullPath, "utf8");
-            if (ext === ".py") {
-              const defMatches = content.match(/^(?:async\s+)?def\s+([a-zA-Z_0-9]+)/gm) || [];
-              const classMatches = content.match(/^class\s+([a-zA-Z_0-9]+)/gm) || [];
-              exports = [
-                ...classMatches.map((c) => c.replace(/^class\s+/, "").trim()),
-                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim()),
-              ];
-            } else {
-              const sourceFile = ts.createSourceFile(
-                entry.name,
-                content,
-                ts.ScriptTarget.Latest,
-                true,
-                ext === ".tsx"
-                  ? ts.ScriptKind.TSX
-                  : ext === ".jsx"
-                    ? ts.ScriptKind.JSX
-                    : ts.ScriptKind.TS
-              );
-
-              for (const stmt of sourceFile.statements) {
-                const mods = (stmt as { modifiers?: ts.NodeArray<ts.ModifierLike> }).modifiers;
-                const hasExport =
-                  Array.isArray(mods) && mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
-                if (hasExport) {
-                  if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-                    exports.push(stmt.name.text);
-                  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
-                    exports.push(stmt.name.text);
-                  } else if (ts.isInterfaceDeclaration(stmt) && stmt.name) {
-                    exports.push(stmt.name.text);
-                  } else if (ts.isTypeAliasDeclaration(stmt) && stmt.name) {
-                    exports.push(stmt.name.text);
-                  } else if (ts.isEnumDeclaration(stmt) && stmt.name) {
-                    exports.push(stmt.name.text);
-                  } else if (ts.isVariableStatement(stmt)) {
-                    for (const decl of stmt.declarationList.declarations) {
-                      if (decl.name && ts.isIdentifier(decl.name)) {
-                        exports.push(decl.name.text);
-                      }
-                    }
-                  }
-                } else if (
-                  ts.isExportDeclaration(stmt) &&
-                  stmt.exportClause &&
-                  ts.isNamedExports(stmt.exportClause)
-                ) {
-                  for (const el of stmt.exportClause.elements) {
-                    exports.push(el.name.text);
-                  }
-                }
-              }
-            }
-          } catch {
-            // best-effort symbol extraction
-          }
-
-          if (query) {
-            const matchesQuery =
-              relPath.toLowerCase().includes(query) ||
-              exports.some((e) => e.toLowerCase().includes(query));
-            if (!matchesQuery) continue;
-          }
-
-          files.push({ path: relPath, exports });
-        }
-      }
-    }
-  }
-
-  walk(rootDir);
-
-  const treeLines = files.map((f) => {
-    return f.exports.length > 0 ? `${f.path}: ${f.exports.join(", ")}` : `${f.path}`;
-  });
-
-  const treeSummary = treeLines.join("\n");
-
-  const repoMap: WorkspaceRepoMap = {
-    root: rootDir,
-    files,
-    treeSummary,
-    length: files.length,
-    toString() {
-      return treeSummary;
-    },
-  };
-
-  return repoMap;
-}
-
 export class ExplorerWorker {
   readonly role: WorkerRole = "explorer";
   private readonly scopedTools = ["workspace_get_tree", "workspace_grep", "workspace_read_file"];
@@ -283,233 +147,8 @@ export class ExplorerWorker {
   }
 }
 
-/**
- * Resolves the real HEAD SHA. Provenance rule: never synthesize a SHA.
- * Throws when no git repository is found. `strict` only inspects `repoRoot`.
- */
-export function getResolvedGitSha(repoRoot?: string, opts?: { strict?: boolean }): string {
-  const envWorkspace = process.env.WORKSPACE_DIR;
-  const candidates = (
-    opts?.strict
-      ? [repoRoot]
-      : [
-          repoRoot,
-          envWorkspace,
-          fs.existsSync("/workspace") ? "/workspace" : undefined,
-          process.cwd(),
-          path.resolve(process.cwd(), ".."),
-          path.resolve(process.cwd(), "../.."),
-        ]
-  ).filter(Boolean) as string[];
-
-  for (const dir of candidates) {
-    try {
-      const top = execSync("git -c safe.directory=* rev-parse --show-toplevel", {
-        cwd: dir,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "ignore"],
-      }).trim();
-      if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase())
-        continue;
-      const sha = execSync("git -c safe.directory=* rev-parse HEAD", {
-        cwd: dir,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "ignore"],
-      }).trim();
-      if (/^[0-9a-f]{40}$/i.test(sha)) {
-        return sha;
-      }
-    } catch {}
-  }
-  throw new Error(
-    `No git repository found (searched: ${candidates.join(", ")}); refusing to fabricate a commit SHA.`
-  );
-}
-
-export function createUnifiedDiff(filename: string, oldStr: string, newStr: string): string {
-  const oldLines = oldStr ? oldStr.split("\n") : [];
-  const newLines = newStr ? newStr.split("\n") : [];
-
-  const diffLines: string[] = [
-    `--- a/${filename}`,
-    `+++ b/${filename}`,
-    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
-  ];
-
-  for (const line of oldLines) {
-    if (!newLines.includes(line)) {
-      diffLines.push(`-${line}`);
-    }
-  }
-  for (const line of newLines) {
-    if (!oldLines.includes(line)) {
-      diffLines.push(`+${line}`);
-    } else {
-      diffLines.push(` ${line}`);
-    }
-  }
-
-  return diffLines.join("\n") + "\n";
-}
-
 const FORCED_FLAW_MARKER =
   "// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
-
-/**
- * TEST-ONLY deterministic content used exclusively under FAST_GRAPH_TEST.
- * Every result produced from here is flagged `synthetic: true`.
- */
-function synthesizeForFastGraphTest(
-  milestone: Milestone,
-  targetRelPath: string,
-  previousContent: string,
-  criticFeedback: string[],
-  iteration: number
-): string {
-  let content = previousContent;
-  if (criticFeedback.length > 0) {
-    for (const fb of criticFeedback) {
-      if (fb.includes("egress-mesh") && !content.includes("egress-mesh")) {
-        content +=
-          "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
-      }
-      if ((fb.includes("#ffffff") || fb.includes("background")) && !content.includes("#ffffff")) {
-        content += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
-      }
-    }
-    if (content === previousContent) {
-      content += `\n// [synthetic] refinement iteration ${iteration}`;
-    }
-    return content;
-  }
-  return `// [synthetic FAST_GRAPH_TEST output] ${milestone.id}: ${milestone.title}\n// target: ${targetRelPath}\nexport interface ${milestone.id.replace(/[^A-Za-z0-9_]/g, "_")}TaskResult {\n  id: string;\n  status: string;\n}\n`;
-}
-
-// Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
-export function validateCodeAst(
-  filePath: string,
-  content: string
-): { valid: boolean; error?: string } {
-  const ext = path.extname(filePath).toLowerCase();
-
-  // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
-  if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
-    try {
-      const scriptKind =
-        ext === ".tsx"
-          ? ts.ScriptKind.TSX
-          : ext === ".jsx"
-            ? ts.ScriptKind.JSX
-            : ext === ".js" || ext === ".mjs" || ext === ".cjs"
-              ? ts.ScriptKind.JS
-              : ts.ScriptKind.TS;
-
-      const sourceFile = ts.createSourceFile(
-        filePath,
-        content,
-        ts.ScriptTarget.Latest,
-        true,
-        scriptKind
-      );
-
-      const diagnostics =
-        (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ||
-        [];
-      if (diagnostics.length > 0) {
-        const first = diagnostics[0];
-        const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
-        const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
-        return {
-          valid: false,
-          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`,
-        };
-      }
-      return { valid: true };
-    } catch (err: unknown) {
-      return {
-        valid: false,
-        error: `AST parser failure: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-  }
-
-  // 2. Python AST parsing via Python standard library ast module
-  if (ext === ".py") {
-    const pythonCmds = ["python3", "python"];
-    for (const cmd of pythonCmds) {
-      try {
-        execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
-          input: content,
-          encoding: "utf8",
-          timeout: 3000,
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-        return { valid: true };
-      } catch (err: unknown) {
-        const e = err as { stderr?: string; message?: string; code?: string; status?: number };
-        const stderr = e.stderr ? e.stderr.trim() : e.message || "";
-        if (e.code === "ENOENT" || e.status === 9009 || stderr.includes("Python was not found")) {
-          continue;
-        }
-        return {
-          valid: false,
-          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`,
-        };
-      }
-    }
-    // Neither python3 nor python found - fail open for validation
-    return { valid: true };
-  }
-
-  // 3. JSON validation
-  if (ext === ".json") {
-    try {
-      JSON.parse(content);
-      return { valid: true };
-    } catch (err: unknown) {
-      return {
-        valid: false,
-        error: `Invalid JSON syntax in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-  }
-
-  // 4. SVG and XML validation (check basic well-formedness: starts with <svg or <?xml or <, has closing tag)
-  if (ext === ".svg" || ext === ".xml" || ext === ".drawio") {
-    const trimmed = content.trim();
-    if (ext === ".svg" && (!trimmed.includes("<svg") || !trimmed.includes("</svg>"))) {
-      return {
-        valid: false,
-        error: `Invalid SVG format in ${filePath}: missing <svg> root element or closing tag.`,
-      };
-    }
-    if (
-      (ext === ".xml" || ext === ".drawio") &&
-      (!trimmed.startsWith("<") || !trimmed.endsWith(">"))
-    ) {
-      return {
-        valid: false,
-        error: `Invalid XML format in ${filePath}: not enclosed in XML tags.`,
-      };
-    }
-    return { valid: true };
-  }
-
-  // 5. Other non-code files (Markdown, TXT, CSV) pass through
-  return { valid: true };
-}
-
-// Guardrail 5 Helper: Normalize error signature by file + line + error type (build-loop pattern)
-export function normalizeErrorSignature(filePath: string, errorText: string): string {
-  const normFile = path.basename(filePath).toLowerCase();
-  const lineMatch = errorText.match(/line\s*(\d+)|\((\d+):|:(\d+):/i);
-  const line = lineMatch ? lineMatch[1] || lineMatch[2] || lineMatch[3] : "unknown";
-  const typeMatch =
-    errorText.match(/\b([A-Z][a-zA-Z]*Error)\b/) ||
-    errorText.match(/(syntax error|parse error|unexpected token|identifier expected)/i);
-  const errType = typeMatch ? typeMatch[1].toLowerCase().replace(/\s+/g, "_") : "syntax_error";
-  return `${normFile}:${line}:${errType}`;
-}
 
 export class BuilderWorker {
   readonly role: WorkerRole = "builder";
@@ -1069,116 +708,6 @@ Please fix the syntax error and output the complete, valid file content for "${t
       rawContent: newContent,
     };
   }
-}
-
-/**
- * Guardrail 2 (Item 2): Blocking-Gate Revert
- * Records test suite baseline before builder attempt
- */
-export async function recordTestBaseline(
-  repoRoot?: string,
-  testCommand?: string,
-  options?: { evaluator?: () => Promise<TestSnapshot> }
-): Promise<TestSnapshot> {
-  if (options?.evaluator) {
-    return await options.evaluator();
-  }
-
-  const root = repoRoot || process.cwd();
-  const cmd = testCommand || "npm test";
-  let stdout = "";
-  let passCount = 0;
-  let failCount = 0;
-  const failingTests: string[] = [];
-
-  stdout = await releaseCurrentSlotForWait(() => {
-    try {
-      return execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] });
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; message?: string };
-      return e.stdout || e.message || "";
-    }
-  });
-
-  const passMatch = stdout.match(/(\d+)\s+pass(?:ing|ed)/i);
-  if (passMatch) passCount = parseInt(passMatch[1], 10);
-  const failMatch = stdout.match(/(\d+)\s+fail(?:ing|ed)/i);
-  if (failMatch) failCount = parseInt(failMatch[1], 10);
-
-  return {
-    passCount,
-    failCount,
-    failingTests,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-/**
- * Guardrail 2 (Item 2): Compares test results after builder attempt and reverts uncommitted changes if worse
- */
-export async function compareAndRevertIfWorse(
-  baseline: TestSnapshot,
-  repoRoot?: string,
-  testCommand?: string,
-  modifiedFiles?: string[],
-  options?: {
-    evaluator?: () => Promise<{ passCount: number; failCount: number; failingTests?: string[] }>;
-  }
-): Promise<RevertResult> {
-  const root = repoRoot || process.cwd();
-  let afterCounts: { passCount: number; failCount: number; failingTests?: string[] };
-
-  if (options?.evaluator) {
-    afterCounts = await options.evaluator();
-  } else {
-    const afterSnapshot = await recordTestBaseline(root, testCommand);
-    afterCounts = {
-      passCount: afterSnapshot.passCount,
-      failCount: afterSnapshot.failCount,
-      failingTests: afterSnapshot.failingTests,
-    };
-  }
-
-  const isWorse =
-    afterCounts.failCount > baseline.failCount || afterCounts.passCount < baseline.passCount;
-
-  if (isWorse) {
-    const filesToRevert = modifiedFiles && modifiedFiles.length > 0 ? modifiedFiles : [];
-    if (filesToRevert.length > 0) {
-      for (const file of filesToRevert) {
-        try {
-          execFileSync("git", ["checkout", "--", file], { cwd: root, stdio: "ignore" });
-        } catch {
-          const full = path.resolve(root, file);
-          if (fs.existsSync(full)) fs.unlinkSync(full);
-        }
-      }
-    } else {
-      try {
-        execSync("git checkout -- .", { cwd: root, stdio: "ignore" });
-        execSync("git clean -fd", { cwd: root, stdio: "ignore" });
-      } catch {}
-    }
-
-    const logMsg = `Reverted: ${baseline.passCount}→${afterCounts.passCount} pass, ${baseline.failCount}→${afterCounts.failCount} fail`;
-    console.warn(`[BLOCKING-GATE REVERT] ${logMsg}. Reason: Fix attempt degraded test suite.`);
-
-    return {
-      reverted: true,
-      filesReverted: filesToRevert,
-      before: { passed: baseline.passCount, failed: baseline.failCount },
-      after: { passed: afterCounts.passCount, failed: afterCounts.failCount },
-      reason: "Fix attempt degraded test suite",
-      logMessage: logMsg,
-    };
-  }
-
-  return {
-    reverted: false,
-    filesReverted: [],
-    before: { passed: baseline.passCount, failed: baseline.failCount },
-    after: { passed: afterCounts.passCount, failed: afterCounts.failCount },
-  };
 }
 
 export class CriticWorker {

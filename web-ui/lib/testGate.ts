@@ -65,6 +65,19 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
+    tests: ["tests/repoMap.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/subagents/codeValidation") || p.includes("codeValidation.test.ts"),
+    tests: ["tests/codeValidation.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/subagents/testBaseline") || p.includes("testBaseline.test.ts"),
+    tests: ["tests/testBaseline.test.ts", "tests/blockingGateRevert.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("threadStore.ts") ||
       p.includes("app/api/threads/route.ts") ||
