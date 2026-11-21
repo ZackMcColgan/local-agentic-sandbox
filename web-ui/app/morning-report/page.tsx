@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { ArrowLeft, RefreshCw, Sun } from "lucide-react";
@@ -47,13 +48,13 @@ export default function MorningReportPage() {
       <header className="sticky top-0 z-20 bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-4 sm:px-6 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-700 dark:text-zinc-200 shadow-xs transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               <span>Sessions</span>
-            </a>
+            </Link>
             <div className="flex items-center gap-2">
               <Sun className="h-5 w-5 text-amber-500" />
               <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">

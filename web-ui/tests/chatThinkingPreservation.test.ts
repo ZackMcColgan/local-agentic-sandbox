@@ -73,7 +73,6 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     const originalThreadsDir = process.env.THREADS_DIR;
     process.env.THREADS_DIR = dir;
 
-    let serverPort: number;
     let holdThinkingStream = true;
 
     const fakeServer = http.createServer((req, res) => {
@@ -104,7 +103,7 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     });
 
     await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-    serverPort = (fakeServer.address() as { port: number }).port;
+    const serverPort = (fakeServer.address() as { port: number }).port;
     const prevLlmUrl = process.env.LLM_BASE_URL;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
 

@@ -441,12 +441,19 @@ export default function Home() {
     }
   };
 
+  const fetchThreadsRef = useRef(fetchThreads);
+  fetchThreadsRef.current = fetchThreads;
+  const fetchActiveTaskRef = useRef(fetchActiveTask);
+  fetchActiveTaskRef.current = fetchActiveTask;
+  const selectedThreadIdRef = useRef(selectedThreadId);
+  selectedThreadIdRef.current = selectedThreadId;
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
-    fetchThreads(true);
-    fetchActiveTask();
+    fetchThreadsRef.current(true);
+    fetchActiveTaskRef.current();
     fetchMorningReport();
   }, []);
 
@@ -479,8 +486,8 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json();
           if (data.thread) {
-            setSelectedModel(data.thread.model || selectedModel);
-            setReasoningEffort(data.thread.reasoningEffort || reasoningEffort);
+            setSelectedModel((prev) => data.thread.model || prev);
+            setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
               setMessages(data.thread.messages);
             }
@@ -537,21 +544,24 @@ export default function Home() {
   }, [selectedThreadId, isThreadLiveStreaming]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
+  const activeTaskId = activeTask?.taskId;
+  const activeTaskStatus = activeTask?.status;
   useEffect(() => {
-    if (!activeTask || (activeTask.status !== "active" && activeTask.status !== "planning")) return;
-    if (activeTask.taskId?.startsWith("sim-")) return;
+    if (!activeTaskId || (activeTaskStatus !== "active" && activeTaskStatus !== "planning")) return;
+    if (activeTaskId.startsWith("sim-")) return;
 
     const pollTask = async () => {
       try {
-        const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`);
+        const res = await fetch(`/api/tasks?taskId=${activeTaskId}`);
         if (res.ok) {
           const data = await res.json();
           if (data.task) {
             setActiveTask(data.task);
             if (data.task.status !== "active") {
-              fetchThreads(false);
-              if (selectedThreadId) {
-                fetch(`/api/threads/${selectedThreadId}`)
+              fetchThreadsRef.current(false);
+              const currentThreadId = selectedThreadIdRef.current;
+              if (currentThreadId) {
+                fetch(`/api/threads/${currentThreadId}`)
                   .then((r) => r.json())
                   .then((td) => {
                     if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
@@ -573,7 +583,7 @@ export default function Home() {
 
     const interval = setInterval(pollTask, 2000);
     return () => clearInterval(interval);
-  }, [activeTask?.taskId, activeTask?.status]);
+  }, [activeTaskId, activeTaskStatus]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {

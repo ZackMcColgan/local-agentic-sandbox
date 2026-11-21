@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import type { SupervisorBadgeInput } from "./supervisorBadgeState";
 import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
@@ -618,6 +619,8 @@ export function ChatStream({
   const activeSimTaskCancelRef = useRef<(() => void) | null>(null);
   const initialSimulationTriggeredRef = useRef(false);
 
+  const handleSendRef = useRef<((overridePrompt?: string) => void) | null>(null);
+
   useEffect(() => {
     if (initialSimulation && !initialSimulationTriggeredRef.current) {
       initialSimulationTriggeredRef.current = true;
@@ -625,7 +628,7 @@ export function ChatStream({
       const cmd = `/simulate ${initialSimulation.scenarioKey}${
         initialSimulation.speedMultiplier ? ` ${initialSimulation.speedMultiplier}` : ""
       }`;
-      handleSend(cmd);
+      handleSendRef.current?.(cmd);
     }
   }, [initialSimulation]);
 
@@ -724,6 +727,9 @@ export function ChatStream({
   // kept polling while ChatStream was hidden (page.tsx hides via CSS; the
   // component stays mounted). Now: exponential backoff, attempt + total-time
   // caps, and no polling while ChatStream is not the active view.
+  const disconnectedAtMsRef = useRef<number | null>(disconnectedAtMs);
+  disconnectedAtMsRef.current = disconnectedAtMs;
+
   useEffect(() => {
     if (!reconcilingThreadId) return;
     if (!isActiveView) return;
@@ -755,7 +761,7 @@ export function ChatStream({
               const now = Date.now();
               setRecoveredAtMs(now);
               setRecoveredAfterSec(
-                Math.max(1, Math.round((now - (disconnectedAtMs ?? startedAt)) / 1000))
+                Math.max(1, Math.round((now - (disconnectedAtMsRef.current ?? startedAt)) / 1000))
               );
               setDisconnectedAtMs(null);
               return;
@@ -784,7 +790,7 @@ export function ChatStream({
       active = false;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [reconcilingThreadId, isActiveView]);
+  }, [reconcilingThreadId, isActiveView, setMessages]);
   useEffect(() => {
     const tid = activeThreadId || threadId;
     if (typeof window !== "undefined" && tid) {
@@ -874,7 +880,7 @@ export function ChatStream({
     ) {
       scrollToBottom("auto");
     }
-  }, [lastMsg?.content, isLoading, isUserScrolledUp]);
+  }, [lastMsg?.content, lastMsg?.role, isLoading, isUserScrolledUp]);
 
   useEffect(() => {
     if (!isFollowPinnedRef.current || isUserScrolledUp) {
@@ -1973,6 +1979,8 @@ export function ChatStream({
     handleSend(lastUserMsg.content);
   };
 
+  handleSendRef.current = handleSend;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -2101,10 +2109,14 @@ export function ChatStream({
               className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
             >
               <div className="relative max-w-4xl max-h-[90vh]">
-                <img
+                <NextImage
                   src={previewModalImage}
                   alt="Fullscreen preview"
-                  className="rounded-2xl shadow-2xl max-w-full max-h-[85vh] object-contain border border-white/10"
+                  width={0}
+                  height={0}
+                  sizes="100vw"
+                  unoptimized
+                  className="w-auto h-auto rounded-2xl shadow-2xl max-w-full max-h-[85vh] object-contain border border-white/10"
                 />
                 <button
                   onClick={() => setPreviewModalImage(null)}
@@ -2569,9 +2581,12 @@ export function ChatStream({
                                 onClick={() => setPreviewModalImage(att.previewUrl || null)}
                                 className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-700 shadow-xs"
                               >
-                                <img
+                                <NextImage
                                   src={att.previewUrl}
                                   alt={att.name}
+                                  width={80}
+                                  height={80}
+                                  unoptimized
                                   className="h-20 w-20 object-cover hover:scale-105 transition-transform"
                                 />
                               </div>
@@ -3937,9 +3952,12 @@ export function ChatStream({
                     className="group relative flex items-center gap-1.5 p-1.5 pr-2.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
                   >
                     {att.isImage && att.previewUrl ? (
-                      <img
+                      <NextImage
                         src={att.previewUrl}
                         alt={att.name}
+                        width={24}
+                        height={24}
+                        unoptimized
                         className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
                       />
                     ) : (

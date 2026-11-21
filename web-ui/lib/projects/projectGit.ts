@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { ProjectRecord, getFileReviews, setFileReviewStatus } from "./projectStore";
+import {
+  ProjectRecord,
+  ProjectFileReviewRecord,
+  getFileReviews,
+  setFileReviewStatus,
+} from "./projectStore";
 
 export interface ProjectTreeNode {
   name: string;
@@ -276,7 +281,7 @@ export function acceptProjectFile(
   project: ProjectRecord,
   taskId: string,
   filePath: string
-): { file_path: string; status: string; task_id: string; [key: string]: unknown } {
+): ProjectFileReviewRecord {
   assertAllowedProjectPath(project, filePath);
   return setFileReviewStatus(taskId, filePath, "accepted");
 }
@@ -286,7 +291,7 @@ export function revertProjectFile(
   taskId: string,
   filePath: string,
   baseSha: string
-): { file_path: string; status: string; task_id: string; [key: string]: unknown } {
+): ProjectFileReviewRecord {
   const targetPath = assertAllowedProjectPath(project, filePath);
 
   let existedAtBase = false;

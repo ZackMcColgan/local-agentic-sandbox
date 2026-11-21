@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import {
   RotateCcw,
@@ -232,15 +232,17 @@ export function LiveRunBlock({
   }, [isCompleted, deliverableFile, isDeliverableSvg, isDeliverableHtml]);
 
   // Real-time elapsed timer while task is actively running; freeze at settle duration otherwise
+  const taskRef = useRef(task);
+  taskRef.current = task;
   useEffect(() => {
     if (!isRunning) {
-      setElapsedSeconds(computeRunElapsedSeconds(task));
+      setElapsedSeconds(computeRunElapsedSeconds(taskRef.current));
       return;
     }
     if (!task.startedAt) return;
 
     const updateElapsed = () => {
-      setElapsedSeconds(computeRunElapsedSeconds(task, Date.now()));
+      setElapsedSeconds(computeRunElapsedSeconds(taskRef.current, Date.now()));
     };
     updateElapsed();
 
@@ -500,7 +502,7 @@ export function LiveRunBlock({
             </div>
             {critiquedMilestone.criticCritique && (
               <p className="text-xs text-slate-600 dark:text-zinc-300 leading-relaxed italic pl-1">
-                "{critiquedMilestone.criticCritique}"
+                &ldquo;{critiquedMilestone.criticCritique}&rdquo;
               </p>
             )}
           </div>

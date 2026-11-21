@@ -332,7 +332,14 @@ describe("uir-2 canvas: rendered UI", () => {
   };
 
   const withProvider = (...children: React.ReactNode[]) =>
-    React.createElement(CanvasProvider, { scrollElRef: scrollRef, children });
+    React.createElement(
+      CanvasProvider as React.FC<{
+        scrollElRef?: typeof scrollRef;
+        children?: React.ReactNode;
+      }>,
+      { scrollElRef: scrollRef },
+      ...children
+    );
 
   const click = async (el: Element | null) => {
     assert.ok(el, "element to click must exist");

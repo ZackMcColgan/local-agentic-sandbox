@@ -283,19 +283,25 @@ export function ProjectsView({
 
   // Sync active project if prop changes
   useEffect(() => {
-    if (selectedProjectId && selectedProjectId !== activeProjectId) {
-      setActiveProjectId(selectedProjectId);
-    } else if (!activeProjectId && projects.length > 0) {
-      setActiveProjectId(projects[0].project_id);
-    }
+    setActiveProjectId((prev) => {
+      if (selectedProjectId && selectedProjectId !== prev) {
+        return selectedProjectId;
+      }
+      if (!prev && projects.length > 0) {
+        return projects[0].project_id;
+      }
+      return prev;
+    });
   }, [selectedProjectId, projects]);
 
   const activeProject = projects.find((p) => p.project_id === activeProjectId) || null;
+  const activeProjectKey = activeProject?.project_id;
+  const activeProjectAllowlisted = activeProject?.allowlisted;
 
   // Load diffs when tab is switched to diffs
   useEffect(() => {
-    if (activeTab !== "diffs" || !activeProject) return;
-    if (activeProject.allowlisted !== 1) {
+    if (activeTab !== "diffs" || !activeProjectKey) return;
+    if (activeProjectAllowlisted !== 1) {
       setDiffItems([]);
       setDiffError("Project access is currently revoked. Enable allowlist to view diffs.");
       return;
@@ -305,7 +311,7 @@ export function ProjectsView({
       setIsLoadingDiffs(true);
       setDiffError(null);
       try {
-        const res = await fetch(`/api/projects/${activeProject.project_id}/diff`);
+        const res = await fetch(`/api/projects/${activeProjectKey}/diff`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `HTTP ${res.status}`);
@@ -324,7 +330,7 @@ export function ProjectsView({
     };
 
     fetchDiffs();
-  }, [activeTab, activeProject?.project_id, activeProject?.allowlisted]);
+  }, [activeTab, activeProjectKey, activeProjectAllowlisted]);
 
   const handleAcceptFile = async (filePath: string) => {
     if (!activeProject) return;
@@ -392,14 +398,14 @@ export function ProjectsView({
 
   // Load tree when active project changes
   useEffect(() => {
-    if (!activeProject) {
+    if (!activeProjectKey) {
       setTree([]);
       setSelectedFilePath(null);
       setFileContent(null);
       return;
     }
 
-    if (activeProject.allowlisted !== 1) {
+    if (activeProjectAllowlisted !== 1) {
       setTree([]);
       setTreeError("Project access is currently revoked. Enable allowlist to view files.");
       return;
@@ -409,7 +415,7 @@ export function ProjectsView({
       setIsLoadingTree(true);
       setTreeError(null);
       try {
-        const res = await fetch(`/api/projects/${activeProject.project_id}/files`);
+        const res = await fetch(`/api/projects/${activeProjectKey}/files`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `HTTP ${res.status}`);
@@ -426,7 +432,7 @@ export function ProjectsView({
     };
 
     fetchTree();
-  }, [activeProject?.project_id, activeProject?.allowlisted, treeRefreshKey]);
+  }, [activeProjectKey, activeProjectAllowlisted, treeRefreshKey]);
 
   // Load file content when a file is clicked
   const handleSelectFile = async (filePath: string) => {
