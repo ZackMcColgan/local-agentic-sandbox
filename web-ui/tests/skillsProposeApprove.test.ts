@@ -34,7 +34,9 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         }),
       });
 
-      const proposeRes = await postSkills(proposeReq as any);
+      const proposeRes = await postSkills(
+        proposeReq as unknown as Parameters<typeof postSkills>[0]
+      );
       assert.equal(proposeRes.status, 200);
 
       const proposeData = await proposeRes.json();
@@ -47,12 +49,14 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
 
       // Verify GET /api/skills includes this candidate in pendingCandidates
       const getReq = new Request("http://localhost:3000/api/skills");
-      const getRes = await getSkills(getReq as any);
+      const getRes = await getSkills(getReq as unknown as Parameters<typeof getSkills>[0]);
       assert.equal(getRes.status, 200);
 
       const getData = await getRes.json();
       assert.ok(Array.isArray(getData.pendingCandidates));
-      const foundPending = getData.pendingCandidates.find((c: any) => c.id === "clamp-output-rule");
+      const foundPending = getData.pendingCandidates.find(
+        (c: { id?: string; title?: string }) => c.id === "clamp-output-rule"
+      );
       assert.ok(
         foundPending,
         "Proposed candidate must appear in GET /api/skills pendingCandidates"
@@ -72,7 +76,9 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         }),
       });
 
-      const proposeRes = await postSkills(proposeReq as any);
+      const proposeRes = await postSkills(
+        proposeReq as unknown as Parameters<typeof postSkills>[0]
+      );
       assert.equal(proposeRes.status, 200);
       const proposeData = await proposeRes.json();
       assert.equal(proposeData.proposed, true);
@@ -89,7 +95,9 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         }),
       });
 
-      const approveRes = await postSkills(approveReq as any);
+      const approveRes = await postSkills(
+        approveReq as unknown as Parameters<typeof postSkills>[0]
+      );
       assert.equal(approveRes.status, 200);
       const approveData = await approveRes.json();
       assert.equal(approveData.promoted, true);
@@ -97,7 +105,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
 
       // Verify GET /api/skills lists the promoted skill file in activeSkills
       const getReq = new Request("http://localhost:3000/api/skills");
-      const getRes = await getSkills(getReq as any);
+      const getRes = await getSkills(getReq as unknown as Parameters<typeof getSkills>[0]);
       const getData = await getRes.json();
       assert.ok(Array.isArray(getData.activeSkills));
       const foundActive = getData.activeSkills.some((s: string) =>
@@ -118,7 +126,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
             title: "Strict Test Gate",
             solutionSummary: "Never bypass test gate.",
           }),
-        }) as any
+        }) as unknown as Parameters<typeof postSkills>[0]
       );
 
       // 2. Approve candidate
@@ -131,7 +139,9 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         }),
       });
 
-      const approveRes = await postSkills(approveReq as any);
+      const approveRes = await postSkills(
+        approveReq as unknown as Parameters<typeof postSkills>[0]
+      );
       assert.equal(approveRes.status, 200);
       const approveData = await approveRes.json();
       assert.equal(approveData.promoted, true);
@@ -139,7 +149,11 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
       assert.ok(fs.existsSync(approveData.skillPath));
 
       // 3. Verify GET /api/skills reflects active skill
-      const getRes = await getSkills(new Request("http://localhost:3000/api/skills") as any);
+      const getRes = await getSkills(
+        new Request("http://localhost:3000/api/skills") as unknown as Parameters<
+          typeof getSkills
+        >[0]
+      );
       const getData = await getRes.json();
       assert.ok(getData.activeSkills.some((s: string) => s.includes("strict-test-gate")));
     });
@@ -150,7 +164,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ candidateId: "foo" }),
-        }) as any
+        }) as unknown as Parameters<typeof postSkills>[0]
       );
       assert.equal(resMissingAction.status, 400);
 
@@ -159,7 +173,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "propose" }),
-        }) as any
+        }) as unknown as Parameters<typeof postSkills>[0]
       );
       assert.equal(resMissingId.status, 400);
     });

@@ -65,7 +65,7 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
   });
 
   describe("HTTP Server & API Security", () => {
-    let server: any;
+    let server: ReturnType<typeof createHostServer>;
     let baseUrl: string;
 
     before(async () => {
@@ -447,8 +447,8 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
             env: { ...process.env, HOST_RUNNER_SHARED_SECRET: "", PORT: String(LIVE_TEST_PORT) },
             stdio: "pipe",
           });
-        } catch (err: any) {
-          exitCode = err.status;
+        } catch (err: unknown) {
+          exitCode = (err as { status?: number }).status ?? null;
         }
         assert.equal(exitCode, 1, "SEA binary must exit 1 when secret is missing");
       });
@@ -496,8 +496,8 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
               stdio: "pipe",
             });
             duplicateExitCode = 0;
-          } catch (err: any) {
-            duplicateExitCode = err.status;
+          } catch (err: unknown) {
+            duplicateExitCode = (err as { status?: number }).status ?? null;
           }
           assert.equal(
             duplicateExitCode,
@@ -544,8 +544,8 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
               stdio: "pipe",
             });
             exitCode = 0;
-          } catch (err: any) {
-            exitCode = err.status;
+          } catch (err: unknown) {
+            exitCode = (err as { status?: number }).status ?? null;
           }
           assert.equal(
             exitCode,

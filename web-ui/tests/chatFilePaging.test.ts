@@ -63,18 +63,19 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       const wsSchema = DEFAULT_TOOL_SCHEMAS.workspace_read_file;
       assert.ok(wsSchema, "workspace_read_file schema must be defined in DEFAULT_TOOL_SCHEMAS");
 
-      const hostTool = HOST_TOOLS_DEFINITIONS.find(
-        (t: any) => t.function?.name === "host_read_file"
-      );
+      const hostTool = HOST_TOOLS_DEFINITIONS.find((t) => t.function?.name === "host_read_file");
       assert.ok(hostTool, "host_read_file must be defined in HOST_TOOLS_DEFINITIONS");
       const hostSchema = hostTool.function;
 
-      const wsParams = (wsSchema.parameters as any)?.properties || {};
-      const hostParams = (hostSchema.parameters as any)?.properties || {};
+      type ToolParams = { properties?: Record<string, { type?: string }>; required?: string[] };
+      const wsParamsObj = wsSchema.parameters as unknown as ToolParams | undefined;
+      const hostParamsObj = hostSchema.parameters as unknown as ToolParams | undefined;
+      const wsParams = wsParamsObj?.properties || {};
+      const hostParams = hostParamsObj?.properties || {};
 
       // Required parameter
-      assert.deepEqual((wsSchema.parameters as any)?.required, ["path"]);
-      assert.deepEqual((hostSchema.parameters as any)?.required, ["path"]);
+      assert.deepEqual(wsParamsObj?.required, ["path"]);
+      assert.deepEqual(hostParamsObj?.required, ["path"]);
 
       // Parameter keys parity
       const expectedKeys = ["path", "start_line", "end_line", "offset", "limit"].sort();
@@ -234,14 +235,15 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       };
 
       // 1. workspace_read_file should NOT be clamped
-      const wsMessages: any[] = [{ role: "user", content: "read file" }];
+      type LoopMessages = Parameters<typeof runChatToolLoop>[0]["conversationMessages"];
+      const wsMessages: LoopMessages = [{ role: "user", content: "read file" }];
       await runChatToolLoop({
         conversationMessages: wsMessages,
         maxContentTokens: 100000,
         llmTools: [{ type: "function", function: { name: "workspace_read_file" } }],
         maxToolRounds: 2,
-        streamLlmChat: async function* (payload: any) {
-          if (payload.messages.length === 1) {
+        streamLlmChat: async function* (payload) {
+          if (Array.isArray(payload.messages) && payload.messages.length === 1) {
             yield {
               message: {
                 content: "",
@@ -275,14 +277,14 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       );
 
       // 2. host_read_file should NOT be clamped
-      const hostMessages: any[] = [{ role: "user", content: "read host file" }];
+      const hostMessages: LoopMessages = [{ role: "user", content: "read host file" }];
       await runChatToolLoop({
         conversationMessages: hostMessages,
         maxContentTokens: 100000,
         llmTools: [{ type: "function", function: { name: "host_read_file" } }],
         maxToolRounds: 2,
-        streamLlmChat: async function* (payload: any) {
-          if (payload.messages.length === 1) {
+        streamLlmChat: async function* (payload) {
+          if (Array.isArray(payload.messages) && payload.messages.length === 1) {
             yield {
               message: {
                 content: "",
@@ -316,14 +318,14 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       );
 
       // 3. non-read tool (workspace_run_command) MUST be clamped
-      const cmdMessages: any[] = [{ role: "user", content: "run command" }];
+      const cmdMessages: LoopMessages = [{ role: "user", content: "run command" }];
       await runChatToolLoop({
         conversationMessages: cmdMessages,
         maxContentTokens: 100000,
         llmTools: [{ type: "function", function: { name: "workspace_run_command" } }],
         maxToolRounds: 2,
-        streamLlmChat: async function* (payload: any) {
-          if (payload.messages.length === 1) {
+        streamLlmChat: async function* (payload) {
+          if (Array.isArray(payload.messages) && payload.messages.length === 1) {
             yield {
               message: {
                 content: "",

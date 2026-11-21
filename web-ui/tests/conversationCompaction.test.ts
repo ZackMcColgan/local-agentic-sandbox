@@ -113,7 +113,7 @@ describe("Conversation Compaction at 85% Suite (Fix D3)", () => {
   });
 
   it("handles short or empty conversation arrays gracefully without mutating input", () => {
-    const empty: any[] = [];
+    const empty: Parameters<typeof compactConversationHistory>[0] = [];
     const resEmpty = compactConversationHistory(empty);
     assert.equal(resEmpty.compacted, false);
     assert.equal(resEmpty.messages.length, 0);

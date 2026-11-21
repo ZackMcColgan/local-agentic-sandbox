@@ -70,11 +70,10 @@ describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", 
       );
 
       // Verify unloadAllModels executes without error
-      const mockFetch = async () =>
-        ({
-          ok: true,
-          json: async () => ({ models: [{ name: "qwen3.8:27b-q3_k_m", size: 1000 }] }),
-        }) as any;
+      const mockFetch = (async () => ({
+        ok: true,
+        json: async () => ({ models: [{ name: "qwen3.8:27b-q3_k_m", size: 1000 }] }),
+      })) as unknown as typeof fetch;
       const unloaded = await unloadAllModels("http://127.0.0.1:11434", mockFetch);
       assert.ok(Array.isArray(unloaded), "unloadAllModels must return list of unloaded models");
     });

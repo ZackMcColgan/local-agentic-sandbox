@@ -10,7 +10,7 @@ describe("E8: SkillsView collapses dual empty cards (UI-038)", () => {
       React.createElement(SkillsView, {
         pendingProposals: [],
         activeSkills: [],
-      } as any)
+      } as unknown as React.ComponentProps<typeof SkillsView>)
     );
     assert.ok(html.includes("No skills to review"), "Expected 'No skills to review'");
     assert.equal(

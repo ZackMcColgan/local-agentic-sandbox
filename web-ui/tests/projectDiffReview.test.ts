@@ -69,11 +69,11 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     execFileSync("git", ["commit", "-m", "Initial base commit"], { cwd: testRepoDir });
 
     // Happy DOM
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);

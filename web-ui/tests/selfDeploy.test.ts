@@ -420,7 +420,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         enabled: true,
         ledger,
         runlogPath,
-      } as any);
+      } as unknown as ConstructorParameters<typeof SelfDeployPipeline>[0]);
 
       const history = pipeline.getDeployHistory();
       assert.equal(history.length, 1, "Expected 1 fallback deploy record from runlog");

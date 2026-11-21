@@ -19,8 +19,14 @@ import http from "node:http";
  * thread is resumable (not a bare silent ⚠️).
  */
 
+interface ScriptToolCall {
+  id: string;
+  type: string;
+  function: { name: string; arguments: string };
+}
+
 function makeScriptedOllamaServer(
-  script: Array<{ content: string; toolCalls?: any[]; evalCount?: number }>
+  script: Array<{ content: string; toolCalls?: ScriptToolCall[]; evalCount?: number }>
 ) {
   let completionCount = 0;
   const server = http.createServer((req, res) => {
@@ -43,7 +49,10 @@ function makeScriptedOllamaServer(
         completionCount++;
         const step = script[Math.min(completionCount - 1, script.length - 1)];
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        const msg: any = { role: "assistant", content: step.content };
+        const msg: { role: string; content: string; tool_calls?: ScriptToolCall[] } = {
+          role: "assistant",
+          content: step.content,
+        };
         if (step.toolCalls) msg.tool_calls = step.toolCalls;
         res.write(JSON.stringify({ message: msg }) + "\n");
         res.write(
@@ -63,7 +72,9 @@ function makeScriptedOllamaServer(
   return { server, getCompletionCount: () => completionCount };
 }
 
-async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalCount?: number }>) {
+async function runTurn(
+  script: Array<{ content: string; toolCalls?: ScriptToolCall[]; evalCount?: number }>
+) {
   const tmpThreadsDir = path.resolve(
     process.cwd(),
     "tmp-test-synth-retry-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)
@@ -83,7 +94,8 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
 
   const { server, getCompletionCount } = makeScriptedOllamaServer(script);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-  const port = (server.address() as any).port;
+  const addr = server.address();
+  const port = typeof addr === "object" && addr ? addr.port : 0;
   process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
@@ -117,7 +129,7 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
         enableTools: true,
       }),
     });
-    const res = await chatRouteModule.POST(req as any);
+    const res = await chatRouteModule.POST(req);
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let raw = "";
@@ -128,7 +140,7 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
     }
 
     const thread = await store.getThread(threadId);
-    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    const asst = thread?.messages.find((m) => m.id === "a-1");
     return { asst, raw, completionCount: getCompletionCount() };
   } finally {
     server.close();
@@ -284,7 +296,8 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
 
   try {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
@@ -315,7 +328,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
     });
 
     const res = await Promise.race([
-      chatRouteModule.POST(req as any),
+      chatRouteModule.POST(req),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error("POST hung")), 4000)),
     ]);
     const reader = res.body!.getReader();
@@ -330,7 +343,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
     }
 
     const thread = await store.getThread(threadId);
-    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    const asst = thread?.messages.find((m) => m.id === "a-1");
     assert.ok(asst, "assistant message must exist");
     assert.ok(
       asst!.content.includes("Partial synth"),
@@ -455,7 +468,8 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
   };
   try {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
@@ -484,7 +498,7 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
         enableTools: true,
       }),
     });
-    const res = await chatRouteModule.POST(req as any);
+    const res = await chatRouteModule.POST(req);
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let raw = "";

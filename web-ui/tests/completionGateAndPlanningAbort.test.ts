@@ -77,12 +77,12 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
     let statusWhenGateRan: string | undefined;
     let stampWhenGateRan: string | undefined;
 
-    const fakeGitOps: any = {
+    const fakeGitOps = {
       ensureTaskBranch: async () => ({ success: true, branchName: task.branchName }),
       runGateTest: async () => ({ exitCode: 1, stdout: "", stderr: "gate failed" }),
       isPushConfigured: async () => ({ configured: false, reason: "test" }),
       pushBranch: async () => ({ success: false }),
-    };
+    } as unknown as NonNullable<Parameters<typeof supervisor.executeTaskWithRecovery>[1]>["gitOps"];
 
     const result = await supervisor.executeTaskWithRecovery(task, {
       gitOps: fakeGitOps,
@@ -178,14 +178,23 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       assert.ok(threadId, "response must include threadId");
 
       const store = new ThreadStore(tmpThreads);
-      let terminalMsg: any = null;
+      let terminalMsg: {
+        completionStamp?: string;
+        verificationGaps?: Array<{ kind?: string }>;
+      } | null = null;
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
         const t = await store.getThread(threadId);
         if (t && t.status === "failed") {
-          terminalMsg = [...t.messages]
-            .reverse()
-            .find((m) => m.role === "assistant" && m.id.endsWith("-term"));
+          terminalMsg =
+            ([...t.messages]
+              .reverse()
+              .find((m) => m.role === "assistant" && m.id.endsWith("-term")) as
+              | {
+                  completionStamp?: string;
+                  verificationGaps?: Array<{ kind?: string }>;
+                }
+              | undefined) ?? null;
           if (terminalMsg) break;
         }
         await new Promise((r) => setTimeout(r, 30));
@@ -199,7 +208,7 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       );
       assert.ok(
         Array.isArray(terminalMsg.verificationGaps) &&
-          terminalMsg.verificationGaps.some((g: any) => g.kind === "gate"),
+          terminalMsg.verificationGaps.some((g) => g.kind === "gate"),
         "terminal message must carry verificationGaps with the gate failure"
       );
     } finally {

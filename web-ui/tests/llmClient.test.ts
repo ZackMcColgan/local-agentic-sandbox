@@ -19,13 +19,13 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
   });
 
   it("Call generate with scope: 'SNIPPET' asserts num_ctx === 4096 in outgoing request", async () => {
-    let capturedBody: any = null;
-    const mockFetch = async (_url: string, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { options?: { num_ctx?: number } } | null = null;
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return new Response(JSON.stringify({ response: "ok" }), { status: 200 });
     };
 
-    const generate = createOllamaGenerate({ fetchImpl: mockFetch as any });
+    const generate = createOllamaGenerate({ fetchImpl: mockFetch });
     await generate({
       model: "swift-27b-mtp",
       prompt: "generate snippet",
@@ -33,18 +33,19 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
-    assert.ok(capturedBody.options, "Request options must exist");
-    assert.equal(capturedBody.options.num_ctx, 4096, "num_ctx must be 4096 for SNIPPET scope");
+    const body = capturedBody as { options?: { num_ctx?: number } };
+    assert.ok(body.options, "Request options must exist");
+    assert.equal(body.options.num_ctx, 4096, "num_ctx must be 4096 for SNIPPET scope");
   });
 
   it("Call generate with scope: 'PROJECT' asserts num_ctx === 8192 in outgoing request", async () => {
-    let capturedBody: any = null;
-    const mockFetch = async (_url: string, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { options?: { num_ctx?: number } } | null = null;
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return new Response(JSON.stringify({ response: "ok" }), { status: 200 });
     };
 
-    const generate = createOllamaGenerate({ fetchImpl: mockFetch as any });
+    const generate = createOllamaGenerate({ fetchImpl: mockFetch });
     await generate({
       model: "swift-27b-mtp",
       prompt: "generate project",
@@ -52,40 +53,42 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
-    assert.ok(capturedBody.options, "Request options must exist");
-    assert.equal(capturedBody.options.num_ctx, 8192, "num_ctx must be 8192 for PROJECT scope");
+    const body = capturedBody as { options?: { num_ctx?: number } };
+    assert.ok(body.options, "Request options must exist");
+    assert.equal(body.options.num_ctx, 8192, "num_ctx must be 8192 for PROJECT scope");
   });
 
   it("Call generate with no scope asserts num_ctx === 4096 (safe default)", async () => {
-    let capturedBody: any = null;
-    const mockFetch = async (_url: string, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { options?: { num_ctx?: number } } | null = null;
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return new Response(JSON.stringify({ response: "ok" }), { status: 200 });
     };
 
-    const generate = createOllamaGenerate({ fetchImpl: mockFetch as any });
+    const generate = createOllamaGenerate({ fetchImpl: mockFetch });
     await generate({
       model: "swift-27b-mtp",
       prompt: "generate default",
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
-    assert.ok(capturedBody.options, "Request options must exist");
+    const body = capturedBody as { options?: { num_ctx?: number } };
+    assert.ok(body.options, "Request options must exist");
     assert.equal(
-      capturedBody.options.num_ctx,
+      body.options.num_ctx,
       4096,
       "num_ctx must default to 4096 when no scope is provided"
     );
   });
 
   it("Explicit caller num_ctx in options overrides default if specified", async () => {
-    let capturedBody: any = null;
-    const mockFetch = async (_url: string, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { options?: { num_ctx?: number } } | null = null;
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return new Response(JSON.stringify({ response: "ok" }), { status: 200 });
     };
 
-    const generate = createOllamaGenerate({ fetchImpl: mockFetch as any });
+    const generate = createOllamaGenerate({ fetchImpl: mockFetch });
     await generate({
       model: "swift-27b-mtp",
       prompt: "custom options",
@@ -94,6 +97,7 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
-    assert.equal(capturedBody.options.num_ctx, 16384, "Caller options must override scope default");
+    const body = capturedBody as { options?: { num_ctx?: number } };
+    assert.equal(body.options?.num_ctx, 16384, "Caller options must override scope default");
   });
 });

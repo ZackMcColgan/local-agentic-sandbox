@@ -76,7 +76,9 @@ describe("Phase 1 — Tasks API Route Suite", () => {
       updatedAt: new Date().toISOString(),
     };
 
-    supervisor.saveCheckpoint(testManifest as any);
+    supervisor.saveCheckpoint(
+      testManifest as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]
+    );
 
     // Initial GET caches the task in tasksRegistry as "active"
     const req1 = new Request(`http://localhost:3000/api/tasks?taskId=${diskTaskId}`);
@@ -88,7 +90,9 @@ describe("Phase 1 — Tasks API Route Suite", () => {
     // Outside route, task is paused on disk
     testManifest.status = "paused";
     testManifest.updatedAt = new Date().toISOString();
-    supervisor.saveCheckpoint(testManifest as any);
+    supervisor.saveCheckpoint(
+      testManifest as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]
+    );
 
     // If supervisor.listAllTasks() was skipped or if tasksRegistry held onto stale state,
     // let's verify resumeTaskFromCheckpoint overrides tasksRegistry cache:

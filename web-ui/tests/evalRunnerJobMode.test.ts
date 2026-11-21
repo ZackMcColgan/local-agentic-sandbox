@@ -7,7 +7,7 @@ import { runJobMode } from "../../eval/run.mjs";
 
 describe("eval/run.mjs — job mode", () => {
   it("submits to /api/threads with launchTask, goal, and chunkBudget, then polls to completed", async () => {
-    const calls: Array<{ url: string; method: string; body?: any }> = [];
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
     let pollCount = 0;
 
     const mockFetch = async (url: string, init?: RequestInit) => {

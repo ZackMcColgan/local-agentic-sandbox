@@ -24,8 +24,12 @@ describe("B3: Search match context (matchSnippet)", () => {
       ];
       store.saveThread(thread);
 
-      const summaries = await (store as any).listThreadSummaries("quantum_flux_capacitor");
-      const found = summaries.find((s: any) => s.id === thread.id);
+      const summaries = await (
+        store as unknown as {
+          listThreadSummaries: (q: string) => Promise<Array<{ id: string; matchSnippet?: string }>>;
+        }
+      ).listThreadSummaries("quantum_flux_capacitor");
+      const found = summaries.find((s) => s.id === thread.id);
       assert.ok(found, "Expected thread matching body-only query");
       assert.ok(
         typeof found.matchSnippet === "string" &&

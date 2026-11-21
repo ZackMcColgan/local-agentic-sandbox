@@ -81,7 +81,7 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
             prompt: "Valid prompt",
             status: "running",
             startedAt: new Date().toISOString(),
-            model: undefined as any, // missing model
+            model: undefined as unknown as string, // missing model
             gitShas: [],
             milestoneSummary: [],
             deploymentRef: "none",
@@ -150,7 +150,8 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
   it("Task 2: pauseRun writes checkpoints into supervisor.checkpointDirectory when initialized without overrides", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-chk-unify-"));
     const dbPath = path.join(tmpDir, "runs.db");
-    let ledger: any = null;
+    let ledger: InstanceType<(typeof import("../lib/ledger/runLedger.js"))["RunLedger"]> | null =
+      null;
     let expectedCheckpointPath = "";
 
     try {
@@ -220,7 +221,7 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
         "supervisor.checkpointDirectory must strictly match getDefaultCheckpointDir()"
       );
       assert.equal(
-        (ledger as any).checkpointDir,
+        (ledger as unknown as { checkpointDir: string }).checkpointDir,
         supervisor.checkpointDirectory,
         "RunLedger default checkpointDir must match supervisor.checkpointDirectory"
       );

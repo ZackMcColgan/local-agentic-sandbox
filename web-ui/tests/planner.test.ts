@@ -78,7 +78,9 @@ describe("Phase 1 — Planner Worker Suite", () => {
   });
 
   it("planner uses injected model to generate custom milestones", async () => {
-    const mockModelGenerate = async (req: any) => ({
+    const mockModelGenerate: NonNullable<
+      Parameters<typeof generatePlanSpec>[0]["generate"]
+    > = async (req) => ({
       text: JSON.stringify({
         milestones: [
           {
@@ -141,7 +143,9 @@ describe("Phase 1 — Planner Worker Suite", () => {
     delete process.env.PLANNER_MODEL;
     let capturedModel: string | undefined;
 
-    const mockGenerate = async (req: any) => {
+    const mockGenerate: NonNullable<Parameters<typeof generatePlanSpec>[0]["generate"]> = async (
+      req
+    ) => {
       capturedModel = req.model;
       return {
         text: JSON.stringify({
@@ -254,7 +258,9 @@ describe("Phase 1 — Planner Worker Suite", () => {
 
     it("(c) retries empty/truncated PlanSpec JSON up to 3 times and succeeds on retry", async () => {
       let calls = 0;
-      const flakyGenerate = async (req: any) => {
+      const flakyGenerate: NonNullable<Parameters<typeof generatePlanSpec>[0]["generate"]> = async (
+        req
+      ) => {
         calls++;
         if (calls === 1) {
           return { text: "", model: req.model, loadDurationMs: 0, totalDurationMs: 1 };
@@ -298,7 +304,9 @@ describe("Phase 1 — Planner Worker Suite", () => {
 
     it("(c) fails honestly after 3 attempts on persistent empty/truncated PlanSpec JSON", async () => {
       let calls = 0;
-      const alwaysEmptyGenerate = async (req: any) => {
+      const alwaysEmptyGenerate: NonNullable<
+        Parameters<typeof generatePlanSpec>[0]["generate"]
+      > = async (req) => {
         calls++;
         return { text: "", model: req.model, loadDurationMs: 0, totalDurationMs: 1 };
       };

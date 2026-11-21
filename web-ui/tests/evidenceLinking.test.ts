@@ -60,7 +60,7 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
     const review = await critic.evaluateMilestoneDiff(milestone, {
       diff: "+ comment line only without criteria",
       forceEmptyEvidence: true,
-    } as any);
+    } as unknown as Parameters<typeof critic.evaluateMilestoneDiff>[1]);
 
     assert.equal(review.approved, false, "Empty evidence MUST fail-closed");
     assert.equal(review.abstained, true, "Empty evidence treated as abstain");

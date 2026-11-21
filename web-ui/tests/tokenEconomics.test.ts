@@ -44,7 +44,11 @@ describe("Token Economics (a): provider usage plumbing carries prompt tokens", (
         "data: [DONE]\n\n",
       ]);
     try {
-      const chunks: any[] = [];
+      const chunks: Array<{
+        finish_reason?: string;
+        outputTokens?: number;
+        promptTokens?: number;
+      }> = [];
       for await (const chunk of provider.streamChat("http://127.0.0.1:9", {
         model: "test-model",
         messages: [{ role: "user", content: "hi" }],
@@ -139,7 +143,10 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
 
     const thread = await store.getThread(threadId);
     assert.ok(thread, "thread must exist");
-    const asst1 = thread!.messages.find((m: any) => m.id === "a-1") as any;
+    const asst1 = thread!.messages.find((m) => m.id === "a-1") as unknown as {
+      roundPromptTokens?: number[];
+      tokenEconomics?: JobTokenRollup;
+    };
     assert.deepEqual(
       asst1.roundPromptTokens,
       [1000, 1200],
@@ -160,7 +167,7 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
       compactions: 1,
     };
     assert.deepEqual(
-      (thread as any).tokenEconomics,
+      (thread as unknown as { tokenEconomics?: JobTokenRollup }).tokenEconomics,
       expected,
       "thread record must carry the aggregated rollup"
     );

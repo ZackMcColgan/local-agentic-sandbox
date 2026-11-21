@@ -6,7 +6,9 @@ import * as chatUtils from "../lib/chatUtils.js";
 
 describe("P0.5 — Stray UI fixes", () => {
   it("UI-010: joinNarrationChunks inserts a separator when neither side has boundary whitespace", () => {
-    const joinFn = (chatUtils as any).joinNarrationChunks;
+    const joinFn = (
+      chatUtils as unknown as { joinNarrationChunks: (a: string, b: string) => string }
+    ).joinNarrationChunks;
     assert.equal(
       typeof joinFn,
       "function",

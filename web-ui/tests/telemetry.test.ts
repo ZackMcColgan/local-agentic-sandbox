@@ -84,7 +84,7 @@ test("OpenTelemetry Distributed Tracing Suite", async (t) => {
         tracer,
       });
 
-      const mockTask: any = {
+      const mockTask = {
         taskId: "task-telemetry-eval",
         goal: "Implement OTel propagation",
         currentMilestoneIndex: 0,
@@ -92,7 +92,7 @@ test("OpenTelemetry Distributed Tracing Suite", async (t) => {
           { id: "m1", title: "Milestone 1", description: "First milestone", status: "pending" },
         ],
         checkpoints: [],
-      };
+      } as unknown as Parameters<typeof supervisor.executeMilestoneWithTelemetry>[0];
 
       const result = await supervisor.executeMilestoneWithTelemetry(mockTask, 0, async () => {
         return {

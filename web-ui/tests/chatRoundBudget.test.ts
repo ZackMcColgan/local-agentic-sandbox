@@ -210,36 +210,37 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
 
   describe("runChatToolLoop runs past the legacy 8-round ceiling when headroom remains", () => {
     it("executes >8 tool rounds without an explicit cap (budget-governed)", async () => {
-      const capturedPayloads: any[] = [];
-      const messages: any[] = [
+      const capturedPayloads: Array<{ messages: Parameters<typeof estimateTokens>[0] }> = [];
+      const messages: Parameters<typeof runChatToolLoop>[0]["conversationMessages"] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
         { role: "user", content: "Inspect every module in the repo and summarize the findings." },
       ];
       let callCount = 0;
 
-      const mockStreamChat = async function* (payload: any) {
-        capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
-        callCount++;
-        if (callCount <= 9) {
-          yield {
-            message: {
-              content: "",
-              tool_calls: [
-                {
-                  function: {
-                    name: "workspace_grep",
-                    arguments: JSON.stringify({ query: `module_${callCount}` }),
+      const mockStreamChat: Parameters<typeof runChatToolLoop>[0]["streamLlmChat"] =
+        async function* (payload) {
+          capturedPayloads.push(JSON.parse(JSON.stringify(payload)));
+          callCount++;
+          if (callCount <= 9) {
+            yield {
+              message: {
+                content: "",
+                tool_calls: [
+                  {
+                    function: {
+                      name: "workspace_grep",
+                      arguments: JSON.stringify({ query: `module_${callCount}` }),
+                    },
                   },
-                },
-              ],
-            },
-          };
-        } else {
-          yield { message: { content: "Synthesized findings across all inspected modules." } };
-        }
-      };
+                ],
+              },
+            };
+          } else {
+            yield { message: { content: "Synthesized findings across all inspected modules." } };
+          }
+        };
 
-      const mockExecuteTool = async (toolCall: any) => ({
+      const mockExecuteTool = async (toolCall: { function?: { name?: string } }) => ({
         status: "SUCCESS",
         tool: toolCall.function?.name,
         data: "X".repeat(800),

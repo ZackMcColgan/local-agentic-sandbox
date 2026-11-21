@@ -24,11 +24,11 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     if (!fs.existsSync(supervisorTempDir)) fs.mkdirSync(supervisorTempDir, { recursive: true });
 
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);

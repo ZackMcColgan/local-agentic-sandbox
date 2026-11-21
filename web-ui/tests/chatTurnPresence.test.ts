@@ -34,7 +34,7 @@ async function main() {
       let acc = "";
       req.on("data", (c) => (acc += c));
       await new Promise((r) => req.on("end", r));
-      let parsedBody: any = {};
+      let parsedBody: { messages?: Array<{ content?: unknown }> } = {};
       try {
         parsedBody = JSON.parse(acc);
       } catch {}
@@ -103,7 +103,8 @@ async function main() {
       res.end();
     });
     server.listen(0, "127.0.0.1", () => {
-      const port = (server.address() as any).port;
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
       resolve({ url: `http://127.0.0.1:${port}`, close: () => server.close() });
     });
   });
@@ -124,11 +125,23 @@ async function main() {
     }
   }
 
-  async function getThreadResponse(threadId: string): Promise<any> {
+  interface ThreadMessageRecord {
+    id?: string;
+    role?: string;
+    content?: string;
+    status?: string;
+  }
+
+  interface ThreadGetResponse {
+    thread?: { messages?: ThreadMessageRecord[] } | null;
+    activeTurn?: { status?: string; startedAt?: string } | null;
+  }
+
+  async function getThreadResponse(threadId: string): Promise<ThreadGetResponse> {
     const res = await THREAD_GET(new Request(`http://localhost/api/threads/${threadId}`), {
       params: Promise.resolve({ id: threadId }),
-    } as any);
-    return res.json();
+    });
+    return res.json() as Promise<ThreadGetResponse>;
   }
 
   function chatRequest(threadId: string, assistantId: string, content: string): Request {
@@ -171,7 +184,9 @@ async function main() {
       scenario = { kind: "thinking-then-content", thinkChunkMs: 350, content: "All done." };
       const { threadId, assistantId } = uniqueThread("presence-live");
       const res = await CHAT_POST(
-        chatRequest(threadId, assistantId, "Probe presence window") as any
+        chatRequest(threadId, assistantId, "Probe presence window") as unknown as Parameters<
+          typeof CHAT_POST
+        >[0]
       );
       // The route generator only runs while the body is consumed — pump it concurrently.
       const consume = (async () => {
@@ -184,7 +199,7 @@ async function main() {
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
         const data = await getThreadResponse(threadId);
-        const assistantMsg = (data.thread?.messages || []).find((m: any) => m.role === "assistant");
+        const assistantMsg = (data.thread?.messages || []).find((m) => m.role === "assistant");
         const hasContent = assistantMsg && (assistantMsg.content || "").trim().length > 0;
         if (data.activeTurn && !hasContent) sawPresenceBeforeContent = true;
         if (hasContent) {
@@ -202,16 +217,19 @@ async function main() {
 
       const after = await getThreadResponse(threadId);
       assert.equal(after.activeTurn, null, "presence must be cleared when the turn ends (done)");
-      const asst = (after.thread.messages || []).find((m: any) => m.role === "assistant");
+      const asst = (after.thread?.messages || []).find((m) => m.role === "assistant");
+      assert.ok(asst);
       assert.equal(asst.id, assistantId, "terminal persistence must upsert the same message id");
-      assert.ok(asst.content.includes("All done."), "final content must persist");
+      assert.ok((asst.content || "").includes("All done."), "final content must persist");
     });
 
     it("presence survives a thinking-only turn that never emits content and clears at end", async () => {
       scenario = { kind: "thinking-only-then-empty-done", thinkChunkMs: 350 };
       const { threadId, assistantId } = uniqueThread("presence-empty");
       const res = await CHAT_POST(
-        chatRequest(threadId, assistantId, "Probe empty synthesis") as any
+        chatRequest(threadId, assistantId, "Probe empty synthesis") as unknown as Parameters<
+          typeof CHAT_POST
+        >[0]
       );
       const during = await getThreadResponse(threadId);
       assert.ok(
@@ -227,7 +245,11 @@ async function main() {
     it("presence clears on engine error", async () => {
       scenario = { kind: "engine-error", delayMs: 1200 };
       const { threadId, assistantId } = uniqueThread("presence-err");
-      const res = await CHAT_POST(chatRequest(threadId, assistantId, "Probe error path") as any);
+      const res = await CHAT_POST(
+        chatRequest(threadId, assistantId, "Probe error path") as unknown as Parameters<
+          typeof CHAT_POST
+        >[0]
+      );
       const during = await getThreadResponse(threadId);
       assert.ok(during.activeTurn, "presence must be visible during the engine-error window");
       await drain(res);
@@ -238,7 +260,11 @@ async function main() {
     it("presence clears when the client disconnects mid-turn", async () => {
       scenario = { kind: "thinking-then-content", thinkChunkMs: 600, content: "late" };
       const { threadId, assistantId } = uniqueThread("presence-abort");
-      const res = await CHAT_POST(chatRequest(threadId, assistantId, "Probe abort path") as any);
+      const res = await CHAT_POST(
+        chatRequest(threadId, assistantId, "Probe abort path") as unknown as Parameters<
+          typeof CHAT_POST
+        >[0]
+      );
       const during = await getThreadResponse(threadId);
       assert.ok(during.activeTurn, "presence visible during the turn");
       const reader = res.body!.getReader();
@@ -269,15 +295,19 @@ async function main() {
         chunkDelayMs: 400,
       };
       const { threadId, assistantId } = uniqueThread("presence-merge");
-      const res = await CHAT_POST(chatRequest(threadId, assistantId, "Probe merge coexist") as any);
+      const res = await CHAT_POST(
+        chatRequest(threadId, assistantId, "Probe merge coexist") as unknown as Parameters<
+          typeof CHAT_POST
+        >[0]
+      );
       const consume = (async () => {
         await drain(res);
       })();
-      let sawStreamingSnapshot: any = null;
+      let sawStreamingSnapshot: ThreadMessageRecord | null = null;
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
         const data = await getThreadResponse(threadId);
-        const asst = (data.thread?.messages || []).find((m: any) => m.role === "assistant");
+        const asst = (data.thread?.messages || []).find((m) => m.role === "assistant");
         if (data.activeTurn && asst && asst.status === "streaming") {
           assert.equal(asst.id, assistantId, "snapshot must carry the turn's assistant message id");
           assert.ok(data.activeTurn.startedAt, "presence must coexist with a streaming snapshot");
@@ -293,7 +323,7 @@ async function main() {
       );
       const after = await getThreadResponse(threadId);
       assert.equal(after.activeTurn, null, "presence clears at done");
-      const finals = (after.thread.messages || []).filter((m: any) => m.role === "assistant");
+      const finals = (after.thread?.messages || []).filter((m) => m.role === "assistant");
       assert.equal(
         finals.length,
         1,

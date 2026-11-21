@@ -67,15 +67,14 @@ Confirm when complete.`;
     // 4. Verify tool calls executed via system traces API
     const traceRes = await page.request.get(`${url}/api/traces`);
     expect(traceRes.ok()).toBe(true);
-    const traceData = await traceRes.json();
-    const allSpans = (traceData.sessions || []).flatMap((s: any) => s.spans || []);
-    const toolSpans = allSpans.filter((sp: any) => sp.name === "mcp.tool_call");
+    type TraceSpan = { name?: string; attributes?: { tool?: string } };
+    const traceData = (await traceRes.json()) as { sessions?: Array<{ spans?: TraceSpan[] }> };
+    const allSpans: TraceSpan[] = (traceData.sessions || []).flatMap((s) => s.spans || []);
+    const toolSpans = allSpans.filter((sp) => sp.name === "mcp.tool_call");
 
-    const ranReadFile = toolSpans.some((sp: any) => sp.attributes?.tool === "host_read_file");
-    const ranPowershell = toolSpans.some(
-      (sp: any) => sp.attributes?.tool === "host_run_powershell"
-    );
-    const ranWriteFile = toolSpans.some((sp: any) => sp.attributes?.tool === "host_write_file");
+    const ranReadFile = toolSpans.some((sp) => sp.attributes?.tool === "host_read_file");
+    const ranPowershell = toolSpans.some((sp) => sp.attributes?.tool === "host_run_powershell");
+    const ranWriteFile = toolSpans.some((sp) => sp.attributes?.tool === "host_write_file");
 
     expect(ranReadFile).toBe(true);
     expect(ranPowershell).toBe(true);

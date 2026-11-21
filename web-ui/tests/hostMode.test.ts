@@ -24,12 +24,12 @@ const {
   executeHostTool,
   checkHostRunnerHealth,
   getHostRunnerBaseUrl,
-} = hostModeLib as any;
+} = hostModeLib;
 
 describe("Host Mode & Destructive Action Gate Suite", () => {
   it("defines all 6 standard host tools with valid schemas", () => {
     assert.equal(HOST_TOOLS_DEFINITIONS.length, 6);
-    const names = HOST_TOOLS_DEFINITIONS.map((t: any) => t.function.name);
+    const names = HOST_TOOLS_DEFINITIONS.map((t) => t.function.name);
     assert.ok(names.includes("host_run_powershell"));
     assert.ok(names.includes("host_read_file"));
     assert.ok(names.includes("host_write_file"));
@@ -278,11 +278,11 @@ describe("Host Mode F2.2 Single-Use & Expiring Approvals Suite", () => {
     // At t0 + 11 minutes, req1 should be expired and purged
     const activeAt11Min = getPendingApprovals("thread-purge-1", t0 + 11 * 60 * 1000);
     assert.equal(
-      activeAt11Min.some((a: any) => a.id === req1.id),
+      activeAt11Min.some((a) => a.id === req1.id),
       false
     );
     assert.equal(
-      activeAt11Min.some((a: any) => a.id === req2.id),
+      activeAt11Min.some((a) => a.id === req2.id),
       true
     );
   });
@@ -323,7 +323,7 @@ describe("Host Mode F2.2 Single-Use & Expiring Approvals Suite", () => {
       Promise.resolve().then(() => consumePendingApproval(concReq.id, "approved", t0)),
     ]);
 
-    const statuses = results.map((r: any) => r.status).sort();
+    const statuses = results.map((r) => r.status).sort();
     assert.deepEqual(statuses, ["approved", "conflict"]);
   });
 
@@ -407,11 +407,12 @@ describe("POST /api/host/approvals Route Suite", () => {
   it("approves pending action, returns 200, executes tool, and writes to continuation buffer", async () => {
     const origFetch = global.fetch;
     try {
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, stdout: "cleared" }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, stdout: "cleared" }),
+        }) as unknown as Response) as typeof fetch;
 
       const approval = createPendingApproval(
         "route-thread-1",
@@ -572,13 +573,13 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
 
     try {
       process.env.HOST_RUNNER_SHARED_SECRET = "secret-test-token-xyz";
-      global.fetch = (async (_url: any, init?: any) => {
+      global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
         capturedHeaders = (init?.headers as Record<string, string>) || {};
         return {
           ok: true,
           status: 200,
           json: async () => ({ success: true }),
-        } as Response;
+        } as unknown as Response;
       }) as typeof fetch;
 
       await executeHostTool("host_list_dir", { path: "." });
@@ -604,11 +605,12 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
         return origTimeout.call(AbortSignal, ms);
       };
 
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true }),
+        }) as unknown as Response) as typeof fetch;
 
       // 1. Default timeout (120s + 5s buffer = 125s = 125,000ms)
       await executeHostTool("host_run_powershell", { command: "Get-Date" });
@@ -660,14 +662,14 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
       };
 
       // Case 1: Healthy 200 {"status":"ok"}
-      global.fetch = (async (url: any, init?: any) => {
+      global.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         lastUrl = String(url);
         lastMethod = init?.method || "GET";
         return {
           ok: true,
           status: 200,
           json: async () => ({ status: "ok" }),
-        } as Response;
+        } as unknown as Response;
       }) as typeof fetch;
 
       const healthy = await checkHostRunnerHealth();
@@ -680,20 +682,22 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
       );
 
       // Case 2: HTTP 500 error
-      global.fetch = (async () => ({
-        ok: false,
-        status: 500,
-        json: async () => ({ error: "internal server error" }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "internal server error" }),
+        }) as unknown as Response) as typeof fetch;
       const unhealthy500 = await checkHostRunnerHealth();
       assert.equal(unhealthy500, false, "checkHostRunnerHealth must return false on HTTP 500");
 
       // Case 3: Bad JSON payload {"status":"error"}
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: "error" }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "error" }),
+        }) as unknown as Response) as typeof fetch;
       const unhealthyBadPayload = await checkHostRunnerHealth();
       assert.equal(
         unhealthyBadPayload,
@@ -704,7 +708,7 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
       // Case 4: Network rejection
       global.fetch = (async () => {
         throw new TypeError("Failed to fetch");
-      }) as any;
+      }) as typeof fetch;
       const unhealthyNetwork = await checkHostRunnerHealth();
       assert.equal(
         unhealthyNetwork,
@@ -717,7 +721,7 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
         const err = new Error("The operation was aborted due to timeout");
         err.name = "TimeoutError";
         throw err;
-      }) as any;
+      }) as typeof fetch;
       const unhealthyTimeout = await checkHostRunnerHealth();
       assert.equal(unhealthyTimeout, false, "checkHostRunnerHealth must return false on timeout");
     } finally {
@@ -749,15 +753,16 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       threadStore.saveThread(thread);
 
       const manifest = getBridgeManifest();
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          status: "ok",
-          protocolVersion: PROTOCOL_VERSION,
-          bridgeSourceSha256: manifest.bridgeSourceSha256,
-        }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: "ok",
+            protocolVersion: PROTOCOL_VERSION,
+            bridgeSourceSha256: manifest.bridgeSourceSha256,
+          }),
+        }) as unknown as Response) as typeof fetch;
 
       const req2 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
       const res2 = await hostStatusGet(req2);
@@ -767,11 +772,12 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       assert.equal(json2.runnerAvailable, true);
 
       // 3. Mock unhealthy runner (500)
-      global.fetch = (async () => ({
-        ok: false,
-        status: 500,
-        json: async () => ({ error: "offline" }),
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "offline" }),
+        }) as unknown as Response) as typeof fetch;
 
       const req3 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
       const res3 = await hostStatusGet(req3);
@@ -900,7 +906,9 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
         );
         assert.equal(getApprovalsRes.status, 200);
         const getApprovalsJson = await getApprovalsRes.json();
-        assert.ok(getApprovalsJson.approvals.some((a: any) => a.id === app1.id));
+        assert.ok(
+          (getApprovalsJson.approvals as Array<{ id: string }>).some((a) => a.id === app1.id)
+        );
 
         const rejectReq = new Request("http://localhost:3000/api/host/approvals", {
           method: "POST",

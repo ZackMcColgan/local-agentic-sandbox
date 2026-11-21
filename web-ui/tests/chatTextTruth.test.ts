@@ -16,7 +16,7 @@ function renderAssistantContent(content: string): string {
         },
       ],
       isLoading: false,
-    } as any)
+    } as unknown as React.ComponentProps<typeof ChatStream>)
   );
 }
 
@@ -57,7 +57,7 @@ describe("Lane A Item 3: User message bubble line breaks", () => {
           },
         ],
         isLoading: false,
-      } as any)
+      } as unknown as React.ComponentProps<typeof ChatStream>)
     );
     assert.ok(
       html.includes("whitespace-pre-line") || html.includes("<br"),

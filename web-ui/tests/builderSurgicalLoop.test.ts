@@ -51,7 +51,7 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
           description: "Change targetB to return 42",
           acceptanceCriteria: [{ id: "ac1", assertion: "targetB returns 42" }],
           targetFiles: [targetRel],
-        } as any,
+        } as unknown as Parameters<BuilderWorker["executeMilestoneWork"]>[0],
         { repoRoot: tmpDir, targetFile: targetRel }
       );
 

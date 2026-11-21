@@ -13,7 +13,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
     OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
       task: TaskManifest,
-      options?: any
+      _options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
     ) {
       executeCalled = true;
       receivedTaskId = task.taskId;
@@ -84,7 +84,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
     OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
       task: TaskManifest,
-      options?: any
+      _options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
     ) {
       executeCalled = true;
       receivedTaskId = task.taskId;
@@ -150,14 +150,15 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
 
   it("preserves scope='PROJECT' on manifest and passes scope='PROJECT' on resume and restart", async () => {
     let executedTask: TaskManifest | null = null;
-    let executedOptions: any = null;
+    let executedOptions: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1] | null =
+      null;
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
     OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
       task: TaskManifest,
-      options?: any
+      options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
     ) {
       executedTask = task;
-      executedOptions = options;
+      executedOptions = options ?? null;
       return task;
     };
 
@@ -220,7 +221,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
         "Resumed task must preserve scope === 'PROJECT'"
       );
       assert.equal(
-        (executedOptions?.stepExecutor as any)?.scope,
+        (executedOptions as { stepExecutor?: { scope?: string } } | null)?.stepExecutor?.scope,
         "PROJECT",
         "Resumed stepExecutor must receive scope === 'PROJECT'"
       );
@@ -249,7 +250,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
         "Restarted task must preserve scope === 'PROJECT'"
       );
       assert.equal(
-        (executedOptions?.stepExecutor as any)?.scope,
+        (executedOptions as { stepExecutor?: { scope?: string } } | null)?.stepExecutor?.scope,
         "PROJECT",
         "Restarted stepExecutor must receive scope === 'PROJECT'"
       );

@@ -39,7 +39,7 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
 
     const saved1 = store.getFilePath(thread.id);
     const parsed1 = JSON.parse(fs.readFileSync(saved1, "utf8"));
-    const msg1 = parsed1.messages.find((m: any) => m.id === "msg-asst-1");
+    const msg1 = parsed1.messages.find((m: { id?: string }) => m.id === "msg-asst-1");
     assert.ok(msg1, "Streaming message must be written to disk");
     assert.equal(msg1.status, "streaming");
     assert.equal(msg1.thought, "Analyzing user request...");
@@ -59,7 +59,7 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     assert.equal(write3, true, "Snapshot past interval must land");
 
     const parsed2 = JSON.parse(fs.readFileSync(saved1, "utf8"));
-    const msg2 = parsed2.messages.find((m: any) => m.id === "msg-asst-1");
+    const msg2 = parsed2.messages.find((m: { id?: string }) => m.id === "msg-asst-1");
     assert.equal(msg2.thought, "Analyzing user request... still thinking\nDone thinking.");
     assert.equal(msg2.content, "Here is the start of answer");
 
@@ -108,7 +108,7 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     });
 
     await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-    serverPort = (fakeServer.address() as any).port;
+    serverPort = (fakeServer.address() as { port: number }).port;
     const prevLlmUrl = process.env.LLM_BASE_URL;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
 
@@ -233,7 +233,7 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     });
 
     await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-    const serverPort = (fakeServer.address() as any).port;
+    const serverPort = (fakeServer.address() as { port: number }).port;
     const prevLlmUrl = process.env.LLM_BASE_URL;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
 

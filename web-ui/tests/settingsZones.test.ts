@@ -28,14 +28,14 @@ describe("uir-3 Settings zones", () => {
   let win: GlobalWindow;
   let container: HTMLDivElement;
   let root: Root | null = null;
-  let gitActivity: any[] = [];
+  let gitActivity: Array<Record<string, unknown>> = [];
 
   const installFetch = () => {
-    (globalThis as any).fetch = async (url: string, init?: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       if (u.includes("/api/engine")) {
         if (init && init.method === "POST") {
-          return { ok: true, json: async () => ({ message: "ok" }) };
+          return { ok: true, json: async () => ({ message: "ok" }) } as unknown as Response;
         }
         return {
           ok: true,
@@ -45,14 +45,14 @@ describe("uir-3 Settings zones", () => {
             model: "qwen3.8-flash-next-test",
             vram_mb: 16384,
           }),
-        };
+        } as unknown as Response;
       }
       if (u.includes("/api/settings/host")) {
         if (init && init.method === "POST") {
           return {
             ok: true,
             json: async () => ({ hostAccessEnabled: true, allowUnattendedHostGit: false }),
-          };
+          } as unknown as Response;
         }
         return {
           ok: true,
@@ -62,24 +62,31 @@ describe("uir-3 Settings zones", () => {
             runnerAvailable: true,
             recentActivity: gitActivity,
           }),
-        };
+        } as unknown as Response;
       }
       if (u.includes("/api/settings/notifications")) {
-        return { ok: true, json: async () => ({ configured: true, enabled: true }) };
+        return {
+          ok: true,
+          json: async () => ({ configured: true, enabled: true }),
+        } as unknown as Response;
       }
       if (u.includes("/api/settings/memory")) {
-        return { ok: true, json: async () => ({ text: "", updatedAt: new Date().toISOString() }) };
+        return {
+          ok: true,
+          json: async () => ({ text: "", updatedAt: new Date().toISOString() }),
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) };
+      return { ok: true, json: async () => ({}) } as unknown as Response;
     };
   };
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     gitActivity = [];
     installFetch();
     const div = win.document.createElement("div");
@@ -92,7 +99,7 @@ describe("uir-3 Settings zones", () => {
     root = null;
   });
 
-  const render = async (props: any = {}) => {
+  const render = async (props: Partial<React.ComponentProps<typeof SettingsView>> = {}) => {
     root = createRoot(container);
     await act(async () => {
       root!.render(React.createElement(SettingsView, { onBack: () => {}, ...props }));
@@ -104,7 +111,8 @@ describe("uir-3 Settings zones", () => {
     }
   };
 
-  const zoneEl = (testid: string) => container.querySelector(`[data-testid="${testid}"]`) as any;
+  const zoneEl = (testid: string) =>
+    container.querySelector(`[data-testid="${testid}"]`) as HTMLElement;
 
   it("renders all zones in the specified top-to-bottom order", async () => {
     await render();
@@ -124,7 +132,7 @@ describe("uir-3 Settings zones", () => {
     assert.ok(about, "about zone exists");
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
     assert.ok(
-      about.textContent.includes(`v${pkg.version}`),
+      (about.textContent ?? "").includes(`v${pkg.version}`),
       "about zone shows the package.json version"
     );
   });
@@ -205,7 +213,9 @@ describe("uir-3 Settings zones", () => {
     const selfDeploy = zoneEl("settings-zone-self-deploy");
     assert.ok(danger, "danger zone exists");
     assert.ok(selfDeploy, "self-deploy zone exists");
-    const toggle = danger.querySelector('[data-testid="self-deploy-kill-switch-btn"]') as any;
+    const toggle = danger.querySelector(
+      '[data-testid="self-deploy-kill-switch-btn"]'
+    ) as HTMLButtonElement;
     assert.ok(toggle, "kill switch toggle is inside the Danger Zone");
     assert.equal(
       selfDeploy.querySelector('[data-testid="self-deploy-kill-switch-btn"]'),
@@ -240,9 +250,14 @@ describe("uir-3 Settings zones", () => {
     assert.ok(zone.innerHTML.includes("branch-2"), "second entry visible");
     assert.ok(!zone.innerHTML.includes("branch-3"), "third entry hidden while collapsed");
     assert.ok(!zone.innerHTML.includes("branch-4"), "fourth entry hidden while collapsed");
-    const expandBtn = zone.querySelector('[data-testid="deploy-history-expand-btn"]') as any;
+    const expandBtn = zone.querySelector(
+      '[data-testid="deploy-history-expand-btn"]'
+    ) as HTMLButtonElement;
     assert.ok(expandBtn, "expand control exists");
-    assert.ok(expandBtn.textContent.includes("Show all 4"), "expand control names the full count");
+    assert.ok(
+      (expandBtn.textContent ?? "").includes("Show all 4"),
+      "expand control names the full count"
+    );
     await act(async () => {
       expandBtn.click();
     });
@@ -260,17 +275,19 @@ describe("uir-3 Settings zones", () => {
     }));
     installFetch();
     await render();
-    const list = container.querySelector('[data-testid="host-git-activity-list"]') as any;
+    const list = container.querySelector('[data-testid="host-git-activity-list"]') as HTMLElement;
     assert.ok(list, "activity list exists");
     assert.equal(list.children.length, 2, "only 2 activity entries visible while collapsed");
     const expandBtn = container.querySelector(
       '[data-testid="host-git-activity-expand-btn"]'
-    ) as any;
+    ) as HTMLButtonElement;
     assert.ok(expandBtn, "activity expand control exists");
     await act(async () => {
       expandBtn.click();
     });
-    const listAfter = container.querySelector('[data-testid="host-git-activity-list"]') as any;
+    const listAfter = container.querySelector(
+      '[data-testid="host-git-activity-list"]'
+    ) as HTMLElement;
     assert.equal(listAfter.children.length, 5, "all activity entries visible after expand");
   });
 

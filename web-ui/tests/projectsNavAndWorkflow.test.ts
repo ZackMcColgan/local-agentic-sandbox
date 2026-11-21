@@ -100,13 +100,13 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
     try {
       const { GET } = await import("../app/api/projects/browse/route.js");
       const req = new Request("http://localhost:3000/api/projects/browse");
-      const res = await GET(req as any);
+      const res = await GET(req as unknown as Parameters<typeof GET>[0]);
       assert.equal(res.status, 200);
 
       const data = await res.json();
       assert.ok(Array.isArray(data.items), "Must return items array");
 
-      const repoItem = data.items.find((i: any) => i.name === "repo-one");
+      const repoItem = data.items.find((i: { name?: string }) => i.name === "repo-one");
       assert.ok(repoItem, "repo-one must be in items");
       assert.equal(repoItem.isGitRepo, true, "repo-one must be detected as git repo");
       assert.equal(repoItem.defaultBranch, "main", "repo-one branch must be main");
@@ -116,7 +116,7 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
         "repo-one toolchain must detect package.json as node:22"
       );
 
-      const plainItem = data.items.find((i: any) => i.name === "plain-folder");
+      const plainItem = data.items.find((i: { name?: string }) => i.name === "plain-folder");
       assert.ok(plainItem, "plain-folder must be in items");
       assert.equal(plainItem.isGitRepo, false, "plain-folder is not a git repo");
       assert.equal(
@@ -134,7 +134,7 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
     try {
       const { GET } = await import("../app/api/projects/browse/route.js");
       const req = new Request("http://localhost:3000/api/projects/browse?subpath=../../etc");
-      const res = await GET(req as any);
+      const res = await GET(req as unknown as Parameters<typeof GET>[0]);
       assert.equal(res.status, 403, "Must reject traversal outside allowed root with 403");
     } finally {
       teardownDirs();
@@ -153,7 +153,7 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
           targetPath: nonGitDir,
         }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.success, true);
@@ -179,7 +179,7 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
           name: "my-greenfield-app",
         }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       assert.equal(res.status, 201);
       const data = await res.json();
       assert.ok(data.projectPath);

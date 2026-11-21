@@ -82,7 +82,7 @@ describe("Critic Worker — Validation, Rejection, and Fail-Closed Abstention", 
   it("abstains (does NOT approve) on Ollama failure, logging and surfacing abstention", async () => {
     let loggedError = "";
     const originalConsoleError = console.error;
-    console.error = (...args: any[]) => {
+    console.error = (...args: unknown[]) => {
       loggedError += args.join(" ") + "\n";
       originalConsoleError(...args);
     };

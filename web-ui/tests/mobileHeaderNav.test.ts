@@ -99,7 +99,9 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
           newSessionFired = true;
         },
         pendingSkillsCount: 2,
-        threads: sampleThreads as any,
+        threads: sampleThreads as unknown as React.ComponentProps<
+          typeof NavigationDrawer
+        >["threads"],
         selectedThreadId: "t1",
         onSelectThread: (id) => {
           selectedThread = id;

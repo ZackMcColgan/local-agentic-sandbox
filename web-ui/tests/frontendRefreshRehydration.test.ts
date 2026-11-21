@@ -13,11 +13,12 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -39,19 +40,19 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
   });
 
   it("renders empty state threads list and unified input field when no run is active", async () => {
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads")) {
         return {
           ok: true,
           json: async () => ({ threads: [] }),
-        } as any;
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/tasks?active=true")) {
         return {
           ok: true,
           json: async () => ({ activeTask: null, tasks: [] }),
-        } as any;
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/sandbox-status")) {
         return {
@@ -59,9 +60,9 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
           json: async () => ({
             services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } },
           }),
-        } as any;
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, json: async () => ({}) } as unknown as Response;
     };
 
     root = createRoot(container);
@@ -132,7 +133,7 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
       updatedAt: new Date().toISOString(),
     };
 
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads")) {
         return {
@@ -188,7 +189,7 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
             },
             task: mockActiveTask,
           }),
-        } as any;
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/tasks?active=true") || urlStr.includes("/api/tasks?taskId=")) {
         return {
@@ -198,7 +199,7 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
             task: mockActiveTask,
             tasks: [mockActiveTask],
           }),
-        } as any;
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/sandbox-status")) {
         return {
@@ -206,9 +207,9 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
           json: async () => ({
             services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } },
           }),
-        } as any;
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, json: async () => ({}) } as unknown as Response;
     };
 
     // 1. Initial Render (First Page Load)

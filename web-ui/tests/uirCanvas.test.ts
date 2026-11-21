@@ -299,13 +299,14 @@ describe("uir-2 canvas: rendered UI", () => {
   let scrollRef: { current: HTMLDivElement | null };
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    (globalThis as any).window = win;
-    (globalThis as any).document = win.document;
-    (globalThis as any).localStorage = win.localStorage;
-    container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
+    const div = win.document.createElement("div");
+    win.document.body.appendChild(div);
+    container = div as unknown as HTMLDivElement;
     scrollEl = win.document.createElement("div") as unknown as HTMLDivElement;
     scrollRef = { current: scrollEl };
   });

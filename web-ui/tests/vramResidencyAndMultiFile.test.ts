@@ -79,7 +79,9 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       const loaded = await fetchLoadedModels("http://mock-ollama", mockFetch);
       assert.ok(
         loaded.some(
-          (m) => m.name === "swift-15-27b-mtp" || (m as any).baseName === "swift-15-27b-mtp"
+          (m) =>
+            m.name === "swift-15-27b-mtp" ||
+            (m as { name: string; baseName?: string }).baseName === "swift-15-27b-mtp"
         )
       );
     });
@@ -239,14 +241,21 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         "utf8"
       );
 
-      const builder = createBuilderWorker();
+      type BuilderWithPatch = {
+        patchFile: (
+          filePath: string,
+          patches: Array<{ search: string; replace: string }>,
+          opts: { repoRoot: string }
+        ) => Promise<{ status: string }>;
+      };
+      const builder = createBuilderWorker() as unknown as BuilderWithPatch;
       assert.equal(
-        typeof (builder as any).patchFile,
+        typeof builder.patchFile,
         "function",
         "BuilderWorker must have patchFile method"
       );
 
-      const patchResult = await (builder as any).patchFile(
+      const patchResult = await builder.patchFile(
         filePath,
         [{ search: 'const color = "red";', replace: 'const color = "emerald";' }],
         { repoRoot: tmpDir }
@@ -264,9 +273,16 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
       fs.writeFileSync(fullPath, `const x = 1;\n`, "utf8");
 
-      const builder = createBuilderWorker();
+      type BuilderWithPatch = {
+        patchFile: (
+          filePath: string,
+          patches: Array<{ search: string; replace: string }>,
+          opts: { repoRoot: string }
+        ) => Promise<{ status: string }>;
+      };
+      const builder = createBuilderWorker() as unknown as BuilderWithPatch;
       await assert.rejects(async () => {
-        await (builder as any).patchFile(
+        await builder.patchFile(
           filePath,
           [{ search: "const nonexistent = 99;", replace: "const y = 2;" }],
           { repoRoot: tmpDir }
@@ -286,7 +302,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
     });
 
     it("createOllamaGenerate adds thinking budget on top of requested num_predict", async () => {
-      let sentOptions: any = null;
+      let sentOptions: { num_predict?: number } | null = null;
       const mockFetch: typeof fetch = async (url, init) => {
         const body = JSON.parse(String(init?.body || "{}"));
         sentOptions = body.options;
@@ -299,20 +315,21 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         prompt: "write code",
         options: { num_predict: 2048 },
         reasoningEffort: "fast",
-      } as any);
+      } as unknown as Parameters<typeof generate>[0]);
 
       assert.ok(sentOptions, "Ollama request options must be sent");
+      const capturedOptions = sentOptions as { num_predict?: number };
       // 2048 requested + 1024 thinking budget = 3072
       assert.equal(
-        sentOptions.num_predict,
+        capturedOptions.num_predict,
         3072,
-        `num_predict must add thinking budget on top: expected 3072, got ${sentOptions.num_predict}`
+        `num_predict must add thinking budget on top: expected 3072, got ${capturedOptions.num_predict}`
       );
     });
 
     it("BuilderWorker defaults num_predict to 8192 for code generation", async () => {
       let sentNumPredict: number | undefined;
-      const mockGenerate = async (req: any) => {
+      const mockGenerate = async (req: { model: string; options?: { num_predict?: number } }) => {
         sentNumPredict = req.options?.num_predict;
         return {
           text: "export const x = 1;",
@@ -323,7 +340,11 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
 
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "builder-num-predict-"));
       try {
-        const builder = new BuilderWorker({ generate: mockGenerate as any });
+        const builder = new BuilderWorker({
+          generate: mockGenerate as unknown as NonNullable<
+            NonNullable<ConstructorParameters<typeof BuilderWorker>[0]>["generate"]
+          >,
+        });
         const m: Milestone = {
           id: "M1",
           title: "Generate widget",
@@ -371,18 +392,21 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         criticRounds: 0,
       };
 
+      const builderWithTargets = builder as unknown as {
+        resolveTargets: (milestone: Milestone) => string[];
+      };
       assert.equal(
-        typeof (builder as any).resolveTargets,
+        typeof builderWithTargets.resolveTargets,
         "function",
         "BuilderWorker must expose resolveTargets"
       );
-      const targets = (builder as any).resolveTargets(m);
+      const targets = builderWithTargets.resolveTargets(m);
       assert.deepEqual(targets, ["lib/a.ts", "lib/b.ts", "lib/c.ts"]);
     });
 
     it("executeMilestoneWork iterates all plannedFiles and returns modifiedFiles array", async () => {
       const createdFiles: Record<string, string> = {};
-      const mockGenerate = async (req: any) => {
+      const mockGenerate = async (req: { model: string; prompt: string }) => {
         // Find which target is being generated from prompt
         const match = req.prompt.match(/content for "([^"]+)"/);
         const file = match ? match[1] : "default.ts";
@@ -393,7 +417,11 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         };
       };
 
-      const builder = new BuilderWorker({ generate: mockGenerate as any });
+      const builder = new BuilderWorker({
+        generate: mockGenerate as unknown as NonNullable<
+          NonNullable<ConstructorParameters<typeof BuilderWorker>[0]>["generate"]
+        >,
+      });
       const m: Milestone = {
         id: "M1",
         title: "Multi-file feature",
@@ -406,11 +434,12 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       };
 
       const result = await builder.executeMilestoneWork(m, { repoRoot: tmpDir });
+      const resultWithModified = result as unknown as { modifiedFiles?: string[] };
       assert.ok(
-        Array.isArray((result as any).modifiedFiles),
+        Array.isArray(resultWithModified.modifiedFiles),
         "Result must include modifiedFiles array"
       );
-      assert.deepEqual((result as any).modifiedFiles, ["lib/core.ts", "lib/utils.ts"]);
+      assert.deepEqual(resultWithModified.modifiedFiles, ["lib/core.ts", "lib/utils.ts"]);
 
       assert.ok(fs.existsSync(path.join(tmpDir, "lib/core.ts")));
       assert.ok(fs.existsSync(path.join(tmpDir, "lib/utils.ts")));

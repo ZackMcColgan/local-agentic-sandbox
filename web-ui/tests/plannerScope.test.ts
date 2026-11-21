@@ -141,7 +141,7 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
         taskId: "task-script-test",
         goal: "write a python script to ping servers",
         scope: "SCRIPT",
-        generate: mockGenerate as any,
+        generate: mockGenerate as unknown as Parameters<typeof generatePlanSpec>[0]["generate"],
       });
 
       assert.equal(spec.scope, "SCRIPT");
@@ -170,7 +170,7 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
         taskId: "task-project-rest-api",
         goal: "Build a REST API",
         scope: "PROJECT",
-        generate: mockGenerate as any,
+        generate: mockGenerate as unknown as Parameters<typeof generatePlanSpec>[0]["generate"],
       });
 
       assert.equal(spec.scope, "PROJECT");
@@ -185,8 +185,8 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
 
       const { createProductionStepExecutor } = await import("../lib/subagents/supervisor");
       const { WorkerPool } = await import("../lib/subagents/workerPool");
-      const capturedRequests: any[] = [];
-      const spyGenerate = async (req: any) => {
+      const capturedRequests: Array<{ prompt?: string; scope?: string }> = [];
+      const spyGenerate = async (req: { prompt?: string; scope?: string }) => {
         capturedRequests.push(req);
         if (
           req.prompt &&
@@ -201,7 +201,9 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
 
       const workerPool = new WorkerPool({
         scope: "PROJECT",
-        generate: spyGenerate as any,
+        generate: spyGenerate as unknown as NonNullable<
+          ConstructorParameters<typeof WorkerPool>[0]
+        >["generate"],
       });
 
       const executor = createProductionStepExecutor({

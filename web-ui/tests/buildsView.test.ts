@@ -14,13 +14,13 @@ describe("E6: BuildsView Self-Deploy Pipeline uses latest displayed task when ac
       testSummary: { passed: 10, failed: 0 },
       createdAt: Date.now() - 60_000,
       updatedAt: Date.now(),
-    } as any;
+    } as unknown as NonNullable<React.ComponentProps<typeof BuildsView>["tasks"]>[number];
 
     const html = renderToStaticMarkup(
       React.createElement(BuildsView, {
         activeTask: null,
         tasks: [completedTask],
-      } as any)
+      } as unknown as React.ComponentProps<typeof BuildsView>)
     );
 
     assert.ok(

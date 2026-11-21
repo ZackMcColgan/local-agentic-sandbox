@@ -155,7 +155,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
   it("Item 3: MorningReportView renders project badge and review link for project tasks, omits them for standalone tasks", () => {
     const sharedStartedAt = new Date(Date.now() - 60000).toISOString();
     const sharedNow = new Date().toISOString();
-    const projectTaskEntry: any = {
+    const projectTaskEntry = {
       taskId: "task-view-proj",
       goal: "Build payment gateway",
       branch: "feat/payment",
@@ -176,7 +176,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       reviewUrl: "/projects?projectId=proj-payment-gw&tab=diffs",
     };
 
-    const standaloneTaskEntry: any = {
+    const standaloneTaskEntry = {
       taskId: "task-view-standalone",
       goal: "Generate standalone chart",
       branch: "feat/chart",
@@ -194,7 +194,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       testsFailed: 0,
     };
 
-    const overnightReport: any = {
+    const overnightReport = {
       reportId: "rep-view-test",
       generatedAt: new Date().toISOString(),
       windowLabel: "Autonomous Run",
@@ -208,7 +208,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       artifactsProduced: [],
       attentionItems: [],
       summaryMarkdown: "",
-    };
+    } as unknown as NonNullable<React.ComponentProps<typeof MorningReportView>["overnightReport"]>;
 
     const html = renderToString(
       React.createElement(MorningReportView, {

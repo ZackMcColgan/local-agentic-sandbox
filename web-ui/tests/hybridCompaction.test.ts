@@ -435,7 +435,12 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
             timestamp: "now",
           },
           { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
-          { id: "m3", role: "tool" as any, content: "File contents retrieved.", timestamp: "now" },
+          {
+            id: "m3",
+            role: "tool" as unknown as Thread["messages"][number]["role"],
+            content: "File contents retrieved.",
+            timestamp: "now",
+          },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
           { id: "m6", role: "assistant", content: filler, timestamp: "now" },
@@ -512,7 +517,12 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
             timestamp: "now",
           },
           { id: "m2", role: "assistant", content: "Working on it.", timestamp: "now" },
-          { id: "m3", role: "tool" as any, content: "File contents retrieved.", timestamp: "now" },
+          {
+            id: "m3",
+            role: "tool" as unknown as Thread["messages"][number]["role"],
+            content: "File contents retrieved.",
+            timestamp: "now",
+          },
           { id: "m4", role: "assistant", content: "Done.", timestamp: "now" },
           { id: "m5", role: "user", content: "Recent question one", timestamp: "now" },
           { id: "m6", role: "assistant", content: filler, timestamp: "now" },
@@ -629,32 +639,33 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
   // the post-extraction view above the 65% hybrid escalation rung.
   // Fixture typing is any[] (not ThreadMessage[]): the fixture carries a tool-role message,
   // mirroring the pre-existing fixtures above (lines 363/417 use the same tool-role shape).
-  const TURN_START_MESSAGES = (prefix: string): any[] => [
-    {
-      id: `${prefix}-1`,
-      role: "user",
-      content:
-        "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo",
-      timestamp: "now",
-    },
-    {
-      id: `${prefix}-2`,
-      role: "assistant",
-      content: "Execution error: failed to compile module at line 42.",
-      timestamp: "now",
-    },
-    {
-      id: `${prefix}-3`,
-      role: "tool",
-      name: "workspace_read_file",
-      content: "x".repeat(30000 * 4),
-      timestamp: "now",
-    },
-    { id: `${prefix}-4`, role: "assistant", content: "Done.", timestamp: "now" },
-    { id: `${prefix}-5`, role: "user", content: "Recent question one", timestamp: "now" },
-    { id: `${prefix}-6`, role: "assistant", content: "y".repeat(66000 * 4), timestamp: "now" },
-    { id: `${prefix}-7`, role: "user", content: "Recent question two", timestamp: "now" },
-  ];
+  const TURN_START_MESSAGES = (prefix: string): Thread["messages"] =>
+    [
+      {
+        id: `${prefix}-1`,
+        role: "user",
+        content:
+          "Inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo",
+        timestamp: "now",
+      },
+      {
+        id: `${prefix}-2`,
+        role: "assistant",
+        content: "Execution error: failed to compile module at line 42.",
+        timestamp: "now",
+      },
+      {
+        id: `${prefix}-3`,
+        role: "tool",
+        name: "workspace_read_file",
+        content: "x".repeat(30000 * 4),
+        timestamp: "now",
+      },
+      { id: `${prefix}-4`, role: "assistant", content: "Done.", timestamp: "now" },
+      { id: `${prefix}-5`, role: "user", content: "Recent question one", timestamp: "now" },
+      { id: `${prefix}-6`, role: "assistant", content: "y".repeat(66000 * 4), timestamp: "now" },
+      { id: `${prefix}-7`, role: "user", content: "Recent question two", timestamp: "now" },
+    ] as unknown as Thread["messages"];
 
   const makeTurnStartThread = (id: string): Thread => ({
     id,
@@ -701,7 +712,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       assert.ok(prep.tokensAfterCompaction! < prep.tokensBeforeCompaction!, "tokens must shrink");
       assert.equal(calls, 1, "exactly ONE summarization pass at turn start");
       assert.ok(
-        prep.messages.some((m: any) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)),
+        prep.messages.some((m) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)),
         "model view must carry the model digest"
       );
 
@@ -752,7 +763,7 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
         assert.equal(prep.compactedThisTurn, true, "turn-start must report compaction");
         assert.equal(summarizeCalls, 0, "summarizer must never be invoked on the extraction rung");
         assert.ok(
-          !prep.messages.some((m: any) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)),
+          !prep.messages.some((m) => m.content.startsWith(COMPACTION_MODEL_DIGEST_HEADER)),
           "model view must not carry a model digest"
         );
         const savedThread = (await store.getThread(thread.id))!;

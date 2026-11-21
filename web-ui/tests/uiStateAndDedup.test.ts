@@ -16,11 +16,11 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -47,18 +47,18 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
     let launchTaskCalled = false;
     let launchedGoal = "";
 
-    globalThis.fetch = (async (url: any, init?: any) => {
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads/test-thread-1")) {
         try {
-          const body = JSON.parse(init?.body || "{}");
+          const body = JSON.parse(String(init?.body || "{}"));
           if (body.action === "addMessage") {
             addMessageDispatched = true;
           }
         } catch {}
       }
-      return new (win as any).Response(JSON.stringify({ ok: true }), { status: 200 });
-    }) as any;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof globalThis.fetch;
 
     root = createRoot(container);
     await act(async () => {
@@ -87,14 +87,25 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
 
     await act(async () => {
       const textareaPropsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
-      if (textareaPropsKey && (textarea as any)[textareaPropsKey]?.onChange) {
-        (textarea as any)[textareaPropsKey].onChange({ target: { value: builderPrompt } });
+      const textareaProps = textareaPropsKey
+        ? (
+            textarea as unknown as Record<
+              string,
+              { onChange?: (e: { target: { value: string } }) => void } | undefined
+            >
+          )[textareaPropsKey]
+        : undefined;
+      if (textareaProps?.onChange) {
+        textareaProps.onChange({ target: { value: builderPrompt } });
       } else {
-        const tracker = (textarea as any)._valueTracker;
+        const tracker = (
+          textarea as unknown as { _valueTracker?: { setValue: (v: string) => void } }
+        )._valueTracker;
         if (tracker) tracker.setValue("");
         textarea.value = builderPrompt;
-        textarea.dispatchEvent(new (win as any).Event("input", { bubbles: true }));
-        textarea.dispatchEvent(new (win as any).Event("change", { bubbles: true }));
+        const WinEvent = (win as unknown as { Event: typeof Event }).Event;
+        textarea.dispatchEvent(new WinEvent("input", { bubbles: true }));
+        textarea.dispatchEvent(new WinEvent("change", { bubbles: true }));
       }
     });
 
@@ -103,12 +114,19 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
 
     await act(async () => {
       const formPropsKey = Object.keys(sendForm).find((k) => k.startsWith("__reactProps"));
-      if (formPropsKey && (sendForm as any)[formPropsKey]?.onSubmit) {
-        (sendForm as any)[formPropsKey].onSubmit({ preventDefault: () => {} });
+      const formProps = formPropsKey
+        ? (
+            sendForm as unknown as Record<
+              string,
+              { onSubmit?: (e: { preventDefault: () => void }) => void } | undefined
+            >
+          )[formPropsKey]
+        : undefined;
+      if (formProps?.onSubmit) {
+        formProps.onSubmit({ preventDefault: () => {} });
       } else {
-        sendForm.dispatchEvent(
-          new (win as any).Event("submit", { bubbles: true, cancelable: true })
-        );
+        const WinEvent = (win as unknown as { Event: typeof Event }).Event;
+        sendForm.dispatchEvent(new WinEvent("submit", { bubbles: true, cancelable: true }));
       }
     });
 

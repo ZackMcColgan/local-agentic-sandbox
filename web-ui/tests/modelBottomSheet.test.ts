@@ -8,9 +8,14 @@ import { ModelBottomSheet } from "../components/ModelBottomSheet";
 
 function setupDom() {
   const win = new Window({ url: "http://localhost/" });
-  (globalThis as any).window = win;
-  (globalThis as any).document = win.document;
-  (globalThis as any).KeyboardEvent = win.KeyboardEvent;
+  const g = globalThis as unknown as {
+    window: Window;
+    document: Window["document"];
+    KeyboardEvent: Window["KeyboardEvent"];
+  };
+  g.window = win;
+  g.document = win.document;
+  g.KeyboardEvent = win.KeyboardEvent;
   win.document.body.innerHTML = "<div id='root'></div>";
   return { window: win };
 }
@@ -20,7 +25,9 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
     const dom = setupDom();
     const origFetch = globalThis.fetch;
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ status: "running" }), { status: 200 })) as any;
+      new Response(JSON.stringify({ status: "running" }), {
+        status: 200,
+      })) as unknown as typeof fetch;
 
     let closed = false;
     const container = dom.window.document.getElementById("root")! as unknown as HTMLElement;
@@ -58,7 +65,7 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
     const dom = setupDom();
     const origFetch = globalThis.fetch;
     let postCount = 0;
-    globalThis.fetch = (async (_url: any, init?: any) => {
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method === "POST") {
         postCount++;
         return new Response(
@@ -69,7 +76,7 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
         );
       }
       return new Response(JSON.stringify({ status: "running" }), { status: 200 });
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const container = dom.window.document.getElementById("root")! as unknown as HTMLElement;
     const root = createRoot(container);

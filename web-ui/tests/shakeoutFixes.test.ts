@@ -7,7 +7,7 @@ import { sanitizeScheduleBranchName } from "../lib/subagents/scheduler";
 describe("Flash Work Order #6 — Shakeout Fixes Test Suite", () => {
   describe("P0-1: LlamaCppProvider.generate Token Budgeting & Content Recovery", () => {
     it("allocates max_tokens including thinking budget so reasoning does not starve output", async () => {
-      let capturedBody: any = null;
+      let capturedBody: Record<string, unknown> | null = null;
       const mockFetch = async (_url: string | URL | Request, init?: RequestInit) => {
         capturedBody = JSON.parse(String(init?.body || "{}"));
         const sseData = [
@@ -30,14 +30,14 @@ describe("Flash Work Order #6 — Shakeout Fixes Test Suite", () => {
           options: { num_predict: 2048 },
         },
         "http://127.0.0.1:8080",
-        { fetchImpl: mockFetch as any }
+        { fetchImpl: mockFetch as typeof fetch }
       );
 
       assert.equal(res.text, "Final answer");
       assert.ok(capturedBody, "Body must be captured");
       // num_predict (2048) + balanced thinking budget (4096) = 6144
       assert.equal(
-        capturedBody.max_tokens,
+        (capturedBody as Record<string, unknown>).max_tokens,
         6144,
         "max_tokens must allocate headroom for thinking tokens"
       );
@@ -63,7 +63,7 @@ describe("Flash Work Order #6 — Shakeout Fixes Test Suite", () => {
           prompt: "Decompose task",
         },
         "http://127.0.0.1:8080",
-        { fetchImpl: mockFetch as any }
+        { fetchImpl: mockFetch as typeof fetch }
       );
 
       assert.ok(

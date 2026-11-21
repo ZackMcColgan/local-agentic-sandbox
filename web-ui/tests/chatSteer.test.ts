@@ -117,22 +117,33 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
     let fakeServer: http.Server;
     let serverPort: number;
     let prevLlmUrl: string | undefined;
-    let roundHandler: (parsed: any, res: http.ServerResponse) => void;
+    interface ChatRequestBody {
+      messages?: Array<{ role?: string; content?: string }>;
+      [key: string]: unknown;
+    }
+    interface SseEvent {
+      type?: string;
+      texts?: string[];
+      content?: string;
+      [key: string]: unknown;
+    }
+    let roundHandler: (parsed: ChatRequestBody, res: http.ServerResponse) => void;
 
     before(async () => {
       fakeServer = http.createServer((req, res) => {
         let body = "";
         req.on("data", (c) => (body += c));
         req.on("end", () => {
-          let parsed: any = {};
+          let parsed: ChatRequestBody = {};
           try {
-            parsed = JSON.parse(body);
+            parsed = JSON.parse(body) as ChatRequestBody;
           } catch {}
           roundHandler(parsed, res);
         });
       });
       await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-      serverPort = (fakeServer.address() as any).port;
+      const addr = fakeServer.address();
+      serverPort = typeof addr === "object" && addr ? addr.port : 0;
       prevLlmUrl = process.env.LLM_BASE_URL;
       process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
     });
@@ -147,7 +158,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      const recordedRequests: any[] = [];
+      const recordedRequests: ChatRequestBody[] = [];
       roundHandler = (parsed, res) => {
         recordedRequests.push(parsed);
         roundCount++;
@@ -199,7 +210,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const reader = chatRes.body!.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      const events: any[] = [];
+      const events: SseEvent[] = [];
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -233,7 +244,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       assert.ok(recordedRequests.length >= 2, "Must have made at least 2 LLM requests");
       const round2Messages = recordedRequests[1].messages || [];
       const steerInPrompt = round2Messages.find(
-        (m: any) => m.content && m.content.includes("[Steer from user, mid-turn] skip A - do B")
+        (m) => m.content && m.content.includes("[Steer from user, mid-turn] skip A - do B")
       );
       assert.ok(steerInPrompt, "Steer must appear in subsequent round messages");
 
@@ -246,7 +257,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      const recordedRequests: any[] = [];
+      const recordedRequests: ChatRequestBody[] = [];
       roundHandler = (parsed, res) => {
         recordedRequests.push(parsed);
         roundCount++;
@@ -293,7 +304,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const reader = chatRes.body!.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      const events: any[] = [];
+      const events: SseEvent[] = [];
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -318,8 +329,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       assert.ok(recordedRequests.length >= 2, "Must have dispatched synthesis request to model");
       const synthMessages = recordedRequests[1].messages || [];
       const steerInPrompt = synthMessages.find(
-        (m: any) =>
-          m.content && m.content.includes("[Steer from user, mid-turn] Create a svg of it")
+        (m) => m.content && m.content.includes("[Steer from user, mid-turn] Create a svg of it")
       );
       assert.ok(steerInPrompt, "Steer must appear in synthesis model request");
 
@@ -358,7 +368,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       process.env.THREADS_DIR = tmpDir;
 
       let roundCount = 0;
-      const recordedRequests: any[] = [];
+      const recordedRequests: ChatRequestBody[] = [];
       let round1FirstTokenReceivedResolve!: () => void;
       const round1FirstTokenReceived = new Promise<void>((r) => {
         round1FirstTokenReceivedResolve = r;
@@ -415,7 +425,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const reader = chatRes.body!.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      const events: any[] = [];
+      const events: SseEvent[] = [];
 
       // Start reading SSE stream concurrently
       const streamDonePromise = (async () => {
@@ -479,16 +489,19 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       );
       const round2Messages = recordedRequests[1].messages || [];
       const partialAssistantInRound2 = round2Messages.find(
-        (m: any) =>
-          m.role === "assistant" && m.content.includes("Initial partial response before interrupt.")
+        (m) =>
+          m.role === "assistant" &&
+          typeof m.content === "string" &&
+          m.content.includes("Initial partial response before interrupt.")
       );
       assert.ok(
         partialAssistantInRound2,
         "Partial content from interrupted round 1 must be preserved in round 2 context"
       );
       const steerInRound2 = round2Messages.find(
-        (m: any) =>
+        (m) =>
           m.role === "user" &&
+          typeof m.content === "string" &&
           m.content.includes("[Steer from user, mid-turn] Switch to concise bullet points now")
       );
       assert.ok(steerInRound2, "Interrupt steer must be injected into round 2 messages");

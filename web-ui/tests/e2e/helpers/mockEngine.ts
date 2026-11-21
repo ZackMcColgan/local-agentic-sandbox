@@ -3,8 +3,8 @@ import { Page, Route } from "@playwright/test";
 export interface MockOptions {
   modelName?: string;
   engineRunning?: boolean;
-  projects?: any[];
-  threads?: any[];
+  projects?: Record<string, unknown>[];
+  threads?: Array<{ id?: string; [key: string]: unknown }>;
 }
 
 /**
@@ -81,7 +81,7 @@ export async function setupStubbedEngineRoutes(
   await page.route("**/api/threads**", async (route: Route) => {
     const req = route.request();
     if (req.method() === "POST") {
-      let postData: any = {};
+      let postData: { title?: string; messages?: unknown[] } = {};
       try {
         postData = req.postDataJSON() || {};
       } catch {}
@@ -152,7 +152,7 @@ export async function setupStubbedEngineRoutes(
   await page.route("**/api/projects", async (route: Route) => {
     const req = route.request();
     if (req.method() === "POST") {
-      let data: any = {};
+      let data: { name?: string; rootPath?: string; baseBranch?: string; toolchain?: string } = {};
       try {
         data = req.postDataJSON() || {};
       } catch {}
@@ -187,7 +187,7 @@ export async function setupStubbedEngineRoutes(
   await page.route("**/api/projects/browse**", async (route: Route) => {
     const req = route.request();
     if (req.method() === "POST") {
-      let data: any = {};
+      let data: { action?: string; targetPath?: string; name?: string; toolchain?: string } = {};
       try {
         data = req.postDataJSON() || {};
       } catch {}

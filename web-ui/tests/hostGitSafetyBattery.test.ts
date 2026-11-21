@@ -177,7 +177,7 @@ process.exit(1);
     branch: "feature/canary-workflow",
   };
 
-  function setGhScenario(state: Record<string, any>) {
+  function setGhScenario(state: Record<string, unknown>) {
     fs.writeFileSync(GH_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
   }
 

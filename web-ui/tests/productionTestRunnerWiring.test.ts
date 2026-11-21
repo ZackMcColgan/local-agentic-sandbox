@@ -62,7 +62,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       };
 
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") return mockBuilder.executeMilestoneWork();
           if (job.role === "critic") return mockCritic.evaluateMilestoneDiff();
           return {};
@@ -74,7 +74,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
       // Call without options.testRunner
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
         repoRoot: tmpDir,
       });
 
@@ -121,7 +123,7 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
       const criticReceivedFeedback: string[] = [];
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") {
             return {
               diff: "+ const x = 0;",
@@ -145,7 +147,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       };
 
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
         repoRoot: tmpDir,
       });
 

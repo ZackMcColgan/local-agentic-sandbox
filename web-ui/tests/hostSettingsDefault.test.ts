@@ -97,7 +97,11 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
    * must NEVER be offered host tools, even with hostAccess ON and a READY
    * runner; an ordinary user-chat thread must be offered them (control).
    */
-  function makeScriptedEngineServer(capturedPayloads: any[]) {
+  type CapturedPayload = {
+    tools?: Array<{ function?: { name?: string }; name?: string }>;
+  };
+
+  function makeScriptedEngineServer(capturedPayloads: CapturedPayload[]) {
     const manifest = getBridgeManifest();
     const server = http.createServer((req, res) => {
       const url = req.url || "";
@@ -165,10 +169,10 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
 
-    const capturedPayloads: any[] = [];
+    const capturedPayloads: CapturedPayload[] = [];
     const server = makeScriptedEngineServer(capturedPayloads);
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const port = (server.address() as { port: number }).port;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
     process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
     process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
@@ -208,7 +212,7 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
           model: "swift-15-27b-mtp",
         }),
       });
-      const res = await chatRouteModule.POST(req as any);
+      const res = await chatRouteModule.POST(req);
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       while (true) {
@@ -227,9 +231,9 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
     }
   }
 
-  function advertisedToolNames(capturedPayloads: any[]): string[] {
+  function advertisedToolNames(capturedPayloads: CapturedPayload[]): string[] {
     return capturedPayloads.flatMap((p) =>
-      Array.isArray(p.tools) ? p.tools.map((t: any) => t.function?.name || t.name) : []
+      Array.isArray(p.tools) ? p.tools.map((t) => t.function?.name || t.name || "") : []
     );
   }
 

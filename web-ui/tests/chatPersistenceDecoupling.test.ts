@@ -212,7 +212,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         });
 
         // Call route handler
-        const res = await POST(req as any);
+        const res = await POST(req as unknown as NextRequest);
         assert.ok(res.ok || res.status === 200 || res.status === 503 || res.status === 500);
 
         if (res.body) {
@@ -262,7 +262,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           }),
         });
 
-        const res = await POST(req as any);
+        const res = await POST(req as unknown as NextRequest);
         // Read SSE stream until end
         if (res.body) {
           const reader = res.body.getReader();
@@ -292,7 +292,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       store.createThread({ id: threadId, title: "Abort Thread" });
 
       const http = await import("node:http");
-      let activeRes: any = null;
+      let activeRes: import("node:http").ServerResponse | null = null;
       const abortMockServer = http.createServer((sReq, sRes) => {
         const url = sReq.url || "";
         if (url.includes("/api/ps")) {
@@ -316,7 +316,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         activeRes = sRes;
       });
       await new Promise<void>((r) => abortMockServer.listen(0, "127.0.0.1", () => r()));
-      const mockPort = (abortMockServer.address() as any).port;
+      const mockAddr = abortMockServer.address();
+      const mockPort = typeof mockAddr === "object" && mockAddr ? mockAddr.port : 0;
       const prevLlmUrl = process.env.LLM_BASE_URL;
       const prevOllamaUrl = process.env.OLLAMA_BASE_URL;
       process.env.LLM_BASE_URL = `http://127.0.0.1:${mockPort}`;
@@ -338,7 +339,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           }),
         });
 
-        const res = await POST(req as any);
+        const res = await POST(req as unknown as NextRequest);
         // Drain response body in background so writer never blocks
         const drainPromise = (async () => {
           if (!res.body) return;
@@ -365,10 +366,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "stop" }),
         });
-        await THREAD_POST(stopReq as any, { params: Promise.resolve({ id: threadId }) });
-        if (activeRes) {
+        await THREAD_POST(stopReq as unknown as Parameters<typeof THREAD_POST>[0], {
+          params: Promise.resolve({ id: threadId }),
+        });
+        const resToEnd = activeRes as import("node:http").ServerResponse | null;
+        if (resToEnd) {
           try {
-            activeRes.end();
+            resToEnd.end();
           } catch {}
         }
         await drainPromise;
@@ -399,11 +403,15 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
   });
 
   describe("Requirement 4: Turn-Lifetime Decoupling (Client Disconnect vs Explicit Stop & No Holes)", () => {
-    let fakeServer: any;
+    let fakeServer: import("node:http").Server;
     let serverPort: number;
     let prevLlmUrl: string | undefined;
     let prevOllamaUrl: string | undefined;
-    let roundHandler: (parsed: any, res: any, req: any) => void;
+    let roundHandler: (
+      parsed: Record<string, unknown>,
+      res: import("node:http").ServerResponse,
+      req: import("node:http").IncomingMessage
+    ) => void;
 
     before(async () => {
       const http = await import("node:http");
@@ -422,15 +430,16 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         let body = "";
         req.on("data", (c) => (body += c));
         req.on("end", () => {
-          let parsed: any = {};
+          let parsed: Record<string, unknown> = {};
           try {
-            parsed = JSON.parse(body);
+            parsed = JSON.parse(body) as Record<string, unknown>;
           } catch {}
           roundHandler(parsed, res, req);
         });
       });
       await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-      serverPort = fakeServer.address().port;
+      const addr = fakeServer.address();
+      serverPort = typeof addr === "object" && addr ? addr.port : 0;
       prevLlmUrl = process.env.LLM_BASE_URL;
       prevOllamaUrl = process.env.OLLAMA_BASE_URL;
       process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
@@ -456,7 +465,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       store.appendSteer(threadId, "Add tomorrow too");
 
       let roundCount = 0;
-      const recordedPrompts: any[] = [];
+      const recordedPrompts: Record<string, unknown>[] = [];
 
       roundHandler = (parsed, res) => {
         recordedPrompts.push(parsed);
@@ -508,7 +517,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         }),
       });
 
-      const res = await POST(req as any);
+      const res = await POST(req);
       // Abort the client request SSE stream immediately after initial stream setup
       abortController.abort();
 
@@ -553,7 +562,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       const threadId = `thread-stop-${Date.now()}`;
       store.createThread({ id: threadId, title: "Stop Thread" });
 
-      let activeRes: any = null;
+      let activeRes: import("node:http").ServerResponse | null = null;
       let stopTriggeredPromiseResolve: (() => void) | null = null;
       const stopTriggeredPromise = new Promise<void>((r) => {
         stopTriggeredPromiseResolve = r;
@@ -586,7 +595,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           }),
         });
 
-        const res = await POST(req as any);
+        const res = await POST(req as unknown as NextRequest);
         // Read until we receive the first token event ("Starting long process...")
         const reader = res.body!.getReader();
         const decoder = new TextDecoder();
@@ -617,10 +626,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "stop" }),
         });
-        await THREAD_POST(stopReq as any, { params: Promise.resolve({ id: threadId }) });
-        if (activeRes) {
+        await THREAD_POST(stopReq as unknown as Parameters<typeof THREAD_POST>[0], {
+          params: Promise.resolve({ id: threadId }),
+        });
+        const resToEnd = activeRes as import("node:http").ServerResponse | null;
+        if (resToEnd) {
           try {
-            activeRes.end();
+            resToEnd.end();
           } catch {}
         }
         await readLoop;
@@ -673,14 +685,16 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         }),
       });
 
-      await POST(req as any);
+      await POST(req as unknown as NextRequest);
       // Simulate client disconnect right after turn start
       abortController.abort();
 
       // Immediately call GET /api/threads/[id] while turn is running
       const { GET: THREAD_GET } = await import("../app/api/threads/[id]/route");
       const getRes = await THREAD_GET(
-        new Request(`http://localhost:3000/api/threads/${threadId}`) as any,
+        new Request(`http://localhost:3000/api/threads/${threadId}`) as unknown as Parameters<
+          typeof THREAD_GET
+        >[0],
         {
           params: Promise.resolve({ id: threadId }),
         }
@@ -689,7 +703,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       assert.ok(data.thread);
       assert.equal(data.activeTurn?.status, "streaming");
 
-      const asst = data.thread.messages.find((m: any) => m.id === "a-hole-1");
+      const asst = (data.thread.messages as ThreadMessage[]).find((m) => m.id === "a-hole-1");
       assert.ok(asst, "Assistant message must be present immediately on thread reload (NO HOLE)");
       assert.equal(asst.status, "streaming");
 
@@ -729,7 +743,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         }),
       });
 
-      const res = await POST(req as any);
+      const res = await POST(req);
       if (res.body) {
         const reader = res.body.getReader();
         while (true) {

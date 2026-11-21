@@ -96,9 +96,15 @@ describe("BoardControlStore & /api/board/control", () => {
     registerTurnAbortController(threadId, turnController);
     activeExecutionSet.add(threadId);
 
+    const supGlobal = globalThis as typeof globalThis & {
+      __supervisorGlobalState?: {
+        pausedTasks: Set<string>;
+        abortControllers: Map<string, AbortController>;
+      };
+    };
     const supState =
-      (globalThis as any).__supervisorGlobalState ||
-      ((globalThis as any).__supervisorGlobalState = {
+      supGlobal.__supervisorGlobalState ||
+      (supGlobal.__supervisorGlobalState = {
         pausedTasks: new Set<string>(),
         abortControllers: new Map<string, AbortController>(),
       });
@@ -139,9 +145,15 @@ describe("BoardControlStore & /api/board/control", () => {
     registerTurnAbortController(threadId, turnController);
     activeExecutionSet.add(threadId);
 
+    const supGlobal = globalThis as typeof globalThis & {
+      __supervisorGlobalState?: {
+        pausedTasks: Set<string>;
+        abortControllers: Map<string, AbortController>;
+      };
+    };
     const supState =
-      (globalThis as any).__supervisorGlobalState ||
-      ((globalThis as any).__supervisorGlobalState = {
+      supGlobal.__supervisorGlobalState ||
+      (supGlobal.__supervisorGlobalState = {
         pausedTasks: new Set<string>(),
         abortControllers: new Map<string, AbortController>(),
       });

@@ -218,9 +218,9 @@ describe("Outbound Telegram Notifications Suite", () => {
       enabled: true,
     });
 
-    let capturedBody: any = null;
-    global.fetch = (async (_url: any, init?: any) => {
-      capturedBody = JSON.parse(init?.body || "{}");
+    const captured: Array<{ parse_mode?: string; text: string }> = [];
+    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.push(JSON.parse(String(init?.body || "{}")));
       return {
         ok: true,
         status: 200,
@@ -233,6 +233,7 @@ describe("Outbound Telegram Notifications Suite", () => {
       body: "Updated path/to/my_file_1.ts & [link](test) _unclosed_ *bold*",
     });
 
+    const capturedBody = captured[0];
     assert.equal(result, true);
     assert.ok(capturedBody);
     assert.equal(
@@ -293,15 +294,15 @@ describe("Outbound Telegram Notifications Suite", () => {
   });
 
   it("6. Privacy fence for host.approval_pending without leaking commands or arguments", async () => {
-    let capturedPayload: any = null;
+    const captured: Array<{ text: string }> = [];
     setTelegramConfig({
       botToken: "123456:VALID_TEST_TOKEN",
       chatId: "999999",
       enabled: true,
     });
-    global.fetch = (async (_url: any, init?: any) => {
-      const body = JSON.parse(init?.body || "{}");
-      capturedPayload = body;
+    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || "{}"));
+      captured.push(body);
       return {
         ok: true,
         status: 200,
@@ -314,6 +315,7 @@ describe("Outbound Telegram Notifications Suite", () => {
       body: "Tap to review in the sandbox chat.",
     };
     const result = await notify("host.approval_pending", payload);
+    const capturedPayload = captured[0];
     assert.equal(result, true);
     assert.ok(capturedPayload);
     assert.ok(capturedPayload.text.includes("Host approval needed"));

@@ -304,8 +304,8 @@ describe("SVG Rendering & Sanitization Suite", () => {
     // 3. Malformed / empty input: must return empty string, never throw
     assert.equal(convertDrawioToSvg(""), "");
     assert.equal(convertDrawioToSvg("   "), "");
-    assert.equal(convertDrawioToSvg(null as any), "");
-    assert.equal(convertDrawioToSvg(undefined as any), "");
+    assert.equal(convertDrawioToSvg(null as unknown as string), "");
+    assert.equal(convertDrawioToSvg(undefined as unknown as string), "");
     assert.equal(convertDrawioToSvg("<invalid><xml></broken>"), "");
     assert.equal(convertDrawioToSvg("this is plain text"), "");
   });

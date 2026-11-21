@@ -50,10 +50,10 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
                 criticRounds: 0,
               },
             ],
-          } as any;
+          };
         },
         runner: async (m: Record<string, unknown>) => ({ ...m, status: "completed" }),
-      } as any);
+      } as unknown as Parameters<typeof scheduler.executeScheduledRun>[1]);
 
       assert.strictEqual(plannerCalled, true, "Planner must be called by executeScheduledRun");
       assert.strictEqual(capturedGoal, "Audit and refactor auth module");

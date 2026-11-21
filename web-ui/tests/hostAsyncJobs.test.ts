@@ -20,36 +20,55 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
   };
 }
 
+type JobBody = {
+  jobId: string;
+  status: string;
+  exitCode?: number;
+  finishedAt: number;
+  startedAt: number;
+  timedOut?: boolean;
+  error?: string;
+  reason?: string;
+  [key: string]: unknown;
+};
+
 async function pollUntil(
   base: string,
   jobId: string,
-  predicate: (body: any) => boolean,
+  predicate: (body: JobBody) => boolean,
   timeoutMs = 20000
-): Promise<any> {
+): Promise<JobBody> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const res = await fetch(`${base}/jobs/${jobId}`, { headers: authHeaders() });
-    const body = await res.json();
+    const body = (await res.json()) as JobBody;
     if (predicate(body)) return body;
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`pollUntil timed out waiting for predicate on job ${jobId}`);
 }
 
-async function startServer(jobsDir: string): Promise<{ srv: any; base: string }> {
+async function startServer(
+  jobsDir: string
+): Promise<{ srv: ReturnType<typeof createHostServer>; base: string }> {
   const srv = createHostServer({ port: 0, jobsDir });
   await srv.start();
-  const addr = srv.server.address() as any;
+  const addr = srv.server.address() as { port: number };
   return { srv, base: `http://127.0.0.1:${addr.port}` };
 }
 
-async function startJob(base: string, tool: string, args: any, approvalId?: string): Promise<any> {
+async function startJob(
+  base: string,
+  tool: string,
+  args: Record<string, unknown>,
+  approvalId?: string
+): Promise<{ status: number; body: JobBody }> {
   const res = await fetch(`${base}/execute-async`, {
     method: "POST",
     headers: authHeaders(approvalId ? { "x-host-approval-id": approvalId } : {}),
     body: JSON.stringify({ tool, args }),
   });
-  return { status: res.status, body: await res.json() };
+  return { status: res.status, body: (await res.json()) as JobBody };
 }
 
 describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
@@ -209,7 +228,7 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
         ).json();
         assert.strictEqual(status.status, "interrupted");
         const persisted = JSON.parse(fs.readFileSync(path.join(jobsDir, "jobs.json"), "utf8"));
-        const rec = persisted.find((j: any) => j.id === body.jobId);
+        const rec = persisted.find((j: { id?: string; status?: string }) => j.id === body.jobId);
         assert.strictEqual(rec.status, "interrupted");
       } finally {
         await srv2.stop();

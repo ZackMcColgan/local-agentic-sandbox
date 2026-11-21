@@ -28,8 +28,8 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument) @full", () 
     await sendPrompt(page, massivePrompt);
 
     // 3. Await turn outcome with 10m deadline (within 15m project timeout)
-    let turnError: any = null;
-    let turnResult: any = null;
+    let turnError: { message?: string; classification?: string } | null = null;
+    let turnResult: Awaited<ReturnType<typeof awaitTurnCompletion>> | null = null;
 
     try {
       turnResult = await awaitTurnCompletion(
@@ -39,8 +39,8 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument) @full", () 
         DEADLINES.WEDGING_LIMIT,
         "l8-wedge-test"
       );
-    } catch (err: any) {
-      turnError = err;
+    } catch (err: unknown) {
+      turnError = err as { message?: string; classification?: string };
     }
 
     // 4. Critical Invariant: Verify Strata slot 0 is NOT wedged

@@ -62,8 +62,8 @@ function readComp(rel: string): string {
     fs.writeFileSync(path.join(tmpDir, "board.json"), JSON.stringify(staleItems), "utf8");
     const store = new BoardStore(tmpDir);
     const migrated = store.list();
-    assert.equal(migrated.find((i: any) => i.id === "item-15")?.status, "done");
-    assert.equal(migrated.find((i: any) => i.id === "item-22")?.status, "done");
+    assert.equal(migrated.find((i) => i.id === "item-15")?.status, "done");
+    assert.equal(migrated.find((i) => i.id === "item-22")?.status, "done");
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

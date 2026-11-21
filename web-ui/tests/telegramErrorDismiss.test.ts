@@ -13,13 +13,16 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     origFetch = globalThis.fetch;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -32,7 +35,7 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
   });
 
   function mockFetchWithError(at: string, errorSummary: string) {
-    globalThis.fetch = (async (url: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL) => {
       const u = String(url);
       if (u.includes("/api/settings/notifications")) {
         return {
@@ -47,10 +50,10 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
               errorSummary,
             },
           }),
-        } as any;
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) } as any;
-    }) as any;
+      return { ok: true, json: async () => ({}) } as unknown as Response;
+    };
   }
 
   it("renders error date, dismisses persistently across reload, and re-shows on a new error", async () => {
@@ -59,7 +62,10 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
 
     await act(async () => {
       root.render(
-        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+        React.createElement(SettingsView, {
+          activeModel: "test",
+          onSelectModel: () => {},
+        } as unknown as React.ComponentProps<typeof SettingsView>)
       );
     });
     await act(async () => {
@@ -74,7 +80,7 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     assert.ok(dismissBtn, "Dismiss button should exist for error");
 
     act(() => {
-      dismissBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      dismissBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     assert.equal(
@@ -90,7 +96,10 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     root = createRoot(container);
     await act(async () => {
       root.render(
-        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+        React.createElement(SettingsView, {
+          activeModel: "test",
+          onSelectModel: () => {},
+        } as unknown as React.ComponentProps<typeof SettingsView>)
       );
     });
     await act(async () => {
@@ -111,7 +120,10 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     root = createRoot(container);
     await act(async () => {
       root.render(
-        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+        React.createElement(SettingsView, {
+          activeModel: "test",
+          onSelectModel: () => {},
+        } as unknown as React.ComponentProps<typeof SettingsView>)
       );
     });
     await act(async () => {

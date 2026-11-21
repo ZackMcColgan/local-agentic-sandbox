@@ -161,7 +161,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
     });
 
     it("renders amber Incomplete badge when assistant message status is 'incomplete'", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-incomplete",
           role: "assistant",
@@ -195,7 +195,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
     });
 
     it("renders red Error badge when assistant message status is 'error'", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-error",
           role: "assistant",
@@ -225,7 +225,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
     });
 
     it("does not render status badge for standard completed messages", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-completed",
           role: "assistant",

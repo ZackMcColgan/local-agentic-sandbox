@@ -62,25 +62,30 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     // Track mkdirSync and chmodSync calls
     const origMkdirSync = fs.mkdirSync;
     const origChmodSync = fs.chmodSync;
-    const mkdirCalls: Array<{ path: string; options?: any }> = [];
-    const chmodCalls: Array<{ path: string; mode: any }> = [];
+    const mkdirCalls: Array<{ path: string; options?: fs.MakeDirectoryOptions | fs.Mode | null }> =
+      [];
+    const chmodCalls: Array<{ path: string; mode: fs.Mode }> = [];
 
     try {
-      (fs as any).mkdirSync = (p: any, opt?: any) => {
-        mkdirCalls.push({ path: String(p), options: opt });
-        return origMkdirSync(p, opt);
+      const fsMutable = fs as unknown as {
+        mkdirSync: typeof fs.mkdirSync;
+        chmodSync: typeof fs.chmodSync;
       };
-      (fs as any).chmodSync = (p: any, m: any) => {
+      fsMutable.mkdirSync = ((p: fs.PathLike, opt?: fs.MakeDirectoryOptions | fs.Mode | null) => {
+        mkdirCalls.push({ path: String(p), options: opt });
+        return origMkdirSync(p, opt as fs.MakeDirectoryOptions);
+      }) as typeof fs.mkdirSync;
+      fsMutable.chmodSync = ((p: fs.PathLike, m: fs.Mode) => {
         chmodCalls.push({ path: String(p), mode: m });
         return origChmodSync(p, m);
-      };
+      }) as typeof fs.chmodSync;
 
       const store = new ThreadStore(targetThreadsDir);
       assert.ok(fs.existsSync(targetThreadsDir), "threads directory should be created");
 
       // Verify that any mkdirSync calls specify mode 0o770
       const relevantMkdir = mkdirCalls.find((c) => c.path.includes("threads_runtime_dir"));
-      if (relevantMkdir && relevantMkdir.options) {
+      if (relevantMkdir && relevantMkdir.options && typeof relevantMkdir.options === "object") {
         assert.strictEqual(
           relevantMkdir.options.mode,
           0o770,
@@ -114,13 +119,18 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     fs.mkdirSync(targetThreadsDir, { recursive: true, mode: 0o770 });
 
     const origWriteFileSync = fs.writeFileSync;
-    const writeCalls: Array<{ path: string; options?: any }> = [];
+    const writeCalls: Array<{ path: string; options?: fs.WriteFileOptions }> = [];
 
     try {
-      (fs as any).writeFileSync = (p: any, data: any, opt?: any) => {
+      const fsMutable = fs as unknown as { writeFileSync: typeof fs.writeFileSync };
+      fsMutable.writeFileSync = ((
+        p: fs.PathOrFileDescriptor,
+        data: string | NodeJS.ArrayBufferView,
+        opt?: fs.WriteFileOptions
+      ) => {
         writeCalls.push({ path: String(p), options: opt });
         return origWriteFileSync(p, data, opt);
-      };
+      }) as typeof fs.writeFileSync;
 
       const store = new ThreadStore(targetThreadsDir);
       const thread = store.createThread({
@@ -141,7 +151,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
           `writeFileSync options should be an object (got ${typeof call.options})`
         );
         assert.strictEqual(
-          call.options.mode,
+          (call.options as fs.ObjectEncodingOptions & { mode?: fs.Mode }).mode,
           0o660,
           `writeFileSync must be called with mode 0o660 on ${call.path}`
         );

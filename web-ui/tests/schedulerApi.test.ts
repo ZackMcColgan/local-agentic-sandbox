@@ -158,7 +158,7 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const getRes = await getSchedules();
       const getData = await getRes.json();
       assert.equal(
-        getData.schedules.some((s: any) => s.id === id),
+        getData.schedules.some((s: { id: string }) => s.id === id),
         false
       );
     } finally {
@@ -192,7 +192,7 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
       const getRes = await getSchedules();
       const getData = await getRes.json();
       assert.equal(
-        getData.schedules.some((s: any) => s.id === id),
+        getData.schedules.some((s: { id: string }) => s.id === id),
         false
       );
     } finally {

@@ -7,6 +7,8 @@ import path from "node:path";
 import { formatHumanReadableTrace } from "../lib/chatUtils";
 import { ChatStream } from "../components/ChatStream";
 
+const ChatStreamComponent = ChatStream as unknown as React.ComponentType<Record<string, unknown>>;
+
 describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
   it("formatHumanReadableTrace assigns badge 'host' when tool is host_* or tier is 'host'", () => {
     // 1. host_list_dir
@@ -96,7 +98,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
   });
 
   it("ChatStream renders distinct badges ('Host', 'Workspace', 'Web', 'Sandbox') per tool trace", () => {
-    const messages: any[] = [
+    const messages: Record<string, unknown>[] = [
       {
         id: "msg-mixed-traces-1",
         role: "assistant",
@@ -138,7 +140,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream as any, {
+      React.createElement(ChatStreamComponent, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -164,7 +166,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
 
 describe("FIX B — Assistant Response Copy Button Suite", () => {
   it("ChatStream renders a copy response button on every assistant message with content", () => {
-    const messages: any[] = [
+    const messages: Record<string, unknown>[] = [
       {
         id: "msg-asst-1",
         role: "assistant",
@@ -178,7 +180,7 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream as any, {
+      React.createElement(ChatStreamComponent, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -223,7 +225,7 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream as any, {
+      React.createElement(ChatStreamComponent, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
@@ -245,7 +247,7 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
 
 describe("Part 3 — User Message Copy Button Suite", () => {
   it("ChatStream renders a copy button on every user message", () => {
-    const messages: any[] = [
+    const messages: Record<string, unknown>[] = [
       {
         id: "msg-user-1",
         role: "user",
@@ -259,7 +261,7 @@ describe("Part 3 — User Message Copy Button Suite", () => {
     ];
 
     const html = renderToString(
-      React.createElement(ChatStream as any, {
+      React.createElement(ChatStreamComponent, {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",

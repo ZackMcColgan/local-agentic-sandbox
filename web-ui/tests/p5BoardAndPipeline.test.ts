@@ -35,7 +35,7 @@ describe("P5.1 & P5.2: /api/board (UI-051) & Pre-PR FlowMonitor/ReviewerGate", (
     assert.equal(resp.status, 200);
     const data = await resp.json();
     assert.ok(Array.isArray(data.items), "board items must be an array");
-    const found = data.items.find((item: any) => item.id === t.id);
+    const found = data.items.find((item: { id: string; title?: string }) => item.id === t.id);
     assert.ok(found, "board must include the thread created in ThreadStore");
     assert.equal(found.title, "Active build thread");
   });

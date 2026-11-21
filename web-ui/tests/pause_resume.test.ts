@@ -115,7 +115,7 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
 
     const executedMilestones: string[] = [];
 
-    const task: any = {
+    const task = {
       taskId,
       goal: "Test in-flight pause stop semantics",
       branchName: "feature/pause-test",
@@ -130,9 +130,9 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
-    };
+    } as unknown as Parameters<typeof supervisor.executeTaskWithRecovery>[0];
 
-    const mockExecutor = async (milestone: any) => {
+    const mockExecutor = async (milestone: { id: string }) => {
       executedMilestones.push(milestone.id);
       if (milestone.id === "M1") {
         activeExecutionSet.delete(taskId);
@@ -165,7 +165,7 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
 
       const executedMilestones: string[] = [];
 
-      const task: any = {
+      const task = {
         taskId,
         goal: "Test cross-supervisor in-flight pause",
         branchName: "feature/cross-sup-test",
@@ -180,9 +180,9 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
-      };
+      } as unknown as Parameters<typeof supA.executeTaskWithRecovery>[0];
 
-      const mockExecutor = async (milestone: any) => {
+      const mockExecutor = async (milestone: { id: string }) => {
         executedMilestones.push(milestone.id);
         if (milestone.id === "M1") {
           supB.pauseTask(task, "User paused mid-milestone via supB");
@@ -231,7 +231,7 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
-      } as any);
+      } as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]);
 
       activeExecutionSet.delete(taskId);
 

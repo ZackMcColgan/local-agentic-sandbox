@@ -7,7 +7,17 @@ import assert from "node:assert/strict";
 // 3. Task list capped with an expand control.
 // 4. "Parked" wording replaced by "Stalled" in the rendered view.
 
-function makeTask(overrides: Record<string, unknown> = {}): any {
+type OvernightTaskInput = Parameters<
+  typeof import("../lib/subagents/morningReport.js").generateOvernightMorningReport
+>[0][number];
+type AmbiguityFlagInput = Parameters<
+  typeof import("../lib/subagents/morningReport.js").generateMorningReport
+>[0]["ambiguityFlags"][number];
+type MorningReportViewProps = Parameters<
+  typeof import("../components/MorningReportView.js").MorningReportView
+>[0];
+
+function makeTask(overrides: Record<string, unknown> = {}): OvernightTaskInput {
   return {
     taskId: "task-001",
     goal: "Generic overnight task",
@@ -22,10 +32,10 @@ function makeTask(overrides: Record<string, unknown> = {}): any {
     ambiguityFlags: [],
     journal: [],
     ...overrides,
-  };
+  } as unknown as OvernightTaskInput;
 }
 
-function mixedTasks(): any[] {
+function mixedTasks(): OvernightTaskInput[] {
   return [
     makeTask({
       taskId: "task-artifact",
@@ -65,7 +75,7 @@ function mixedTasks(): any[] {
   ];
 }
 
-const sampleFlag: any = {
+const sampleFlag: AmbiguityFlagInput = {
   id: "AMB-1",
   milestoneId: "M1",
   question: "Should the summary document default to a white background?",
@@ -73,9 +83,12 @@ const sampleFlag: any = {
   reasoning: "Light Mode Purity specifies white backgrounds for documents.",
   revertAction: { type: "git_revert", target: "bca5b34" },
   reviewed: false,
-};
+} as unknown as AmbiguityFlagInput;
 
-async function renderView(overnightReport: any, report?: any): Promise<string> {
+async function renderView(
+  overnightReport: MorningReportViewProps["overnightReport"],
+  report?: MorningReportViewProps["report"]
+): Promise<string> {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
   const { MorningReportView } = await import("../components/MorningReportView.js");

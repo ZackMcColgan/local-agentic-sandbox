@@ -41,12 +41,16 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
 
     let threadFileReads = 0;
     const origReadFile = fs.promises.readFile;
-    (fs.promises as any).readFile = async (p: any, ...args: any[]) => {
+    const promisesMutable = fs.promises as unknown as { readFile: typeof fs.promises.readFile };
+    promisesMutable.readFile = (async (
+      p: Parameters<typeof fs.promises.readFile>[0],
+      options?: Parameters<typeof fs.promises.readFile>[1]
+    ) => {
       if (String(p).endsWith(".json") && !String(p).includes(".summaries-cache")) {
         threadFileReads++;
       }
-      return origReadFile.call(fs.promises, p, ...args);
-    };
+      return origReadFile.call(fs.promises, p, options);
+    }) as typeof fs.promises.readFile;
 
     try {
       const second = await store.listThreadSummaries();
@@ -57,7 +61,7 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
         `Expected 0 full thread file reads on cached listThreadSummaries(), got ${threadFileReads}`
       );
     } finally {
-      (fs.promises as any).readFile = origReadFile;
+      promisesMutable.readFile = origReadFile;
     }
   });
 
@@ -113,7 +117,11 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
     const freshStore = new ThreadStore(tmpDir);
     let threadFileReads = 0;
     const origReadFile = fs.promises.readFile;
-    (fs.promises as any).readFile = async (p: any, ...args: any[]) => {
+    const promisesMutable = fs.promises as unknown as { readFile: typeof fs.promises.readFile };
+    promisesMutable.readFile = (async (
+      p: Parameters<typeof fs.promises.readFile>[0],
+      options?: Parameters<typeof fs.promises.readFile>[1]
+    ) => {
       const s = String(p);
       if (
         s.endsWith(".json") &&
@@ -122,8 +130,8 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
       ) {
         threadFileReads++;
       }
-      return origReadFile.call(fs.promises, p, ...args);
-    };
+      return origReadFile.call(fs.promises, p, options);
+    }) as typeof fs.promises.readFile;
 
     try {
       const second = await freshStore.listThreadSummaries();
@@ -134,7 +142,7 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
         `Expected 0 full thread reads on fresh store, got ${threadFileReads}`
       );
     } finally {
-      (fs.promises as any).readFile = origReadFile;
+      promisesMutable.readFile = origReadFile;
     }
   });
 
@@ -203,7 +211,9 @@ describe("AUD-12: reconcileSummaryStatus honest status reconciliation", () => {
   }
 
   function writeCheckpoint(taskId: string, status: string): void {
-    const cpPath = (store as any).supervisor.getCheckpointFilePath(taskId);
+    const cpPath = (
+      store as unknown as { supervisor: { getCheckpointFilePath: (id: string) => string } }
+    ).supervisor.getCheckpointFilePath(taskId);
     fs.mkdirSync(path.dirname(cpPath), { recursive: true });
     fs.writeFileSync(cpPath, JSON.stringify({ taskId, status }), "utf8");
   }

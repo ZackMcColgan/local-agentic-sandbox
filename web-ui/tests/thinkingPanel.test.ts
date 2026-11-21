@@ -13,12 +13,15 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -75,7 +78,7 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     const toggleBtn = container.querySelector("button[aria-expanded]");
     assert.ok(toggleBtn, "Toggle button should exist");
     act(() => {
-      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     const text = container.textContent ?? "";
@@ -143,10 +146,14 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
         durationMs: 12000,
         thinkingDurationMs: 12000,
         phaseTimings,
-      } as any,
+      } as unknown as Parameters<typeof sanitizeMessagesForStorage>[0][number],
     ]);
-    assert.deepEqual((sanitized[0] as any).phaseTimings, phaseTimings);
-    assert.equal((sanitized[0] as any).thinkingDurationMs, 12000);
+    const firstSanitized = sanitized[0] as unknown as {
+      phaseTimings?: typeof phaseTimings;
+      thinkingDurationMs?: number;
+    };
+    assert.deepEqual(firstSanitized.phaseTimings, phaseTimings);
+    assert.equal(firstSanitized.thinkingDurationMs, 12000);
 
     act(() => {
       root.render(
@@ -155,14 +162,14 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
           isStreaming: false,
           durationMs: 12000,
           phaseTimings,
-        } as any)
+        } as unknown as React.ComponentProps<typeof ThinkingPanel>)
       );
     });
 
     const toggleBtn = container.querySelector("button[aria-expanded]");
     assert.ok(toggleBtn, "Toggle button should exist");
     act(() => {
-      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     const breakdown = container.querySelector("[data-testid='phase-timings-breakdown']");

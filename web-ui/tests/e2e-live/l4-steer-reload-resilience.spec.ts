@@ -52,24 +52,25 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience @full", () => {
       DEADLINES.WEDGING_LIMIT,
       "l4-steer-turn"
     );
-    const messages = completedTurn.thread.messages;
-    const lastAssistant = [...messages].reverse().find((m: any) => m.role === "assistant");
+    type ThreadMsg = { role?: string; content?: string; thinking?: string; status?: string };
+    const messages = completedTurn.thread.messages as ThreadMsg[];
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 
     expect(lastAssistant).toBeDefined();
-    expect(lastAssistant.role).toBe("assistant");
-    expect(lastAssistant.status === "completed" || !lastAssistant.status).toBe(true);
+    expect(lastAssistant?.role).toBe("assistant");
+    expect(lastAssistant?.status === "completed" || !lastAssistant?.status).toBe(true);
 
     // 6. Verify steer was absorbed into assistant output or thread context
     const fullAssistantText = messages
-      .filter((m: any) => m.role === "assistant")
-      .map((m: any) => (m.content || "") + (m.thinking || ""))
+      .filter((m) => m.role === "assistant")
+      .map((m) => (m.content || "") + (m.thinking || ""))
       .join(" ");
     const absorbed = /Byzantine|PBFT|fault tolerance|replication/i.test(fullAssistantText);
     expect(absorbed).toBe(true);
 
     // 7. Verify no duplicate user initial prompts were created
     const initialUserPrompts = messages.filter(
-      (m: any) => m.role === "user" && !m.content?.startsWith("[Steer from user, mid-turn]")
+      (m) => m.role === "user" && !m.content?.startsWith("[Steer from user, mid-turn]")
     );
     expect(initialUserPrompts.length).toBe(1);
   });

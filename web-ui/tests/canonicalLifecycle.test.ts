@@ -101,7 +101,7 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
       // Mock workerPool with controlled builder and critic generate responses
       const mockWorkerPool = new WorkerPool({
         scope: "PROJECT",
-        generate: async (options: any) => {
+        generate: async (options: { prompt?: string }) => {
           const prompt = options.prompt || "";
           if (
             prompt.includes("strict, adversarial code review critic") ||

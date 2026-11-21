@@ -15,7 +15,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
     OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
       task: TaskManifest,
-      options?: any
+      _options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
     ) {
       executeCalled = true;
       receivedManifest = task;
@@ -107,7 +107,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
 
     supervisor.saveCheckpoint(manifest);
 
-    const mockExecutor = async (milestone: any, attempt: number) => {
+    const mockExecutor = async (_milestone: unknown, _attempt: number) => {
       return {
         status: "completed" as const,
         gitSha: "c0ffee1",
@@ -164,7 +164,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
 
     supervisor.saveCheckpoint(manifest);
 
-    const mockExecutor = async (milestone: any, attempt: number) => {
+    const mockExecutor = async (_milestone: unknown, _attempt: number) => {
       return {
         status: "completed" as const,
         gitSha: "f00d123",
@@ -216,7 +216,7 @@ describe("Threads API — launchTask Behavioral Test Suite (Weather SVG Scenario
 
     supervisor.saveCheckpoint(manifest);
 
-    const failingExecutor = async (milestone: any, attempt: number) => {
+    const failingExecutor = async (_milestone: unknown, _attempt: number) => {
       throw new Error("Unrecoverable worker execution failure");
     };
 

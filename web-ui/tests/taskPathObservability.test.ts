@@ -17,7 +17,7 @@ function makeTask(overrides: Partial<TaskManifest> = {}): TaskManifest {
     taskId: `task-obs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     goal: "Observability test goal",
     status: "active",
-    toolchain: "node" as any,
+    toolchain: "node" as unknown as TaskManifest["toolchain"],
     branchName: "feat/test-obs",
     checkpoints: [],
     ambiguityFlags: [],
@@ -54,7 +54,9 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
           createAndSwitchBranch: async () => {
             throw new Error("Bootstrap failed: dirty working tree in workspace");
           },
-        } as any,
+        } as unknown as NonNullable<
+          Parameters<typeof supervisor.executeTaskWithRecovery>[1]
+        >["gitOps"],
         stepExecutor: async () => ({ status: "completed", summary: "should not run" }),
       });
 
@@ -161,7 +163,7 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
 
     const logs: string[] = [];
     const origLog = console.log;
-    console.log = (...args: any[]) => {
+    console.log = (...args: unknown[]) => {
       logs.push(args.map(String).join(" "));
       origLog(...args);
     };
@@ -171,7 +173,9 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
         repoRoot: tmpDir,
         gitOps: {
           createAndSwitchBranch: async () => {},
-        } as any,
+        } as unknown as NonNullable<
+          Parameters<typeof supervisor.executeTaskWithRecovery>[1]
+        >["gitOps"],
         stepExecutor: async () => ({
           status: "completed",
           summary: "done",
@@ -185,8 +189,8 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
         verificationAdapters: {
           checkFileExists: () => true,
           checkCommitExists: () => true,
-        } as any,
-      } as any);
+        },
+      } as unknown as Parameters<typeof supervisor.executeTaskWithRecovery>[1]);
 
       const prefix = `[task:${task.taskId}] phase=`;
       const phaseLogs = logs.filter((l) => l.includes(prefix));
@@ -233,9 +237,9 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
             chunkRounds: 2,
             pollIntervalMs: 1,
             timeoutMs: 5000,
-            fetchImpl: mockFetch as any,
+            fetchImpl: mockFetch as unknown as typeof fetch,
           }),
-        (err: any) => {
+        (err: unknown) => {
           assert.ok(err instanceof Error);
           assert.match(err.message, new RegExp(badStatus, "i"));
           return true;

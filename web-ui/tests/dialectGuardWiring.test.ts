@@ -12,7 +12,7 @@ describe("dialectGuard wiring in host-bridge/server.ts", () => {
     const res = await handleToolExecution(
       "host_run_powershell",
       { command: "export FOO=bar && ls" },
-      {} as any
+      {} as unknown as Parameters<typeof handleToolExecution>[2]
     );
     assert.ok(res);
     assert.strictEqual(res.success, false);
