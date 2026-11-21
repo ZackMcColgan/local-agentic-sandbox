@@ -10,6 +10,7 @@
     "host-bridge"
   ],
   "scripts": {
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces",
@@ -45,6 +46,13 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "prettier": "^3.10.1"
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.29",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript-eslint": "^8.73.0"
   }
 }

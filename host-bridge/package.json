@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "node scripts/build.js",
+    "lint": "eslint . --max-warnings 0",
     "test": "node --test tests/**/*.test.ts"
   },
   "devDependencies": {
