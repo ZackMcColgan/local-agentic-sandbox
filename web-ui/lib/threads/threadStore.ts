@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import { TaskManifest, TaskScope } from "../subagents/types";
 import { OvernightSupervisor } from "../subagents/supervisor";
-import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
 import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
 import {
@@ -11,17 +10,13 @@ import {
   resolveCompactionStrategy,
 } from "../conversationCompaction";
 import type {
-  CompactionStrategy,
   HybridFallbackReason,
   SummarizeRequest,
   SummarizeResult,
 } from "../conversationCompaction";
-import { TurnFileDiff } from "../chatDiffs";
 import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
-import type { ElisionMeta } from "../microElision";
-import type { ReadDedupMeta } from "../readDedup";
 import { getHostSettings } from "../hostSettings";
-import { superviseStalledThread, STALL_WINDOW_MS } from "./inAppSupervisor";
+import { superviseStalledThread } from "./inAppSupervisor";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 
@@ -53,17 +48,9 @@ export const COMPACTION_TRIGGER_TOKENS = Math.floor(
   CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO
 );
 
-import {
-  THREAD_TITLE_MAX_CHARS,
-  deriveStoredThreadTitle,
-  deriveThreadTitle,
-} from "./titles";
+import { THREAD_TITLE_MAX_CHARS, deriveStoredThreadTitle, deriveThreadTitle } from "./titles";
 
-export {
-  THREAD_TITLE_MAX_CHARS,
-  deriveStoredThreadTitle,
-  deriveThreadTitle,
-};
+export { THREAD_TITLE_MAX_CHARS, deriveStoredThreadTitle, deriveThreadTitle };
 
 import {
   TURN_STALL_WINDOW_MS,
@@ -73,12 +60,7 @@ import {
   computeTurnLiveness as computeTurnLivenessPure,
 } from "./liveness";
 
-export {
-  TURN_STALL_WINDOW_MS,
-  ZOMBIE_TURN_AGE_CAP_MS,
-  isRecordStaleBeyond,
-  isZombiePresence,
-};
+export { TURN_STALL_WINDOW_MS, ZOMBIE_TURN_AGE_CAP_MS, isRecordStaleBeyond, isZombiePresence };
 
 /**
  * Derives liveness from the record's last-activity timestamp (updatedAt) against the
@@ -86,8 +68,7 @@ export {
  * reconciliation stays owned by reconcileThread.
  */
 export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
-  const isLiveOverride =
-    activeExecutionSet.has(thread.id) || Boolean(getActiveTurn(thread.id));
+  const isLiveOverride = activeExecutionSet.has(thread.id) || Boolean(getActiveTurn(thread.id));
   return computeTurnLivenessPure(thread, now, isLiveOverride);
 }
 

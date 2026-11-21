@@ -64,8 +64,6 @@ describe("thread liveness and zombie computation", () => {
     expect(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS)).toBe(false);
 
     // Ancient presence AND stale record -> zombie
-    expect(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1)).toBe(
-      true
-    );
+    expect(isZombiePresence(presence, staleThread, baseMs + ZOMBIE_TURN_AGE_CAP_MS + 1)).toBe(true);
   });
 });
