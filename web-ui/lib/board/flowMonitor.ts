@@ -3,6 +3,7 @@ import type { BoardItem } from "./boardStore";
 export const FLOW_MONITOR_STAGE2_DEFAULT = false;
 
 export const REQUIRED_PR_CHECKS = [
+  "Lint & Format",
   "Typecheck (full error report)",
   "Unit Tests & Static Analysis",
   "Code Coverage Report",
