@@ -83,7 +83,7 @@ describe("FileReviewPanel characterization", () => {
         activeTab: "files",
         baseBranch: "main",
         tree: [
-          { name: "src", path: "src", type: "dir" },
+          { name: "src", path: "src", type: "directory" },
           { name: "index.ts", path: "src/index.ts", type: "file" },
         ],
         isLoadingTree: false,
