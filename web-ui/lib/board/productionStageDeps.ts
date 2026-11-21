@@ -472,8 +472,9 @@ export function createProductionStageDeps(
 
     async buildAndImport(targetTag: string, dryRun: boolean): Promise<BuildImportResult> {
       if (dryRun) {
+        const currentState = await selfDeployDeps.readCurrentState();
         const plan = prepareSelfDeployPlan({
-          currentImage: "current",
+          currentImage: currentState.image,
           targetImage: formatImageRef(targetTag),
           healthUrl: "http://127.0.0.1:3001/api/sandbox-status",
           shadowMode: true,
