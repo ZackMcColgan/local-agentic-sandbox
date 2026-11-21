@@ -79,8 +79,11 @@ export async function GET() {
       overnightReport,
       morningReport: singleReport,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -96,7 +99,10 @@ export async function POST(req: Request) {
       body: `Overnight engineering report compiled with ${tasks.length} task(s).`,
     }).catch(() => {});
     return NextResponse.json({ overnightReport });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

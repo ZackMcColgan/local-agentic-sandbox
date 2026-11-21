@@ -31,7 +31,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
   const taskId = manifest.taskId;
   const scope = manifest.scope || "PROJECT";
   const effectiveModel = threadModel || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
-  (manifest as any).threadId = activeThreadId;
+  (manifest as TaskManifest & { threadId?: string }).threadId = activeThreadId;
   let lastThinkingUpdate = 0;
   let lastRecordedLength = 0;
 
@@ -117,7 +117,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
 
           if (targetFile) {
             const repoCandidates = [
-              (result as any).worktreePath,
+              (result as TaskManifest & { worktreePath?: string }).worktreePath,
               process.env.WORKSPACE_DIR,
               "/workspace",
               process.cwd(),
@@ -158,7 +158,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             ...(Array.isArray(result.verificationGaps)
               ? { verificationGaps: result.verificationGaps }
               : {}),
-          } as any);
+          });
           getThreadStore().saveThread(currentThread);
         }
       } else {
@@ -174,7 +174,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             Array.isArray(result.journal) && result.journal.length > 0
               ? [...result.journal]
                   .reverse()
-                  .find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)
+                  .find((j) => typeof j?.message === "string" && j.message.trim().length > 0)
                   ?.message
               : undefined;
           const reason =
@@ -193,13 +193,13 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             ...(Array.isArray(result.verificationGaps)
               ? { verificationGaps: result.verificationGaps }
               : {}),
-          } as any);
+          });
           getThreadStore().saveThread(currentThread);
         }
       }
-    } catch (err: any) {
-      console.error(`[threads/[id]] Task ${taskId} execution failed:`, err?.message || err);
-      const errReason = err?.message || String(err);
+    } catch (err: unknown) {
+      const errReason = err instanceof Error ? err.message : String(err);
+      console.error(`[threads/[id]] Task ${taskId} execution failed:`, errReason);
       try {
         supervisor.parkTask(manifest, `Execution failure: ${errReason}`);
       } catch {}
@@ -251,8 +251,11 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       { thread, task, activeTurn: getActiveTurn(id) },
       { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
     );
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -344,8 +347,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           thread.status = "active";
           getThreadStore().saveThread(thread);
 
-          if (thread.chunkBudget !== undefined && (task as any).chunkBudget === undefined) {
-            (task as any).chunkBudget = thread.chunkBudget;
+          const taskWithBudget = task as TaskManifest & { chunkBudget?: unknown };
+          if (thread.chunkBudget !== undefined && taskWithBudget.chunkBudget === undefined) {
+            taskWithBudget.chunkBudget = thread.chunkBudget;
           }
           launchTaskExecution(thread.id, task, thread.model);
 
@@ -371,8 +375,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           activeExecutionSet.add(restarted.taskId);
           getThreadStore().saveThread(thread);
 
-          if (thread.chunkBudget !== undefined && (restarted as any).chunkBudget === undefined) {
-            (restarted as any).chunkBudget = thread.chunkBudget;
+          const restartedWithBudget = restarted as TaskManifest & { chunkBudget?: unknown };
+          if (thread.chunkBudget !== undefined && restartedWithBudget.chunkBudget === undefined) {
+            restartedWithBudget.chunkBudget = thread.chunkBudget;
           }
           launchTaskExecution(thread.id, restarted, thread.model);
 
@@ -409,8 +414,11 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     }
 
     return NextResponse.json({ thread });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -423,7 +431,10 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     }
     const ok = await getThreadStore().deleteThread(id);
     return NextResponse.json({ success: ok });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

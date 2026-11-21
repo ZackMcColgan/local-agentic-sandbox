@@ -87,7 +87,16 @@ export default function Home() {
   });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
-  const [securityPosture, setSecurityPosture] = useState<any>(undefined);
+  const [securityPosture, setSecurityPosture] = useState<
+    | {
+        execution_uid: string;
+        root_filesystem: string;
+        capabilities: string;
+        tmpfs_buffer: string;
+        provenance_level: string;
+      }
+    | undefined
+  >(undefined);
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -142,7 +151,9 @@ export default function Home() {
   };
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
-  const [deployHistory, setDeployHistory] = useState<any[]>([]);
+  const [deployHistory, setDeployHistory] = useState<
+    NonNullable<React.ComponentProps<typeof SettingsView>["deployHistory"]>
+  >([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -168,8 +179,11 @@ export default function Home() {
         const text = await textRes.text();
         setSelectedWorkspaceFile({ path: filePath, content: text });
       }
-    } catch (err: any) {
-      console.warn("[WorkspacePreview] Failed to preview file:", err.message);
+    } catch (err: unknown) {
+      console.warn(
+        "[WorkspacePreview] Failed to preview file:",
+        err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setIsLoadingFilePreview(false);
     }
@@ -352,7 +366,7 @@ export default function Home() {
           action: "executeSelfDeploy",
           taskId,
           threadId: selectedThreadId,
-          branchName: activeTask?.branchName || (activeTask as any)?.branch,
+          branchName: activeTask?.branchName || (activeTask as { branch?: string } | null)?.branch,
         }),
       });
       if (res.ok) {
@@ -696,7 +710,7 @@ export default function Home() {
   // Launch a multi-milestone builder task inside the thread
   const handleLaunchTask = async (
     goal: string,
-    attachments?: any[],
+    attachments?: unknown[],
     scope?: TaskScope,
     autoDeployOnGreen?: boolean
   ) => {
@@ -1305,11 +1319,11 @@ export default function Home() {
                     const traceFiles: string[] = [];
                     const activeMessages = currentThread?.messages || messages;
                     activeMessages.forEach((m) => {
-                      m.traces?.forEach((t: any) => {
+                      m.traces?.forEach((t) => {
                         if (
                           (t.tool === "workspace_write_file" ||
                             t.tool === "workspace_patch_file") &&
-                          t.args?.path
+                          typeof t.args?.path === "string"
                         ) {
                           traceFiles.push(t.args.path);
                         }

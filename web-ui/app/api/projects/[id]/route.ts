@@ -18,8 +18,11 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: `Project not found: ${id}` }, { status: 404 });
     }
     return NextResponse.json({ project });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -35,11 +38,12 @@ export async function PATCH(req: Request, { params }: RouteParams) {
 
     const project = updateProject(id, body);
     return NextResponse.json({ project });
-  } catch (err: any) {
-    if (err.message && /not found/i.test(err.message)) {
-      return NextResponse.json({ error: err.message }, { status: 404 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message && /not found/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 404 });
     }
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -51,7 +55,10 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: `Project not found: ${id}` }, { status: 404 });
     }
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

@@ -17,15 +17,22 @@ export async function GET() {
       runnerReason: runnerStatus.reason,
       recentActivity,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const updates: any = {};
+    const updates: {
+      hostAccessEnabled?: boolean;
+      allowUnattendedHostGit?: boolean;
+      jobChunkingEnabled?: boolean;
+    } = {};
 
     if (typeof body.hostAccessEnabled === "boolean") {
       updates.hostAccessEnabled = body.hostAccessEnabled;
@@ -54,7 +61,10 @@ export async function POST(req: Request) {
       },
       { status: 400 }
     );
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

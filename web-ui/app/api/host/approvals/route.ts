@@ -12,8 +12,11 @@ export async function GET(req: Request) {
     const threadId = searchParams.get("threadId") || undefined;
     const approvals = getPendingApprovals(threadId);
     return NextResponse.json({ approvals });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -101,21 +104,23 @@ export async function POST(req: Request) {
         approvalId: approval.id,
         result,
       });
-    } catch (execErr: any) {
+    } catch (execErr: unknown) {
+      const execMsg = execErr instanceof Error ? execErr.message : undefined;
       recordContinuationEntry({
         approvalId: approval.id,
         threadId: approval.threadId,
         tool: approval.tool,
         args: approval.args,
         status: "error",
-        error: execErr?.message || "Host tool execution threw an exception",
+        error: execMsg || "Host tool execution threw an exception",
       });
       return NextResponse.json(
-        { success: false, error: execErr?.message || "Execution error" },
+        { success: false, error: execMsg || "Execution error" },
         { status: 500 }
       );
     }
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    return NextResponse.json({ error: message || "Internal server error" }, { status: 500 });
   }
 }

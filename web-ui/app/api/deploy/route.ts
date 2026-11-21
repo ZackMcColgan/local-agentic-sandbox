@@ -18,8 +18,11 @@ export async function GET(_req: NextRequest) {
       selfDeployEnabled,
       deployHistory,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -155,7 +158,8 @@ export async function POST(req: NextRequest) {
       newSha = newSha || "HEAD";
 
       const pipeline =
-        (globalThis as any).__mockSelfDeployPipeline ||
+        (globalThis as { __mockSelfDeployPipeline?: SelfDeployPipeline })
+          .__mockSelfDeployPipeline ||
         new SelfDeployPipeline(
           body.dryRun
             ? {
@@ -199,7 +203,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

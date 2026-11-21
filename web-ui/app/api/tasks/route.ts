@@ -102,7 +102,7 @@ export async function POST(req: Request) {
     let plannerResolutionError: string | null = null;
     try {
       planSpec = await generatePlanSpec({ taskId, goal, toolchain, scope: body.scope });
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("could not resolve a valid artifact file target")) {
         plannerResolutionError = message;
@@ -176,7 +176,7 @@ export async function POST(req: Request) {
           });
           tasksRegistry.set(taskId, result);
           supervisor.saveCheckpoint(result);
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(`[tasks] Task ${taskId} async execution error:`, err);
         } finally {
           activeExecutionSet.delete(taskId);
@@ -198,8 +198,11 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 

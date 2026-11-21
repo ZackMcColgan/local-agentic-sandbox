@@ -294,9 +294,12 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: "Internal server error reading file", details: error.message },
+      {
+        error: "Internal server error reading file",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }

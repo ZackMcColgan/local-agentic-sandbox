@@ -77,11 +77,11 @@ export async function GET() {
       model: data.model ?? null,
       vram_mb: typeof data.vram_mb === "number" ? data.vram_mb : null,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({
       status: "stopped",
       reachable: false,
-      error: `Supervisor offline: ${err.message}`,
+      error: `Supervisor offline: ${err instanceof Error ? err.message : String(err)}`,
       engine: null,
       model: null,
       vram_mb: null,
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   const supervisorUrl = getSupervisorUrl();
   const token = getSupervisorToken();
 
-  let body: any = {};
+  let body: { action?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -171,11 +171,11 @@ export async function POST(req: NextRequest) {
       action,
       status: data.status || (action === "start" ? "starting" : "stopped"),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
       {
         success: false,
-        error: `Could not reach supervisor at ${supervisorUrl}: ${err.message}`,
+        error: `Could not reach supervisor at ${supervisorUrl}: ${err instanceof Error ? err.message : String(err)}`,
       },
       { status: 502 }
     );
