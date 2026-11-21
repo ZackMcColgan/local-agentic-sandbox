@@ -1,7 +1,5 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -176,11 +174,16 @@ describe("Settings Memory — SettingsView Memory card", () => {
     assert.ok(container.innerHTML.includes("0 / 2000"), "counter shows 0 / 2000");
   });
 
-  it("static guard: SettingsView source contains the exact privacy note verbatim", () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "../components/SettingsView.tsx"), "utf8");
+  it("MemoryZone renders the exact privacy note verbatim", async () => {
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(React.createElement(SettingsView, { onBack: () => {} }));
+    });
     assert.ok(
-      src.includes("Stored on this machine only. Never committed to the repository."),
-      "exact note text must appear in SettingsView source"
+      container.innerHTML.includes(
+        "Stored on this machine only. Never committed to the repository."
+      ),
+      "exact note text must be rendered by SettingsView / MemoryZone"
     );
   });
 });

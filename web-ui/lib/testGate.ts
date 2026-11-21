@@ -1339,8 +1339,15 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/operatorMemoryInjection.test.ts"],
   },
   {
-    match: (p) => p.includes("components/SettingsView"),
-    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"],
+    match: (p) =>
+      p.includes("components/SettingsView") ||
+      p.includes("components/settings/") ||
+      p.includes("settingsZoneComponents.test.ts"),
+    tests: [
+      "tests/settingsMemoryUi.test.ts",
+      "tests/settingsZones.test.ts",
+      "tests/settingsZoneComponents.test.ts",
+    ],
   },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
