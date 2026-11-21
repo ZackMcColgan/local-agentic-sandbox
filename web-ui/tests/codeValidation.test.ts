@@ -11,9 +11,12 @@ describe("subagents/codeValidation characterization", () => {
       assert.deepEqual(validateCodeAst("src/View.tsx", "export const View = () => <div />;"), {
         valid: true,
       });
-      assert.deepEqual(validateCodeAst("src/util.js", "export function add(a, b) { return a + b; }"), {
-        valid: true,
-      });
+      assert.deepEqual(
+        validateCodeAst("src/util.js", "export function add(a, b) { return a + b; }"),
+        {
+          valid: true,
+        }
+      );
     });
 
     it("rejects invalid TypeScript syntax with line and column", () => {

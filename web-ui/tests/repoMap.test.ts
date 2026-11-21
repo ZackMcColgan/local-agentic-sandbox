@@ -53,12 +53,23 @@ describe("subagents/repoMap characterization", () => {
 
       fs.writeFileSync(
         path.join(root, "src", "script.py"),
-        ["class Worker:", "  pass", "def run_job():", "  pass", "async def fetch_data():", "  pass"].join("\n"),
+        [
+          "class Worker:",
+          "  pass",
+          "def run_job():",
+          "  pass",
+          "async def fetch_data():",
+          "  pass",
+        ].join("\n"),
         "utf8"
       );
 
       fs.writeFileSync(path.join(root, "src", "notes.md"), "# ignored", "utf8");
-      fs.writeFileSync(path.join(root, "node_modules", "pkg", "index.ts"), "export const x = 1;", "utf8");
+      fs.writeFileSync(
+        path.join(root, "node_modules", "pkg", "index.ts"),
+        "export const x = 1;",
+        "utf8"
+      );
       fs.writeFileSync(path.join(root, "dist", "bundle.js"), "export const y = 2;", "utf8");
 
       const map: WorkspaceRepoMap = scanWorkspaceRepoMap(root);
@@ -101,7 +112,11 @@ describe("subagents/repoMap characterization", () => {
 
   describe("createUnifiedDiff", () => {
     it("formats added, removed, and unchanged lines with unified headers", () => {
-      const diff = createUnifiedDiff("src/file.ts", "line1\noldLine\nline3", "line1\nnewLine\nline3");
+      const diff = createUnifiedDiff(
+        "src/file.ts",
+        "line1\noldLine\nline3",
+        "line1\nnewLine\nline3"
+      );
       assert.equal(
         diff,
         [
