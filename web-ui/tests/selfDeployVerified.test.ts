@@ -231,3 +231,60 @@ test("sprint report names PR, merge SHA, deploy tag, status, and evidence per it
   assert.match(report.markdown, /v1\.0\.0/);
   assert.match(report.markdown, /needs-attention/);
 });
+
+test("primary S3 setImage failure aborts before S4 without rollback", async () => {
+  const calls: string[] = [];
+  const deps = makeBaseDeps({
+    setImage: async (tag) => {
+      calls.push(`S3:${tag}`);
+      return { ok: false, detail: "kubectl set image exited 1" };
+    },
+    verifyDeployment: async (tag) => {
+      calls.push(`S4:${tag}`);
+      return {
+        ok: true,
+        rolloutSuccess: true,
+        podRunningZeroRestarts: true,
+        gatewayStatus: 200,
+        threadListLoads: true,
+        observedTag: tag,
+      };
+    },
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.needsAttention, true);
+  assert.match(result.evidence, /kubectl set image exited 1/);
+  assert.equal(calls.filter((c) => c.startsWith("S3:")).length, 1, "no rollback setImage");
+  assert.equal(calls.some((c) => c.startsWith("S4:")), false, "S4 must not run after S3 failure");
+});
+
+test("rollback S3 setImage failure surfaces rollbackVerified=false and failure in evidence", async () => {
+  let setCount = 0;
+  const deps = makeBaseDeps({
+    setImage: async () => {
+      setCount++;
+      if (setCount === 1) return { ok: true };
+      return { ok: false, detail: "rollback kubectl error" };
+    },
+    verifyDeployment: async (expectedTag) => ({
+      ok: false,
+      rolloutSuccess: true,
+      podRunningZeroRestarts: false,
+      gatewayStatus: 502,
+      threadListLoads: false,
+      observedTag: expectedTag,
+      failedStep: "gateway_200",
+      observed: "gateway returned 502",
+    }),
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "rolled_back_suspended");
+  assert.equal(result.rollbackVerified, false);
+  assert.equal(result.needsAttention, true);
+  assert.match(result.evidence, /rollback kubectl error/);
+});
