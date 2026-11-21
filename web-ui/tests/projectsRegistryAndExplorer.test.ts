@@ -228,6 +228,59 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
 
       assert.equal(deletedId, proj.project_id, "Confirming delete should invoke onDeleteProject with project_id");
     });
+
+    it("ProjectsView refresh button re-fetches the project tree instead of dispatching a dead event", async () => {
+      const proj = registerProject({ name: "Refreshable Project", rootPath: testRepoDir });
+      const originalFetch = globalThis.fetch;
+      let treeFetchCount = 0;
+
+      globalThis.fetch = (async (input: any) => {
+        const url = String(input);
+        if (url.includes(`/api/projects/${proj.project_id}/files`)) {
+          treeFetchCount += 1;
+          const nodes =
+            treeFetchCount === 1
+              ? [{ name: "README.md", path: "README.md", type: "file" }]
+              : [
+                  { name: "README.md", path: "README.md", type: "file" },
+                  { name: "NEW_FILE.md", path: "NEW_FILE.md", type: "file" }
+                ];
+          return new Response(JSON.stringify({ tree: nodes }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+      }) as any;
+
+      try {
+        await act(async () => {
+          root = createRoot(container);
+          root.render(
+            React.createElement(ProjectsView, {
+              projects: [proj],
+              selectedProjectId: proj.project_id,
+              onOpenDrawer: () => {},
+            })
+          );
+        });
+
+        assert.equal(treeFetchCount, 1, "Initial load should fetch tree once");
+        assert.equal(container.textContent?.includes("NEW_FILE.md"), false);
+
+        const refreshBtn = container.querySelector('[title="Refresh"]') as HTMLButtonElement | null;
+        assert.ok(refreshBtn, "Refresh button should render");
+
+        await act(async () => {
+          refreshBtn!.click();
+        });
+
+        assert.equal(treeFetchCount, 2, "Clicking refresh should re-fetch the project tree");
+        assert.equal(container.textContent?.includes("NEW_FILE.md"), true, "Updated tree should render after refresh");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   describe("Item 2: Path Validator rejects roots, system dirs & invalid paths", () => {

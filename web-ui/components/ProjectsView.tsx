@@ -220,6 +220,7 @@ export function ProjectsView({
 
   // Explorer State
   const [tree, setTree] = useState<ProjectTreeNode[]>([]);
+  const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [isLoadingTree, setIsLoadingTree] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
@@ -385,7 +386,7 @@ export function ProjectsView({
     };
 
     fetchTree();
-  }, [activeProject?.project_id, activeProject?.allowlisted]);
+  }, [activeProject?.project_id, activeProject?.allowlisted, treeRefreshKey]);
 
   // Load file content when a file is clicked
   const handleSelectFile = async (filePath: string) => {
@@ -727,10 +728,8 @@ export function ProjectsView({
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        const evt = new CustomEvent("refreshTree");
-                        window.dispatchEvent(evt);
-                      }}
+                      data-testid="project-tree-refresh-btn"
+                      onClick={() => setTreeRefreshKey((k) => k + 1)}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1 rounded-lg"
                       title="Refresh"
                     >
