@@ -42,6 +42,7 @@ import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
 import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
 import { resolveSupervisorChunkResume, resolveThreadChunkBudget, handleLiveTurnChunkBudget, type ChunkBudgetConfig } from "../jobChunking";
+import { getHostSettings } from "../hostSettings";
 import { touchActiveTurn } from "../threads/threadStore";
 import { STALL_WINDOW_MS } from "../threads/inAppSupervisor";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
@@ -1631,7 +1632,8 @@ export class OvernightSupervisor {
     const signal = options?.signal || controller.signal;
     const isPaused = () => Boolean(task.status === "paused" || this.isPaused(task.taskId));
     const isAbortedOrCancelled = () => Boolean(!isPaused() && (signal?.aborted || (task.status as TaskStatus) === "cancelled"));
-    const chunkBudget = options?.chunkBudget ?? resolveThreadChunkBudget(task as any);
+    const jobChunkingEnabled = getHostSettings().jobChunkingEnabled;
+    const chunkBudget = jobChunkingEnabled ? (options?.chunkBudget ?? resolveThreadChunkBudget(task as any)) : undefined;
     const runStartTime = Date.now();
     let roundsUsed = 0;
 
