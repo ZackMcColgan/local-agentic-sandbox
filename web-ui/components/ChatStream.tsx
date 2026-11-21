@@ -97,15 +97,13 @@ import {
   SimulationScenarioKey,
 } from "../lib/simulator";
 
-export interface AttachedFileItem {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  previewUrl?: string;
-  base64: string;
-  isImage: boolean;
-}
+import {
+  formatFileSize,
+  fileToBase64,
+  buildAttachedFileItem,
+  type AttachedFileItem,
+} from "../lib/chat/attachments";
+export { formatFileSize, fileToBase64, type AttachedFileItem };
 
 export interface ChatMessage {
   id: string;
@@ -237,74 +235,6 @@ const COMPACTION_ACTION_LABELS: Record<string, string> = {
   drop_old_turns: "Drop old turns",
   truncate_oversize: "Truncate oversize",
 };
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Check if raster image that benefits from high-performance client-side scaling
-    if (
-      file.type.startsWith("image/") &&
-      !file.type.includes("svg") &&
-      typeof window !== "undefined"
-    ) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const rawUrl = e.target?.result as string;
-        if (!rawUrl) {
-          resolve("");
-          return;
-        }
-        const img = new Image();
-        img.onload = () => {
-          const MAX_DIM = 1600;
-          let { width, height } = img;
-          if (width > MAX_DIM || height > MAX_DIM) {
-            if (width > height) {
-              height = Math.round((height * MAX_DIM) / width);
-              width = MAX_DIM;
-            } else {
-              width = Math.round((width * MAX_DIM) / height);
-              height = MAX_DIM;
-            }
-          } else {
-            resolve(rawUrl);
-            return;
-          }
-
-          try {
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, width, height);
-              resolve(canvas.toDataURL("image/jpeg", 0.88));
-              return;
-            }
-          } catch {
-            // fallback to original if canvas fails
-          }
-          resolve(rawUrl);
-        };
-        img.onerror = () => resolve(rawUrl);
-        img.src = rawUrl;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-}
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
 // "Show full brief" toggle so a pasted job brief never walls off the thread.
@@ -940,18 +870,17 @@ export function ChatStream({
     const newItems: AttachedFileItem[] = [];
     for (let i = 0; i < fileList.length; i++) {
       const f = fileList[i];
-      const isImg = f.type.startsWith("image/");
       try {
         const b64 = await fileToBase64(f);
-        newItems.push({
-          id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-          name: f.name,
-          type: f.type || "application/octet-stream",
-          size: f.size,
-          previewUrl: isImg ? b64 : undefined,
-          base64: b64,
-          isImage: isImg,
-        });
+        newItems.push(
+          buildAttachedFileItem({
+            id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            base64: b64,
+          })
+        );
       } catch (err) {
         console.error("Failed to read attached file:", f.name, err);
       }

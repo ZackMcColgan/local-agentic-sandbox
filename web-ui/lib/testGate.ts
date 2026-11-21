@@ -788,6 +788,10 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Chat route extracted modules
   {
+    match: (p) => p.includes("lib/chat/attachments") || p.includes("chatAttachmentHelpers.test.ts"),
+    tests: ["tests/chatAttachmentHelpers.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
     tests: ["tests/chatMcpClients.test.ts"],
   },
