@@ -83,11 +83,12 @@ export async function extractArchitectureSpec(
       extractedAt: new Date().toISOString(),
       modelUsed: visionModel,
     };
-  } catch (err: any) {
-    console.warn(`[VisionProcessor] Vision extraction error on '${diagram.name}':`, err.message);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[VisionProcessor] Vision extraction error on '${diagram.name}':`, msg);
     return {
       diagramName: diagram.name,
-      markdownSpec: `### Architecture Diagram: ${diagram.name}\n\n*Note: Automated multimodal diagram ingestion encountered an issue (${err.message}). Proceeding with file metadata.*`,
+      markdownSpec: `### Architecture Diagram: ${diagram.name}\n\n*Note: Automated multimodal diagram ingestion encountered an issue (${msg}). Proceeding with file metadata.*`,
       extractedAt: new Date().toISOString(),
       modelUsed: visionModel,
     };

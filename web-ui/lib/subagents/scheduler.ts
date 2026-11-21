@@ -154,8 +154,11 @@ export class UnattendedScheduler {
   saveSchedules(schedules: Schedule[]) {
     try {
       fs.writeFileSync(this.storageFile, JSON.stringify(schedules, null, 2), "utf8");
-    } catch (err: any) {
-      console.warn("[Scheduler] Could not save schedules:", err.message);
+    } catch (err: unknown) {
+      console.warn(
+        "[Scheduler] Could not save schedules:",
+        err instanceof Error ? err.message : String(err)
+      );
       throw err;
     }
   }
@@ -454,7 +457,8 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         );
         return result;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       sched.failureCount = (sched.failureCount || 0) + 1;
       const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
       sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
@@ -463,15 +467,18 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       }
       try {
         this.saveSchedules(schedules);
-      } catch (saveErr: any) {
-        console.warn("[Scheduler] Could not save schedules during crash handler:", saveErr.message);
+      } catch (saveErr: unknown) {
+        console.warn(
+          "[Scheduler] Could not save schedules during crash handler:",
+          saveErr instanceof Error ? saveErr.message : String(saveErr)
+        );
       }
 
       manifest.status = "parked";
-      manifest.parkedReason = err.message;
+      manifest.parkedReason = errMsg;
       await this.triggerMorningReport(runId, manifest).catch(() => {});
       this.clearHeartbeat();
-      logStream(`Scheduled run crashed: ${err.message}`);
+      logStream(`Scheduled run crashed: ${errMsg}`);
       throw err;
     }
   }

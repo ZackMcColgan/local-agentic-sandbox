@@ -63,9 +63,13 @@ export function loadChatHistory(defaultModel: string = DEFAULT_PRIMARY_MODEL): C
     }
 
     // Validate that items conform to ChatMessage structure
-    const valid = parsed.every(
-      (m: any) =>
-        m && typeof m === "object" && typeof m.id === "string" && typeof m.role === "string"
+    const valid = parsed.every((m: unknown) =>
+      Boolean(
+        m &&
+        typeof m === "object" &&
+        typeof (m as { id?: unknown }).id === "string" &&
+        typeof (m as { role?: unknown }).role === "string"
+      )
     );
 
     if (!valid) {

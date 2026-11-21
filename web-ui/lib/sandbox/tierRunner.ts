@@ -193,13 +193,15 @@ export async function executeInSandboxTier(
       executionTimeMs: Math.round(performance.now() - startTime),
       securityBoundary,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const e = err as { code?: number; stdout?: string; stderr?: string; message?: string };
+    const message = e.message ?? String(err);
     return {
       status: "EXECUTION_ERROR",
-      exitCode: err.code || 1,
-      stdout: err.stdout ? err.stdout.trim() : "",
-      stderr: err.stderr ? err.stderr.trim() : err.message,
-      error: err.message,
+      exitCode: e.code || 1,
+      stdout: e.stdout ? e.stdout.trim() : "",
+      stderr: e.stderr ? e.stderr.trim() : message,
+      error: message,
       executionTimeMs: Math.round(performance.now() - startTime),
       securityBoundary,
     };
@@ -237,8 +239,11 @@ export async function pruneBuildCache(
         prunedFiles.push(entry.name);
       }
     }
-  } catch (err: any) {
-    console.warn(`[BuildCache] Prune notice for ${cacheDir}:`, err.message);
+  } catch (err: unknown) {
+    console.warn(
+      `[BuildCache] Prune notice for ${cacheDir}:`,
+      err instanceof Error ? err.message : String(err)
+    );
   }
 
   return { prunedCount, prunedFiles, bytesFreed };

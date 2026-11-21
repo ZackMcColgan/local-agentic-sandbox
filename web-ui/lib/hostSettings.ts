@@ -55,7 +55,7 @@ export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
   return next;
 }
 
-export async function fetchRecentGitActivity(limit = 20): Promise<any[]> {
+export async function fetchRecentGitActivity(limit = 20): Promise<Record<string, unknown>[]> {
   // First attempt: query host runner daemon via GET /git-ops/logs
   try {
     const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";

@@ -109,11 +109,12 @@ export class SelfDeployPipeline {
             timeout: cmdOpts?.timeout || 120000,
           });
           return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const e = err as { code?: unknown; stdout?: string; stderr?: string; message?: string };
           return {
-            exitCode: typeof err?.code === "number" ? err.code : 1,
-            stdout: err?.stdout || "",
-            stderr: err?.stderr || err?.message || String(err),
+            exitCode: typeof e?.code === "number" ? e.code : 1,
+            stdout: e?.stdout || "",
+            stderr: e?.stderr || e?.message || String(err),
           };
         }
       });
@@ -147,9 +148,20 @@ export class SelfDeployPipeline {
           error_message TEXT
         );
       `);
+      interface SelfDeployHistoryRow {
+        deploy_id: string;
+        timestamp: string;
+        branch_name: string;
+        previous_sha: string;
+        new_sha: string;
+        status: string;
+        rollback_status: string;
+        health_status: number;
+        error_message?: string | null;
+      }
       const rows = db
         .prepare("SELECT * FROM self_deploy_history ORDER BY timestamp DESC")
-        .all() as any[];
+        .all() as unknown as SelfDeployHistoryRow[];
       if (rows && rows.length > 0) {
         return rows.map((r) => ({
           deployId: r.deploy_id,

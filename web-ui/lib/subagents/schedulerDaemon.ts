@@ -83,8 +83,10 @@ export class SchedulerDaemon {
     try {
       const logFile = this.getLogFilePath(dateStr);
       fs.appendFileSync(logFile, logLine, "utf8");
-    } catch (err: any) {
-      console.error(`[SchedulerDaemon] Failed to write to log file: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(
+        `[SchedulerDaemon] Failed to write to log file: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
 
     if (level === "ERROR") {
@@ -126,8 +128,11 @@ export class SchedulerDaemon {
           }
         }
       }
-    } catch (err: any) {
-      this.log("WARN", `Log rotation check failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.log(
+        "WARN",
+        `Log rotation check failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 
@@ -140,8 +145,11 @@ export class SchedulerDaemon {
         active,
       };
       fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(hb, null, 2), "utf8");
-    } catch (err: any) {
-      this.log("WARN", `Failed to write heartbeat: ${err.message}`);
+    } catch (err: unknown) {
+      this.log(
+        "WARN",
+        `Failed to write heartbeat: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 
@@ -176,8 +184,11 @@ export class SchedulerDaemon {
           } else {
             this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
           }
-        } catch (err: any) {
-          this.log("ERROR", `Crash recovery failed: ${err.message}`);
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     }
@@ -213,11 +224,11 @@ export class SchedulerDaemon {
         this.log("INFO", `Executing due schedule ${sched.id} ("${sched.taskDescription}")`);
         await this.scheduler.executeScheduledRun(sched.id);
         this.log("INFO", `Successfully completed schedule run for ${sched.id}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Catch per-schedule errors: one failure does not stop others
         this.log(
           "ERROR",
-          `Error executing schedule ${sched.id} ("${sched.taskDescription}"): ${err.message}`
+          `Error executing schedule ${sched.id} ("${sched.taskDescription}"): ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
@@ -270,8 +281,11 @@ export class SchedulerDaemon {
       if (options?.onTick) {
         try {
           await options.onTick(dueCount);
-        } catch (err: any) {
-          this.log("ERROR", `Error in onTick callback: ${err.message}`);
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Error in onTick callback: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
 

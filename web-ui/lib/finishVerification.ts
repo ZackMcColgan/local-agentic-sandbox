@@ -119,7 +119,7 @@ export async function verifyCompletionClaims(
   };
 }
 
-export function stampCompletion<T extends Record<string, any>>(
+export function stampCompletion<T extends object>(
   record: T,
   verification: VerificationResult
 ): T & { completionStamp: CompletionStamp; verificationGaps: VerificationGap[] } {

@@ -80,15 +80,17 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
 
     // Trace 1: Failed SQLite command
     const failedTrace = traces[0].trace;
+    assert.ok(failedTrace);
     assert.strictEqual(failedTrace.tool, "execute_sandboxed_command");
-    assert.strictEqual(failedTrace.result.exitCode, 1);
-    assert.ok(failedTrace.result.stderr.includes("unable to open database file"));
+    assert.strictEqual(failedTrace.result?.exitCode, 1);
+    assert.ok(failedTrace.result?.stderr?.includes("unable to open database file"));
 
     // Trace 2: Workspace fallback
     const fallbackTrace = traces[1].trace;
+    assert.ok(fallbackTrace);
     assert.strictEqual(fallbackTrace.tool, "workspace_read_file");
-    assert.strictEqual(fallbackTrace.result.success, true);
-    assert.ok(fallbackTrace.result.content.includes("142"));
+    assert.strictEqual(fallbackTrace.result?.success, true);
+    assert.ok(fallbackTrace.result?.content?.includes("142"));
   });
 
   it("build-retry scenario includes critic rejection and iteration 2 approval", () => {

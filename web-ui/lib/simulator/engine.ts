@@ -100,7 +100,7 @@ export async function createSimulatedChatResponse(
           if (isClosed || signal?.aborted) return;
 
           try {
-            let ssePayload: any = null;
+            let ssePayload: Record<string, unknown> | null = null;
 
             if (event.type === "meta") {
               ssePayload = { type: "meta", model: event.model };

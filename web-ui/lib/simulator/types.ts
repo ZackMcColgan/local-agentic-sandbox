@@ -17,7 +17,22 @@ export interface SimulationEvent {
   status?: string;
   thought?: string;
   content?: string;
-  trace?: any;
+  trace?: {
+    tool: string;
+    args?: Record<string, unknown>;
+    result?: {
+      exitCode?: number;
+      stderr?: string;
+      stdout?: string;
+      success?: boolean;
+      content?: string;
+      [key: string]: unknown;
+    };
+    durationMs?: number;
+    timestamp?: string;
+    model?: string;
+    tier?: string;
+  };
   task?: TaskManifest;
   error?: string;
   durationMs?: number;

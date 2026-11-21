@@ -3,7 +3,7 @@ import path from "path";
 import os from "os";
 
 export interface ProfileHistoryItem {
-  value: any;
+  value: unknown;
   timestamp: string;
   sourceSessionId: string;
   origin: "user-stated" | "observed" | "corrected";
@@ -11,7 +11,7 @@ export interface ProfileHistoryItem {
 
 export interface ProfileEntry {
   key: string;
-  value: any;
+  value: unknown;
   sourceSessionId: string;
   timestamp: string; // ISO-8601
   origin: "user-stated" | "observed" | "corrected";
@@ -22,7 +22,7 @@ export interface UserProfile {
   version: number;
   entries: Record<string, ProfileEntry>;
   updatedAt: string;
-  [key: string]: any; // tolerant to unknown fields additively
+  [key: string]: unknown; // tolerant to unknown fields additively
 }
 
 /**
@@ -78,9 +78,9 @@ export function loadUserProfile(customPath?: string): UserProfile {
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
       ...parsed,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.warn(
-      `[UserProfile] Warning: corrupted profile JSON at ${filePath} (${err.message}). Starting with empty profile.`
+      `[UserProfile] Warning: corrupted profile JSON at ${filePath} (${err instanceof Error ? err.message : String(err)}). Starting with empty profile.`
     );
     return emptyProfile;
   }
@@ -112,13 +112,15 @@ export function saveUserProfile(profile: UserProfile, customPath?: string): void
       fs.copyFileSync(tempPath, filePath);
       fs.unlinkSync(tempPath);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (fs.existsSync(tempPath)) {
       try {
         fs.unlinkSync(tempPath);
       } catch (_) {}
     }
-    throw new Error(`[UserProfile] Failed to write profile to ${filePath}: ${err.message}`);
+    throw new Error(
+      `[UserProfile] Failed to write profile to ${filePath}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 }
 
@@ -130,7 +132,7 @@ export function saveUserProfile(profile: UserProfile, customPath?: string): void
  */
 export function recordProfileEntry(
   key: string,
-  value: any,
+  value: unknown,
   options: {
     sessionId: string;
     origin?: "user-stated" | "observed" | "corrected";
@@ -198,13 +200,13 @@ export function recordProfileEntry(
 export function extractDurablePreferences(
   text: string,
   sessionId: string
-): Array<{ key: string; value: any; origin: "user-stated" | "corrected" }> {
+): Array<{ key: string; value: unknown; origin: "user-stated" | "corrected" }> {
   if (!text || typeof text !== "string") {
     return [];
   }
 
   const clean = text.trim();
-  const results: Array<{ key: string; value: any; origin: "user-stated" | "corrected" }> = [];
+  const results: Array<{ key: string; value: unknown; origin: "user-stated" | "corrected" }> = [];
 
   // 1. Explicit name preferences: "only call me Zack", "call me Zack", "my name is Zack", "I go by Zack"
   const nameMatch = clean.match(

@@ -194,7 +194,30 @@ export function resolveSingleArtifactFile(
  * Normalizes a raw milestone object, guaranteeing proper IDs, defaults,
  * and synthesizing test commands from testFile if criteria omitted command.
  */
-export function normalizeMilestone(m: any, idx: number = 0): Milestone {
+interface RawAcceptanceCriterion {
+  id?: string;
+  assertion?: string;
+  fileMatch?: string;
+  command?: string;
+}
+
+interface RawMilestoneInput {
+  id?: string;
+  title?: string;
+  description?: string;
+  status?: Milestone["status"];
+  builderIterations?: number;
+  criticRounds?: number;
+  synthetic?: boolean;
+  plannedFiles?: string[];
+  testFile?: string;
+  skipCriticOnValidSyntax?: boolean;
+  taskComplexity?: Milestone["taskComplexity"];
+  acceptanceCriteria?: RawAcceptanceCriterion[];
+  [key: string]: unknown;
+}
+
+export function normalizeMilestone(m: RawMilestoneInput, idx: number = 0): Milestone {
   const milestoneId = m.id || `M${idx + 1}`;
   const plannedFiles = Array.isArray(m.plannedFiles) ? m.plannedFiles : [];
   const testFile =
@@ -205,7 +228,7 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
 
   const acceptanceCriteria: AcceptanceCriterion[] =
     Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
-      ? m.acceptanceCriteria.map((ac: any, acIdx: number) => {
+      ? m.acceptanceCriteria.map((ac, acIdx: number) => {
           let command = ac.command;
           if (!command && testFile) {
             command = `npx tsx --test ${testFile}`;
@@ -253,7 +276,9 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
  * Resilient JSON repair and parser for autonomous planner responses.
  * Recovers valid milestones from truncated or slightly malformed JSON.
  */
-export function repairAndParsePlanJson(rawText: string): { milestones: any[] } | null {
+export function repairAndParsePlanJson(
+  rawText: string
+): { milestones: RawMilestoneInput[] } | null {
   if (!rawText || !rawText.trim()) return null;
   const stripped = stripCodeFence(rawText).trim();
 
@@ -363,7 +388,10 @@ function validateRelativePlanPath(filePath: string): boolean {
   return true;
 }
 
-export function validatePlanSpecMilestones(milestones: Milestone[], rawMilestones?: any[]): void {
+export function validatePlanSpecMilestones(
+  milestones: Milestone[],
+  rawMilestones?: RawMilestoneInput[]
+): void {
   if (!Array.isArray(milestones) || milestones.length === 0) {
     throw new Error("Invalid PlanSpec: planner produced empty milestones.");
   }
@@ -542,7 +570,7 @@ Respond strictly in valid JSON matching this schema:
     const prompt = promptParts.join("\r\n\r\n");
 
     const MAX_PLAN_SPEC_ATTEMPTS = 3;
-    let rawList: any[] | undefined;
+    let rawList: RawMilestoneInput[] | undefined;
     for (let attempt = 1; attempt <= MAX_PLAN_SPEC_ATTEMPTS; attempt++) {
       const attemptPrompt =
         attempt === 1
@@ -562,7 +590,7 @@ Respond strictly in valid JSON matching this schema:
       if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
         // Respect SCRIPT cap of 2 milestones max
         rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
-        milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
+        milestones = rawList.map((m, idx: number) => normalizeMilestone(m, idx));
         validatePlanSpecMilestones(milestones, rawList);
         break;
       }

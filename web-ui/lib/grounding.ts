@@ -143,18 +143,22 @@ const NO_RESULTS_RE =
   /\b(no\s+(results|matches|search\s+results)(\s+found)?|0\s+results|nothing\s+found|did\s+not\s+match\s+any)\b/i;
 export const SUBSTANTIVE_MIN_CHARS = 200;
 
-function extractText(result: any): string {
+function extractText(result: unknown): string {
   if (result == null) return "";
   if (typeof result === "string") return result;
   if (Array.isArray(result)) return result.map(extractText).join("\n");
   if (typeof result === "object") {
-    if (Array.isArray(result.content))
-      return result.content
-        .map((c: any) => (typeof c?.text === "string" ? c.text : extractText(c)))
+    const obj = result as Record<string, unknown>;
+    if (Array.isArray(obj.content))
+      return obj.content
+        .map((c: unknown) => {
+          const item = c as { text?: unknown } | null;
+          return typeof item?.text === "string" ? item.text : extractText(c);
+        })
         .join("\n");
-    if (Array.isArray(result.results)) return result.results.map(extractText).join("\n");
+    if (Array.isArray(obj.results)) return obj.results.map(extractText).join("\n");
     const parts: string[] = [];
-    for (const [k, v] of Object.entries(result)) {
+    for (const [k, v] of Object.entries(obj)) {
       if (k === "error" || k === "isError") continue;
       if (typeof v === "string") parts.push(v);
       else if (v && typeof v === "object") parts.push(extractText(v));
@@ -164,13 +168,16 @@ function extractText(result: any): string {
   return "";
 }
 
-function isErrorResult(result: any): boolean {
+function isErrorResult(result: unknown): boolean {
   if (!result || typeof result !== "object") return false;
-  return Boolean(result.isError || result.error);
+  const obj = result as { isError?: unknown; error?: unknown };
+  return Boolean(obj.isError || obj.error);
 }
 
 /** True only if some web trace returned non-error, non-empty, substantive text. */
-export function hasSubstantiveWebResults(traces: Array<{ tool: string; result?: any }>): boolean {
+export function hasSubstantiveWebResults(
+  traces: Array<{ tool: string; result?: unknown }>
+): boolean {
   if (!Array.isArray(traces)) return false;
   return traces.some((t) => {
     if (!t || !WEB_TOOLS.has(t.tool)) return false;
@@ -189,7 +196,7 @@ export function shouldInjectHonestAbort(input: {
   userPrompt: string;
   priorUserPrompt?: string;
   webResearchCalls: number;
-  traces: Array<{ tool: string; result?: any }>;
+  traces: Array<{ tool: string; result?: unknown }>;
 }): boolean {
   const live =
     isLiveRealTimeIntent(input.userPrompt) ||

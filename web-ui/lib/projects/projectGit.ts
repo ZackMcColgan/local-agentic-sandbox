@@ -274,7 +274,11 @@ export function getProjectDiffSummary(
   };
 }
 
-export function acceptProjectFile(project: ProjectRecord, taskId: string, filePath: string): any {
+export function acceptProjectFile(
+  project: ProjectRecord,
+  taskId: string,
+  filePath: string
+): { file_path: string; status: string; task_id: string; [key: string]: unknown } {
   assertAllowedProjectPath(project, filePath);
   const { setFileReviewStatus } = require("./projectStore");
   return setFileReviewStatus(taskId, filePath, "accepted");
@@ -285,7 +289,7 @@ export function revertProjectFile(
   taskId: string,
   filePath: string,
   baseSha: string
-): any {
+): { file_path: string; status: string; task_id: string; [key: string]: unknown } {
   const targetPath = assertAllowedProjectPath(project, filePath);
 
   let existedAtBase = false;

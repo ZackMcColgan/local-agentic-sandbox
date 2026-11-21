@@ -147,7 +147,9 @@ export async function fetchModelSizes(
   }
   const res = await fetchImpl(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/tags failed: HTTP ${res.status}`);
-  const data: any = await res.json();
+  const data = (await res.json()) as {
+    models?: Array<{ name?: string; size?: number }>;
+  };
   const sizes: Record<string, number> = {};
   for (const m of data.models || []) {
     if (m?.name && typeof m.size === "number") {
@@ -175,8 +177,10 @@ export async function fetchLoadedModels(
   }
   const res = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/ps failed: HTTP ${res.status}`);
-  const data: any = await res.json();
-  return (data.models || []).map((m: any) => {
+  const data = (await res.json()) as {
+    models?: Array<{ name?: string; size_vram?: number; size?: number }>;
+  };
+  return (data.models || []).map((m) => {
     const rawName = m.name || "";
     const baseName = rawName.replace(/:latest$/, "");
     return {
@@ -303,9 +307,9 @@ export async function unloadAllModelsWithResult(
         reason: `GET /api/ps failed: HTTP ${psRes.status}`,
       };
     }
-    const data: any = await psRes.json();
+    const data = (await psRes.json()) as { models?: Array<{ name?: string }> };
     const loaded: { name: string }[] = (data.models || [])
-      .map((m: any) => ({
+      .map((m) => ({
         name: m.name || "",
       }))
       .filter((m: { name: string }) => Boolean(m.name));
@@ -333,12 +337,13 @@ export async function unloadAllModelsWithResult(
       unloaded.push(m.name);
     }
     return { status: "unloaded", unloaded };
-  } catch (err: any) {
-    console.warn("Notice: could not unload models from LLM:", err.message);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : undefined;
+    console.warn("Notice: could not unload models from LLM:", msg ?? String(err));
     return {
       status: "failed",
       unloaded,
-      reason: err?.message || "Unload failed",
+      reason: msg || "Unload failed",
     };
   }
 }

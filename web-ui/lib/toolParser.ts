@@ -3,7 +3,7 @@ export interface ParsedToolCall {
   type: "function";
   function: {
     name: string;
-    arguments: Record<string, any>;
+    arguments: Record<string, unknown>;
   };
 }
 /**
@@ -41,7 +41,7 @@ export const PRIMARY_TOOL_PARAM: Record<string, string> = {
  */
 export function parseToolCallsFromText(
   content: string,
-  availableTools?: Set<string> | Map<string, any>
+  availableTools?: Set<string> | Map<string, unknown>
 ): ParsedToolCall[] {
   if (!content || typeof content !== "string") {
     return [];
@@ -69,7 +69,7 @@ export function parseToolCallsFromText(
   while ((match = funcRegex.exec(cleanContent)) !== null) {
     const name = match[1].trim();
     const paramsBlock = match[2];
-    const args: Record<string, any> = {};
+    const args: Record<string, unknown> = {};
     const paramRegex =
       /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
     let pMatch;

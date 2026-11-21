@@ -18,7 +18,7 @@ export interface AgentSpan {
   endTime?: number;
   durationMs?: number;
   status: "ok" | "error";
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface TraceSession {
@@ -105,10 +105,10 @@ export class TelemetryTracer {
   public startSpan(
     name: AgentSpan["name"],
     parentSpanId?: string,
-    attributes: Record<string, any> = {}
+    attributes: Record<string, unknown> = {}
   ): {
     spanId: string;
-    end: (status?: "ok" | "error", extraAttrs?: Record<string, any>) => AgentSpan;
+    end: (status?: "ok" | "error", extraAttrs?: Record<string, unknown>) => AgentSpan;
   } {
     const spanId = name === "agent.turn" ? this.rootSpanId : generateHex(8);
     const effectiveParent =
@@ -140,7 +140,7 @@ export class TelemetryTracer {
 
     return {
       spanId,
-      end: (status: "ok" | "error" = "ok", extraAttrs: Record<string, any> = {}) => {
+      end: (status: "ok" | "error" = "ok", extraAttrs: Record<string, unknown> = {}) => {
         const endTime = Date.now();
         spanRecord.endTime = endTime;
         spanRecord.durationMs = Math.max(1, endTime - startTime);

@@ -70,7 +70,18 @@ export function deriveThreadTitle(
 
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
-  messages: any[];
+  messages: Array<{
+    role: string;
+    content: string;
+    name?: string;
+    tool_call_id?: string;
+    tool_calls?: Array<{
+      id?: string;
+      type?: string;
+      function?: { name?: string; arguments?: string | Record<string, unknown> };
+    }>;
+    [key: string]: unknown;
+  }>;
   compactedThisTurn: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
@@ -330,7 +341,15 @@ export function resolveThreadsDir(): string {
 
 // In-memory set of actively executing task/thread IDs in the current Node process.
 // Attached to globalThis so Next.js / tsx module path aliases (@/lib/... vs ../lib/...) share the exact same singleton state.
-const g = globalThis as any;
+const g = globalThis as {
+  __sandboxActiveExecutionSet?: Set<string>;
+  __sandboxActiveTurnRegistry?: Map<string, ActiveTurnInfo>;
+  __sandboxActiveTurnAbortControllers?: Map<string, AbortController>;
+  __sandboxActiveRoundAbortControllers?: Map<string, AbortController>;
+  __sandboxDeletedThreadIds?: Set<string>;
+  __sandboxSupervisorSweepTimer?: ReturnType<typeof setInterval> | null;
+  [key: string]: unknown;
+};
 export const activeExecutionSet: Set<string> =
   g.__sandboxActiveExecutionSet || (g.__sandboxActiveExecutionSet = new Set<string>());
 
@@ -1875,7 +1894,12 @@ export class ThreadStore {
    */
   prepareTurnConversationMessages(
     thread: Thread | null,
-    clientMessages: any[],
+    clientMessages: Array<{
+      id?: string;
+      role: string;
+      content: string;
+      timestamp?: string;
+    }>,
     maxBudgetTokens: number,
     opts: TurnStartCompactionOptions & {
       summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
@@ -1883,18 +1907,28 @@ export class ThreadStore {
   ): Promise<TurnConversationPreparation>;
   prepareTurnConversationMessages(
     thread: Thread | null,
-    clientMessages: any[],
+    clientMessages: Array<{
+      id?: string;
+      role: string;
+      content: string;
+      timestamp?: string;
+    }>,
     maxBudgetTokens?: number,
     opts?: TurnStartCompactionOptions
   ): TurnConversationPreparation;
   prepareTurnConversationMessages(
     thread: Thread | null,
-    clientMessages: any[],
+    clientMessages: Array<{
+      id?: string;
+      role: string;
+      content: string;
+      timestamp?: string;
+    }>,
     maxBudgetTokens: number = CHAT_CONTEXT_BUDGET_TOKENS,
     opts?: TurnStartCompactionOptions
   ): TurnConversationPreparation | Promise<TurnConversationPreparation> {
     if (thread && thread.messages && thread.messages.length > 0) {
-      const clientUserMessages = (clientMessages || []).filter((m: any) => m.role === "user");
+      const clientUserMessages = (clientMessages || []).filter((m) => m.role === "user");
       const lastClientUser = clientUserMessages[clientUserMessages.length - 1];
 
       if (lastClientUser && lastClientUser.content) {
