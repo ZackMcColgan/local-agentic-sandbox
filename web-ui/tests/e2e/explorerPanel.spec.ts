@@ -67,7 +67,11 @@ test.describe("Explorer Panel (P2-P4)", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route("**/api/explorer/tree*", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TREE) })
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_TREE),
+      })
     );
 
     await page.goto("/");
@@ -99,7 +103,10 @@ test.describe("Explorer Panel (P2-P4)", () => {
 
   test("P2: empty-repo state renders honestly", async ({ page }, testInfo) => {
     // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
-    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
+    test.skip(
+      testInfo.project.name.startsWith("desktop"),
+      "Explorer entry is mobile-only (hamburger drawer hidden on desktop)"
+    );
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({
         status: 200,
@@ -113,14 +120,25 @@ test.describe("Explorer Panel (P2-P4)", () => {
 
     await page.goto("/");
     await openExplorerFromDrawer(page);
-    await expect(page.getByTestId("explorer-empty-state")).toContainText("This directory is empty.");
+    await expect(page.getByTestId("explorer-empty-state")).toContainText(
+      "This directory is empty."
+    );
   });
 
-  test("P3: tap-to-preview in place, filename search/clear, and revoked state", async ({ page }, testInfo) => {
+  test("P3: tap-to-preview in place, filename search/clear, and revoked state", async ({
+    page,
+  }, testInfo) => {
     // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
-    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
+    test.skip(
+      testInfo.project.name.startsWith("desktop"),
+      "Explorer entry is mobile-only (hamburger drawer hidden on desktop)"
+    );
     await page.route("**/api/explorer/tree*", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TREE) })
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_TREE),
+      })
     );
     await page.route("**/api/explorer/read*", (route) =>
       route.fulfill({
@@ -156,7 +174,10 @@ test.describe("Explorer Panel (P2-P4)", () => {
 
   test("P3: revoked project access renders honest 403 state", async ({ page }, testInfo) => {
     // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
-    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
+    test.skip(
+      testInfo.project.name.startsWith("desktop"),
+      "Explorer entry is mobile-only (hamburger drawer hidden on desktop)"
+    );
     await page.route("**/api/explorer/tree*", (route) =>
       route.fulfill({
         status: 403,
@@ -172,11 +193,20 @@ test.describe("Explorer Panel (P2-P4)", () => {
     );
   });
 
-  test("P4: open/close explorer preserves chat surface without leaving thread", async ({ page }, testInfo) => {
+  test("P4: open/close explorer preserves chat surface without leaving thread", async ({
+    page,
+  }, testInfo) => {
     // PR #134 / UI-097: explorer moved into the mobile-only hamburger drawer; hamburger is hidden on desktop (md:hidden).
-    test.skip(testInfo.project.name.startsWith("desktop"), "Explorer entry is mobile-only (hamburger drawer hidden on desktop)");
+    test.skip(
+      testInfo.project.name.startsWith("desktop"),
+      "Explorer entry is mobile-only (hamburger drawer hidden on desktop)"
+    );
     await page.route("**/api/explorer/tree*", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TREE) })
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_TREE),
+      })
     );
 
     await page.goto("/");

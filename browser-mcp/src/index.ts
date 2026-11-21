@@ -10,7 +10,7 @@ app.use(cors());
 export function createBrowserMcpServer(): McpServer {
   const mcp = new McpServer({
     name: "browser-mcp-service",
-    version: "1.0.0"
+    version: "1.0.0",
   });
   registerBrowserTools(mcp);
   return mcp;
@@ -27,9 +27,9 @@ app.get("/health", (_req: Request, res: Response) => {
       user: "10002:10002",
       role: "isolated-egress-scraper",
       ssrf_protection: "ACTIVE",
-      workspace_access: "NONE"
+      workspace_access: "NONE",
     },
-    active_sessions: sessions.size
+    active_sessions: sessions.size,
   });
 });
 

@@ -23,23 +23,25 @@ export const AGENT_MODES: Record<AgentMode, AgentModeConfig> = {
     id: "auto",
     label: "Auto",
     badgeLabel: "Auto (Hierarchical)",
-    description: "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
-    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
+    description:
+      "Hierarchical routing: Flash (~80 t/s) triage with automated escalation to Pro on deep synthesis or test failures.",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s",
   },
   flash: {
     id: "flash",
     label: "Flash",
     badgeLabel: "Flash-Next (Gyro-S)",
     description: "Ultra-fast execution and native multimodal vision via Flash-Next (Gyro-S).",
-    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s",
   },
   pro: {
     id: "pro",
     label: "Pro",
     badgeLabel: "Pro (Flash-Next)",
-    description: "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Flash-Next (Gyro-S).",
-    defaultModel: "qwen3.8-flash-next-gyro-gyro-s"
-  }
+    description:
+      "Deep reasoning, complete multi-module refactoring, and root-cause analysis via Flash-Next (Gyro-S).",
+    defaultModel: "qwen3.8-flash-next-gyro-gyro-s",
+  },
 };
 
 export const DEFAULT_AGENT_MODE: AgentMode = "auto";
@@ -54,7 +56,8 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     recommendedVRAM: "~12.8 GB",
     supportsReasoningEffort: true,
     defaultReasoningEffort: "low",
-    description: "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning."
+    description:
+      "Artificial Analysis #1 Open Model with embedded MTP speculative decoding. Deep reasoning, code generation & agentic planning.",
   },
   {
     id: "qwen3.8-flash-next-gyro-gyro-s",
@@ -63,7 +66,8 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     recommendedVRAM: "~16.0 GB",
     supportsReasoningEffort: true,
     defaultReasoningEffort: "low",
-    description: "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning."
+    description:
+      "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning.",
   },
   {
     id: "gemma4:e4b",
@@ -72,7 +76,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     recommendedVRAM: "~4.0 GB",
     supportsReasoningEffort: true,
     defaultReasoningEffort: "low",
-    description: "Ultra-fast natively multimodal model (~80 tok/s). Image/diagram ingestion ready."
+    description: "Ultra-fast natively multimodal model (~80 tok/s). Image/diagram ingestion ready.",
   },
   {
     id: "qwen3.8:27b-q3_k_m",
@@ -81,7 +85,8 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     recommendedVRAM: "~13.8 GB",
     supportsReasoningEffort: true,
     defaultReasoningEffort: "low",
-    description: "Artificial Analysis #1 Open Model. Deep reasoning, code generation & agentic planning."
+    description:
+      "Artificial Analysis #1 Open Model. Deep reasoning, code generation & agentic planning.",
   },
   {
     id: "hermes3:8b",
@@ -89,7 +94,8 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~6.0 GB",
     supportsReasoningEffort: false,
-    description: "Nous Research Hermes 3. Purpose-built for unconstrained function calling & multi-turn agentic loops."
+    description:
+      "Nous Research Hermes 3. Purpose-built for unconstrained function calling & multi-turn agentic loops.",
   },
   {
     id: "hermes3:70b-q3_k_m",
@@ -97,8 +103,8 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~32+ GB",
     supportsReasoningEffort: false,
-    description: "Nous Research Hermes 3 70B. Enterprise unconstrained agentic synthesis."
-  }
+    description: "Nous Research Hermes 3 70B. Enterprise unconstrained agentic synthesis.",
+  },
 ];
 
 export function isReasoningEffortSupported(modelId?: string): boolean {
@@ -106,7 +112,12 @@ export function isReasoningEffortSupported(modelId?: string): boolean {
   const lower = modelId.toLowerCase();
   const profile = PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
   if (profile) return profile.supportsReasoningEffort;
-  return lower.includes("qwen") || lower.includes("gemma") || lower.includes("swift") || lower.includes("flash");
+  return (
+    lower.includes("qwen") ||
+    lower.includes("gemma") ||
+    lower.includes("swift") ||
+    lower.includes("flash")
+  );
 }
 
 export function getModelProfile(modelId?: string): ModelProfile | undefined {

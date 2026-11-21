@@ -85,7 +85,9 @@ export class JobStore {
   // interrupted so they never read as running forever.
   interruptActive(): void {
     for (const [id, kill] of this.killFns.entries()) {
-      try { kill(); } catch {}
+      try {
+        kill();
+      } catch {}
     }
     this.killFns.clear();
     let changed = false;
@@ -107,7 +109,7 @@ export class JobStore {
       args,
       status: "pending",
       createdAt: Date.now(),
-      timeoutMs
+      timeoutMs,
     };
     this.records.set(rec.id, rec);
     this.persist();
@@ -170,7 +172,7 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
     const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
       cwd: effectiveCwd,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     store.update(rec.id, { status: "running", startedAt: Date.now() });
@@ -189,12 +191,20 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
             `powershell.exe -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | ForEach-Object { $_.ProcessId }"`,
             { encoding: "utf8", timeout: 3000 }
           );
-          for (const p of check.trim().split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) {
-            try { execSync(`taskkill /PID ${p} /T /F`, { stdio: "ignore" }); } catch {}
+          for (const p of check
+            .trim()
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean)) {
+            try {
+              execSync(`taskkill /PID ${p} /T /F`, { stdio: "ignore" });
+            } catch {}
           }
         } catch {}
       }
-      try { proc.kill("SIGKILL"); } catch {}
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
     };
     store.registerKill(rec.id, killTree);
 
@@ -215,21 +225,21 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
           finishedAt: Date.now(),
           exitCode: code,
           timedOut: true,
-          error: `Job timed out after ${Math.round(rec.timeoutMs / 1000)}s (async job-level timeout)`
+          error: `Job timed out after ${Math.round(rec.timeoutMs / 1000)}s (async job-level timeout)`,
         });
       } else if (killed) {
         store.update(rec.id, {
           status: "interrupted",
           finishedAt: Date.now(),
           exitCode: code,
-          error: "Job interrupted by daemon shutdown."
+          error: "Job interrupted by daemon shutdown.",
         });
       } else {
         store.update(rec.id, {
           status: code === 0 ? "done" : "failed",
           finishedAt: Date.now(),
           exitCode: code,
-          error: code === 0 ? undefined : `Process exited with code ${code}`
+          error: code === 0 ? undefined : `Process exited with code ${code}`,
         });
       }
       resolve();
@@ -241,7 +251,7 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
         status: "failed",
         finishedAt: Date.now(),
         timedOut: false,
-        error: err.message
+        error: err.message,
       });
       resolve();
     });
@@ -261,7 +271,7 @@ export async function runAsyncJob(
           store.update(rec.id, {
             status: "failed",
             finishedAt: Date.now(),
-            error: `Directory not found: ${rec.args.cwd}`
+            error: `Directory not found: ${rec.args.cwd}`,
           });
           return;
         }
@@ -273,7 +283,7 @@ export async function runAsyncJob(
         store.update(rec.id, {
           status: "failed",
           finishedAt: Date.now(),
-          error: dialect.reason
+          error: dialect.reason,
         });
         return;
       }
@@ -289,13 +299,13 @@ export async function runAsyncJob(
       status: failed ? "failed" : "done",
       finishedAt: Date.now(),
       exitCode: failed ? 1 : 0,
-      error: failed ? String(result.error || "Tool reported failure") : undefined
+      error: failed ? String(result.error || "Tool reported failure") : undefined,
     });
   } catch (err: any) {
     store.update(rec.id, {
       status: "failed",
       finishedAt: Date.now(),
-      error: err?.message || "Async job execution error"
+      error: err?.message || "Async job execution error",
     });
   }
 }

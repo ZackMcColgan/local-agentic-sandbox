@@ -41,11 +41,14 @@ export const KNOWN_RUNTIME_DIR_PREFIXES = [
   "test_ui_",
   ".opencode-",
   "node_modules/",
-  ".tmp-e2e-"
+  ".tmp-e2e-",
 ];
 
 export function isProtectedBranch(branch: string): boolean {
-  const b = (branch || "").toLowerCase().trim().replace(/^refs\/heads\//, "");
+  const b = (branch || "")
+    .toLowerCase()
+    .trim()
+    .replace(/^refs\/heads\//, "");
   return b === "develop" || b === "main" || b === "master";
 }
 
@@ -127,7 +130,7 @@ export function parseGitStatusOutput(porcelainText: string): GitStatusResult {
     trackedDirty: trackedFiles.length > 0,
     trackedFiles,
     untrackedFiles,
-    runtimeDirs
+    runtimeDirs,
   };
 }
 
@@ -168,33 +171,42 @@ export function appendGitOpsAuditLog(
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const line = JSON.stringify({
-      timestamp: new Date().toISOString(),
-      ...entry
-    }) + "\n";
+    const line =
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        ...entry,
+      }) + "\n";
     fs.appendFileSync(logPath, line, "utf8");
   } catch {}
 }
 
-function runGit(repoRoot: string, args: string[], timeoutMs = 60000): { stdout: string; stderr: string; exitCode: number } {
+function runGit(
+  repoRoot: string,
+  args: string[],
+  timeoutMs = 60000
+): { stdout: string; stderr: string; exitCode: number } {
   const result = spawnSync("git", args, {
     cwd: repoRoot,
     encoding: "utf8",
     timeout: timeoutMs,
     env: {
       ...process.env,
-      GIT_TERMINAL_PROMPT: "0"
-    }
+      GIT_TERMINAL_PROMPT: "0",
+    },
   });
 
   return {
     stdout: result.stdout || "",
     stderr: result.stderr || (result.error ? result.error.message : ""),
-    exitCode: result.status ?? 1
+    exitCode: result.status ?? 1,
   };
 }
 
-function runGh(repoRoot: string, args: string[], timeoutMs = 60000): { stdout: string; stderr: string; exitCode: number } {
+function runGh(
+  repoRoot: string,
+  args: string[],
+  timeoutMs = 60000
+): { stdout: string; stderr: string; exitCode: number } {
   const ghBin = process.env.GH_BIN_PATH || "gh";
   const isCmdOrBat = ghBin.endsWith(".cmd") || ghBin.endsWith(".bat");
   const result = spawnSync(ghBin, args, {
@@ -204,14 +216,14 @@ function runGh(repoRoot: string, args: string[], timeoutMs = 60000): { stdout: s
     shell: isCmdOrBat,
     env: {
       ...process.env,
-      GIT_TERMINAL_PROMPT: "0"
-    }
+      GIT_TERMINAL_PROMPT: "0",
+    },
   });
 
   return {
     stdout: result.stdout || "",
     stderr: result.stderr || (result.error ? result.error.message : ""),
-    exitCode: result.status ?? 1
+    exitCode: result.status ?? 1,
   };
 }
 
@@ -232,7 +244,7 @@ export async function executeGitVerb(
       repo: capability?.repo || "unknown",
       branch: capability?.branch || "unknown",
       result: "refused",
-      error: refusal
+      error: refusal,
     });
     return { success: false, error: refusal };
   }
@@ -245,7 +257,7 @@ export async function executeGitVerb(
       repo: capability?.repo || "unknown",
       branch: capability?.branch || "unknown",
       result: "refused",
-      error: refusal
+      error: refusal,
     });
     return { success: false, error: refusal };
   }
@@ -258,7 +270,7 @@ export async function executeGitVerb(
       repo: capability.repo,
       branch: capability.branch,
       result: "refused",
-      error: refusal
+      error: refusal,
     });
     return { success: false, error: refusal };
   }
@@ -268,17 +280,21 @@ export async function executeGitVerb(
   // Immediate Protected Branch Protection for Mutating / Checkout / Push
   if (
     isProtectedBranch(targetBranch) &&
-    (verb === "host_git_push" || verb === "host_git_checkout" || verb === "host_git_commit" || verb === "host_git_branch_create")
+    (verb === "host_git_push" ||
+      verb === "host_git_checkout" ||
+      verb === "host_git_commit" ||
+      verb === "host_git_branch_create")
   ) {
-    const refusal = verb === "host_git_push"
-      ? `Refused: direct push to protected branch '${targetBranch}' is forbidden`
-      : `Refused: direct operation on protected branch '${targetBranch}' is forbidden`;
+    const refusal =
+      verb === "host_git_push"
+        ? `Refused: direct push to protected branch '${targetBranch}' is forbidden`
+        : `Refused: direct operation on protected branch '${targetBranch}' is forbidden`;
     appendGitOpsAuditLog(gitLogPath, {
       verb,
       repo: capability.repo,
       branch: targetBranch,
       result: "refused",
-      error: refusal
+      error: refusal,
     });
     return { success: false, error: refusal };
   }
@@ -291,7 +307,7 @@ export async function executeGitVerb(
       repo: capability.repo,
       branch: capability.branch,
       result: "refused",
-      error: refusal
+      error: refusal,
     });
     return { success: false, error: refusal };
   }
@@ -326,12 +342,12 @@ export async function executeGitVerb(
           branch: capability.branch,
           headBefore,
           headAfter: headBefore,
-          result: "success"
+          result: "success",
         });
 
         return {
           success: true,
-          ...parsed
+          ...parsed,
         };
       }
 
@@ -347,14 +363,14 @@ export async function executeGitVerb(
           headBefore,
           headAfter,
           result: success ? "success" : "error",
-          error: success ? undefined : fetchRes.stderr || fetchRes.stdout
+          error: success ? undefined : fetchRes.stderr || fetchRes.stdout,
         });
 
         return {
           success,
           stdout: fetchRes.stdout,
           stderr: fetchRes.stderr,
-          exitCode: fetchRes.exitCode
+          exitCode: fetchRes.exitCode,
         };
       }
 
@@ -368,7 +384,7 @@ export async function executeGitVerb(
             branch: capability.branch,
             headBefore,
             result: "refused",
-            error: refusal
+            error: refusal,
           });
           return { success: false, error: refusal, trackedFiles: preCheck.status?.trackedFiles };
         }
@@ -384,7 +400,7 @@ export async function executeGitVerb(
           headBefore,
           headAfter,
           result: success ? "success" : "error",
-          error: success ? undefined : pullRes.stderr || pullRes.stdout
+          error: success ? undefined : pullRes.stderr || pullRes.stdout,
         });
 
         return {
@@ -393,7 +409,7 @@ export async function executeGitVerb(
           stderr: pullRes.stderr,
           exitCode: pullRes.exitCode,
           headBefore,
-          headAfter
+          headAfter,
         };
       }
 
@@ -403,20 +419,38 @@ export async function executeGitVerb(
 
         if (!isValidFeatureBranchName(branchName)) {
           const refusal = `Refused: branch name '${branchName}' must match feature/* format`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         if (isProhibitedBranchToken(branchName)) {
           const refusal = `Refused: branch name '${branchName}' contains prohibited agent/tool tokens`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         const preCheck = checkTrackedClean();
         if (!preCheck.clean) {
           const refusal = "Refused: working tree has tracked modifications";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -424,7 +458,13 @@ export async function executeGitVerb(
         const existsCheck = runGit(repoRoot, ["rev-parse", "--verify", `refs/heads/${branchName}`]);
         if (existsCheck.exitCode === 0) {
           const refusal = `Refused: branch '${branchName}' already exists`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -439,7 +479,7 @@ export async function executeGitVerb(
           headBefore,
           headAfter,
           result: success ? "success" : "error",
-          error: success ? undefined : createRes.stderr || createRes.stdout
+          error: success ? undefined : createRes.stderr || createRes.stdout,
         });
 
         return {
@@ -448,7 +488,7 @@ export async function executeGitVerb(
           baseRef,
           headSha: headAfter,
           stdout: createRes.stdout,
-          stderr: createRes.stderr
+          stderr: createRes.stderr,
         };
       }
 
@@ -457,20 +497,38 @@ export async function executeGitVerb(
 
         if (isProtectedBranch(branchName)) {
           const refusal = `Refused: checkout of protected branch '${branchName}' as working branch is not permitted`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         if (!isValidFeatureBranchName(branchName)) {
           const refusal = `Refused: checkout only permitted on feature/* branches, got '${branchName}'`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         const preCheck = checkTrackedClean();
         if (!preCheck.clean) {
           const refusal = "Refused: working tree has tracked modifications";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: branchName, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: branchName,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -485,7 +543,7 @@ export async function executeGitVerb(
           headBefore,
           headAfter,
           result: success ? "success" : "error",
-          error: success ? undefined : checkoutRes.stderr || checkoutRes.stdout
+          error: success ? undefined : checkoutRes.stderr || checkoutRes.stdout,
         });
 
         return {
@@ -493,7 +551,7 @@ export async function executeGitVerb(
           branch: branchName,
           headSha: headAfter,
           stdout: checkoutRes.stdout,
-          stderr: checkoutRes.stderr
+          stderr: checkoutRes.stderr,
         };
       }
 
@@ -501,7 +559,13 @@ export async function executeGitVerb(
         const rawPaths: string[] = Array.isArray(args.paths) ? args.paths : [];
         if (rawPaths.length === 0) {
           const refusal = "Refused: exact relative file paths required in paths list";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -511,14 +575,26 @@ export async function executeGitVerb(
             const refusal = isRuntime
               ? `Refused: staging runtime directories is forbidden ('${p}')`
               : `Refused: exact relative file paths required; wildcards or flags forbidden ('${p}')`;
-            appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+            appendGitOpsAuditLog(gitLogPath, {
+              verb,
+              repo: capability.repo,
+              branch: capability.branch,
+              result: "refused",
+              error: refusal,
+            });
             return { success: false, error: refusal };
           }
 
           const fullPath = path.resolve(repoRoot, p);
           if (!fs.existsSync(fullPath)) {
             const refusal = `Refused: file does not exist on disk ('${p}')`;
-            appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+            appendGitOpsAuditLog(gitLogPath, {
+              verb,
+              repo: capability.repo,
+              branch: capability.branch,
+              result: "refused",
+              error: refusal,
+            });
             return { success: false, error: refusal };
           }
         }
@@ -533,14 +609,14 @@ export async function executeGitVerb(
           headBefore,
           headAfter: headBefore,
           result: success ? "success" : "error",
-          error: success ? undefined : addRes.stderr || addRes.stdout
+          error: success ? undefined : addRes.stderr || addRes.stdout,
         });
 
         return {
           success,
           stagedPaths: rawPaths,
           stdout: addRes.stdout,
-          stderr: addRes.stderr
+          stderr: addRes.stderr,
         };
       }
 
@@ -548,7 +624,13 @@ export async function executeGitVerb(
         const message = typeof args.message === "string" ? args.message.trim() : "";
         if (!message) {
           const refusal = "Refused: commit message cannot be empty";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -557,7 +639,13 @@ export async function executeGitVerb(
         const stagedFiles = stagedRes.stdout.split(/\r?\n/).filter(Boolean);
         if (stagedFiles.length === 0) {
           const refusal = "Refused: nothing staged to commit";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -565,7 +653,13 @@ export async function executeGitVerb(
         for (const file of stagedFiles) {
           if (!isExactPathAllowed(file)) {
             const refusal = `Refused: staged set contains forbidden or runtime path: '${file}'`;
-            appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+            appendGitOpsAuditLog(gitLogPath, {
+              verb,
+              repo: capability.repo,
+              branch: capability.branch,
+              result: "refused",
+              error: refusal,
+            });
             return { success: false, error: refusal };
           }
         }
@@ -581,7 +675,7 @@ export async function executeGitVerb(
           headBefore,
           headAfter,
           result: success ? "success" : "error",
-          error: success ? undefined : commitRes.stderr || commitRes.stdout
+          error: success ? undefined : commitRes.stderr || commitRes.stdout,
         });
 
         return {
@@ -589,7 +683,7 @@ export async function executeGitVerb(
           headSha: headAfter,
           stagedFiles,
           stdout: commitRes.stdout,
-          stderr: commitRes.stderr
+          stderr: commitRes.stderr,
         };
       }
 
@@ -597,7 +691,13 @@ export async function executeGitVerb(
         const targetBranch = args.branch || capability.branch;
         if (isProtectedBranch(targetBranch)) {
           const refusal = `Refused: direct push to protected branch '${targetBranch}' is forbidden`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: targetBranch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: targetBranch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -611,7 +711,7 @@ export async function executeGitVerb(
           headBefore,
           headAfter: headBefore,
           result: success ? "success" : "error",
-          error: success ? undefined : pushRes.stderr || pushRes.stdout
+          error: success ? undefined : pushRes.stderr || pushRes.stdout,
         });
 
         return {
@@ -619,25 +719,38 @@ export async function executeGitVerb(
           branch: targetBranch,
           stdout: pushRes.stdout,
           stderr: pushRes.stderr,
-          exitCode: pushRes.exitCode
+          exitCode: pushRes.exitCode,
         };
       }
 
       case "host_git_pr_create": {
         const title = typeof args.title === "string" ? args.title.trim() : "";
         const body = typeof args.body === "string" ? args.body.trim() : "";
-        const base = typeof args.base === "string" && args.base.trim() ? args.base.trim() : "develop";
+        const base =
+          typeof args.base === "string" && args.base.trim() ? args.base.trim() : "develop";
         const branch = args.branch || capability.branch;
 
         if (!title || !body) {
           const refusal = "Refused: PR title and body must be non-empty";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         if (isProtectedBranch(base) && base.toLowerCase() === "main") {
           const refusal = "Refused: direct PR into main is forbidden; PRs must target develop";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -656,19 +769,30 @@ export async function executeGitVerb(
                 headAfter: headBefore,
                 result: "success",
                 prNumber: existing.number,
-                prUrl: existing.url
+                prUrl: existing.url,
               });
               return {
                 success: true,
                 alreadyExisted: true,
                 prNumber: existing.number,
-                prUrl: existing.url
+                prUrl: existing.url,
               };
             }
           } catch {}
         }
 
-        const createRes = runGh(repoRoot, ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body]);
+        const createRes = runGh(repoRoot, [
+          "pr",
+          "create",
+          "--base",
+          base,
+          "--head",
+          branch,
+          "--title",
+          title,
+          "--body",
+          body,
+        ]);
         const success = createRes.exitCode === 0;
         let prUrl = "";
         let prNumber = 0;
@@ -692,7 +816,7 @@ export async function executeGitVerb(
           result: success ? "success" : "error",
           error: success ? undefined : createRes.stderr || createRes.stdout,
           prNumber: prNumber || undefined,
-          prUrl: prUrl || undefined
+          prUrl: prUrl || undefined,
         });
 
         return {
@@ -700,7 +824,7 @@ export async function executeGitVerb(
           prNumber,
           prUrl,
           stdout: createRes.stdout,
-          stderr: createRes.stderr
+          stderr: createRes.stderr,
         };
       }
 
@@ -708,7 +832,13 @@ export async function executeGitVerb(
         const prNumber = parseInt(args.prNumber, 10);
         if (isNaN(prNumber) || prNumber <= 0) {
           const refusal = "Refused: valid prNumber required";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
@@ -717,7 +847,7 @@ export async function executeGitVerb(
           "view",
           String(prNumber),
           "--json",
-          "number,title,state,isDraft,mergeable,statusCheckRollup"
+          "number,title,state,isDraft,mergeable,statusCheckRollup",
         ]);
 
         if (viewRes.exitCode !== 0) {
@@ -728,7 +858,7 @@ export async function executeGitVerb(
           const data = JSON.parse(viewRes.stdout);
           return {
             success: true,
-            data
+            data,
           };
         } catch (err: any) {
           return { success: false, error: `Failed to parse gh output: ${err.message}` };
@@ -739,32 +869,67 @@ export async function executeGitVerb(
         const prNumber = parseInt(args.prNumber, 10);
         if (isNaN(prNumber) || prNumber <= 0) {
           const refusal = "Refused: valid prNumber required";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+          });
           return { success: false, error: refusal };
         }
 
         // Part 1.5 Merge Grant Pre-checks
         if (!grant) {
           const refusal = "Refused: No merge grant exists for this job";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (grant.consumed) {
           const refusal = "Refused: Merge grant for this PR has already been consumed";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (grant.prNumber && grant.prNumber !== prNumber) {
           const refusal = `Refused: PR mismatch: grant is for PR #${grant.prNumber}, not #${prNumber}`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (grant.targetBase && grant.targetBase.toLowerCase() === "main" && !grant.allowMain) {
-          const refusal = "Refused: Merge into main is refused: instruction did not explicitly approve main base";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          const refusal =
+            "Refused: Merge into main is refused: instruction did not explicitly approve main base";
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
@@ -774,12 +939,19 @@ export async function executeGitVerb(
           "view",
           String(prNumber),
           "--json",
-          "number,state,isDraft,mergeable,baseRefName,statusCheckRollup"
+          "number,state,isDraft,mergeable,baseRefName,statusCheckRollup",
         ]);
 
         if (viewRes.exitCode !== 0) {
           const refusal = `Refused: gh pr view failed: ${viewRes.stderr || viewRes.stdout}`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
@@ -792,26 +964,55 @@ export async function executeGitVerb(
 
         const base = (prInfo.baseRefName || grant.targetBase || "").toLowerCase();
         if (base === "main" && !grant.allowMain) {
-          const refusal = "Refused: Merge into main is refused: instruction did not explicitly approve main base";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          const refusal =
+            "Refused: Merge into main is refused: instruction did not explicitly approve main base";
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (prInfo.state !== "OPEN") {
           const refusal = `Refused: PR is not OPEN (current state: ${prInfo.state})`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (prInfo.isDraft) {
           const refusal = "Refused: PR is still marked as draft";
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
         if (prInfo.mergeable !== "MERGEABLE") {
           const refusal = `Refused: PR is not mergeable (mergeable state: ${prInfo.mergeable})`;
-          appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+          appendGitOpsAuditLog(gitLogPath, {
+            verb,
+            repo: capability.repo,
+            branch: capability.branch,
+            result: "refused",
+            error: refusal,
+            prNumber,
+          });
           return { success: false, error: refusal };
         }
 
@@ -821,7 +1022,14 @@ export async function executeGitVerb(
           const state = (check.conclusion || check.status || check.state || "").toUpperCase();
           if (state !== "SUCCESS" && state !== "COMPLETED") {
             const refusal = `Refused: PR CI checks are not all green: check '${check.name || check.context}' is ${state}`;
-            appendGitOpsAuditLog(gitLogPath, { verb, repo: capability.repo, branch: capability.branch, result: "refused", error: refusal, prNumber });
+            appendGitOpsAuditLog(gitLogPath, {
+              verb,
+              repo: capability.repo,
+              branch: capability.branch,
+              result: "refused",
+              error: refusal,
+              prNumber,
+            });
             return { success: false, error: refusal };
           }
         }
@@ -854,7 +1062,7 @@ export async function executeGitVerb(
           result: success ? "success" : "error",
           error: success ? undefined : mergeRes.stderr || mergeRes.stdout,
           prNumber,
-          mergeSha: mergeSha || undefined
+          mergeSha: mergeSha || undefined,
         });
 
         return {
@@ -862,7 +1070,7 @@ export async function executeGitVerb(
           prNumber,
           mergeSha,
           stdout: mergeRes.stdout,
-          stderr: mergeRes.stderr
+          stderr: mergeRes.stderr,
         };
       }
 
@@ -877,7 +1085,7 @@ export async function executeGitVerb(
       branch: capability.branch,
       headBefore,
       result: "error",
-      error: err.message
+      error: err.message,
     });
     return { success: false, error: err.message };
   }

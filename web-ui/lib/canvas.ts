@@ -45,9 +45,7 @@ export function isCanvasEnabled(
   storage?: { getItem: (key: string) => string | null } | null
 ): boolean {
   try {
-    const store =
-      storage ??
-      (typeof window !== "undefined" ? window.localStorage : null);
+    const store = storage ?? (typeof window !== "undefined" ? window.localStorage : null);
     if (!store) return true;
     const raw = store.getItem(CANVAS_FLAG_KEY);
     if (raw === null || raw === undefined) return true;
@@ -120,10 +118,7 @@ function pathFromSection(sectionLines: string[]): string | null {
  * `diff --git` headers becomes a single file under the fallback path.
  * The text of each section is preserved verbatim — nothing is truncated.
  */
-export function splitUnifiedDiff(
-  diff: string,
-  fallbackPath?: string
-): CanvasDiffFile[] {
+export function splitUnifiedDiff(diff: string, fallbackPath?: string): CanvasDiffFile[] {
   if (!diff || !diff.trim()) return [];
   const lines = diff.split("\n");
   const starts: number[] = [];
@@ -258,11 +253,7 @@ export function buildDiffRows(diff: string): DiffRow[] {
  * classification (an HTML page stays a page; SVG stays a graphic) so the
  * canvas preview never reclassifies what the chat already renders.
  */
-export function isPreviewable(
-  filename?: string,
-  language?: string,
-  code?: string
-): boolean {
+export function isPreviewable(filename?: string, language?: string, code?: string): boolean {
   const name = (filename || "").toLowerCase();
   const lang = (language || "").toLowerCase();
   if (name.endsWith(".html") || name.endsWith(".htm")) return true;
@@ -290,10 +281,7 @@ export function captureScrollPosition(el: ScrollLike | null | undefined): number
   return typeof el.scrollTop === "number" ? el.scrollTop : 0;
 }
 
-export function restoreScrollPosition(
-  el: ScrollLike | null | undefined,
-  position: number
-): void {
+export function restoreScrollPosition(el: ScrollLike | null | undefined, position: number): void {
   if (!el) return;
   el.scrollTop = position;
 }

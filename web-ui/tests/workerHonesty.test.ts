@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { createBuilderWorker, createCriticWorker, getResolvedGitSha } from "../lib/subagents/workerPool.js";
+import {
+  createBuilderWorker,
+  createCriticWorker,
+  getResolvedGitSha,
+} from "../lib/subagents/workerPool.js";
 import { ModelUnavailableError, type GenerateFn } from "../lib/subagents/llmClient.js";
 import type { Milestone } from "../lib/subagents/types.js";
 
@@ -19,7 +23,7 @@ function milestone(overrides: Partial<Milestone> = {}): Milestone {
     status: "in_progress",
     builderIterations: 0,
     criticRounds: 0,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -27,7 +31,7 @@ const approvingModel: GenerateFn = async (req) => ({
   text: JSON.stringify({ approved: true, feedback: [], analysis: "diff sets background" }),
   model: req.model,
   loadDurationMs: 0,
-  totalDurationMs: 1
+  totalDurationMs: 1,
 });
 
 describe("Phase A — Critic never approves without a model verdict (A1)", () => {
@@ -40,7 +44,9 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
   it("critic with Ollama down does NOT approve a rule-clean diff — it abstains", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const critic = createCriticWorker({ ollamaUrl: DEAD_OLLAMA, model: "swift-27b-mtp" });
-    const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
+    const review = await critic.evaluateMilestoneDiff(milestone(), {
+      diff: '+ background="#ffffff"',
+    });
     assert.equal(review.approved, false, "unreachable critic model must never approve");
     assert.equal(review.abstained, true);
     assert.ok(review.feedback.some((f) => f.includes("critic model unreachable — abstaining")));
@@ -48,9 +54,16 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
 
   it("critic abstains when the model returns an unparseable verdict", async () => {
     delete process.env.FAST_GRAPH_TEST;
-    const garbage: GenerateFn = async (req) => ({ text: "sure looks fine to me", model: req.model, loadDurationMs: 0, totalDurationMs: 1 });
+    const garbage: GenerateFn = async (req) => ({
+      text: "sure looks fine to me",
+      model: req.model,
+      loadDurationMs: 0,
+      totalDurationMs: 1,
+    });
     const critic = createCriticWorker({ generate: garbage, model: "swift-27b-mtp" });
-    const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
+    const review = await critic.evaluateMilestoneDiff(milestone(), {
+      diff: '+ background="#ffffff"',
+    });
     assert.equal(review.approved, false);
     assert.equal(review.abstained, true);
   });
@@ -58,7 +71,9 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
   it("critic approves only when rules pass AND the model approves", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const critic = createCriticWorker({ generate: approvingModel, model: "swift-27b-mtp" });
-    const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
+    const review = await critic.evaluateMilestoneDiff(milestone(), {
+      diff: '+ background="#ffffff"',
+    });
     assert.equal(review.approved, true);
     assert.equal(review.abstained, false);
     assert.equal(review.synthetic, false);
@@ -67,13 +82,19 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
   it("a model rejection overrides clean rules and its feedback is surfaced", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const rejecting: GenerateFn = async (req) => ({
-      text: JSON.stringify({ approved: false, feedback: ["line 3 sets background twice"], analysis: "dup attr" }),
+      text: JSON.stringify({
+        approved: false,
+        feedback: ["line 3 sets background twice"],
+        analysis: "dup attr",
+      }),
       model: req.model,
       loadDurationMs: 0,
-      totalDurationMs: 1
+      totalDurationMs: 1,
     });
     const critic = createCriticWorker({ generate: rejecting, model: "swift-27b-mtp" });
-    const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
+    const review = await critic.evaluateMilestoneDiff(milestone(), {
+      diff: '+ background="#ffffff"',
+    });
     assert.equal(review.approved, false);
     assert.ok(review.feedback.includes("line 3 sets background twice"));
   });
@@ -81,7 +102,9 @@ describe("Phase A — Critic never approves without a model verdict (A1)", () =>
   it("FAST_GRAPH_TEST rule-only verdicts are flagged synthetic", async () => {
     process.env.FAST_GRAPH_TEST = "1";
     const critic = createCriticWorker({ ollamaUrl: DEAD_OLLAMA });
-    const review = await critic.evaluateMilestoneDiff(milestone(), { diff: '+ background="#ffffff"' });
+    const review = await critic.evaluateMilestoneDiff(milestone(), {
+      diff: '+ background="#ffffff"',
+    });
     assert.equal(review.synthetic, true, "rule-only verdict must carry synthetic provenance");
   });
 });
@@ -105,16 +128,29 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
     delete process.env.FAST_GRAPH_TEST;
     const repo = tempRepo();
     const builder = createBuilderWorker({ ollamaUrl: DEAD_OLLAMA, model: "swift-27b-mtp" });
-    const m = milestone({ title: "Generate architecture diagram", plannedFiles: ["docs/architecture.drawio"] });
-    await assert.rejects(builder.executeMilestoneWork(m, { repoRoot: repo, gitSha: "a".repeat(40) }), ModelUnavailableError);
-    assert.equal(fs.existsSync(path.join(repo, "docs/architecture.drawio")), false, "no file may be written on model failure");
+    const m = milestone({
+      title: "Generate architecture diagram",
+      plannedFiles: ["docs/architecture.drawio"],
+    });
+    await assert.rejects(
+      builder.executeMilestoneWork(m, { repoRoot: repo, gitSha: "a".repeat(40) }),
+      ModelUnavailableError
+    );
+    assert.equal(
+      fs.existsSync(path.join(repo, "docs/architecture.drawio")),
+      false,
+      "no file may be written on model failure"
+    );
   });
 
   it("FAST_GRAPH_TEST fallback output is marked synthetic: true", async () => {
     process.env.FAST_GRAPH_TEST = "1";
     const repo = tempRepo();
     const builder = createBuilderWorker({ ollamaUrl: DEAD_OLLAMA });
-    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["out.ts"] }), { repoRoot: repo, gitSha: "b".repeat(40) });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["out.ts"] }), {
+      repoRoot: repo,
+      gitSha: "b".repeat(40),
+    });
     assert.equal(res.synthetic, true);
     assert.equal(res.model, undefined);
   });
@@ -122,12 +158,23 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
   it("model output is written verbatim (fence stripped) with synthetic: false and the model recorded", async () => {
     delete process.env.FAST_GRAPH_TEST;
     const repo = tempRepo();
-    const gen: GenerateFn = async (req) => ({ text: "```ts\nexport const BG = '#ffffff';\n```", model: req.model, loadDurationMs: 0, totalDurationMs: 1 });
+    const gen: GenerateFn = async (req) => ({
+      text: "```ts\nexport const BG = '#ffffff';\n```",
+      model: req.model,
+      loadDurationMs: 0,
+      totalDurationMs: 1,
+    });
     const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
-    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["out.ts"] }), { repoRoot: repo, gitSha: "c".repeat(40) });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["out.ts"] }), {
+      repoRoot: repo,
+      gitSha: "c".repeat(40),
+    });
     assert.equal(res.synthetic, false);
     assert.equal(res.model, "swift-27b-mtp");
-    assert.equal(fs.readFileSync(path.join(repo, "out.ts"), "utf8"), "export const BG = '#ffffff';");
+    assert.equal(
+      fs.readFileSync(path.join(repo, "out.ts"), "utf8"),
+      "export const BG = '#ffffff';"
+    );
     assert.ok(res.diff.includes("+export const BG = '#ffffff';"));
   });
 
@@ -138,12 +185,18 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
       text: "Here is the implementation:\n\n```typescript\nexport const WEATHER_API = 'https://api.open-meteo.com';\n```\nHope this helps!",
       model: req.model,
       loadDurationMs: 0,
-      totalDurationMs: 1
+      totalDurationMs: 1,
     });
     const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
-    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["weather.ts"] }), { repoRoot: repo, gitSha: "d".repeat(40) });
+    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["weather.ts"] }), {
+      repoRoot: repo,
+      gitSha: "d".repeat(40),
+    });
     assert.equal(res.synthetic, false);
-    assert.equal(fs.readFileSync(path.join(repo, "weather.ts"), "utf8"), "export const WEATHER_API = 'https://api.open-meteo.com';");
+    assert.equal(
+      fs.readFileSync(path.join(repo, "weather.ts"), "utf8"),
+      "export const WEATHER_API = 'https://api.open-meteo.com';"
+    );
   });
 
   it("model output containing thinking tags and reasoning extracts clean code", async () => {
@@ -153,12 +206,18 @@ describe("Phase A — Builder never synthesizes in production (A2)", () => {
       text: "We need respond to user: write fetch script. Simple.\n</think>\n\n```typescript\nexport const fetchWeather = async () => ({ temp: 72 });\n```",
       model: req.model,
       loadDurationMs: 0,
-      totalDurationMs: 1
+      totalDurationMs: 1,
     });
     const builder = createBuilderWorker({ generate: gen, model: "swift-27b-mtp" });
-    const res = await builder.executeMilestoneWork(milestone({ plannedFiles: ["fetchWeather.ts"] }), { repoRoot: repo, gitSha: "e".repeat(40) });
+    const res = await builder.executeMilestoneWork(
+      milestone({ plannedFiles: ["fetchWeather.ts"] }),
+      { repoRoot: repo, gitSha: "e".repeat(40) }
+    );
     assert.equal(res.synthetic, false);
-    assert.equal(fs.readFileSync(path.join(repo, "fetchWeather.ts"), "utf8"), "export const fetchWeather = async () => ({ temp: 72 });");
+    assert.equal(
+      fs.readFileSync(path.join(repo, "fetchWeather.ts"), "utf8"),
+      "export const fetchWeather = async () => ({ temp: 72 });"
+    );
   });
 });
 
@@ -183,7 +242,10 @@ describe("Phase A — No fabricated SHAs (A2c)", () => {
       execSync("git config user.name 'Test'", { cwd: tempRepo, stdio: "ignore" });
       fs.writeFileSync(path.join(tempRepo, "test.txt"), "hello");
       execSync("git add test.txt && git commit -m 'initial'", { cwd: tempRepo, stdio: "ignore" });
-      const expectedSha = execSync("git rev-parse HEAD", { cwd: tempRepo, encoding: "utf8" }).trim();
+      const expectedSha = execSync("git rev-parse HEAD", {
+        cwd: tempRepo,
+        encoding: "utf8",
+      }).trim();
 
       process.env.WORKSPACE_DIR = tempRepo;
       // In container environment, repoRoot might be /app (not a git repo), but WORKSPACE_DIR is /workspace

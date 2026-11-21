@@ -1,7 +1,11 @@
 import { execFileSync } from "child_process";
 import { existsSync, rmSync } from "fs";
 import { join } from "path";
-export interface WorktreeHandle { jobId: string; path: string; branch: string; }
+export interface WorktreeHandle {
+  jobId: string;
+  path: string;
+  branch: string;
+}
 // A git spawn must never wait forever: under parallel test churn, `worktree
 // add` can queue behind index/worktree locks indefinitely (CI run 43737566475
 // went silent 24 min on exactly this). Bound every spawn to 30s and retry a
@@ -61,16 +65,23 @@ export function createJobWorktree(repoRoot: string, jobId: string): WorktreeHand
   // stale registrations, retrying across concurrent git lock races.
   for (let attempt = 0; ; attempt++) {
     if (existsSync(path)) {
-      try { git(["worktree", "remove", "--force", path], repoRoot); } catch {}
+      try {
+        git(["worktree", "remove", "--force", path], repoRoot);
+      } catch {}
     }
-    try { git(["branch", "-D", branch], repoRoot); } catch {}
-    try { git(["worktree", "prune"], repoRoot); } catch {}
+    try {
+      git(["branch", "-D", branch], repoRoot);
+    } catch {}
+    try {
+      git(["worktree", "prune"], repoRoot);
+    } catch {}
     try {
       git(["worktree", "add", "-b", branch, path, "HEAD"], repoRoot);
       return { jobId, path, branch };
     } catch (err: any) {
       const text = errorText(err);
-      const retryable = err?.code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
+      const retryable =
+        err?.code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
       if (!retryable || attempt >= GIT_LOCK_RETRIES) throw err;
       sleep(150 * (attempt + 1) + (process.pid % 97));
     }
@@ -83,7 +94,11 @@ export function removeJobWorktree(repoRoot: string, handle: WorktreeHandle): voi
     try {
       if (existsSync(handle.path)) rmSync(handle.path, { recursive: true, force: true });
     } catch {}
-    try { git(["worktree", "prune"], repoRoot); } catch {}
+    try {
+      git(["worktree", "prune"], repoRoot);
+    } catch {}
   }
-  try { git(["branch", "-D", handle.branch], repoRoot); } catch {}
+  try {
+    git(["branch", "-D", handle.branch], repoRoot);
+  } catch {}
 }

@@ -24,7 +24,7 @@ import {
   Eye,
   Check,
   RotateCcw,
-  Trash2
+  Trash2,
 } from "lucide-react";
 import { ProjectRecord } from "@/lib/projects/projectStore";
 import { ProjectTreeNode } from "@/lib/projects/projectGit";
@@ -35,12 +35,21 @@ export interface ProjectsViewProps {
   projects: ProjectRecord[];
   selectedProjectId?: string | null;
   onSelectProject?: (id: string) => void;
-  onRegisterProject?: (data: { name: string; rootPath: string; baseBranch?: string; toolchain?: string }) => Promise<void>;
+  onRegisterProject?: (data: {
+    name: string;
+    rootPath: string;
+    baseBranch?: string;
+    toolchain?: string;
+  }) => Promise<void>;
   onToggleAllowlist?: (id: string, allowlisted: boolean) => Promise<void>;
   onDeleteProject?: (id: string) => Promise<void>;
   onOpenDrawer: () => void;
   // Phase 2 props (optional)
-  onRunOvernightTask?: (projectId: string, prompt: string, mode: "now" | "schedule") => Promise<void>;
+  onRunOvernightTask?: (
+    projectId: string,
+    prompt: string,
+    mode: "now" | "schedule"
+  ) => Promise<void>;
   // Phase 3 props (optional)
   diffs?: any[];
   onAcceptFile?: (filePath: string) => Promise<void>;
@@ -58,7 +67,7 @@ export function ProjectsView({
   onRunOvernightTask,
   diffs = [],
   onAcceptFile,
-  onRevertFile
+  onRevertFile,
 }: ProjectsViewProps) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(
     selectedProjectId || (projects.length > 0 ? projects[0].project_id : null)
@@ -128,7 +137,7 @@ export function ProjectsView({
       const initRes = await fetch("/api/projects/browse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "init-repo", targetPath: formPath })
+        body: JSON.stringify({ action: "init-repo", targetPath: formPath }),
       });
       if (!initRes.ok) {
         const d = await initRes.json().catch(() => ({}));
@@ -136,21 +145,33 @@ export function ProjectsView({
       }
       if (onRegisterProject) {
         await onRegisterProject({
-          name: formName.trim() || (formPath.split(/[\/\\]/).filter(Boolean).pop() || "project"),
+          name:
+            formName.trim() ||
+            formPath
+              .split(/[\/\\]/)
+              .filter(Boolean)
+              .pop() ||
+            "project",
           rootPath: formPath.trim(),
           baseBranch: formBranch.trim() || "main",
-          toolchain: formToolchain.trim() || "node:22"
+          toolchain: formToolchain.trim() || "node:22",
         });
       } else {
         const regRes = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: formName.trim() || (formPath.split(/[\/\\]/).filter(Boolean).pop() || "project"),
+            name:
+              formName.trim() ||
+              formPath
+                .split(/[\/\\]/)
+                .filter(Boolean)
+                .pop() ||
+              "project",
             rootPath: formPath.trim(),
             baseBranch: formBranch.trim() || "main",
-            toolchain: formToolchain.trim() || "node:22"
-          })
+            toolchain: formToolchain.trim() || "node:22",
+          }),
         });
         if (!regRes.ok) {
           const d = await regRes.json().catch(() => ({}));
@@ -179,7 +200,7 @@ export function ProjectsView({
       const gfRes = await fetch("/api/projects/browse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create-greenfield", name: greenfieldName.trim() })
+        body: JSON.stringify({ action: "create-greenfield", name: greenfieldName.trim() }),
       });
       if (!gfRes.ok) {
         const d = await gfRes.json().catch(() => ({}));
@@ -191,7 +212,7 @@ export function ProjectsView({
           name: data.name,
           rootPath: data.projectPath,
           baseBranch: data.defaultBranch || "main",
-          toolchain: greenfieldToolchain
+          toolchain: greenfieldToolchain,
         });
       } else {
         const regRes = await fetch("/api/projects", {
@@ -201,8 +222,8 @@ export function ProjectsView({
             name: data.name,
             rootPath: data.projectPath,
             baseBranch: data.defaultBranch || "main",
-            toolchain: greenfieldToolchain
-          })
+            toolchain: greenfieldToolchain,
+          }),
         });
         if (!regRes.ok) {
           const d = await regRes.json().catch(() => ({}));
@@ -299,7 +320,7 @@ export function ProjectsView({
         await fetch(`/api/projects/${activeProject.project_id}/diff`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "accept", taskId: tId, filePath })
+          body: JSON.stringify({ action: "accept", taskId: tId, filePath }),
         });
       }
       setDiffItems((prev) =>
@@ -323,7 +344,7 @@ export function ProjectsView({
         await fetch(`/api/projects/${activeProject.project_id}/diff`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "revert", taskId: tId, filePath, baseSha: diffBaseSha })
+          body: JSON.stringify({ action: "revert", taskId: tId, filePath, baseSha: diffBaseSha }),
         });
       }
       setDiffItems((prev) =>
@@ -344,7 +365,7 @@ export function ProjectsView({
       await fetch(`/api/projects/${activeProject.project_id}/diff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "finalize", taskId: tId })
+        body: JSON.stringify({ action: "finalize", taskId: tId }),
       });
       setReviewFinalized(true);
     } catch (err: any) {
@@ -428,7 +449,7 @@ export function ProjectsView({
           name: formName.trim(),
           rootPath: formPath.trim(),
           baseBranch: formBranch.trim() || "develop",
-          toolchain: formToolchain.trim() || "node:22"
+          toolchain: formToolchain.trim() || "node:22",
         });
       } else {
         const res = await fetch("/api/projects", {
@@ -438,8 +459,8 @@ export function ProjectsView({
             name: formName.trim(),
             rootPath: formPath.trim(),
             baseBranch: formBranch.trim() || "develop",
-            toolchain: formToolchain.trim() || "node:22"
-          })
+            toolchain: formToolchain.trim() || "node:22",
+          }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -468,7 +489,7 @@ export function ProjectsView({
       await fetch("/api/projects", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: p.project_id, allowlisted: nextVal })
+        body: JSON.stringify({ id: p.project_id, allowlisted: nextVal }),
       });
     }
   };
@@ -476,7 +497,6 @@ export function ProjectsView({
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        
         {/* Top Header */}
         <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -518,7 +538,8 @@ export function ProjectsView({
               No Projects Registered
             </h3>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-md mx-auto">
-              Register a local repository directory to enable overnight autonomous runs, read-only file exploration, and surgical git diff reviews.
+              Register a local repository directory to enable overnight autonomous runs, read-only
+              file exploration, and surgical git diff reviews.
             </p>
             <button
               type="button"
@@ -626,7 +647,8 @@ export function ProjectsView({
                       className="mt-3 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 space-y-2"
                     >
                       <p className="text-[11px] text-rose-800 dark:text-rose-200">
-                        Remove <strong>{proj.name}</strong> from the registry? Files on disk and linked chat threads will not be deleted.
+                        Remove <strong>{proj.name}</strong> from the registry? Files on disk and
+                        linked chat threads will not be deleted.
                       </p>
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -761,13 +783,15 @@ export function ProjectsView({
                           key={node.path}
                           onClick={() => isFile && handleSelectFile(node.path)}
                           className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs transition-colors ${
-                            isFile ? "cursor-pointer" : "cursor-default text-slate-400 font-semibold"
+                            isFile
+                              ? "cursor-pointer"
+                              : "cursor-default text-slate-400 font-semibold"
                           } ${
                             isSelected
                               ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 font-semibold"
                               : isFile
-                              ? "hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300"
-                              : "text-slate-500 dark:text-zinc-400"
+                                ? "hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                                : "text-slate-500 dark:text-zinc-400"
                           }`}
                         >
                           {isFile ? (
@@ -794,7 +818,9 @@ export function ProjectsView({
                       </div>
 
                       {isLoadingFile && (
-                        <div className="p-8 text-center text-xs text-slate-400">Loading file content...</div>
+                        <div className="p-8 text-center text-xs text-slate-400">
+                          Loading file content...
+                        </div>
                       )}
 
                       {fileError && (
@@ -807,14 +833,20 @@ export function ProjectsView({
                         <CodeBlock
                           code={fileContent}
                           filename={selectedFilePath.split("/").pop()}
-                          language={selectedFilePath.endsWith(".ts") || selectedFilePath.endsWith(".tsx") ? "typescript" : "javascript"}
+                          language={
+                            selectedFilePath.endsWith(".ts") || selectedFilePath.endsWith(".tsx")
+                              ? "typescript"
+                              : "javascript"
+                          }
                         />
                       )}
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-400">
                       <Eye className="h-8 w-8 mb-2 opacity-50" />
-                      <p className="text-xs">Select any file from the repository tree to preview its content.</p>
+                      <p className="text-xs">
+                        Select any file from the repository tree to preview its content.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -839,7 +871,10 @@ export function ProjectsView({
                       </span>
                     </div>
                     <p className="text-xs text-slate-700 dark:text-zinc-300">
-                      Task execution in progress on branch <code className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded">feat/task...</code>
+                      Task execution in progress on branch{" "}
+                      <code className="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1 py-0.5 rounded">
+                        feat/task...
+                      </code>
                     </p>
                   </div>
                 )}
@@ -862,14 +897,17 @@ export function ProjectsView({
 
                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
                     <div className="text-[11px] text-slate-400">
-                      Target branch: <code className="font-mono">{activeProject.base_branch}</code> · Engine: <code className="font-mono">Flash-Next</code>
+                      Target branch: <code className="font-mono">{activeProject.base_branch}</code>{" "}
+                      · Engine: <code className="font-mono">Flash-Next</code>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={async () => {
-                          const el = document.getElementById("project-task-prompt-input") as HTMLTextAreaElement | null;
+                          const el = document.getElementById(
+                            "project-task-prompt-input"
+                          ) as HTMLTextAreaElement | null;
                           const prompt = el?.value || "";
                           if (!prompt.trim()) return;
                           if (onRunOvernightTask) {
@@ -878,7 +916,11 @@ export function ProjectsView({
                             await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ prompt, mode: "schedule", scheduleTime: "02:00" })
+                              body: JSON.stringify({
+                                prompt,
+                                mode: "schedule",
+                                scheduleTime: "02:00",
+                              }),
                             });
                           }
                           if (el) el.value = "";
@@ -892,7 +934,9 @@ export function ProjectsView({
                       <button
                         type="button"
                         onClick={async () => {
-                          const el = document.getElementById("project-task-prompt-input") as HTMLTextAreaElement | null;
+                          const el = document.getElementById(
+                            "project-task-prompt-input"
+                          ) as HTMLTextAreaElement | null;
                           const prompt = el?.value || "";
                           if (!prompt.trim()) return;
                           if (onRunOvernightTask) {
@@ -901,7 +945,7 @@ export function ProjectsView({
                             await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ prompt, mode: "now" })
+                              body: JSON.stringify({ prompt, mode: "now" }),
                             });
                           }
                           if (el) el.value = "";
@@ -983,7 +1027,9 @@ export function ProjectsView({
                 {reviewFinalized && (
                   <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                    <span>File review has been finalized. Accepted files are approved for merge.</span>
+                    <span>
+                      File review has been finalized. Accepted files are approved for merge.
+                    </span>
                   </div>
                 )}
 
@@ -1013,19 +1059,19 @@ export function ProjectsView({
                         item.changeType === "A"
                           ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                           : item.changeType === "D"
-                          ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                          : item.changeType === "R"
-                          ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800";
+                            ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                            : item.changeType === "R"
+                              ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                              : "bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800";
 
                       const typeLabel =
                         item.changeType === "A"
                           ? "Added"
                           : item.changeType === "D"
-                          ? "Deleted"
-                          : item.changeType === "R"
-                          ? "Renamed"
-                          : "Modified";
+                            ? "Deleted"
+                            : item.changeType === "R"
+                              ? "Renamed"
+                              : "Modified";
 
                       return (
                         <div
@@ -1052,8 +1098,8 @@ export function ProjectsView({
                                   isAccepted
                                     ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                     : isReverted
-                                    ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700"
+                                      ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                      : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700"
                                 }`}
                               >
                                 {isAccepted && <Check className="h-3 w-3" />}
@@ -1162,7 +1208,10 @@ export function ProjectsView({
               <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800 rounded-2xl shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setEntryMode("browse"); setFormError(null); }}
+                  onClick={() => {
+                    setEntryMode("browse");
+                    setFormError(null);
+                  }}
                   className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
                     entryMode === "browse"
                       ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
@@ -1173,7 +1222,10 @@ export function ProjectsView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setEntryMode("greenfield"); setFormError(null); }}
+                  onClick={() => {
+                    setEntryMode("greenfield");
+                    setFormError(null);
+                  }}
                   className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
                     entryMode === "greenfield"
                       ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
@@ -1184,7 +1236,10 @@ export function ProjectsView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setEntryMode("manual"); setFormError(null); }}
+                  onClick={() => {
+                    setEntryMode("manual");
+                    setFormError(null);
+                  }}
                   className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
                     entryMode === "manual"
                       ? "bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
@@ -1228,9 +1283,13 @@ export function ProjectsView({
                   {/* Directory Listing */}
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
                     {isBrowserLoading ? (
-                      <div className="p-8 text-center text-xs text-slate-400">Scanning filesystem...</div>
+                      <div className="p-8 text-center text-xs text-slate-400">
+                        Scanning filesystem...
+                      </div>
                     ) : browserItems.length === 0 ? (
-                      <div className="p-8 text-center text-xs text-slate-400">No subdirectories found</div>
+                      <div className="p-8 text-center text-xs text-slate-400">
+                        No subdirectories found
+                      </div>
                     ) : (
                       browserItems.map((item) => {
                         const isSelected = selectedFolder?.path === item.path;
@@ -1245,12 +1304,18 @@ export function ProjectsView({
                             }`}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
-                                item.isGitRepo
-                                  ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
-                                  : "bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400"
-                              }`}>
-                                {item.isGitRepo ? <FolderGit2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                              <div
+                                className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                  item.isGitRepo
+                                    ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                                    : "bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400"
+                                }`}
+                              >
+                                {item.isGitRepo ? (
+                                  <FolderGit2 className="h-4 w-4" />
+                                ) : (
+                                  <Folder className="h-4 w-4" />
+                                )}
                               </div>
                               <div className="min-w-0">
                                 <span className="font-bold text-xs text-slate-900 dark:text-zinc-100 block truncate">
@@ -1298,7 +1363,9 @@ export function ProjectsView({
                           Selected: {selectedFolder.name}
                         </span>
                         <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">
-                          {selectedFolder.isGitRepo ? `Git [HEAD: ${formBranch}]` : "No Git initialized"}
+                          {selectedFolder.isGitRepo
+                            ? `Git [HEAD: ${formBranch}]`
+                            : "No Git initialized"}
                         </span>
                       </div>
 
@@ -1363,7 +1430,8 @@ export function ProjectsView({
                       className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:outline-emerald-500"
                     />
                     <p className="text-[11px] text-slate-400 mt-1 font-mono">
-                      Location: ./workspace/projects/{greenfieldName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "<slug>"}
+                      Location: ./workspace/projects/
+                      {greenfieldName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "<slug>"}
                     </p>
                   </div>
 
@@ -1485,7 +1553,6 @@ export function ProjectsView({
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

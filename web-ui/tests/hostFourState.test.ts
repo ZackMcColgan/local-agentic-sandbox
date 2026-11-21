@@ -11,24 +11,45 @@ const {
   shouldAdvertiseHostTools,
   getHostStateDirective,
   generateHostFileDiff,
-  executeHostTool
+  executeHostTool,
 } = hostModeLib as any;
 
 describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () => {
   describe("PIN 1: CSPRNG UUID for Approvals", () => {
     it("generates UUIDv4 approval IDs using crypto.randomUUID() without Math.random", () => {
-      const approval1 = createPendingApproval("t1", "host_delete_path", { path: "C:\\test1" }, "risk");
-      const approval2 = createPendingApproval("t1", "host_delete_path", { path: "C:\\test2" }, "risk");
+      const approval1 = createPendingApproval(
+        "t1",
+        "host_delete_path",
+        { path: "C:\\test1" },
+        "risk"
+      );
+      const approval2 = createPendingApproval(
+        "t1",
+        "host_delete_path",
+        { path: "C:\\test2" },
+        "risk"
+      );
 
-      const uuidV4Regex = /^approval-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const generalUuidRegex = /^approval-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidV4Regex =
+        /^approval-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const generalUuidRegex =
+        /^approval-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-      assert.ok(generalUuidRegex.test(approval1.id), `Approval ID must be valid UUID format: ${approval1.id}`);
-      assert.ok(generalUuidRegex.test(approval2.id), `Approval ID must be valid UUID format: ${approval2.id}`);
+      assert.ok(
+        generalUuidRegex.test(approval1.id),
+        `Approval ID must be valid UUID format: ${approval1.id}`
+      );
+      assert.ok(
+        generalUuidRegex.test(approval2.id),
+        `Approval ID must be valid UUID format: ${approval2.id}`
+      );
       assert.notEqual(approval1.id, approval2.id);
 
       // Verify no timestamp prefix in ID
-      assert.ok(!approval1.id.startsWith(`approval-${Date.now().toString().slice(0, 5)}`), "Must not use timestamp-math.random format");
+      assert.ok(
+        !approval1.id.startsWith(`approval-${Date.now().toString().slice(0, 5)}`),
+        "Must not use timestamp-math.random format"
+      );
     });
   });
 
@@ -61,11 +82,14 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
       const mockServer = http.createServer((req, res) => {
         if (req.url === "/health") {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            status: "ok",
-            protocolVersion: PROTOCOL_VERSION,
-            bridgeSourceSha256: "0000000000000000000000000000000000000000000000000000000000000000"
-          }));
+          res.end(
+            JSON.stringify({
+              status: "ok",
+              protocolVersion: PROTOCOL_VERSION,
+              bridgeSourceSha256:
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            })
+          );
           return;
         }
         res.writeHead(404);
@@ -82,7 +106,10 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         assert.equal(status.runnerState, "MISMATCH");
         assert.equal(status.runnerAvailable, false);
         assert.ok(status.reason?.includes("mismatch"));
-        assert.equal(status.actualSha, "0000000000000000000000000000000000000000000000000000000000000000");
+        assert.equal(
+          status.actualSha,
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        );
         const manifest = getBridgeManifest();
         assert.equal(status.expectedSha, manifest.bridgeSourceSha256);
       } finally {
@@ -97,11 +124,13 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
       const mockServer = http.createServer((req, res) => {
         if (req.url === "/health") {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            status: "ok",
-            protocolVersion: PROTOCOL_VERSION,
-            bridgeSourceSha256: manifest.bridgeSourceSha256
-          }));
+          res.end(
+            JSON.stringify({
+              status: "ok",
+              protocolVersion: PROTOCOL_VERSION,
+              bridgeSourceSha256: manifest.bridgeSourceSha256,
+            })
+          );
           return;
         }
         res.writeHead(404);
@@ -149,10 +178,16 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
       // DISABLED
       const disabledDir = getHostStateDirective("DISABLED");
       assert.ok(disabledDir.includes("HOST ACCESS: DISABLED"));
-      assert.ok(disabledDir.toLowerCase().includes("host toggle") || disabledDir.toLowerCase().includes("toggle"));
+      assert.ok(
+        disabledDir.toLowerCase().includes("host toggle") ||
+          disabledDir.toLowerCase().includes("toggle")
+      );
 
       // UNAVAILABLE
-      const unavailDir = getHostStateDirective("UNAVAILABLE", "Host runner daemon not responding on port 8765");
+      const unavailDir = getHostStateDirective(
+        "UNAVAILABLE",
+        "Host runner daemon not responding on port 8765"
+      );
       assert.ok(unavailDir.includes("HOST ACCESS: UNAVAILABLE"));
       assert.ok(unavailDir.includes("AI-ON.ps1"));
       assert.ok(unavailDir.includes("offline"));
@@ -180,7 +215,7 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         {
           success: true,
           preImageExists: true,
-          preImageContent: "hello world\nold line\n"
+          preImageContent: "hello world\nold line\n",
         }
       );
 
@@ -199,7 +234,7 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         {
           success: true,
           preImageExists: true,
-          preImageContent: "{\n  debug: false\n}\n"
+          preImageContent: "{\n  debug: false\n}\n",
         }
       );
 
@@ -216,7 +251,7 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         {
           success: true,
           preImageExists: false,
-          preImageContent: null
+          preImageContent: null,
         }
       );
       assert.equal(noPreImage, null);
@@ -227,7 +262,7 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         {
           success: true,
           preImageExists: true,
-          preImageContent: "identical"
+          preImageContent: "identical",
         }
       );
       assert.equal(unchanged, null);

@@ -4,7 +4,7 @@ import {
   registerProject,
   toggleAllowlist,
   deleteProject,
-  getProject
+  getProject,
 } from "@/lib/projects/projectStore";
 
 export async function GET() {
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       name: name.trim(),
       rootPath: rootPath.trim(),
       baseBranch: baseBranch ? String(baseBranch).trim() : undefined,
-      toolchain: toolchain ? String(toolchain).trim() : undefined
+      toolchain: toolchain ? String(toolchain).trim() : undefined,
     });
 
     return NextResponse.json({ project }, { status: 201 });

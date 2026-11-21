@@ -11,7 +11,7 @@ describe("Workspace & Git Tools Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-mcp-server",
-      version: "2.0.0"
+      version: "2.0.0",
     });
     registerWorkspaceTools(mcp);
   });
@@ -32,7 +32,7 @@ describe("Workspace & Git Tools Suite", () => {
       "git_status",
       "git_diff",
       "git_checkout_branch",
-      "git_commit"
+      "git_commit",
     ];
 
     for (const toolName of requiredTools) {
@@ -49,14 +49,14 @@ describe("Workspace & Git Tools Suite", () => {
     // 1. Write Python test file
     const writeResult = await writeHandler({
       path: "tests/sample_test.py",
-      content: "def test_answer():\n    assert 1 + 1 == 2\n"
+      content: "def test_answer():\n    assert 1 + 1 == 2\n",
     });
     const writeData = JSON.parse(writeResult.content[0].text);
     assert.equal(writeData.status, "SUCCESS");
 
     // 2. Read Python test file
     const readResult = await readHandler({
-      path: "tests/sample_test.py"
+      path: "tests/sample_test.py",
     });
     const readData = JSON.parse(readResult.content[0].text);
     assert.equal(readData.status, "SUCCESS");
@@ -65,7 +65,7 @@ describe("Workspace & Git Tools Suite", () => {
     // 3. Write .drawio.svg architecture diagram
     const svgResult = await writeHandler({
       path: "docs/architecture.drawio.svg",
-      content: '<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="50" /></svg>'
+      content: '<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="50" /></svg>',
     });
     const svgData = JSON.parse(svgResult.content[0].text);
     assert.equal(svgData.status, "SUCCESS");
@@ -77,7 +77,7 @@ describe("Workspace & Git Tools Suite", () => {
     const readHandler = mcp._registeredTools["workspace_read_file"].handler;
 
     const res = await readHandler({
-      path: "../../../etc/shadow"
+      path: "../../../etc/shadow",
     });
     const data = JSON.parse(res.content[0].text);
     assert.equal(data.status, "EXECUTION_ERROR");
@@ -106,7 +106,7 @@ describe("Workspace & Git Tools Suite", () => {
     const cmdHandler = mcp._registeredTools["workspace_run_command"].handler;
 
     const res = await cmdHandler({
-      command: "node -e \"console.log('hello autonomous sandbox')\""
+      command: "node -e \"console.log('hello autonomous sandbox')\"",
     });
     const data = JSON.parse(res.content[0].text);
     assert.equal(data.status, "SUCCESS");
@@ -126,7 +126,7 @@ describe("Workspace & Git Tools Suite", () => {
     const branchName = `agent/test-suite-${Date.now()}`;
     const checkoutRes = await checkoutHandler({
       branch_name: branchName,
-      create_new: true
+      create_new: true,
     });
     const checkoutData = JSON.parse(checkoutRes.content[0].text);
     assert.equal(checkoutData.status, "SUCCESS");
@@ -137,12 +137,12 @@ describe("Workspace & Git Tools Suite", () => {
     const writeHandler = mcp._registeredTools["workspace_write_file"].handler;
     await writeHandler({
       path: "commit_test.txt",
-      content: `Autonomous commit test ${Date.now()}`
+      content: `Autonomous commit test ${Date.now()}`,
     });
 
     // Commit changes
     const commitRes = await commitHandler({
-      message: "feat(tests): add automated autonomous test assertions"
+      message: "feat(tests): add automated autonomous test assertions",
     });
     const commitData = JSON.parse(commitRes.content[0].text);
     assert.equal(commitData.status, "SUCCESS");

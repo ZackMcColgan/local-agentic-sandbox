@@ -8,9 +8,6 @@
     "builder-tier",
     "qdrant"
   ],
-  "networks": [
-    "ai-mesh",
-    "egress-mesh"
-  ],
+  "networks": ["ai-mesh", "egress-mesh"],
   "updatedAt": "2026-10-02T19:49:18.022Z"
 }

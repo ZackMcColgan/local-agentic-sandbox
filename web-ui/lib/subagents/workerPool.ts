@@ -1,7 +1,16 @@
 import fs from "fs";
 import path from "path";
 import { execSync, execFileSync } from "child_process";
-import { Milestone, WorkerRole, AssertionContract, EvidenceItem, ContractAssertionResult, TestSnapshot, RevertResult, TestCounts } from "./types";
+import {
+  Milestone,
+  WorkerRole,
+  AssertionContract,
+  EvidenceItem,
+  ContractAssertionResult,
+  TestSnapshot,
+  RevertResult,
+  TestCounts,
+} from "./types";
 import ts from "typescript";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 export type { TestSnapshot, RevertResult } from "./types";
@@ -10,7 +19,7 @@ import {
   createOllamaGenerate,
   isFastGraphTestMode,
   stripCodeFence,
-  type GenerateFn
+  type GenerateFn,
 } from "./llmClient";
 import { keepAliveFor, type ResidencyPlan } from "./residency";
 import { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore";
@@ -19,7 +28,7 @@ import {
   getSharedSlotScheduler,
   PrioritySlotScheduler,
   releaseCurrentSlotForWait,
-  SlotPriority
+  SlotPriority,
 } from "../slotScheduler";
 export { workspacePatchFile, type PatchItem, type PatchFileResult };
 
@@ -127,7 +136,7 @@ const IGNORED_SCAN_DIRS = new Set([
   ".cache",
   "tmp",
   "temp",
-  ".gemini"
+  ".gemini",
 ]);
 
 export function scanWorkspaceRepoMap(
@@ -168,7 +177,7 @@ export function scanWorkspaceRepoMap(
               const classMatches = content.match(/^class\s+([a-zA-Z_0-9]+)/gm) || [];
               exports = [
                 ...classMatches.map((c) => c.replace(/^class\s+/, "").trim()),
-                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim())
+                ...defMatches.map((d) => d.replace(/^(?:async\s+)?def\s+/, "").trim()),
               ];
             } else {
               const sourceFile = ts.createSourceFile(
@@ -176,12 +185,18 @@ export function scanWorkspaceRepoMap(
                 content,
                 ts.ScriptTarget.Latest,
                 true,
-                ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.TS
+                ext === ".tsx"
+                  ? ts.ScriptKind.TSX
+                  : ext === ".jsx"
+                    ? ts.ScriptKind.JSX
+                    : ts.ScriptKind.TS
               );
 
               for (const stmt of sourceFile.statements) {
                 const mods = (stmt as any).modifiers;
-                const hasExport = Array.isArray(mods) && mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
+                const hasExport =
+                  Array.isArray(mods) &&
+                  mods.some((m: any) => m.kind === ts.SyntaxKind.ExportKeyword);
                 if (hasExport) {
                   if (ts.isFunctionDeclaration(stmt) && stmt.name) {
                     exports.push(stmt.name.text);
@@ -200,7 +215,11 @@ export function scanWorkspaceRepoMap(
                       }
                     }
                   }
-                } else if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+                } else if (
+                  ts.isExportDeclaration(stmt) &&
+                  stmt.exportClause &&
+                  ts.isNamedExports(stmt.exportClause)
+                ) {
                   for (const el of stmt.exportClause.elements) {
                     exports.push(el.name.text);
                   }
@@ -227,9 +246,7 @@ export function scanWorkspaceRepoMap(
   walk(rootDir);
 
   const treeLines = files.map((f) => {
-    return f.exports.length > 0
-      ? `${f.path}: ${f.exports.join(", ")}`
-      : `${f.path}`;
+    return f.exports.length > 0 ? `${f.path}: ${f.exports.join(", ")}` : `${f.path}`;
   });
 
   const treeSummary = treeLines.join("\n");
@@ -241,7 +258,7 @@ export function scanWorkspaceRepoMap(
     length: files.length,
     toString() {
       return treeSummary;
-    }
+    },
   };
 
   return repoMap;
@@ -249,20 +266,23 @@ export function scanWorkspaceRepoMap(
 
 export class ExplorerWorker {
   readonly role: WorkerRole = "explorer";
-  private readonly scopedTools = [
-    "workspace_get_tree",
-    "workspace_grep",
-    "workspace_read_file"
-  ];
+  private readonly scopedTools = ["workspace_get_tree", "workspace_grep", "workspace_read_file"];
 
   getScopedToolNames(): string[] {
     return [...this.scopedTools];
   }
 
-  async exploreWorkspace(options?: { path?: string; query?: string; repoRoot?: string; maxFiles?: number }): Promise<WorkspaceRepoMap> {
+  async exploreWorkspace(options?: {
+    path?: string;
+    query?: string;
+    repoRoot?: string;
+    maxFiles?: number;
+  }): Promise<WorkspaceRepoMap> {
     const root = options?.path
-      ? (path.isAbsolute(options.path) ? options.path : path.resolve(options?.repoRoot || process.cwd(), options.path))
-      : (options?.repoRoot || process.cwd());
+      ? path.isAbsolute(options.path)
+        ? options.path
+        : path.resolve(options?.repoRoot || process.cwd(), options.path)
+      : options?.repoRoot || process.cwd();
     return scanWorkspaceRepoMap(root, options);
   }
 }
@@ -273,29 +293,41 @@ export class ExplorerWorker {
  */
 export function getResolvedGitSha(repoRoot?: string, opts?: { strict?: boolean }): string {
   const envWorkspace = process.env.WORKSPACE_DIR;
-  const candidates = (opts?.strict
-    ? [repoRoot]
-    : [
-        repoRoot,
-        envWorkspace,
-        fs.existsSync("/workspace") ? "/workspace" : undefined,
-        process.cwd(),
-        path.resolve(process.cwd(), ".."),
-        path.resolve(process.cwd(), "../..")
-      ]
+  const candidates = (
+    opts?.strict
+      ? [repoRoot]
+      : [
+          repoRoot,
+          envWorkspace,
+          fs.existsSync("/workspace") ? "/workspace" : undefined,
+          process.cwd(),
+          path.resolve(process.cwd(), ".."),
+          path.resolve(process.cwd(), "../.."),
+        ]
   ).filter(Boolean) as string[];
 
   for (const dir of candidates) {
     try {
-      const top = execSync("git -c safe.directory=* rev-parse --show-toplevel", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
-      if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase()) continue;
-      const sha = execSync("git -c safe.directory=* rev-parse HEAD", { cwd: dir, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+      const top = execSync("git -c safe.directory=* rev-parse --show-toplevel", {
+        cwd: dir,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+      if (opts?.strict && path.resolve(top).toLowerCase() !== path.resolve(dir).toLowerCase())
+        continue;
+      const sha = execSync("git -c safe.directory=* rev-parse HEAD", {
+        cwd: dir,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
       if (/^[0-9a-f]{40}$/i.test(sha)) {
         return sha;
       }
     } catch {}
   }
-  throw new Error(`No git repository found (searched: ${candidates.join(", ")}); refusing to fabricate a commit SHA.`);
+  throw new Error(
+    `No git repository found (searched: ${candidates.join(", ")}); refusing to fabricate a commit SHA.`
+  );
 }
 
 export function createUnifiedDiff(filename: string, oldStr: string, newStr: string): string {
@@ -305,7 +337,7 @@ export function createUnifiedDiff(filename: string, oldStr: string, newStr: stri
   const diffLines: string[] = [
     `--- a/${filename}`,
     `+++ b/${filename}`,
-    `@@ -1,${oldLines.length} +1,${newLines.length} @@`
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
   ];
 
   for (const line of oldLines) {
@@ -324,18 +356,26 @@ export function createUnifiedDiff(filename: string, oldStr: string, newStr: stri
   return diffLines.join("\n") + "\n";
 }
 
-const FORCED_FLAW_MARKER = "// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
+const FORCED_FLAW_MARKER =
+  "// FORCED_FLAW: seeded discrepancy for critic rejection and retry verification";
 
 /**
  * TEST-ONLY deterministic content used exclusively under FAST_GRAPH_TEST.
  * Every result produced from here is flagged `synthetic: true`.
  */
-function synthesizeForFastGraphTest(milestone: Milestone, targetRelPath: string, previousContent: string, criticFeedback: string[], iteration: number): string {
+function synthesizeForFastGraphTest(
+  milestone: Milestone,
+  targetRelPath: string,
+  previousContent: string,
+  criticFeedback: string[],
+  iteration: number
+): string {
   let content = previousContent;
   if (criticFeedback.length > 0) {
     for (const fb of criticFeedback) {
       if (fb.includes("egress-mesh") && !content.includes("egress-mesh")) {
-        content += "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
+        content +=
+          "\n// Network configuration: browser-mcp attached to egress-mesh\nexport const SCRAPER_NETWORK = 'egress-mesh';";
       }
       if ((fb.includes("#ffffff") || fb.includes("background")) && !content.includes("#ffffff")) {
         content += "\nexport const CANVAS_BACKGROUND = '#ffffff';";
@@ -350,17 +390,23 @@ function synthesizeForFastGraphTest(milestone: Milestone, targetRelPath: string,
 }
 
 // Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
-export function validateCodeAst(filePath: string, content: string): { valid: boolean; error?: string } {
+export function validateCodeAst(
+  filePath: string,
+  content: string
+): { valid: boolean; error?: string } {
   const ext = path.extname(filePath).toLowerCase();
 
   // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
   if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
     try {
       const scriptKind =
-        ext === ".tsx" ? ts.ScriptKind.TSX :
-        ext === ".jsx" ? ts.ScriptKind.JSX :
-        ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
-        ts.ScriptKind.TS;
+        ext === ".tsx"
+          ? ts.ScriptKind.TSX
+          : ext === ".jsx"
+            ? ts.ScriptKind.JSX
+            : ext === ".js" || ext === ".mjs" || ext === ".cjs"
+              ? ts.ScriptKind.JS
+              : ts.ScriptKind.TS;
 
       const sourceFile = ts.createSourceFile(
         filePath,
@@ -377,7 +423,7 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
         const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
         return {
           valid: false,
-          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`
+          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`,
         };
       }
       return { valid: true };
@@ -395,17 +441,21 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
           input: content,
           encoding: "utf8",
           timeout: 3000,
-          stdio: ["pipe", "pipe", "pipe"]
+          stdio: ["pipe", "pipe", "pipe"],
         });
         return { valid: true };
       } catch (err: any) {
-        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
-        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
+        const stderr = err.stderr ? err.stderr.trim() : err.message || "";
+        if (
+          err.code === "ENOENT" ||
+          err.status === 9009 ||
+          stderr.includes("Python was not found")
+        ) {
           continue;
         }
         return {
           valid: false,
-          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`,
         };
       }
     }
@@ -427,10 +477,19 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
   if (ext === ".svg" || ext === ".xml" || ext === ".drawio") {
     const trimmed = content.trim();
     if (ext === ".svg" && (!trimmed.includes("<svg") || !trimmed.includes("</svg>"))) {
-      return { valid: false, error: `Invalid SVG format in ${filePath}: missing <svg> root element or closing tag.` };
+      return {
+        valid: false,
+        error: `Invalid SVG format in ${filePath}: missing <svg> root element or closing tag.`,
+      };
     }
-    if ((ext === ".xml" || ext === ".drawio") && (!trimmed.startsWith("<") || !trimmed.endsWith(">"))) {
-      return { valid: false, error: `Invalid XML format in ${filePath}: not enclosed in XML tags.` };
+    if (
+      (ext === ".xml" || ext === ".drawio") &&
+      (!trimmed.startsWith("<") || !trimmed.endsWith(">"))
+    ) {
+      return {
+        valid: false,
+        error: `Invalid XML format in ${filePath}: not enclosed in XML tags.`,
+      };
     }
     return { valid: true };
   }
@@ -443,9 +502,10 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 export function normalizeErrorSignature(filePath: string, errorText: string): string {
   const normFile = path.basename(filePath).toLowerCase();
   const lineMatch = errorText.match(/line\s*(\d+)|\((\d+):|:(\d+):/i);
-  const line = lineMatch ? (lineMatch[1] || lineMatch[2] || lineMatch[3]) : "unknown";
-  const typeMatch = errorText.match(/\b([A-Z][a-zA-Z]*Error)\b/) || 
-                    errorText.match(/(syntax error|parse error|unexpected token|identifier expected)/i);
+  const line = lineMatch ? lineMatch[1] || lineMatch[2] || lineMatch[3] : "unknown";
+  const typeMatch =
+    errorText.match(/\b([A-Z][a-zA-Z]*Error)\b/) ||
+    errorText.match(/(syntax error|parse error|unexpected token|identifier expected)/i);
   const errType = typeMatch ? typeMatch[1].toLowerCase().replace(/\s+/g, "_") : "syntax_error";
   return `${normFile}:${line}:${errType}`;
 }
@@ -464,7 +524,7 @@ export class BuilderWorker {
     "workspace_patch_file",
     "workspace_run_command",
     "git_diff",
-    "git_commit"
+    "git_commit",
   ];
 
   constructor(options?: WorkerModelOptions) {
@@ -481,8 +541,14 @@ export class BuilderWorker {
   }
 
   resolveTargets(milestone: Milestone): string[] {
-    if (milestone.plannedFiles && Array.isArray(milestone.plannedFiles) && milestone.plannedFiles.length > 0) {
-      const valid = milestone.plannedFiles.filter((f) => Boolean(f && typeof f === "string" && f.trim().length > 0));
+    if (
+      milestone.plannedFiles &&
+      Array.isArray(milestone.plannedFiles) &&
+      milestone.plannedFiles.length > 0
+    ) {
+      const valid = milestone.plannedFiles.filter((f) =>
+        Boolean(f && typeof f === "string" && f.trim().length > 0)
+      );
       if (valid.length > 0) return valid;
     }
     return [this.resolveTarget(milestone)];
@@ -496,7 +562,11 @@ export class BuilderWorker {
     const repoRoot =
       typeof options === "string"
         ? options
-        : options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
+        : options?.repoRoot ||
+          this.workspaceRoot ||
+          (fs.existsSync(path.join(process.cwd(), "deploy"))
+            ? process.cwd()
+            : path.resolve(process.cwd(), ".."));
     return await workspacePatchFile(repoRoot, targetRelPath, patches);
   }
 
@@ -506,8 +576,18 @@ export class BuilderWorker {
       milestone.plannedFiles?.[0] ||
       milestone.acceptanceCriteria?.find((c) => c.fileMatch)?.fileMatch ||
       `workspace/lib/${milestone.id.toLowerCase()}.ts`;
-    const protectedCoreFiles = ["docker-compose.yml", "package.json", "package-lock.json", "README.md", "tsconfig.json"];
-    if (protectedCoreFiles.includes(target) && !explicit && !milestone.plannedFiles?.includes(target)) {
+    const protectedCoreFiles = [
+      "docker-compose.yml",
+      "package.json",
+      "package-lock.json",
+      "README.md",
+      "tsconfig.json",
+    ];
+    if (
+      protectedCoreFiles.includes(target) &&
+      !explicit &&
+      !milestone.plannedFiles?.includes(target)
+    ) {
       target = `docs/generated/${target}`;
     }
     return target;
@@ -539,7 +619,9 @@ export class BuilderWorker {
         await this.patchFile(targetRelPath, parsedPatches, { repoRoot });
         return fs.readFileSync(fullPath, "utf8");
       } catch (patchErr: any) {
-        console.warn(`[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`);
+        console.warn(
+          `[builder] Surgical patch failed for ${targetRelPath}: ${patchErr?.message}. Falling back to full content or retry.`
+        );
       }
     }
     return null;
@@ -592,7 +674,7 @@ Do not rewrite the entire file.`;
         onThinkingChunk: params.onThinkingChunk,
         scope: this.scope,
         reasoningEffort: "balanced",
-        options: { temperature: 0.2, num_predict: 4096 }
+        options: { temperature: 0.2, num_predict: 4096 },
       });
       if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
       if (result.thinking) lastThinking = result.thinking;
@@ -616,29 +698,38 @@ Do not rewrite the entire file.`;
     }
 
     const fenceMatch = lastText.match(/```(?:[a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/);
-    const fallbackContent = fenceMatch && fenceMatch[1].trim().length > 0 ? fenceMatch[1] : lastText;
+    const fallbackContent =
+      fenceMatch && fenceMatch[1].trim().length > 0 ? fenceMatch[1] : lastText;
     if (fallbackContent.trim().length > 0) {
       fs.mkdirSync(path.dirname(params.fullPath), { recursive: true });
       fs.writeFileSync(params.fullPath, fallbackContent, "utf8");
-      return { content: fallbackContent, loadDurationMs: totalLoadDuration, thinking: lastThinking };
+      return {
+        content: fallbackContent,
+        loadDurationMs: totalLoadDuration,
+        thinking: lastThinking,
+      };
     }
 
-    throw new Error(`[builder] Surgical patch loop exhausted ${maxAttempts} attempts for ${params.targetRelPath}: ${lastError}`);
+    throw new Error(
+      `[builder] Surgical patch loop exhausted ${maxAttempts} attempts for ${params.targetRelPath}: ${lastError}`
+    );
   }
 
   async executeMilestoneWork(
     milestone: Milestone,
-    optionsOrIteration?: {
-      repoRoot?: string;
-      previousDiff?: string;
-      criticFeedback?: string[];
-      iteration?: number;
-      targetFile?: string;
-      model?: string;
-      gitSha?: string;
-      signal?: AbortSignal;
-      onThinkingChunk?: (chunk: string, totalThinking: string) => void;
-    } | number,
+    optionsOrIteration?:
+      | {
+          repoRoot?: string;
+          previousDiff?: string;
+          criticFeedback?: string[];
+          iteration?: number;
+          targetFile?: string;
+          model?: string;
+          gitSha?: string;
+          signal?: AbortSignal;
+          onThinkingChunk?: (chunk: string, totalThinking: string) => void;
+        }
+      | number,
     legacyCriticFeedback?: string[],
     legacyRepoRoot?: string
   ): Promise<BuilderResult> {
@@ -648,11 +739,18 @@ Do not rewrite the entire file.`;
         : {
             iteration: typeof optionsOrIteration === "number" ? optionsOrIteration : undefined,
             criticFeedback: legacyCriticFeedback,
-            repoRoot: legacyRepoRoot
+            repoRoot: legacyRepoRoot,
           };
-    const repoRoot = options?.repoRoot || this.workspaceRoot || (fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), ".."));
-    const iteration = options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
-    const modelToUse = options?.model || this.model || process.env.BUILDER_MODEL || DEFAULT_PRIMARY_MODEL;
+    const repoRoot =
+      options?.repoRoot ||
+      this.workspaceRoot ||
+      (fs.existsSync(path.join(process.cwd(), "deploy"))
+        ? process.cwd()
+        : path.resolve(process.cwd(), ".."));
+    const iteration =
+      options?.iteration ?? (milestone.builderIterations ? milestone.builderIterations + 1 : 1);
+    const modelToUse =
+      options?.model || this.model || process.env.BUILDER_MODEL || DEFAULT_PRIMARY_MODEL;
     const criticFeedback = options?.criticFeedback || [];
     const targets = options?.targetFile ? [options.targetFile] : this.resolveTargets(milestone);
 
@@ -676,12 +774,23 @@ Do not rewrite the entire file.`;
         let newContent: string;
         const synthetic = !this.injectedGenerate && isFastGraphTestMode();
         if (synthetic) {
-          newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+          newContent = synthesizeForFastGraphTest(
+            milestone,
+            targetRelPath,
+            previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""),
+            criticFeedback,
+            iteration
+          );
         } else {
-          const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
-          const priorContext = priorFileContexts.length > 0
-            ? `\nPreviously generated files in this milestone:\n` + priorFileContexts.map(p => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`).join("\n\n")
-            : "";
+          const generate =
+            this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
+          const priorContext =
+            priorFileContexts.length > 0
+              ? `\nPreviously generated files in this milestone:\n` +
+                priorFileContexts
+                  .map((p) => `--- ${p.file} ---\n${p.content.slice(0, 2000)}`)
+                  .join("\n\n")
+              : "";
           if (previousContent && fs.existsSync(fullPath)) {
             const surgical = await this.runSurgicalEditLoop({
               generate,
@@ -694,13 +803,13 @@ Do not rewrite the entire file.`;
               criticFeedback,
               priorContext,
               signal: options?.signal,
-              onThinkingChunk: options?.onThinkingChunk
+              onThinkingChunk: options?.onThinkingChunk,
             });
             newContent = surgical.content;
             totalLoadDuration += surgical.loadDurationMs;
             if (surgical.thinking) lastThinking = surgical.thinking;
           } else {
-          const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+            const prompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
 ${milestone.description}
@@ -712,38 +821,48 @@ ${previousContent ? `\nExisting file content to modify:\n${previousContent.repla
 
 Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
 
-          const result = await generate({
-            model: modelToUse,
-            prompt,
-            keepAlive: this.keepAlive,
-            signal: options?.signal,
-            onThinkingChunk: options?.onThinkingChunk,
-            scope: this.scope,
-            reasoningEffort: "balanced",
-        options: { temperature: 0.2, num_predict: 8192 }
-          });
-          newContent = stripCodeFence(result.text);
-          if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
-          if (result.thinking) lastThinking = result.thinking;
+            const result = await generate({
+              model: modelToUse,
+              prompt,
+              keepAlive: this.keepAlive,
+              signal: options?.signal,
+              onThinkingChunk: options?.onThinkingChunk,
+              scope: this.scope,
+              reasoningEffort: "balanced",
+              options: { temperature: 0.2, num_predict: 8192 },
+            });
+            newContent = stripCodeFence(result.text);
+            if (result.loadDurationMs) totalLoadDuration += result.loadDurationMs;
+            if (result.thinking) lastThinking = result.thinking;
 
-          const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
-          if (patched !== null) {
-            newContent = patched;
-          }
+            const patched = await this.tryApplySurgicalPatches(
+              result.text,
+              targetRelPath,
+              fullPath,
+              previousContent,
+              repoRoot
+            );
+            if (patched !== null) {
+              newContent = patched;
+            }
           }
         }
 
         if (!synthetic) {
           const astCheck = validateCodeAst(targetRelPath, newContent);
           if (!astCheck.valid) {
-            console.warn(`[builder] AST validation warning for ${targetRelPath}: ${astCheck.error}`);
+            console.warn(
+              `[builder] AST validation warning for ${targetRelPath}: ${astCheck.error}`
+            );
           }
         }
 
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         fs.writeFileSync(fullPath, newContent, "utf8");
 
-        diffs.push(createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent));
+        diffs.push(
+          createUnifiedDiff(targetRelPath.replace(/\\/g, "/"), previousContent, newContent)
+        );
         modifiedFiles.push(targetRelPath);
         priorFileContexts.push({ file: targetRelPath, content: newContent });
         lastContent = newContent;
@@ -755,12 +874,12 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
         gitSha,
         iterations: iteration,
         synthetic: !this.injectedGenerate && isFastGraphTestMode(),
-        model: (!this.injectedGenerate && isFastGraphTestMode()) ? undefined : modelToUse,
+        model: !this.injectedGenerate && isFastGraphTestMode() ? undefined : modelToUse,
         targetFile: targets[0],
         modifiedFiles,
         loadDurationMs: totalLoadDuration || undefined,
         thinking: lastThinking,
-        rawContent: lastContent
+        rawContent: lastContent,
       };
     }
 
@@ -775,11 +894,21 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
     let builderThinking: string | undefined;
 
     if (synthetic) {
-      console.warn(`[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`);
-      newContent = synthesizeForFastGraphTest(milestone, targetRelPath, previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""), criticFeedback, iteration);
+      console.warn(
+        `[BuilderWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback for milestone ${milestone.id}`
+      );
+      newContent = synthesizeForFastGraphTest(
+        milestone,
+        targetRelPath,
+        previousContent.replace(`\n${FORCED_FLAW_MARKER}`, ""),
+        criticFeedback,
+        iteration
+      );
     } else {
-      const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
-      const isSingleArtifact = milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
+      const generate =
+        this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
+      const isSingleArtifact =
+        milestone.taskComplexity === "SINGLE_ARTIFACT" || milestone.skipCriticOnValidSyntax;
       if (!isSingleArtifact && previousContent && fs.existsSync(fullPath)) {
         const surgical = await this.runSurgicalEditLoop({
           generate,
@@ -791,15 +920,14 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
           repoRoot,
           criticFeedback,
           signal: options?.signal,
-          onThinkingChunk: options?.onThinkingChunk
+          onThinkingChunk: options?.onThinkingChunk,
         });
         newContent = surgical.content;
         loadDurationMs = surgical.loadDurationMs || undefined;
         builderThinking = surgical.thinking;
       } else {
-
-      const prompt = isSingleArtifact
-        ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+        const prompt = isSingleArtifact
+          ? `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Generate ONLY the requested file. Do NOT create supporting code, project scaffolding, build configs, or API clients. Output the file content directly.
 Task Requirements:
 ${milestone.description}
@@ -808,7 +936,7 @@ ${milestone.acceptanceCriteria?.map((c) => `- [${c.id}]: ${c.assertion}`).join("
 ${criticFeedback.length > 0 ? `\nCRITIC REJECTION FEEDBACK TO RESOLVE IN THIS ITERATION:\n${criticFeedback.join("\n")}` : ""}
 
 Provide the complete file content enclosed in a markdown code fence (e.g. \`\`\`xml or \`\`\`svg or language appropriate for "${targetRelPath}"). Do not include introductory or concluding conversation.`
-        : `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
+          : `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your task: generate the exact, complete, production-grade file content for "${targetRelPath}".
 Task Requirements:
 ${milestone.description}
@@ -819,25 +947,31 @@ ${previousContent ? `\nExisting file content to modify:\n${previousContent.repla
 
 Provide the complete file content enclosed in a \`\`\` typescript (or appropriate language) code fence. Do not include introductory or concluding conversation.`;
 
-      // Throws ModelUnavailableError on any failure — nothing is written in that case.
-      const result = await generate({
-        model: modelToUse,
-        prompt,
-        keepAlive: this.keepAlive,
-        signal: options?.signal,
-        onThinkingChunk: options?.onThinkingChunk,
-        scope: this.scope,
-        reasoningEffort: "balanced",
-        options: { temperature: 0.2, num_predict: 8192 }
-      });
-      newContent = stripCodeFence(result.text);
-      loadDurationMs = result.loadDurationMs;
-      builderThinking = result.thinking;
+        // Throws ModelUnavailableError on any failure — nothing is written in that case.
+        const result = await generate({
+          model: modelToUse,
+          prompt,
+          keepAlive: this.keepAlive,
+          signal: options?.signal,
+          onThinkingChunk: options?.onThinkingChunk,
+          scope: this.scope,
+          reasoningEffort: "balanced",
+          options: { temperature: 0.2, num_predict: 8192 },
+        });
+        newContent = stripCodeFence(result.text);
+        loadDurationMs = result.loadDurationMs;
+        builderThinking = result.thinking;
 
-      const patched = await this.tryApplySurgicalPatches(result.text, targetRelPath, fullPath, previousContent, repoRoot);
-      if (patched !== null) {
-        newContent = patched;
-      }
+        const patched = await this.tryApplySurgicalPatches(
+          result.text,
+          targetRelPath,
+          fullPath,
+          previousContent,
+          repoRoot
+        );
+        if (patched !== null) {
+          newContent = patched;
+        }
       }
     }
 
@@ -849,13 +983,20 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
       const errorSignatures: string[] = [];
 
       while (!astCheck.valid && astAttempts < maxAstRetries) {
-        console.warn(`[builder] AST validation failed for ${targetRelPath} (attempt ${astAttempts}): ${astCheck.error}`);
+        console.warn(
+          `[builder] AST validation failed for ${targetRelPath} (attempt ${astAttempts}): ${astCheck.error}`
+        );
         const signature = normalizeErrorSignature(targetRelPath, astCheck.error || "");
         errorSignatures.push(signature);
 
         // Guardrail 5: If the SAME signature appears 3 times consecutively, break loop and return "stuck"
         const len = errorSignatures.length;
-        if (len >= 3 && errorSignatures[len - 1] === signature && errorSignatures[len - 2] === signature && errorSignatures[len - 3] === signature) {
+        if (
+          len >= 3 &&
+          errorSignatures[len - 1] === signature &&
+          errorSignatures[len - 2] === signature &&
+          errorSignatures[len - 3] === signature
+        ) {
           return {
             diff: "",
             gitSha: options?.gitSha || getResolvedGitSha(repoRoot),
@@ -867,12 +1008,15 @@ Provide the complete file content enclosed in a \`\`\` typescript (or appropriat
             loadDurationMs,
             stuck: true,
             errorSignature: signature,
-            feedback: [`Builder stuck: identical error signature (${signature}) repeated 3 consecutive times.`]
+            feedback: [
+              `Builder stuck: identical error signature (${signature}) repeated 3 consecutive times.`,
+            ],
           };
         }
 
         astAttempts++;
-        const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
+        const generate =
+          this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
         const correctionPrompt = `You are an expert autonomous code builder working on milestone [${milestone.id}]: ${milestone.title}.
 Your previous code generation for "${targetRelPath}" failed syntax validation:
 ${astCheck.error}
@@ -886,7 +1030,7 @@ Please fix the syntax error and output the complete, valid file content for "${t
           signal: options?.signal,
           scope: this.scope,
           reasoningEffort: "balanced",
-        options: { temperature: 0.2, num_predict: 8192 }
+          options: { temperature: 0.2, num_predict: 8192 },
         });
         newContent = stripCodeFence(retryResult.text);
         astCheck = validateCodeAst(targetRelPath, newContent);
@@ -921,7 +1065,7 @@ Please fix the syntax error and output the complete, valid file content for "${t
       modifiedFiles: [targetRelPath],
       loadDurationMs,
       thinking: builderThinking,
-      rawContent: newContent
+      rawContent: newContent,
     };
   }
 }
@@ -963,7 +1107,7 @@ export async function recordTestBaseline(
     passCount,
     failCount,
     failingTests,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -975,7 +1119,9 @@ export async function compareAndRevertIfWorse(
   repoRoot?: string,
   testCommand?: string,
   modifiedFiles?: string[],
-  options?: { evaluator?: () => Promise<{ passCount: number; failCount: number; failingTests?: string[] }> }
+  options?: {
+    evaluator?: () => Promise<{ passCount: number; failCount: number; failingTests?: string[] }>;
+  }
 ): Promise<RevertResult> {
   const root = repoRoot || process.cwd();
   let afterCounts: { passCount: number; failCount: number; failingTests?: string[] };
@@ -987,11 +1133,12 @@ export async function compareAndRevertIfWorse(
     afterCounts = {
       passCount: afterSnapshot.passCount,
       failCount: afterSnapshot.failCount,
-      failingTests: afterSnapshot.failingTests
+      failingTests: afterSnapshot.failingTests,
     };
   }
 
-  const isWorse = (afterCounts.failCount > baseline.failCount) || (afterCounts.passCount < baseline.passCount);
+  const isWorse =
+    afterCounts.failCount > baseline.failCount || afterCounts.passCount < baseline.passCount;
 
   if (isWorse) {
     const filesToRevert = modifiedFiles && modifiedFiles.length > 0 ? modifiedFiles : [];
@@ -1020,7 +1167,7 @@ export async function compareAndRevertIfWorse(
       before: { passed: baseline.passCount, failed: baseline.failCount },
       after: { passed: afterCounts.passCount, failed: afterCounts.failCount },
       reason: "Fix attempt degraded test suite",
-      logMessage: logMsg
+      logMessage: logMsg,
     };
   }
 
@@ -1028,7 +1175,7 @@ export async function compareAndRevertIfWorse(
     reverted: false,
     filesReverted: [],
     before: { passed: baseline.passCount, failed: baseline.failCount },
-    after: { passed: afterCounts.passCount, failed: afterCounts.failCount }
+    after: { passed: afterCounts.passCount, failed: afterCounts.failCount },
   };
 }
 
@@ -1039,11 +1186,7 @@ export class CriticWorker {
   private readonly llmUrl?: string;
   private readonly keepAlive?: string | number;
   private readonly scope?: string;
-  private readonly scopedTools = [
-    "workspace_read_file",
-    "workspace_grep",
-    "git_diff"
-  ];
+  private readonly scopedTools = ["workspace_read_file", "workspace_grep", "git_diff"];
 
   constructor(options?: WorkerModelOptions) {
     this.model = options?.model;
@@ -1059,43 +1202,63 @@ export class CriticWorker {
 
   async evaluateMilestoneDiff(
     milestone: Milestone,
-    diffContext: { diff: string; filesChanged?: string[]; testExitCode?: number; testOutput?: string; noChangeReason?: string },
+    diffContext: {
+      diff: string;
+      filesChanged?: string[];
+      testExitCode?: number;
+      testOutput?: string;
+      noChangeReason?: string;
+    },
     options?: { model?: string; signal?: AbortSignal; testExitCode?: number }
   ): Promise<CriticReview> {
     const feedback: string[] = [];
     const diff = diffContext.diff;
-    const modelToUse = options?.model || this.model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
+    const modelToUse =
+      options?.model || this.model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
 
     // Guardrail 3: Ground-truth override, fail-closed (captain-claw R1 pattern)
     // If test suite exited non-zero, immediately return needs_fix WITHOUT calling the model
-    const testExitCode = diffContext.testExitCode ?? options?.testExitCode ?? (milestone.testsFailed && milestone.testsFailed > 0 ? 1 : undefined);
+    const testExitCode =
+      diffContext.testExitCode ??
+      options?.testExitCode ??
+      (milestone.testsFailed && milestone.testsFailed > 0 ? 1 : undefined);
     if (testExitCode !== undefined && testExitCode !== 0) {
       return {
         approved: false,
         feedback: [
-          `Ground-truth override (captain-claw R1 pattern): Test suite exited non-zero (exit code ${testExitCode}). Tests are ground truth; model cannot override failing tests. Returning needs_fix immediately.`
+          `Ground-truth override (captain-claw R1 pattern): Test suite exited non-zero (exit code ${testExitCode}). Tests are ground truth; model cannot override failing tests. Returning needs_fix immediately.`,
         ],
         abstained: false,
         synthetic: false,
         model: modelToUse,
-        verdict: "needs_fix"
+        verdict: "needs_fix",
       };
     }
 
     // Guardrail 2: No-change gate (captain-claw pattern)
     // If zero files changed but builder claimed changes, reject as no-op unless explicit reason given
-    const addedOrRemoved = diff && diff.split("\n").some((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---")));
-    const hasExplicitNoChange = Boolean(diffContext.noChangeReason && /no changes needed because/i.test(diffContext.noChangeReason));
+    const addedOrRemoved =
+      diff &&
+      diff
+        .split("\n")
+        .some(
+          (l) =>
+            (l.startsWith("+") && !l.startsWith("+++")) ||
+            (l.startsWith("-") && !l.startsWith("---"))
+        );
+    const hasExplicitNoChange = Boolean(
+      diffContext.noChangeReason && /no changes needed because/i.test(diffContext.noChangeReason)
+    );
     if (!addedOrRemoved && !hasExplicitNoChange) {
       return {
         approved: false,
         feedback: [
-          "No-change gate rejection (captain-claw pattern): Zero files changed and no diff was produced. The builder must produce a diff or explicitly state 'no changes needed because [reason]'."
+          "No-change gate rejection (captain-claw pattern): Zero files changed and no diff was produced. The builder must produce a diff or explicitly state 'no changes needed because [reason]'.",
         ],
         abstained: false,
         synthetic: false,
         model: modelToUse,
-        verdict: "needs_fix"
+        verdict: "needs_fix",
       };
     }
 
@@ -1113,13 +1276,18 @@ export class CriticWorker {
           const resolvedTarget = path.isAbsolute(assertion.target)
             ? assertion.target
             : path.resolve(process.cwd(), assertion.target);
-          passed = fs.existsSync(resolvedTarget) || (diffContext.filesChanged?.includes(assertion.target) ?? false) || diff.includes(assertion.target);
-          evidenceText = passed ? `File exists: ${assertion.target}` : `File missing: ${assertion.target}`;
+          passed =
+            fs.existsSync(resolvedTarget) ||
+            (diffContext.filesChanged?.includes(assertion.target) ?? false) ||
+            diff.includes(assertion.target);
+          evidenceText = passed
+            ? `File exists: ${assertion.target}`
+            : `File missing: ${assertion.target}`;
           if (passed && !forceEmptyEvidence) {
             collectedEvidence.push({
               type: "file",
               ref: assertion.target,
-              excerpt: evidenceText.slice(0, 500)
+              excerpt: evidenceText.slice(0, 500),
             });
           }
         } else if (assertion.type === "output_contains") {
@@ -1131,12 +1299,14 @@ export class CriticWorker {
               passed = fileContent.includes(expected);
             } catch {}
           }
-          evidenceText = passed ? `Found expected string '${expected}' in ${assertion.target}` : `Missing expected string '${expected}' in ${assertion.target}`;
+          evidenceText = passed
+            ? `Found expected string '${expected}' in ${assertion.target}`
+            : `Missing expected string '${expected}' in ${assertion.target}`;
           if (passed && !forceEmptyEvidence) {
             collectedEvidence.push({
               type: "diff",
               ref: assertion.target,
-              excerpt: evidenceText.slice(0, 500)
+              excerpt: evidenceText.slice(0, 500),
             });
           }
         } else if (assertion.type === "no_hardcoded_values") {
@@ -1149,65 +1319,94 @@ export class CriticWorker {
             } catch {}
           }
           passed = !containsForbidden;
-          evidenceText = passed ? `Verified ${assertion.target} does not contain '${forbidden}'` : `Found forbidden hardcoded value '${forbidden}' in ${assertion.target}`;
+          evidenceText = passed
+            ? `Verified ${assertion.target} does not contain '${forbidden}'`
+            : `Found forbidden hardcoded value '${forbidden}' in ${assertion.target}`;
           if (passed && !forceEmptyEvidence) {
             collectedEvidence.push({
               type: "diff",
               ref: assertion.target,
-              excerpt: evidenceText.slice(0, 500)
+              excerpt: evidenceText.slice(0, 500),
             });
           }
         } else if (assertion.type === "test_passes") {
-          const exitZero = (diffContext.testExitCode === 0) || (milestone.testsFailed === 0);
+          const exitZero = diffContext.testExitCode === 0 || milestone.testsFailed === 0;
           passed = exitZero;
-          evidenceText = passed ? `Test runner '${assertion.target}' passed with exit code 0` : `Test runner '${assertion.target}' failed`;
+          evidenceText = passed
+            ? `Test runner '${assertion.target}' passed with exit code 0`
+            : `Test runner '${assertion.target}' failed`;
           if (passed && !forceEmptyEvidence) {
             collectedEvidence.push({
               type: "test",
               ref: assertion.target,
-              excerpt: evidenceText.slice(0, 500)
+              excerpt: evidenceText.slice(0, 500),
             });
           }
         }
 
         contractResults.push({ assertion, passed, evidence: evidenceText });
         if (!passed) {
-          feedback.push(`Assertion contract failure [${assertion.type}]: ${assertion.description}. Target: ${assertion.target}${assertion.expected ? ` (Expected: ${assertion.expected})` : ""}`);
+          feedback.push(
+            `Assertion contract failure [${assertion.type}]: ${assertion.description}. Target: ${assertion.target}${assertion.expected ? ` (Expected: ${assertion.expected})` : ""}`
+          );
         }
       }
     } else {
-    // 1. Machine-checkable criterion evaluation against diff
-    for (const criterion of milestone.acceptanceCriteria) {
-      const assertion = criterion.assertion.toLowerCase();
+      // 1. Machine-checkable criterion evaluation against diff
+      for (const criterion of milestone.acceptanceCriteria) {
+        const assertion = criterion.assertion.toLowerCase();
 
-      if (assertion.includes("egress-mesh") && !diff.includes("egress-mesh")) {
-        feedback.push(`Criterion [${criterion.id}] violation: Expected network egress-mesh, but diff does not contain egress-mesh.`);
-      }
+        if (assertion.includes("egress-mesh") && !diff.includes("egress-mesh")) {
+          feedback.push(
+            `Criterion [${criterion.id}] violation: Expected network egress-mesh, but diff does not contain egress-mesh.`
+          );
+        }
 
-      if (assertion.includes("#ffffff") && !diff.includes("#ffffff") && !diff.includes("background")) {
-        feedback.push(`Criterion [${criterion.id}] violation: Expected background=#ffffff in diagram specification.`);
-      }
+        if (
+          assertion.includes("#ffffff") &&
+          !diff.includes("#ffffff") &&
+          !diff.includes("background")
+        ) {
+          feedback.push(
+            `Criterion [${criterion.id}] violation: Expected background=#ffffff in diagram specification.`
+          );
+        }
 
-      if (assertion.includes("30") && assertion.includes("cells") && !diff.includes("30") && !diff.includes("mxCells")) {
-        feedback.push(`Criterion [${criterion.id}] violation: Expected 30 mxCells in architecture diagram.`);
-      }
+        if (
+          assertion.includes("30") &&
+          assertion.includes("cells") &&
+          !diff.includes("30") &&
+          !diff.includes("mxCells")
+        ) {
+          feedback.push(
+            `Criterion [${criterion.id}] violation: Expected 30 mxCells in architecture diagram.`
+          );
+        }
 
-      if (criterion.fileMatch && !diff.includes(criterion.fileMatch)) {
-        feedback.push(`Criterion [${criterion.id}] violation: Diff does not modify expected file matching ${criterion.fileMatch}.`);
+        if (criterion.fileMatch && !diff.includes(criterion.fileMatch)) {
+          feedback.push(
+            `Criterion [${criterion.id}] violation: Diff does not modify expected file matching ${criterion.fileMatch}.`
+          );
+        }
       }
     }
-      }
 
     // Collect evidence from matching criteria in diff for legacy mode
     if (!milestone.assertions || milestone.assertions.length === 0) {
       if (!forceEmptyEvidence && diff) {
-        const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"));
+        const addedLines = diff
+          .split("\n")
+          .filter((l) => l.startsWith("+") && !l.startsWith("+++"));
         for (const line of addedLines) {
-          if (line.includes("egress-mesh") || line.includes("#ffffff") || line.includes("mxCells")) {
+          if (
+            line.includes("egress-mesh") ||
+            line.includes("#ffffff") ||
+            line.includes("mxCells")
+          ) {
             collectedEvidence.push({
               type: "diff",
               ref: milestone.id,
-              excerpt: line.trim().slice(0, 500)
+              excerpt: line.trim().slice(0, 500),
             });
           }
         }
@@ -1215,7 +1414,7 @@ export class CriticWorker {
           collectedEvidence.push({
             type: "diff",
             ref: milestone.id,
-            excerpt: addedLines[0].trim().slice(0, 500)
+            excerpt: addedLines[0].trim().slice(0, 500),
           });
         }
       }
@@ -1226,29 +1425,52 @@ export class CriticWorker {
     if (collectedEvidence.length === 0) {
       return {
         approved: false,
-        feedback: [...feedback, "Evidence linking check failed: No concrete evidence collected for verdict (fail-closed rule)."],
+        feedback: [
+          ...feedback,
+          "Evidence linking check failed: No concrete evidence collected for verdict (fail-closed rule).",
+        ],
         abstained: true,
         synthetic: false,
         model: modelToUse,
         verdict: "needs_fix",
-        evidence: []
+        evidence: [],
       };
     }
 
     // 2. Forced flaw detection (only on added lines)
-    const addedLines = diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
-    if (addedLines.includes("FORCED_FLAW") || addedLines.includes("SYNTAX_ERROR") || addedLines.includes("polygon-error")) {
-      feedback.push("Forced flaw detected in diff content: intentional violation triggers critic rejection and builder retry.");
+    const addedLines = diff
+      .split("\n")
+      .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
+      .join("\n");
+    if (
+      addedLines.includes("FORCED_FLAW") ||
+      addedLines.includes("SYNTAX_ERROR") ||
+      addedLines.includes("polygon-error")
+    ) {
+      feedback.push(
+        "Forced flaw detected in diff content: intentional violation triggers critic rejection and builder retry."
+      );
     }
 
     // 3a. TEST-ONLY: rule-based verdict, explicitly flagged synthetic.
     if (!this.injectedGenerate && isFastGraphTestMode()) {
-      console.warn(`[CriticWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic rule-based review for milestone ${milestone.id}`);
-      return { approved: feedback.length === 0, feedback, abstained: false, synthetic: true, verdict: feedback.length === 0 ? "approved" : "needs_fix", evidence: collectedEvidence, assertions: contractResults };
+      console.warn(
+        `[CriticWorker] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic rule-based review for milestone ${milestone.id}`
+      );
+      return {
+        approved: feedback.length === 0,
+        feedback,
+        abstained: false,
+        synthetic: true,
+        verdict: feedback.length === 0 ? "approved" : "needs_fix",
+        evidence: collectedEvidence,
+        assertions: contractResults,
+      };
     }
 
     // 3b. Model review. Any failure to obtain a parseable verdict => abstain (never approve).
-    const generate = this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
+    const generate =
+      this.injectedGenerate || createLlmGenerate({ baseUrl: this.llmUrl, scope: this.scope });
     const prompt = `You are a strict, adversarial code review critic evaluating an autonomous builder's diff.
 Milestone: [${milestone.id}] ${milestone.title}
 Acceptance Criteria:
@@ -1281,7 +1503,7 @@ Respond strictly in JSON:
         signal: options?.signal,
         scope: this.scope,
         reasoningEffort: "balanced",
-        options: { temperature: 0.1, num_predict: 2048 }
+        options: { temperature: 0.1, num_predict: 2048 },
       });
       verdictText = result.text;
     } catch (err: any) {
@@ -1291,7 +1513,11 @@ Respond strictly in JSON:
         abstained: true,
         synthetic: false,
         model: modelToUse,
-        feedback: [...feedback, "critic model unreachable — abstaining", String(err?.message || err)]
+        feedback: [
+          ...feedback,
+          "critic model unreachable — abstaining",
+          String(err?.message || err),
+        ],
       };
     }
 
@@ -1307,16 +1533,29 @@ Respond strictly in JSON:
         abstained: true,
         synthetic: false,
         model: modelToUse,
-        feedback: [...feedback, "critic model returned an unparseable verdict — abstaining", verdictText.slice(0, 300)]
+        feedback: [
+          ...feedback,
+          "critic model returned an unparseable verdict — abstaining",
+          verdictText.slice(0, 300),
+        ],
       };
     }
 
     if (!parsed.approved) {
-      const modelFeedback = Array.isArray(parsed.feedback) ? parsed.feedback.filter((f: unknown) => typeof f === "string" && f.trim()) : [];
-      feedback.push(...(modelFeedback.length > 0 ? modelFeedback : [`Model rejected: ${parsed.analysis || "no specifics given"}`]));
+      const modelFeedback = Array.isArray(parsed.feedback)
+        ? parsed.feedback.filter((f: unknown) => typeof f === "string" && f.trim())
+        : [];
+      feedback.push(
+        ...(modelFeedback.length > 0
+          ? modelFeedback
+          : [`Model rejected: ${parsed.analysis || "no specifics given"}`])
+      );
     }
 
-    const isApproved = feedback.length === 0 && parsed.approved === true && (contractResults.length === 0 || contractResults.every((r) => r.passed));
+    const isApproved =
+      feedback.length === 0 &&
+      parsed.approved === true &&
+      (contractResults.length === 0 || contractResults.every((r) => r.passed));
     return {
       approved: isApproved,
       feedback,
@@ -1325,7 +1564,7 @@ Respond strictly in JSON:
       model: modelToUse,
       verdict: isApproved ? "approved" : "needs_fix",
       evidence: collectedEvidence,
-      assertions: contractResults
+      assertions: contractResults,
     };
   }
 }
@@ -1336,8 +1575,7 @@ export class RecorderWorker {
 
   constructor(options?: { skillsDirectory?: string }) {
     this.skillsDirectory =
-      options?.skillsDirectory ||
-      path.resolve(process.cwd(), "../workspace/.agent/skills");
+      options?.skillsDirectory || path.resolve(process.cwd(), "../workspace/.agent/skills");
   }
 
   async evaluateAndRecordSkill(
@@ -1379,7 +1617,7 @@ ${outcome.lesson}
 
     return {
       promoted: true,
-      skillFilePath: fullPath
+      skillFilePath: fullPath,
     };
   }
 }
@@ -1447,8 +1685,11 @@ export class WorkerPool {
   private activeJobs = new Set<Promise<any>>();
 
   constructor(options?: WorkerPoolOptions) {
-    this.explicitMultiConcurrency = typeof options?.maxConcurrency === "number" && options.maxConcurrency > 1;
-    this.maxConcurrency = options?.maxConcurrency ?? (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : 1);
+    this.explicitMultiConcurrency =
+      typeof options?.maxConcurrency === "number" && options.maxConcurrency > 1;
+    this.maxConcurrency =
+      options?.maxConcurrency ??
+      (process.env.LLM_CONCURRENCY ? parseInt(process.env.LLM_CONCURRENCY, 10) : 1);
     this.semaphore = new Semaphore(this.maxConcurrency);
     this.scheduler = options?.scheduler ?? getSharedSlotScheduler();
     this.modelRoster = options?.modelRoster || resolveModelRosterFromEnv();
@@ -1471,7 +1712,8 @@ export class WorkerPool {
 
   getModelForRole(role: WorkerRole | "planner"): string {
     const model = this.modelRoster[role];
-    if (!model) throw new Error(`No model configured for role "${role}" (set ${role.toUpperCase()}_MODEL)`);
+    if (!model)
+      throw new Error(`No model configured for role "${role}" (set ${role.toUpperCase()}_MODEL)`);
     return model;
   }
 
@@ -1483,7 +1725,12 @@ export class WorkerPool {
   /** Model options for a role: configured model, injected client, residency keep_alive, task scope. */
   workerOptionsFor(role: WorkerRole | "planner"): WorkerModelOptions {
     const model = this.getModelForRole(role);
-    return { model, generate: this.generate, keepAlive: this.keepAliveFor(model), scope: this.scope };
+    return {
+      model,
+      generate: this.generate,
+      keepAlive: this.keepAliveFor(model),
+      scope: this.scope,
+    };
   }
 
   private resolveJobPriority(job: WorkerJob<any>): SlotPriority {
@@ -1530,7 +1777,6 @@ export class WorkerPool {
       job.abortSignal.addEventListener("abort", onParentAbort, { once: true });
     }
 
-
     let worktreePath: string | undefined;
     if (job.worktreeRepoRoot) {
       const os = await import("node:os");
@@ -1541,7 +1787,7 @@ export class WorkerPool {
       try {
         execFileSync("git", ["worktree", "add", "--detach", wtDir, "HEAD"], {
           cwd: job.worktreeRepoRoot,
-          stdio: "ignore"
+          stdio: "ignore",
         });
         worktreePath = wtDir;
       } catch (err) {
@@ -1565,7 +1811,10 @@ export class WorkerPool {
           abortController.signal.addEventListener(
             "abort",
             () => {
-              setTimeout(() => { emitTerminal("aborted"); reject(new Error("Worker execution aborted")); }, 0);
+              setTimeout(() => {
+                emitTerminal("aborted");
+                reject(new Error("Worker execution aborted"));
+              }, 0);
             },
             { once: true }
           );
@@ -1605,7 +1854,7 @@ export class WorkerPool {
           const { execFileSync } = await import("node:child_process");
           execFileSync("git", ["worktree", "remove", "--force", worktreePath], {
             cwd: job.worktreeRepoRoot,
-            stdio: "ignore"
+            stdio: "ignore",
           });
         } catch {
           try {
@@ -1630,7 +1879,7 @@ export function resolveModelRosterFromEnv(): ModelRosterConfig {
     builder: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
     critic: process.env.CRITIC_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
     explorer: process.env.EXPLORER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
-    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL
+    recorder: process.env.RECORDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
   };
 }
 

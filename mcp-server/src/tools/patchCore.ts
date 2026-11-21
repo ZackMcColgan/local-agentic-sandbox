@@ -21,7 +21,9 @@ export function resolveSafeWorkspacePath(workspaceRoot: string, userPath: string
   const resolved = path.resolve(workspaceRoot, normalized);
 
   if (!resolved.startsWith(rootResolved)) {
-    throw new Error(`Security Violation: Path traversal outside workspace is forbidden (${userPath})`);
+    throw new Error(
+      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
+    );
   }
   return resolved;
 }
@@ -70,6 +72,6 @@ export async function workspacePatchFile(
     status: "SUCCESS",
     path: relativePath,
     patchesApplied: appliedCount,
-    bytesWritten: Buffer.byteLength(content, "utf8")
+    bytesWritten: Buffer.byteLength(content, "utf8"),
   };
 }

@@ -8,11 +8,7 @@
       "promptFile": "eval/tasks/forensic-diagnosis/prompt.txt",
       "grader": "eval/graders/forensic-diagnosis.mjs",
       "passBar": {
-        "requiredRootCauseKeywords": [
-          "close",
-          "enqueue",
-          "controller"
-        ],
+        "requiredRootCauseKeywords": ["close", "enqueue", "controller"],
         "minKeywordMatches": 3,
         "mustNotClaimFixed": true
       }

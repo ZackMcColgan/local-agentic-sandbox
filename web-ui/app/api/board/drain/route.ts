@@ -64,8 +64,7 @@ export async function POST(req: NextRequest) {
 
     const dryRun = body.dryRun === true;
     const threadStore = dryRun ? null : new ThreadStore();
-    const stageDeps =
-      dryRun || !threadStore ? {} : createProductionStageDeps({ threadStore });
+    const stageDeps = dryRun || !threadStore ? {} : createProductionStageDeps({ threadStore });
 
     const orchestrator = new BoardOrchestrator({
       maxItems,
@@ -80,8 +79,7 @@ export async function POST(req: NextRequest) {
       getOwnerState: () => {
         const snapshot = getSharedSlotScheduler().getSnapshot();
         const ownerActive =
-          snapshot.active?.priority === 0 ||
-          snapshot.queued.some((q) => q.priority === 0);
+          snapshot.active?.priority === 0 || snapshot.queued.some((q) => q.priority === 0);
         return {
           isMidTurn: ownerActive,
           reason: ownerActive ? "Owner P0 turn active or queued" : undefined,
@@ -123,7 +121,8 @@ export async function POST(req: NextRequest) {
           }
 
           const assistantMessages = (settled?.messages ?? []).filter(
-            (m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 0
+            (m) =>
+              m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 0
           );
           const lastAssistant = assistantMessages[assistantMessages.length - 1]?.content ?? "";
           const metadata = extractJobOutcomeMetadata(lastAssistant, rawStream);

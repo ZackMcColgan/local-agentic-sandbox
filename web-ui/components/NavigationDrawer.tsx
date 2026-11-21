@@ -14,12 +14,21 @@ import {
   X,
   MessageSquare,
   MoreHorizontal,
-  Trash2
+  Trash2,
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
 import { deriveThreadDisplayTitle } from "../lib/chatUtils";
 
-export type NavView = "sessions" | "thread" | "builds" | "board" | "skills" | "morning-report" | "settings" | "security" | "projects";
+export type NavView =
+  | "sessions"
+  | "thread"
+  | "builds"
+  | "board"
+  | "skills"
+  | "morning-report"
+  | "settings"
+  | "security"
+  | "projects";
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -48,7 +57,7 @@ export function NavigationDrawer({
   onSelectThread,
   onDeleteThread,
   isLoadingThreads = false,
-  onOpenExplorer
+  onOpenExplorer,
 }: NavigationDrawerProps) {
   const [actionSheetThread, setActionSheetThread] = useState<Thread | null>(null);
   const [confirmDeleteThread, setConfirmDeleteThread] = useState<Thread | null>(null);
@@ -83,7 +92,9 @@ export function NavigationDrawer({
     if (actionSheetThread && typeof window !== "undefined") {
       const Evt = window.CustomEvent ?? globalThis.CustomEvent;
       if (Evt) {
-        window.dispatchEvent(new Evt("ui:overlay-open", { detail: { source: "session-action-sheet" } }));
+        window.dispatchEvent(
+          new Evt("ui:overlay-open", { detail: { source: "session-action-sheet" } })
+        );
       }
     }
   }, [actionSheetThread]);
@@ -153,7 +164,9 @@ export function NavigationDrawer({
     longPressTimerRef.current = setTimeout(() => {
       didLongPressRef.current = true;
       if (typeof navigator !== "undefined" && navigator.vibrate) {
-        try { navigator.vibrate(40); } catch {}
+        try {
+          navigator.vibrate(40);
+        } catch {}
       }
       lastActiveElementRef.current = document.activeElement as HTMLElement;
       setActionSheetThread(thread);
@@ -219,7 +232,6 @@ export function NavigationDrawer({
         aria-label="Navigation Drawer"
         className="relative w-72 sm:w-80 max-w-[88vw] h-full bg-stone-50 dark:bg-[#0e0e12] shadow-2xl rounded-r-3xl flex flex-col py-5 px-3.5 z-50 border-r border-stone-200/90 dark:border-white/[0.10] transition-transform animate-in slide-in-from-left duration-200"
       >
-        
         {/* Top Header: Neutral Menu title + Close (X) button */}
         <div className="flex items-center justify-between px-2 pb-4 shrink-0">
           <span className="text-sm font-semibold tracking-tight text-stone-900 dark:text-stone-100">
@@ -396,7 +408,10 @@ export function NavigationDrawer({
           {isLoadingThreads && threads.length === 0 ? (
             <div className="space-y-2 px-1 py-1" aria-label="Loading sessions">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-12 rounded-2xl bg-stone-200/60 dark:bg-[#15151b] animate-pulse border border-stone-200 dark:border-white/[0.08]" />
+                <div
+                  key={i}
+                  className="h-12 rounded-2xl bg-stone-200/60 dark:bg-[#15151b] animate-pulse border border-stone-200 dark:border-white/[0.08]"
+                />
               ))}
             </div>
           ) : threads.length === 0 ? (
@@ -444,7 +459,9 @@ export function NavigationDrawer({
                     className="flex-1 min-w-0 text-left flex flex-col gap-0.5 focus:outline-none"
                     title={thread.title}
                   >
-                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">{deriveThreadDisplayTitle(thread.title)}</span>
+                    <span className="line-clamp-2 break-words text-[13.5px] font-semibold">
+                      {deriveThreadDisplayTitle(thread.title)}
+                    </span>
                     {(thread as any).matchSnippet && (
                       <span className="text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
                         {(thread as any).matchSnippet}
@@ -458,7 +475,10 @@ export function NavigationDrawer({
                   </button>
                   <div className="flex items-center gap-1 shrink-0 ml-1.5">
                     {thread.status === "active" && (
-                      <span className="h-2 w-2 rounded-full bg-cyan-400 shrink-0 animate-pulse" title="Active" />
+                      <span
+                        className="h-2 w-2 rounded-full bg-cyan-400 shrink-0 animate-pulse"
+                        title="Active"
+                      />
                     )}
                     {onDeleteThread && (
                       <button

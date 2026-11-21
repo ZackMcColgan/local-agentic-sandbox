@@ -1,12 +1,21 @@
 import { test, expect } from "@playwright/test";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L8: Wedging Regression (Single Massive Tool Argument) @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("defends against engine wedging when model is asked to emit a massive 70KB tool call payload in a single turn", async ({ page, baseURL }) => {
+  test("defends against engine wedging when model is asked to emit a massive 70KB tool call payload in a single turn", async ({
+    page,
+    baseURL,
+  }) => {
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
@@ -23,7 +32,13 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument) @full", () 
     let turnResult: any = null;
 
     try {
-      turnResult = await awaitTurnCompletion(page, url, threadId, DEADLINES.WEDGING_LIMIT, "l8-wedge-test");
+      turnResult = await awaitTurnCompletion(
+        page,
+        url,
+        threadId,
+        DEADLINES.WEDGING_LIMIT,
+        "l8-wedge-test"
+      );
     } catch (err: any) {
       turnError = err;
     }
@@ -41,7 +56,9 @@ test.describe("L8: Wedging Regression (Single Massive Tool Argument) @full", () 
     } else {
       console.log(`[L8] Turn ended with handled error/timeout:`, turnError?.message);
       expect(turnError?.classification).not.toBe("ENGINE-WEDGED");
-      console.log(`[L8] Confirmed: Strata slot 0 was recovered via watchdog stop; NOT engine-wedged.`);
+      console.log(
+        `[L8] Confirmed: Strata slot 0 was recovered via watchdog stop; NOT engine-wedged.`
+      );
     }
   });
 });

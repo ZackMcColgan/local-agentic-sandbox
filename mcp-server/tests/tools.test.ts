@@ -10,7 +10,7 @@ describe("MCP Tools Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-mcp-server",
-      version: "1.0.0"
+      version: "1.0.0",
     });
   });
 
@@ -28,13 +28,13 @@ describe("MCP Tools Suite", () => {
       const toolHandler = mcp._registeredTools["execute_sandboxed_python"].handler;
 
       const result = await toolHandler({
-        code: "print(42)"
+        code: "print(42)",
       });
 
       assert.ok(result.content, "Result content should be defined");
       assert.equal(result.content[0].type, "text");
       const parsed = JSON.parse(result.content[0].text);
-      
+
       assert.ok(["SUCCESS", "EXECUTION_ERROR"].includes(parsed.status));
       assert.ok(parsed.security_boundary, "Security boundary must be defined");
       assert.equal(parsed.security_boundary.network_egress, "BLOCKED");
@@ -46,7 +46,7 @@ describe("MCP Tools Suite", () => {
       const toolHandler = mcp._registeredTools["execute_sandboxed_python"].handler;
 
       const result = await toolHandler({
-        code: "def broken_syntax(:\n  pass"
+        code: "def broken_syntax(:\n  pass",
       });
 
       const parsed = JSON.parse(result.content[0].text);
@@ -61,7 +61,10 @@ describe("MCP Tools Suite", () => {
       registerAttestation(mcp);
       // @ts-ignore
       const tools = mcp._registeredTools;
-      assert.ok(tools["verify_container_provenance"], "verify_container_provenance should be registered");
+      assert.ok(
+        tools["verify_container_provenance"],
+        "verify_container_provenance should be registered"
+      );
       assert.ok(tools["docker_scout_policy_gate"], "docker_scout_policy_gate should be registered");
     });
 
@@ -71,15 +74,19 @@ describe("MCP Tools Suite", () => {
       const toolHandler = mcp._registeredTools["verify_container_provenance"].handler;
 
       const result = await toolHandler({
-        image_uri: "local-agentic-sandbox/mcp-server:latest@sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        environment: "prod"
+        image_uri:
+          "local-agentic-sandbox/mcp-server:latest@sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        environment: "prod",
       });
 
       const parsed = JSON.parse(result.content[0].text);
       assert.equal(parsed.telemetry_source, "LIVE_KERNEL_PROBE");
       assert.ok(parsed.runtime_boundary, "Runtime boundary must be probed");
       assert.equal(parsed.runtime_boundary.network_egress, "BLOCKED");
-      assert.equal(parsed.supply_chain_gate.image_digest, "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+      assert.equal(
+        parsed.supply_chain_gate.image_digest,
+        "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      );
       assert.ok(parsed.supply_chain_gate.docker_socket_posture.includes("Docker socket"));
     });
 
@@ -91,7 +98,7 @@ describe("MCP Tools Suite", () => {
       const result = await toolHandler({
         image_uri: "local-agentic-sandbox/mcp-server:latest",
         max_critical: 0,
-        max_high: 0
+        max_high: 0,
       });
 
       const parsed = JSON.parse(result.content[0].text);

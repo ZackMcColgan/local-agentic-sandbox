@@ -122,7 +122,7 @@ export function createLlmGenerate(options?: {
         return await provider.generate(req, options?.baseUrl, {
           timeoutMs: options?.timeoutMs,
           fetchImpl: options?.fetchImpl,
-          scope: options?.scope || req.scope
+          scope: options?.scope || req.scope,
         });
       } catch (err: any) {
         throw new ModelUnavailableError(
@@ -149,15 +149,18 @@ export function createLlmGenerate(options?: {
 
     // Decouple <think> reasoning budget from code output budget:
     // Add thinking token budget (fast=1024, balanced=4096, deep=8192) ON TOP of requested num_predict
-    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
-    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "fast") as string;
+    const requestedPredict =
+      typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort ||
+      (req.options as any)?.reasoningEffort ||
+      "fast") as string;
     const thinkingBudget = getThinkingBudget(effort);
     const effectiveNumPredict = requestedPredict + thinkingBudget;
 
     const requestOptions = {
       num_ctx: numCtx,
       ...(req.options || {}),
-      num_predict: effectiveNumPredict
+      num_predict: effectiveNumPredict,
     };
 
     let res: Response;
@@ -172,16 +175,26 @@ export function createLlmGenerate(options?: {
           stream: true,
           ...(req.format ? { format: req.format } : {}),
           ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
-          options: requestOptions
-        })
+          options: requestOptions,
+        }),
       });
     } catch (err: any) {
-      throw new ModelUnavailableError(req.model, endpoint, err?.name === "TimeoutError" ? `timed out after ${timeoutMs}ms` : err?.message || String(err));
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        err?.name === "TimeoutError"
+          ? `timed out after ${timeoutMs}ms`
+          : err?.message || String(err)
+      );
     }
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new ModelUnavailableError(req.model, endpoint, `HTTP ${res.status} ${body.slice(0, 200)}`);
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        `HTTP ${res.status} ${body.slice(0, 200)}`
+      );
     }
 
     let accumulatedText = "";
@@ -239,11 +252,21 @@ export function createLlmGenerate(options?: {
               if (now - lastLogTime >= 15000) {
                 lastLogTime = now;
                 const elapsedSec = Math.round((now - startTime) / 1000);
-                if (insideThinking || (!accumulatedText.includes("</think>") && accumulatedText.length > 0 && !accumulatedText.includes("```"))) {
-                  const sample = (thinkingText || accumulatedText).replace(/\r?\n/g, " ").trim().slice(-120);
+                if (
+                  insideThinking ||
+                  (!accumulatedText.includes("</think>") &&
+                    accumulatedText.length > 0 &&
+                    !accumulatedText.includes("```"))
+                ) {
+                  const sample = (thinkingText || accumulatedText)
+                    .replace(/\r?\n/g, " ")
+                    .trim()
+                    .slice(-120);
                   console.log(`[llm] stream thinking [${elapsedSec}s elapsed]: ...${sample}`);
                 } else {
-                  console.log(`[llm] stream generating [${elapsedSec}s elapsed, ${accumulatedText.length} chars accumulated]`);
+                  console.log(
+                    `[llm] stream generating [${elapsedSec}s elapsed, ${accumulatedText.length} chars accumulated]`
+                  );
                 }
               }
             } catch (_) {}
@@ -283,7 +306,11 @@ export function createLlmGenerate(options?: {
         }
       }
     } catch (err: any) {
-      throw new ModelUnavailableError(req.model, endpoint, `stream read error: ${err?.message || String(err)}`);
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        `stream read error: ${err?.message || String(err)}`
+      );
     }
 
     let text = accumulatedText.trim();
@@ -292,14 +319,16 @@ export function createLlmGenerate(options?: {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[llm] generate completed in ${elapsed}ms for model ${req.model} (${text.length} chars)`);
+    console.log(
+      `[llm] generate completed in ${elapsed}ms for model ${req.model} (${text.length} chars)`
+    );
 
     return {
       text,
       thinking: thinkingText.trim() || undefined,
       model: req.model,
       loadDurationMs,
-      totalDurationMs: totalDurationMs || elapsed
+      totalDurationMs: totalDurationMs || elapsed,
     };
   };
 }

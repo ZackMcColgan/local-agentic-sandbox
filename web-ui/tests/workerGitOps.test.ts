@@ -23,7 +23,7 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
         model: "swift-27b-mtp",
         gitShas: [],
         milestoneSummary: [],
-        deploymentRef: "none"
+        deploymentRef: "none",
       });
 
       const executedCommands: string[] = [];
@@ -40,33 +40,45 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
             return {
               exitCode: 0,
               stdout: "https://github.com/ZackMcColgan/local-agentic-sandbox/pull/99\n",
-              stderr: ""
+              stderr: "",
             };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       const branchRes = await gitOps.createAndSwitchBranch("feature/weather-endpoint");
       assert.equal(branchRes.branchName, "feature/weather-endpoint");
-      assert.equal(branchRes.eventMarkdown, "Created and switched to branch `feature/weather-endpoint`");
+      assert.equal(
+        branchRes.eventMarkdown,
+        "Created and switched to branch `feature/weather-endpoint`"
+      );
 
-      const commitRes = await gitOps.stageAndCommit(["web-ui/api/weather.ts"], "feat(api): add weather forecast endpoint");
+      const commitRes = await gitOps.stageAndCommit(
+        ["web-ui/api/weather.ts"],
+        "feat(api): add weather forecast endpoint"
+      );
       assert.equal(commitRes.commitSha, "abc1234567890");
       assert.ok(commitRes.eventMarkdown.includes("Committed `abc1234`"));
 
       const pushRes = await gitOps.pushBranch("feature/weather-endpoint");
       assert.equal(pushRes.success, true);
-      assert.ok(pushRes.eventMarkdown.includes("Pushed branch `feature/weather-endpoint` to origin"));
+      assert.ok(
+        pushRes.eventMarkdown.includes("Pushed branch `feature/weather-endpoint` to origin")
+      );
 
       const prRes = await gitOps.openPullRequest({
         baseBranch: "develop",
         title: "feat(api): add weather forecast endpoint",
-        body: "Automated PR from worker run-git-1"
+        body: "Automated PR from worker run-git-1",
       });
       assert.equal(prRes.prNumber, 99);
       assert.equal(prRes.prUrl, "https://github.com/ZackMcColgan/local-agentic-sandbox/pull/99");
-      assert.ok(prRes.eventMarkdown.includes("[PR #99](https://github.com/ZackMcColgan/local-agentic-sandbox/pull/99)"));
+      assert.ok(
+        prRes.eventMarkdown.includes(
+          "[PR #99](https://github.com/ZackMcColgan/local-agentic-sandbox/pull/99)"
+        )
+      );
 
       // Verify that all git operations updated the run ledger gitShas and history
       const updatedRun = ledger.getRun("run-git-1");
@@ -146,11 +158,11 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
             return {
               exitCode: 0,
               stdout: "https://github.com/ZackMcColgan/local-agentic-sandbox/pull/101\n",
-              stderr: ""
+              stderr: "",
             };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       // 1. Filename with command injection payload
@@ -160,7 +172,11 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
       assert.equal(fs.existsSync(pwnedFile), false, "Command in filename must NEVER execute");
       const addCall = executedArgs.find((e) => e.file === "git" && e.args[0] === "add");
       assert.ok(addCall, "git add must have been called");
-      assert.deepEqual(addCall.args, ["add", maliciousFilename], "Filename passed literally as array element");
+      assert.deepEqual(
+        addCall.args,
+        ["add", maliciousFilename],
+        "Filename passed literally as array element"
+      );
 
       // 2. Commit message with $(...) injection payload
       const maliciousMessage = `fix: $(touch "${pwnedFile}")`;
@@ -170,13 +186,17 @@ describe("Sprint 12 Phase 8 — Worker Git Operations (workerGitOps.test.ts)", (
       const commitCalls = executedArgs.filter((e) => e.file === "git" && e.args[0] === "commit");
       const commitCall = commitCalls[commitCalls.length - 1];
       assert.ok(commitCall, "git commit must have been called");
-      assert.equal(commitCall.args[2], maliciousMessage, "Commit message passed literally without shell expansion");
+      assert.equal(
+        commitCall.args[2],
+        maliciousMessage,
+        "Commit message passed literally without shell expansion"
+      );
 
       // 3. PR title with backticks injection payload
       await gitOps.createAndSwitchBranch("feature/test-pr-title");
       await gitOps.openPullRequest({
         title: `feat: \`touch "${pwnedFile}"\``,
-        body: "Automated PR body"
+        body: "Automated PR body",
       });
 
       assert.equal(fs.existsSync(pwnedFile), false, "Backticks in PR title must NEVER execute");

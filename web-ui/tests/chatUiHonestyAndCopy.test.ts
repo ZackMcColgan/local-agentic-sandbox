@@ -22,7 +22,10 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
     assert.equal(hRead.title, "Host Read test.txt");
 
     // 3. host_write_file
-    const traceWrite = { tool: "host_write_file", args: { path: "C:\\AI\\output.txt", content: "hello" } };
+    const traceWrite = {
+      tool: "host_write_file",
+      args: { path: "C:\\AI\\output.txt", content: "hello" },
+    };
     const hWrite = formatHumanReadableTrace(traceWrite);
     assert.equal(hWrite.badge, "host");
     assert.equal(hWrite.title, "Host Wrote output.txt");
@@ -103,15 +106,15 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
             tool: "host_list_dir",
             args: { path: "C:\\AI\\ai-control\\bin" },
             tier: "host",
-            durationMs: 11
+            durationMs: 11,
           },
           {
             tool: "workspace_read_file",
             args: { path: "README.md" },
             tier: "workspace",
-            durationMs: 25
-          }
-        ]
+            durationMs: 25,
+          },
+        ],
       },
       {
         id: "msg-mixed-traces-2",
@@ -122,16 +125,16 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
             tool: "search_web",
             args: { query: "node sea" },
             tier: "browser",
-            durationMs: 340
+            durationMs: 340,
           },
           {
             tool: "execute_sandboxed_python",
             args: { code: "print(1)" },
             tier: "sandbox",
-            durationMs: 100
-          }
-        ]
-      }
+            durationMs: 100,
+          },
+        ],
+      },
     ];
 
     const html = renderToString(
@@ -139,7 +142,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
-        messages
+        messages,
       })
     );
 
@@ -165,13 +168,13 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
       {
         id: "msg-asst-1",
         role: "assistant",
-        content: "# Heading\n\n- Item 1\n- Item 2\n\n```ts\nconst x = 42;\n```"
+        content: "# Heading\n\n- Item 1\n- Item 2\n\n```ts\nconst x = 42;\n```",
       },
       {
         id: "msg-user-1",
         role: "user",
-        content: "Please list the items."
-      }
+        content: "Please list the items.",
+      },
     ];
 
     const html = renderToString(
@@ -179,17 +182,24 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
-        messages
+        messages,
       })
     );
 
     // Assistant message must have copy button
-    assert.ok(html.includes('data-testid="copy-response-btn"'), "Must render data-testid='copy-response-btn'");
+    assert.ok(
+      html.includes('data-testid="copy-response-btn"'),
+      "Must render data-testid='copy-response-btn'"
+    );
     assert.ok(html.includes("Copy"), "Must render Copy button label or title");
 
     // User message must NOT have copy button
     const userMessageCount = (html.match(/data-testid="copy-response-btn"/g) || []).length;
-    assert.equal(userMessageCount, 1, "Only the 1 assistant message should have the copy response button");
+    assert.equal(
+      userMessageCount,
+      1,
+      "Only the 1 assistant message should have the copy response button"
+    );
 
     // Source verification: Ensure button is NOT hover-only (no opacity-0 group-hover)
     const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
@@ -197,7 +207,10 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
       !src.includes('data-testid="copy-response-btn" className="opacity-0 group-hover'),
       "Copy response button must be tappable on phone layout without hover"
     );
-    assert.ok(src.includes("copyToClipboard(m.content, m.id)"), "Copy button must pass full raw markdown content");
+    assert.ok(
+      src.includes("copyToClipboard(m.content, m.id)"),
+      "Copy button must pass full raw markdown content"
+    );
   });
 
   it("handles streaming assistant messages copying existing content at tap time", () => {
@@ -205,8 +218,8 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
       {
         id: "msg-streaming-1",
         role: "assistant",
-        content: "This is a partially streamed message..."
-      }
+        content: "This is a partially streamed message...",
+      },
     ];
 
     const html = renderToString(
@@ -215,12 +228,18 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
         isLoading: true,
-        messages: partialStreamingMessage
+        messages: partialStreamingMessage,
       })
     );
 
-    assert.ok(html.includes('data-testid="copy-response-btn"'), "Streaming message must have copy button available");
-    assert.ok(html.includes("This is a partially streamed message..."), "Content must be present at tap time");
+    assert.ok(
+      html.includes('data-testid="copy-response-btn"'),
+      "Streaming message must have copy button available"
+    );
+    assert.ok(
+      html.includes("This is a partially streamed message..."),
+      "Content must be present at tap time"
+    );
   });
 });
 
@@ -230,13 +249,13 @@ describe("Part 3 — User Message Copy Button Suite", () => {
       {
         id: "msg-user-1",
         role: "user",
-        content: "What is the weather in Spanish Fort?"
+        content: "What is the weather in Spanish Fort?",
       },
       {
         id: "msg-asst-1",
         role: "assistant",
-        content: "The weather is sunny."
-      }
+        content: "The weather is sunny.",
+      },
     ];
 
     const html = renderToString(
@@ -244,17 +263,23 @@ describe("Part 3 — User Message Copy Button Suite", () => {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
-        messages
+        messages,
       })
     );
 
     // User message must have data-testid="copy-user-message-btn"
-    assert.ok(html.includes('data-testid="copy-user-message-btn"'), "Must render data-testid='copy-user-message-btn'");
+    assert.ok(
+      html.includes('data-testid="copy-user-message-btn"'),
+      "Must render data-testid='copy-user-message-btn'"
+    );
     assert.ok(html.includes("Copy"), "Must render Copy text/label on user message");
 
     // Source verification: ensure copy button wires to copyToClipboard(m.content, m.id)
     const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
-    assert.ok(src.includes('data-testid="copy-user-message-btn"'), "ChatStream must declare copy-user-message-btn");
+    assert.ok(
+      src.includes('data-testid="copy-user-message-btn"'),
+      "ChatStream must declare copy-user-message-btn"
+    );
     assert.ok(
       src.includes("copyToClipboard(m.content, m.id)"),
       "User copy button must pass m.content and m.id to copyToClipboard"

@@ -46,7 +46,7 @@ export function applyReplaceString(
     return {
       success: false,
       occurrences,
-      error: `oldString occurs ${occurrences} times; pass replaceAll=true or expand oldString with surrounding context to disambiguate`
+      error: `oldString occurs ${occurrences} times; pass replaceAll=true or expand oldString with surrounding context to disambiguate`,
     };
   }
   if (replaceAll) {
@@ -54,11 +54,10 @@ export function applyReplaceString(
       success: true,
       content: content.split(oldString).join(newString),
       replacements: occurrences,
-      occurrences
+      occurrences,
     };
   }
   const idx = content.indexOf(oldString);
-  const next =
-    content.slice(0, idx) + newString + content.slice(idx + oldString.length);
+  const next = content.slice(0, idx) + newString + content.slice(idx + oldString.length);
   return { success: true, content: next, replacements: 1, occurrences };
 }

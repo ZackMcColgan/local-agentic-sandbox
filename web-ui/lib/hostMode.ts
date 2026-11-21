@@ -40,7 +40,10 @@ const consumedApprovalIds = new Set<string>();
 // Strictly in-memory continuation buffer. Zero disk persistence.
 const continuationBuffer = new Map<string, HostContinuationEntry>();
 
-export function getPendingApprovals(threadId?: string, now: number = Date.now()): HostApprovalRequest[] {
+export function getPendingApprovals(
+  threadId?: string,
+  now: number = Date.now()
+): HostApprovalRequest[] {
   // Purge any expired records
   for (const [id, req] of pendingApprovals.entries()) {
     if (req.expiresAt <= now) {
@@ -72,7 +75,7 @@ export function createPendingApproval(
     riskReason,
     status: "pending",
     createdAt: now,
-    expiresAt: now + 10 * 60 * 1000 // 10 minutes
+    expiresAt: now + 10 * 60 * 1000, // 10 minutes
   };
   pendingApprovals.set(id, approval);
   return approval;
@@ -128,7 +131,7 @@ export function recordContinuationEntry(
   const continuation: HostContinuationEntry = {
     ...entry,
     createdAt: now,
-    expiresAt: now + 5 * 60 * 1000 // 5 minutes
+    expiresAt: now + 5 * 60 * 1000, // 5 minutes
   };
   continuationBuffer.set(entry.approvalId, continuation);
   return continuation;
@@ -138,7 +141,9 @@ export function consumeContinuationEntry(
   approvalId: string,
   threadId: string,
   now: number = Date.now()
-): { ok: true; entry: HostContinuationEntry } | { ok: false; reason: "not_found" | "expired" | "thread_mismatch" } {
+):
+  | { ok: true; entry: HostContinuationEntry }
+  | { ok: false; reason: "not_found" | "expired" | "thread_mismatch" } {
   const entry = continuationBuffer.get(approvalId);
   if (!entry) {
     return { ok: false, reason: "not_found" };
@@ -161,7 +166,7 @@ export {
   stripQuotedStrings,
   DESTRUCTIVE_POWERSHELL_PATTERNS,
   isDestructiveHostAction,
-  type DestructiveCheckResult
+  type DestructiveCheckResult,
 } from "../../host-bridge/classifier";
 
 export function getHostRunnerBaseUrl(): string {
@@ -174,7 +179,7 @@ export async function checkHostRunnerHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${getHostRunnerBaseUrl()}/health`, {
       method: "GET",
-      signal: AbortSignal.timeout(1500)
+      signal: AbortSignal.timeout(1500),
     });
     if (!res.ok) {
       return false;
@@ -205,7 +210,7 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
   try {
     const res = await fetch(`${getHostRunnerBaseUrl()}/health`, {
       method: "GET",
-      signal: AbortSignal.timeout(1500)
+      signal: AbortSignal.timeout(1500),
     });
     if (res.ok) {
       probe = await res.json();
@@ -220,7 +225,7 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
       reason: "Host access is disabled for this thread",
       expectedSha: manifest.bridgeSourceSha256,
       actualSha: probe?.bridgeSourceSha256,
-      protocolVersion: probe?.protocolVersion
+      protocolVersion: probe?.protocolVersion,
     };
   }
 
@@ -230,7 +235,7 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
       runnerState: "UNAVAILABLE",
       runnerAvailable: false,
       reason: "Host runner daemon not responding on port 8765",
-      expectedSha: manifest.bridgeSourceSha256
+      expectedSha: manifest.bridgeSourceSha256,
     };
   }
 
@@ -245,7 +250,7 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
       reason: "Host runner daemon version/digest mismatch. Run AI-ON.ps1 to update.",
       expectedSha: manifest.bridgeSourceSha256,
       actualSha: probe.bridgeSourceSha256,
-      protocolVersion: probe.protocolVersion
+      protocolVersion: probe.protocolVersion,
     };
   }
 
@@ -255,7 +260,7 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
     runnerAvailable: true,
     expectedSha: manifest.bridgeSourceSha256,
     actualSha: probe.bridgeSourceSha256,
-    protocolVersion: probe.protocolVersion
+    protocolVersion: probe.protocolVersion,
   };
 }
 
@@ -297,11 +302,7 @@ export function getHostStateDirective(state: HostRunnerState, reason?: string): 
   }
 }
 
-export function generateHostFileDiff(
-  tool: string,
-  args: any,
-  result: any
-): TurnFileDiff | null {
+export function generateHostFileDiff(tool: string, args: any, result: any): TurnFileDiff | null {
   if (
     (tool === "host_write_file" || tool === "host_replace_string") &&
     result &&
@@ -313,16 +314,23 @@ export function generateHostFileDiff(
     if (tool === "host_write_file") {
       afterContent = typeof args.content === "string" ? args.content : null;
     } else if (tool === "host_replace_string") {
-      if (typeof args.oldString === "string" && args.oldString.length > 0 && typeof args.newString === "string") {
+      if (
+        typeof args.oldString === "string" &&
+        args.oldString.length > 0 &&
+        typeof args.newString === "string"
+      ) {
         // Mirror the bridge core's literal semantics: no $-pattern
         // substitution, and replaceAll replaces every occurrence.
         if (args.replaceAll === true) {
           afterContent = result.preImageContent.split(args.oldString).join(args.newString);
         } else {
           const idx = result.preImageContent.indexOf(args.oldString);
-          afterContent = idx === -1
-            ? null
-            : result.preImageContent.slice(0, idx) + args.newString + result.preImageContent.slice(idx + args.oldString.length);
+          afterContent =
+            idx === -1
+              ? null
+              : result.preImageContent.slice(0, idx) +
+                args.newString +
+                result.preImageContent.slice(idx + args.oldString.length);
         }
       } else if (typeof args.newString === "string") {
         afterContent = args.newString;
@@ -378,7 +386,7 @@ export async function executeHostTool(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-Host-Runner-Secret": secret
+    "X-Host-Runner-Secret": secret,
   };
   if (approvalId) {
     headers["X-Host-Approval-Id"] = approvalId;
@@ -393,12 +401,14 @@ export async function executeHostTool(
         tool,
         args,
         capability,
-        mergeGrant
+        mergeGrant,
       }),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err: any) {
-    throw new Error(`Host runner daemon disconnected mid-turn: ${err?.message || "connection error"}`);
+    throw new Error(
+      `Host runner daemon disconnected mid-turn: ${err?.message || "connection error"}`
+    );
   }
 
   if (!res.ok) {
@@ -417,17 +427,21 @@ export const HOST_TOOLS_DEFINITIONS = [
     type: "function",
     function: {
       name: "host_run_powershell",
-      description: "Execute a PowerShell command on the host Windows machine. Destructive commands require approval.",
+      description:
+        "Execute a PowerShell command on the host Windows machine. Destructive commands require approval.",
       parameters: {
         type: "object",
         properties: {
           command: { type: "string", description: "The PowerShell command line to execute." },
           cwd: { type: "string", description: "Optional working directory on the host machine." },
-          timeoutSeconds: { type: "number", description: "Optional execution timeout in seconds (1 to 600, default 120)." }
+          timeoutSeconds: {
+            type: "number",
+            description: "Optional execution timeout in seconds (1 to 600, default 120).",
+          },
         },
-        required: ["command"]
-      }
-    }
+        required: ["command"],
+      },
+    },
   },
   {
     type: "function",
@@ -441,11 +455,11 @@ export const HOST_TOOLS_DEFINITIONS = [
           start_line: { type: "number", description: "Optional start line (1-indexed)." },
           end_line: { type: "number", description: "Optional end line (1-indexed)." },
           offset: { type: "number", description: "Optional line offset." },
-          limit: { type: "number", description: "Optional line count limit." }
+          limit: { type: "number", description: "Optional line count limit." },
         },
-        required: ["path"]
-      }
-    }
+        required: ["path"],
+      },
+    },
   },
   {
     type: "function",
@@ -456,28 +470,41 @@ export const HOST_TOOLS_DEFINITIONS = [
         type: "object",
         properties: {
           path: { type: "string", description: "Absolute path on the host machine." },
-          content: { type: "string", description: "Text content to write." }
+          content: { type: "string", description: "Text content to write." },
         },
-        required: ["path", "content"]
-      }
-    }
+        required: ["path", "content"],
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_replace_string",
-      description: "Replace an exact string in an existing file on the host machine. PREFERRED over host_write_file for editing existing files: it changes only the matched text and preserves the rest of the file byte-for-byte. oldString must match exactly once, or set replaceAll to replace every occurrence; it errors if oldString is not found or is ambiguous. Use host_write_file only to create new files or to rewrite a file in full.",
+      description:
+        "Replace an exact string in an existing file on the host machine. PREFERRED over host_write_file for editing existing files: it changes only the matched text and preserves the rest of the file byte-for-byte. oldString must match exactly once, or set replaceAll to replace every occurrence; it errors if oldString is not found or is ambiguous. Use host_write_file only to create new files or to rewrite a file in full.",
       parameters: {
         type: "object",
         properties: {
           path: { type: "string", description: "Absolute path on the host machine." },
-          oldString: { type: "string", description: "Exact text to replace, including whitespace. Include enough surrounding context that it matches exactly once." },
-          newString: { type: "string", description: "Replacement text, inserted literally. May be empty to delete the matched text." },
-          replaceAll: { type: "boolean", description: "Optional. Replace every occurrence instead of requiring exactly one match." }
+          oldString: {
+            type: "string",
+            description:
+              "Exact text to replace, including whitespace. Include enough surrounding context that it matches exactly once.",
+          },
+          newString: {
+            type: "string",
+            description:
+              "Replacement text, inserted literally. May be empty to delete the matched text.",
+          },
+          replaceAll: {
+            type: "boolean",
+            description:
+              "Optional. Replace every occurrence instead of requiring exactly one match.",
+          },
         },
-        required: ["path", "oldString", "newString"]
-      }
-    }
+        required: ["path", "oldString", "newString"],
+      },
+    },
   },
   {
     type: "function",
@@ -487,26 +514,27 @@ export const HOST_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Directory path on the host machine." }
-        }
-      }
-    }
+          path: { type: "string", description: "Directory path on the host machine." },
+        },
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_delete_path",
-      description: "Delete a file or directory on the host machine filesystem. Requires user approval.",
+      description:
+        "Delete a file or directory on the host machine filesystem. Requires user approval.",
       parameters: {
         type: "object",
         properties: {
           path: { type: "string", description: "Path to remove." },
-          recursive: { type: "boolean", description: "Whether to recursively delete directories." }
+          recursive: { type: "boolean", description: "Whether to recursively delete directories." },
         },
-        required: ["path"]
-      }
-    }
-  }
+        required: ["path"],
+      },
+    },
+  },
 ];
 
 export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
@@ -514,40 +542,43 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
     type: "function",
     function: {
       name: "host_git_status",
-      description: "Query repository git status, current branch, tracked dirty status, and untracked files.",
-      parameters: { type: "object", properties: {} }
-    }
+      description:
+        "Query repository git status, current branch, tracked dirty status, and untracked files.",
+      parameters: { type: "object", properties: {} },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_fetch",
       description: "Fetch all remote refs from origin without modifying the working tree.",
-      parameters: { type: "object", properties: {} }
-    }
+      parameters: { type: "object", properties: {} },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_pull_ff",
-      description: "Fast-forward pull of current branch from origin. Refuses if tracked tree is dirty or diverged.",
-      parameters: { type: "object", properties: {} }
-    }
+      description:
+        "Fast-forward pull of current branch from origin. Refuses if tracked tree is dirty or diverged.",
+      parameters: { type: "object", properties: {} },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_branch_create",
-      description: "Create and switch to a new feature/* branch from a base ref (default origin/develop).",
+      description:
+        "Create and switch to a new feature/* branch from a base ref (default origin/develop).",
       parameters: {
         type: "object",
         properties: {
           branch: { type: "string", description: "New branch name matching feature/*." },
-          baseRef: { type: "string", description: "Base ref (default origin/develop)." }
+          baseRef: { type: "string", description: "Base ref (default origin/develop)." },
         },
-        required: ["branch"]
-      }
-    }
+        required: ["branch"],
+      },
+    },
   },
   {
     type: "function",
@@ -557,29 +588,30 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          branch: { type: "string", description: "Existing feature/* branch to check out." }
+          branch: { type: "string", description: "Existing feature/* branch to check out." },
         },
-        required: ["branch"]
-      }
-    }
+        required: ["branch"],
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_add",
-      description: "Stage exact relative file paths. Wildcards, flags, and runtime directories are forbidden.",
+      description:
+        "Stage exact relative file paths. Wildcards, flags, and runtime directories are forbidden.",
       parameters: {
         type: "object",
         properties: {
           paths: {
             type: "array",
             items: { type: "string" },
-            description: "List of exact relative file paths to stage."
-          }
+            description: "List of exact relative file paths to stage.",
+          },
         },
-        required: ["paths"]
-      }
-    }
+        required: ["paths"],
+      },
+    },
   },
   {
     type: "function",
@@ -589,24 +621,25 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "Non-empty commit message." }
+          message: { type: "string", description: "Non-empty commit message." },
         },
-        required: ["message"]
-      }
-    }
+        required: ["message"],
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_push",
-      description: "Push the granted feature branch to origin. Direct push to develop/main/master is forbidden.",
+      description:
+        "Push the granted feature branch to origin. Direct push to develop/main/master is forbidden.",
       parameters: {
         type: "object",
         properties: {
-          branch: { type: "string", description: "Granted feature branch to push." }
-        }
-      }
-    }
+          branch: { type: "string", description: "Granted feature branch to push." },
+        },
+      },
+    },
   },
   {
     type: "function",
@@ -618,42 +651,50 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
         properties: {
           title: { type: "string", description: "Pull request title." },
           body: { type: "string", description: "Pull request body." },
-          base: { type: "string", description: "Target base branch (default develop; main forbidden)." },
-          branch: { type: "string", description: "Source feature branch." }
+          base: {
+            type: "string",
+            description: "Target base branch (default develop; main forbidden).",
+          },
+          branch: { type: "string", description: "Source feature branch." },
         },
-        required: ["title", "body"]
-      }
-    }
+        required: ["title", "body"],
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_pr_status",
-      description: "Check status, draft state, mergeability, and CI checks of a pull request via host gh CLI.",
+      description:
+        "Check status, draft state, mergeability, and CI checks of a pull request via host gh CLI.",
       parameters: {
         type: "object",
         properties: {
-          prNumber: { type: "number", description: "Pull request number." }
+          prNumber: { type: "number", description: "Pull request number." },
         },
-        required: ["prNumber"]
-      }
-    }
+        required: ["prNumber"],
+      },
+    },
   },
   {
     type: "function",
     function: {
       name: "host_git_pr_merge",
-      description: "Merge a pull request under an explicit Part 1.5 merge grant. Enforces all CI checks green.",
+      description:
+        "Merge a pull request under an explicit Part 1.5 merge grant. Enforces all CI checks green.",
       parameters: {
         type: "object",
         properties: {
           prNumber: { type: "number", description: "Pull request number to merge." },
-          deleteSourceBranch: { type: "boolean", description: "Whether to delete remote branch after merge." }
+          deleteSourceBranch: {
+            type: "boolean",
+            description: "Whether to delete remote branch after merge.",
+          },
         },
-        required: ["prNumber"]
-      }
-    }
-  }
+        required: ["prNumber"],
+      },
+    },
+  },
 ];
 
 export function shouldAdvertiseUnattendedGitTools(
@@ -668,4 +709,3 @@ export function shouldAdvertiseUnattendedGitTools(
   if (runnerHealthy === true || runnerHealthy === "READY") return true;
   return false;
 }
-

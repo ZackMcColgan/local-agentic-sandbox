@@ -140,7 +140,10 @@ export class BoardStore {
     const migrated = items.map((item) => {
       const seed = seedById.get(item.id);
       if (!seed) return item;
-      if (item.status !== seed.status || JSON.stringify(item.evidence) !== JSON.stringify(seed.evidence)) {
+      if (
+        item.status !== seed.status ||
+        JSON.stringify(item.evidence) !== JSON.stringify(seed.evidence)
+      ) {
         changed = true;
         return {
           ...item,
@@ -154,7 +157,11 @@ export class BoardStore {
     if (changed) {
       fs.writeFileSync(this.filePath, JSON.stringify(migrated, null, 2), "utf8");
     }
-    fs.writeFileSync(this.metaPath, JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2), "utf8");
+    fs.writeFileSync(
+      this.metaPath,
+      JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2),
+      "utf8"
+    );
   }
 
   private readAll(): BoardItem[] {
@@ -246,8 +253,7 @@ export class BoardStore {
 
     const current = items[idx];
     const nextStatus = patch.status ?? current.status;
-    const nextReason =
-      patch.parkedReason !== undefined ? patch.parkedReason : current.parkedReason;
+    const nextReason = patch.parkedReason !== undefined ? patch.parkedReason : current.parkedReason;
 
     if (nextStatus === "parked" && (!nextReason || !nextReason.trim())) {
       throw new Error("Parked board item requires a reason string");

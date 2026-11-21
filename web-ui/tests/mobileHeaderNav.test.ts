@@ -15,21 +15,19 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
 
     // Hamburger button: visible on mobile (< md:), opens drawer, min-h-[44px] min-w-[44px]
     assert.ok(
-      file.includes('onClick={onOpenDrawer}') &&
-      file.includes('aria-label="Open navigation menu"') &&
-      file.includes("flex md:hidden"),
+      file.includes("onClick={onOpenDrawer}") &&
+        file.includes('aria-label="Open navigation menu"') &&
+        file.includes("flex md:hidden"),
       "ChatStream must render hamburger menu button on mobile (< md:) opening the drawer"
     );
 
     // Sidebar and Workspace toggles: hidden on mobile (< md:)
     assert.ok(
-      file.includes("hidden md:flex") &&
-      file.includes('aria-label="Toggle Sessions Panel"'),
+      file.includes("hidden md:flex") && file.includes('aria-label="Toggle Sessions Panel"'),
       "Sidebar toggle must be hidden on mobile (< md:)"
     );
     assert.ok(
-      file.includes("hidden md:flex") &&
-      file.includes('aria-label="Toggle Workspace Panel"'),
+      file.includes("hidden md:flex") && file.includes('aria-label="Toggle Workspace Panel"'),
       "Workspace toggle must be hidden on mobile (< md:)"
     );
 
@@ -68,8 +66,18 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
 
   it("ensures NavigationDrawer is the single menu: New session, Destinations, Sessions list (Recents), and pinned Settings", () => {
     const sampleThreads = [
-      { id: "t1", title: "Refactor auth middleware", updatedAt: "2026-10-23T10:00:00Z", messages: [] },
-      { id: "t2", title: "Build project explorer", updatedAt: "2026-10-23T11:00:00Z", messages: [] }
+      {
+        id: "t1",
+        title: "Refactor auth middleware",
+        updatedAt: "2026-10-23T10:00:00Z",
+        messages: [],
+      },
+      {
+        id: "t2",
+        title: "Build project explorer",
+        updatedAt: "2026-10-23T11:00:00Z",
+        messages: [],
+      },
     ];
 
     let selectedThread: string | null = null;
@@ -80,19 +88,30 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
     const html = renderToString(
       React.createElement(NavigationDrawer, {
         isOpen: true,
-        onClose: () => { closed = true; },
+        onClose: () => {
+          closed = true;
+        },
         activeView: "sessions",
-        onNavigate: (view) => { navigatedTo = view; },
-        onNewSession: () => { newSessionFired = true; },
+        onNavigate: (view) => {
+          navigatedTo = view;
+        },
+        onNewSession: () => {
+          newSessionFired = true;
+        },
         pendingSkillsCount: 2,
         threads: sampleThreads as any,
         selectedThreadId: "t1",
-        onSelectThread: (id) => { selectedThread = id; }
+        onSelectThread: (id) => {
+          selectedThread = id;
+        },
       })
     );
 
     // Close button (X)
-    assert.ok(html.includes("aria-label=\"Close drawer\"") || html.includes("title=\"Close drawer\""), "Drawer must have close (X) button");
+    assert.ok(
+      html.includes('aria-label="Close drawer"') || html.includes('title="Close drawer"'),
+      "Drawer must have close (X) button"
+    );
 
     // 1. Prominent New session action at top
     assert.ok(html.includes("New session"), "Drawer must have prominent New session button");
@@ -100,7 +119,10 @@ describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views
     // 2. Destinations: Sessions, Builds, Projects & Folders, Skills (with 2 pending), Morning report
     assert.ok(html.includes("Sessions"), "Must include Sessions destination");
     assert.ok(html.includes("Builds"), "Must include Builds destination");
-    assert.ok(html.includes("Projects &amp; Folders") || html.includes("Projects & Folders"), "Must include Projects & Folders destination");
+    assert.ok(
+      html.includes("Projects &amp; Folders") || html.includes("Projects & Folders"),
+      "Must include Projects & Folders destination"
+    );
     assert.ok(html.includes("Skills"), "Must include Skills destination");
     assert.ok(html.includes("2 pending"), "Must render pending skills count");
     assert.ok(html.includes("Morning report"), "Must include Morning report destination");

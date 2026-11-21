@@ -15,10 +15,13 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-mcp-server-sec",
-      version: "2.0.0"
+      version: "2.0.0",
     });
     registerWorkspaceTools(mcp);
-    probeFile = path.join(os.tmpdir(), `pwned_probe_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    probeFile = path.join(
+      os.tmpdir(),
+      `pwned_probe_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    );
     if (fs.existsSync(probeFile)) {
       fs.unlinkSync(probeFile);
     }
@@ -41,12 +44,13 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
     const checkoutHandler = mcp._registeredTools["git_checkout_branch"].handler;
 
     // Hostile branch names containing shell metacharacters
-    const touchCmd = process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
+    const touchCmd =
+      process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
     const hostileBranch = `main; ${touchCmd}`;
 
     const res = await checkoutHandler({
       branch_name: hostileBranch,
-      create_new: true
+      create_new: true,
     });
 
     // 1. Assert probe file was NOT created outside repo
@@ -70,12 +74,13 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
     // @ts-ignore
     const checkoutHandler = mcp._registeredTools["git_checkout_branch"].handler;
 
-    const touchCmd = process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
+    const touchCmd =
+      process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
     const hostileBranch = `$( ${touchCmd} )`;
 
     await checkoutHandler({
       branch_name: hostileBranch,
-      create_new: true
+      create_new: true,
     });
 
     assert.equal(
@@ -94,14 +99,15 @@ describe("Task 2 — Git Shell Injection Security Suite", () => {
     // Stage a dummy file first
     await writeHandler({
       path: "sec_test_file.txt",
-      content: `Security probe test ${Date.now()}`
+      content: `Security probe test ${Date.now()}`,
     });
 
-    const touchCmd = process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
+    const touchCmd =
+      process.platform === "win32" ? `type nul > "${probeFile}"` : `touch "${probeFile}"`;
     const hostileMessage = `x"; ${touchCmd}; echo "`;
 
     const res = await commitHandler({
-      message: hostileMessage
+      message: hostileMessage,
     });
 
     // 1. Assert probe file was NOT created outside repo

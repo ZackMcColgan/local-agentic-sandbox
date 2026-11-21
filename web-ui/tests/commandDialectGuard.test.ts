@@ -88,9 +88,7 @@ describe("command-dialect-guard", () => {
       assert.equal(capturedBody.args.command, "echo a ; echo b");
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-and"));
-      assert.ok(
-        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and"))
-      );
+      assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and")));
     } finally {
       globalThis.fetch = origFetch;
     }
@@ -113,9 +111,7 @@ describe("command-dialect-guard", () => {
       assert.equal(capturedBody.args.command, "echo a ; echo b");
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-or"));
-      assert.ok(
-        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or"))
-      );
+      assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or")));
     } finally {
       globalThis.fetch = origFetch;
     }

@@ -24,11 +24,11 @@ describe("parity PR1 — context meter format (board: one decimal, 72.4K style)"
   it("the header meter renders the value through formatContextK", () => {
     assert.ok(
       src.includes("formatContextK(displayContextTokens)"),
-      "meter value must use the one-decimal formatter",
+      "meter value must use the one-decimal formatter"
     );
     assert.ok(
       !src.includes("Math.round(displayContextTokens / 1000)"),
-      "whole-K rounding must be gone from the meter value",
+      "whole-K rounding must be gone from the meter value"
     );
   });
 });
@@ -45,7 +45,7 @@ describe("parity PR1 — meter track geometry (board: 128px phone / 240px deskto
     const track = segment('data-testid="context-meter-track"', 900);
     assert.ok(
       track.includes("from-[#10b981]") && track.includes("to-[#34d399]"),
-      "fill gradient #10b981 -> #34d399",
+      "fill gradient #10b981 -> #34d399"
     );
   });
 });
@@ -60,7 +60,7 @@ describe("parity PR1 — header composition (UI-019 + board header note)", () =>
   it("model label is always visible (board Flash-Next pill), never width-gated", () => {
     assert.ok(
       !src.includes("min-[420px]:inline-block"),
-      "model label must not be hidden below 420px",
+      "model label must not be hidden below 420px"
     );
     const chip = segment("Configure model", 500);
     assert.ok(chip.includes("shortModelLabel"), "model chip still shows the active model");
@@ -70,12 +70,9 @@ describe("parity PR1 — header composition (UI-019 + board header note)", () =>
     const chip = segment('data-testid="host-disconnect-chip"', 1400);
     assert.ok(
       chip.includes("DISCONNECTED"),
-      "chip keeps a visible DISCONNECTED label on small screens",
+      "chip keeps a visible DISCONNECTED label on small screens"
     );
-    assert.ok(
-      chip.includes("min-[420px]:hidden"),
-      "short label variant for narrow phones exists",
-    );
+    assert.ok(chip.includes("min-[420px]:hidden"), "short label variant for narrow phones exists");
   });
 });
 

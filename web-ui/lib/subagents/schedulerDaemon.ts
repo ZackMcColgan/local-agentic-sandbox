@@ -39,12 +39,10 @@ export class SchedulerDaemon {
       : NaN;
 
     this.tickIntervalMs =
-      options?.tickIntervalMs ??
-      (!isNaN(envInterval) && envInterval > 0 ? envInterval : 60000);
+      options?.tickIntervalMs ?? (!isNaN(envInterval) && envInterval > 0 ? envInterval : 60000);
 
     this.scheduler =
-      options?.scheduler ||
-      new UnattendedScheduler({ workspaceDir: this.workspaceDir });
+      options?.scheduler || new UnattendedScheduler({ workspaceDir: this.workspaceDir });
 
     this.ensureDirectories();
 
@@ -139,7 +137,7 @@ export class SchedulerDaemon {
         pid: process.pid,
         startedAt: this.startedAt,
         lastTick: new Date().toISOString(),
-        active
+        active,
       };
       fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(hb, null, 2), "utf8");
     } catch (err: any) {
@@ -212,10 +210,7 @@ export class SchedulerDaemon {
       }
 
       try {
-        this.log(
-          "INFO",
-          `Executing due schedule ${sched.id} ("${sched.taskDescription}")`
-        );
+        this.log("INFO", `Executing due schedule ${sched.id} ("${sched.taskDescription}")`);
         await this.scheduler.executeScheduledRun(sched.id);
         this.log("INFO", `Successfully completed schedule run for ${sched.id}`);
       } catch (err: any) {
@@ -294,9 +289,7 @@ export class SchedulerDaemon {
     const checkInterval = 250;
     let elapsed = 0;
     while (elapsed < ms && !this.shutdownRequested) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(checkInterval, ms - elapsed))
-      );
+      await new Promise((resolve) => setTimeout(resolve, Math.min(checkInterval, ms - elapsed)));
       elapsed += checkInterval;
     }
   }
@@ -313,7 +306,7 @@ const isMainScript = Boolean(
   process.argv &&
   process.argv[1] &&
   (process.argv[1].endsWith("schedulerDaemon.js") ||
-   process.argv[1].endsWith("schedulerDaemon.ts")) &&
+    process.argv[1].endsWith("schedulerDaemon.ts")) &&
   !process.env.NODE_TEST_CONTEXT &&
   !process.argv[1].includes(".test.")
 );

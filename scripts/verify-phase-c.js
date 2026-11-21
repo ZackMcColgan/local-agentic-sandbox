@@ -16,18 +16,22 @@ process.env.USER_PROFILE_PATH = profilePath;
 const profileModulePath = path.resolve("web-ui/lib/memory/profile.ts").replace(/\\/g, "/");
 
 function runSnippet(code, env = {}) {
-  const runnerFile = path.resolve(`.runner_${Date.now()}_${Math.random().toString(36).slice(2)}.ts`);
+  const runnerFile = path.resolve(
+    `.runner_${Date.now()}_${Math.random().toString(36).slice(2)}.ts`
+  );
   fs.writeFileSync(runnerFile, code, "utf8");
   try {
     const out = execSync(`"${tsxCmd}" "${runnerFile}"`, {
       cwd: process.cwd(),
       env: { ...process.env, ...env },
-      encoding: "utf8"
+      encoding: "utf8",
     });
     return out;
   } finally {
     if (fs.existsSync(runnerFile)) {
-      try { fs.unlinkSync(runnerFile); } catch (_) {}
+      try {
+        fs.unlinkSync(runnerFile);
+      } catch (_) {}
     }
   }
 }
@@ -77,7 +81,7 @@ const chatterQueries = [
   "Tell me a funny joke about Kubernetes",
   "Can you write a regex for email validation?",
   "Thanks, that was very helpful!",
-  "npm run build"
+  "npm run build",
 ];
 for (const q of chatterQueries) {
   const chatterCode = `
@@ -91,7 +95,9 @@ for (const pref of extracted) {
 }
 const bytesAfter = fs.readFileSync(profilePath, "utf8");
 assert.equal(bytesBefore, bytesAfter, "Profile file MUST remain byte-identical after pure chatter");
-console.log("✅ Experiment 2 PASSED: Pure chatter produced 0 mutations; profile is byte-identical.");
+console.log(
+  "✅ Experiment 2 PASSED: Pure chatter produced 0 mutations; profile is byte-identical."
+);
 
 // Experiment 3: Corruption resilience (garbage bytes in JSON -> starts, warns, behaves as empty, no crash)
 console.log("\n--- Experiment 3: Corruption resilience ---");
@@ -129,8 +135,13 @@ const entry = loadedProv.entries["preferred_language"];
 assert.ok(entry, "Entry must exist");
 assert.equal(entry.sourceSessionId, provSessionId, "Session ID must match");
 assert.equal(entry.origin, "user-stated", "Origin must be user-stated");
-assert.ok(entry.timestamp >= startWindow && entry.timestamp <= endWindow, `Timestamp ${entry.timestamp} must be in window [${startWindow}, ${endWindow}]`);
-console.log(`✅ Experiment 4 PASSED: Provenance verified (timestamp: ${entry.timestamp}, session: ${entry.sourceSessionId}).`);
+assert.ok(
+  entry.timestamp >= startWindow && entry.timestamp <= endWindow,
+  `Timestamp ${entry.timestamp} must be in window [${startWindow}, ${endWindow}]`
+);
+console.log(
+  `✅ Experiment 4 PASSED: Provenance verified (timestamp: ${entry.timestamp}, session: ${entry.sourceSessionId}).`
+);
 
 // Experiment 5: Correction history (set P, correct to Q -> reads return Q, history retains P with timestamp)
 console.log("\n--- Experiment 5: Correction tracking & history retention ---");
@@ -154,8 +165,14 @@ assert.equal(corrEntry.origin, "corrected", "Current origin must be corrected");
 assert.equal(corrEntry.sourceSessionId, "sess_q", "Current session ID must be sess_q");
 assert.equal(corrEntry.history.length, 1, "History must retain prior value");
 assert.equal(corrEntry.history[0].value, "Zachary", "History prior value must be P ('Zachary')");
-assert.equal(corrEntry.history[0].sourceSessionId, "sess_p", "History sourceSessionId must be sess_p");
-console.log(`✅ Experiment 5 PASSED: Current value 'Zack', prior value 'Zachary' preserved in history.`);
+assert.equal(
+  corrEntry.history[0].sourceSessionId,
+  "sess_p",
+  "History sourceSessionId must be sess_p"
+);
+console.log(
+  `✅ Experiment 5 PASSED: Current value 'Zack', prior value 'Zachary' preserved in history.`
+);
 
 // Cleanup
 fs.rmSync(tempDir, { recursive: true, force: true });

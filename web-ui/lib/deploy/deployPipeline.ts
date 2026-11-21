@@ -81,7 +81,10 @@ export function allocateUniqueNodePort(): number {
 }
 
 export function deriveShortBuildId(runId: string): string {
-  const stripped = runId.replace(/^run[-_]?/i, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const stripped = runId
+    .replace(/^run[-_]?/i, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
   return (stripped.slice(0, 8) || "ephem001").padEnd(8, "0");
 }
 
@@ -95,7 +98,7 @@ async function defaultCommandRunner(command: string): Promise<CommandRunnerResul
     return {
       exitCode: typeof err?.code === "number" ? err.code : 1,
       stdout: err?.stdout || "",
-      stderr: err?.stderr || err?.message || String(err)
+      stderr: err?.stderr || err?.message || String(err),
     };
   }
 }
@@ -127,7 +130,7 @@ export class DeployPipeline {
   public async syncAllocatedNodePortsFromCluster(): Promise<void> {
     try {
       const res = await this.commandRunner(
-        "kubectl get svc --all-namespaces -o jsonpath='{range .items[?(@.spec.type==\"NodePort\")]}{range .spec.ports[*]}{.nodePort}{\"\\n\"}{end}{end}'"
+        'kubectl get svc --all-namespaces -o jsonpath=\'{range .items[?(@.spec.type=="NodePort")]}{range .spec.ports[*]}{.nodePort}{"\\n"}{end}{end}\''
       );
       if (res.exitCode === 0 && res.stdout) {
         const ports = res.stdout
@@ -145,9 +148,7 @@ export class DeployPipeline {
   public async deployBuildTask(input: DeployBuildTaskInput): Promise<DeployBuildTaskResult> {
     const shortId = deriveShortBuildId(input.runId);
     const namespace = `build-${shortId}`;
-    const appName = (input.appName || `app-${shortId}`)
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-");
+    const appName = (input.appName || `app-${shortId}`).toLowerCase().replace(/[^a-z0-9-]/g, "-");
     const imageTag = `local-sandbox/${appName}:${shortId}`;
     const host = input.hostAddress || this.defaultHost;
 
@@ -156,10 +157,7 @@ export class DeployPipeline {
     let deployedUrl = "";
     let healthStatus = 0;
 
-    const runStage = async (
-      name: DeployStageName,
-      fn: () => Promise<string>
-    ): Promise<boolean> => {
+    const runStage = async (name: DeployStageName, fn: () => Promise<string>): Promise<boolean> => {
       const stage: DeployStageRecord = { name, status: "in_progress" };
       stages.push(stage);
       try {
@@ -192,7 +190,9 @@ export class DeployPipeline {
           `docker save ${imageTag} | docker exec -i ${k8sNode} ctr -n k8s.io images import -`;
         const importRes = await this.commandRunner(importCmd);
         if (importRes.exitCode !== 0) {
-          throw new Error(`Cluster containerd image import failed: ${importRes.stderr || importRes.stdout}`);
+          throw new Error(
+            `Cluster containerd image import failed: ${importRes.stderr || importRes.stdout}`
+          );
         }
 
         return `Built image ${imageTag} and imported into cluster containerd`;
@@ -246,101 +246,101 @@ export class DeployPipeline {
         return `Allocated NodePort ${nodePort}`;
       });
 
-    if (!portOk) {
-      const errText = stages[stages.length - 1].detail || "Port allocation failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
-
-    // 4. Apply manifests
-    const applyOk = await runStage("apply_manifests", async () => {
-      const res = await this.commandRunner(
-        `kubectl -n ${namespace} create deployment ${appName} --image=${imageTag} --dry-run=client -o yaml | kubectl apply -f - && kubectl -n ${namespace} expose deployment ${appName} --type=NodePort --port=80 --target-port=3000 --overrides="{\\"spec\\":{\\"ports\\":[{\\"port\\":80,\\"targetPort\\":3000,\\"nodePort\\":${nodePort}}]}}" --dry-run=client -o yaml | kubectl apply -f -`
-      );
-      if (res.exitCode !== 0) {
-        throw new Error(`Manifest apply failed: ${res.stderr || res.stdout}`);
+      if (!portOk) {
+        const errText = stages[stages.length - 1].detail || "Port allocation failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
       }
-      return `Applied Deployment and NodePort Service (${nodePort}) in ${namespace}`;
-    });
 
-    if (!applyOk) {
-      const errText = stages[stages.length - 1].detail || "Manifest apply failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
+      // 4. Apply manifests
+      const applyOk = await runStage("apply_manifests", async () => {
+        const res = await this.commandRunner(
+          `kubectl -n ${namespace} create deployment ${appName} --image=${imageTag} --dry-run=client -o yaml | kubectl apply -f - && kubectl -n ${namespace} expose deployment ${appName} --type=NodePort --port=80 --target-port=3000 --overrides="{\\"spec\\":{\\"ports\\":[{\\"port\\":80,\\"targetPort\\":3000,\\"nodePort\\":${nodePort}}]}}" --dry-run=client -o yaml | kubectl apply -f -`
+        );
+        if (res.exitCode !== 0) {
+          throw new Error(`Manifest apply failed: ${res.stderr || res.stdout}`);
+        }
+        return `Applied Deployment and NodePort Service (${nodePort}) in ${namespace}`;
+      });
 
-    // 5. Rollout wait
-    const rolloutOk = await runStage("rollout_wait", async () => {
-      const res = await this.commandRunner(
-        `kubectl -n ${namespace} rollout status deployment/${appName} --timeout=60s`
-      );
-      if (res.exitCode !== 0) {
-        throw new Error(`Rollout failed: ${res.stderr || res.stdout}`);
+      if (!applyOk) {
+        const errText = stages[stages.length - 1].detail || "Manifest apply failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
       }
-      return `Rollout ready for deployment/${appName}`;
-    });
 
-    if (!rolloutOk) {
-      const errText = stages[stages.length - 1].detail || "Rollout failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
+      // 5. Rollout wait
+      const rolloutOk = await runStage("rollout_wait", async () => {
+        const res = await this.commandRunner(
+          `kubectl -n ${namespace} rollout status deployment/${appName} --timeout=60s`
+        );
+        if (res.exitCode !== 0) {
+          throw new Error(`Rollout failed: ${res.stderr || res.stdout}`);
+        }
+        return `Rollout ready for deployment/${appName}`;
+      });
 
-    // 6. Health check
-    const healthOk = await runStage("health_check", async () => {
-      const probeTarget = this.healthProbeUrlOverride || `${deployedUrl}/`;
-      const check = await this.healthChecker(probeTarget);
-      healthStatus = check.status;
-      if (!check.ok) {
-        throw new Error(`Health check failed with HTTP ${check.status} at ${probeTarget}`);
+      if (!rolloutOk) {
+        const errText = stages[stages.length - 1].detail || "Rollout failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
       }
-      return `HTTP ${check.status} OK`;
-    });
 
-    if (!healthOk) {
-      const errText = stages[stages.length - 1].detail || "Health check failed";
-      return this.buildFailureResult(
-        input,
-        namespace,
-        imageTag,
-        nodePort,
-        deployedUrl,
-        healthStatus,
-        stages,
-        errText
-      );
-    }
+      // 6. Health check
+      const healthOk = await runStage("health_check", async () => {
+        const probeTarget = this.healthProbeUrlOverride || `${deployedUrl}/`;
+        const check = await this.healthChecker(probeTarget);
+        healthStatus = check.status;
+        if (!check.ok) {
+          throw new Error(`Health check failed with HTTP ${check.status} at ${probeTarget}`);
+        }
+        return `HTTP ${check.status} OK`;
+      });
 
-    // 7. Report link
-    let threadMessageMarkdown = "";
-    await runStage("report_link", async () => {
-      threadMessageMarkdown = `Deployed build to namespace \`${namespace}\` (NodePort \`${nodePort}\`): [${deployedUrl}](${deployedUrl}) (HTTP ${healthStatus} OK)`;
-      return threadMessageMarkdown;
-    });
+      if (!healthOk) {
+        const errText = stages[stages.length - 1].detail || "Health check failed";
+        return this.buildFailureResult(
+          input,
+          namespace,
+          imageTag,
+          nodePort,
+          deployedUrl,
+          healthStatus,
+          stages,
+          errText
+        );
+      }
+
+      // 7. Report link
+      let threadMessageMarkdown = "";
+      await runStage("report_link", async () => {
+        threadMessageMarkdown = `Deployed build to namespace \`${namespace}\` (NodePort \`${nodePort}\`): [${deployedUrl}](${deployedUrl}) (HTTP ${healthStatus} OK)`;
+        return threadMessageMarkdown;
+      });
 
       return {
         runId: input.runId,
@@ -352,7 +352,7 @@ export class DeployPipeline {
         deployedUrl,
         healthStatus,
         stages,
-        threadMessageMarkdown
+        threadMessageMarkdown,
       };
     } finally {
       if (cleanupNeeded && !input.keepNamespace) {
@@ -385,7 +385,7 @@ export class DeployPipeline {
       healthStatus,
       stages,
       threadMessageMarkdown,
-      error
+      error,
     };
   }
 }

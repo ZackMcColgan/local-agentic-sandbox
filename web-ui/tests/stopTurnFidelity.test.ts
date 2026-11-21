@@ -43,15 +43,25 @@ describe("UI-028c: POST /api/threads/[id] { action: 'stop' } aborts turn and pre
 
       const res = await POST(req, { params: Promise.resolve({ id: thread.id }) });
       assert.equal(res.status, 200);
-      assert.equal(controller.signal.aborted, true, "server turn AbortController should be aborted");
+      assert.equal(
+        controller.signal.aborted,
+        true,
+        "server turn AbortController should be aborted"
+      );
       assert.equal(getActiveTurn(thread.id), null, "turn should no longer be active");
 
       const updated = await store.getThread(thread.id);
       assert.ok(updated);
       const lastMsg = updated!.messages[updated!.messages.length - 1];
       assert.equal(lastMsg.role, "assistant");
-      assert.ok(lastMsg.content.includes("Once upon a time"), "partial content should be preserved");
-      assert.ok(lastMsg.content.includes("*[Stopped by user]*"), "stopped marker should be appended");
+      assert.ok(
+        lastMsg.content.includes("Once upon a time"),
+        "partial content should be preserved"
+      );
+      assert.ok(
+        lastMsg.content.includes("*[Stopped by user]*"),
+        "stopped marker should be appended"
+      );
       assert.equal(lastMsg.isStopped, true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

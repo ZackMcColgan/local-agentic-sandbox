@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import {
   handleControlRequest,
   createControlServer,
-  ENGINE_STOPPED_MESSAGE
+  ENGINE_STOPPED_MESSAGE,
 } from "../llamacpp-standalone.js";
 
 function makeRequest(options, postData = null) {
@@ -63,14 +63,14 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       childProc: null,
       spawnedAt: Date.now() - 5000,
       model: "swift-15-27b-mtp",
-      vramMb: 16384
+      vramMb: 16384,
     };
     mockSpawn();
 
     server = createControlServer(state, {
       controlToken: TEST_TOKEN,
       spawnFn: mockSpawn,
-      backendPort: 19999
+      backendPort: 19999,
     });
 
     server.listen(0, "127.0.0.1", () => {
@@ -88,7 +88,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       host: "127.0.0.1",
       port: serverPort,
       path: "/control/status",
-      method: "GET"
+      method: "GET",
     });
     assert.equal(res.statusCode, 401);
     assert.equal(res.json?.status, "unauthorized");
@@ -100,7 +100,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       port: serverPort,
       path: "/control/status",
       method: "GET",
-      headers: { "X-Control-Token": "wrong-token" }
+      headers: { "X-Control-Token": "wrong-token" },
     });
     assert.equal(res.statusCode, 401);
   });
@@ -111,7 +111,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       port: serverPort,
       path: "/control/status",
       method: "GET",
-      headers: { "X-Control-Token": TEST_TOKEN }
+      headers: { "X-Control-Token": TEST_TOKEN },
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json?.status, "running");
@@ -128,7 +128,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       port: serverPort,
       path: "/control/stop",
       method: "POST",
-      headers: { "X-Control-Token": TEST_TOKEN }
+      headers: { "X-Control-Token": TEST_TOKEN },
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json?.status, "stopped");
@@ -142,7 +142,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       port: serverPort,
       path: "/control/status",
       method: "GET",
-      headers: { "X-Control-Token": TEST_TOKEN }
+      headers: { "X-Control-Token": TEST_TOKEN },
     });
     assert.equal(statusRes.json?.status, "stopped");
     assert.equal(statusRes.json?.pid, null);
@@ -150,13 +150,16 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
   });
 
   it("returns 503 with friendly error for non-control requests while engine is stopped", async () => {
-    const res = await makeRequest({
-      host: "127.0.0.1",
-      port: serverPort,
-      path: "/v1/chat/completions",
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    }, { model: "swift-15-27b-mtp", messages: [] });
+    const res = await makeRequest(
+      {
+        host: "127.0.0.1",
+        port: serverPort,
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      },
+      { model: "swift-15-27b-mtp", messages: [] }
+    );
 
     assert.equal(res.statusCode, 503);
     assert.equal(res.json?.error?.type, "engine_stopped");
@@ -170,7 +173,7 @@ describe("Standalone llama.cpp Supervisor Control Endpoints", () => {
       port: serverPort,
       path: "/control/start",
       method: "POST",
-      headers: { "X-Control-Token": TEST_TOKEN }
+      headers: { "X-Control-Token": TEST_TOKEN },
     });
     assert.equal(res.statusCode, 200);
     assert.ok(res.json?.status === "starting" || res.json?.status === "running");

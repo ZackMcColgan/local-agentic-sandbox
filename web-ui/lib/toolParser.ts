@@ -32,7 +32,7 @@ export const PRIMARY_TOOL_PARAM: Record<string, string> = {
   describe_tool: "tool_name",
   workspace_get_tree: "max_depth",
   verify_container_provenance: "container_id",
-  docker_scout_policy_gate: "image_tag"
+  docker_scout_policy_gate: "image_tag",
 };
 
 /**
@@ -70,7 +70,8 @@ export function parseToolCallsFromText(
     const name = match[1].trim();
     const paramsBlock = match[2];
     const args: Record<string, any> = {};
-    const paramRegex = /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
+    const paramRegex =
+      /<parameter(?:=|\s+name=)[\"']?([a-zA-Z0-9_\-]+)[\"']?>([\s\S]*?)<\/parameter>/gi;
     let pMatch;
     let foundParam = false;
     while ((pMatch = paramRegex.exec(paramsBlock)) !== null) {
@@ -105,7 +106,7 @@ export function parseToolCallsFromText(
       extractedCalls.push({
         id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         type: "function",
-        function: { name, arguments: args }
+        function: { name, arguments: args },
       });
     }
   }
@@ -130,8 +131,8 @@ export function parseToolCallsFromText(
           type: "function",
           function: {
             name: parsed.name,
-            arguments: finalArgs
-          }
+            arguments: finalArgs,
+          },
         });
       }
     } catch {}
@@ -146,32 +147,38 @@ export function parseToolCallsFromText(
     try {
       const parsed = JSON.parse((cMatch as RegExpMatchArray)[1].trim());
       if (parsed && typeof parsed === "object" && parsed.name && isToolAllowed(parsed.name)) {
-        return [{
-          id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: "function",
-          function: {
-            name: parsed.name,
-            arguments: parsed.arguments || {}
-          }
-        }];
+        return [
+          {
+            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            type: "function",
+            function: {
+              name: parsed.name,
+              arguments: parsed.arguments || {},
+            },
+          },
+        ];
       }
     } catch {}
   }
 
   // 4. Raw JSON object fallback
-  const jsonMatch = cleanContent.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/);
+  const jsonMatch = cleanContent.match(
+    /\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/
+  );
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0].trim());
       if (parsed && typeof parsed === "object" && parsed.name && isToolAllowed(parsed.name)) {
-        return [{
-          id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: "function",
-          function: {
-            name: parsed.name,
-            arguments: parsed.arguments || {}
-          }
-        }];
+        return [
+          {
+            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            type: "function",
+            function: {
+              name: parsed.name,
+              arguments: parsed.arguments || {},
+            },
+          },
+        ];
       }
     } catch {}
   }

@@ -18,7 +18,10 @@ const repoRoot = path.resolve(__dirname, "..");
 const layers = [
   { name: "Layer 1: Change-Aware Unit Gate (test:gate)", command: "npm run test:gate" },
   { name: "Layer 2: Fast Stubbed UI Suite (test:ui)", command: "npm run test:ui" },
-  { name: "Layer 3: Live End-to-End Acceptance Battery (test:e2e:live)", command: "npm run test:e2e:live" }
+  {
+    name: "Layer 3: Live End-to-End Acceptance Battery (test:e2e:live)",
+    command: "npm run test:e2e:live",
+  },
 ];
 
 const results = [];
@@ -40,7 +43,7 @@ for (const layer of layers) {
   const child = spawnSync(runCmd, runArgs, {
     cwd: repoRoot,
     stdio: "inherit",
-    env: { ...process.env, TEST_ENGINE: "live" }
+    env: { ...process.env, TEST_ENGINE: "live" },
   });
 
   const durationSec = parseFloat(((Date.now() - start) / 1000).toFixed(1));
@@ -50,12 +53,14 @@ for (const layer of layers) {
     name: layer.name,
     command: layer.command,
     verdict: passed ? "PASS" : "FAIL",
-    durationSeconds: durationSec
+    durationSeconds: durationSec,
   });
 
   if (!passed) {
     overallPass = false;
-    console.error(`\n❌ [test:all] ${layer.name} FAILED in ${durationSec}s. Failing fast; aborting remaining layers.\n`);
+    console.error(
+      `\n❌ [test:all] ${layer.name} FAILED in ${durationSec}s. Failing fast; aborting remaining layers.\n`
+    );
     break;
   } else {
     console.log(`\n✔ [test:all] ${layer.name} PASSED in ${durationSec}s.\n`);

@@ -19,11 +19,8 @@ export function readBoardControlState(boardDir?: string): BoardControlRecord {
 /**
  * Returns true only when the board control state allows draining ("running").
  */
-export function isDrainAllowed(
-  controlOrState: BoardControlRecord | BoardControlState
-): boolean {
-  const state =
-    typeof controlOrState === "string" ? controlOrState : controlOrState.state;
+export function isDrainAllowed(controlOrState: BoardControlRecord | BoardControlState): boolean {
+  const state = typeof controlOrState === "string" ? controlOrState : controlOrState.state;
   return state === "running";
 }
 

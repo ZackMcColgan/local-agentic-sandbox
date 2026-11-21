@@ -26,7 +26,8 @@ export class ChatQueue {
   constructor(
     private storage: StorageLike,
     private threadId: string,
-    private idGenerator: () => string = () => `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    private idGenerator: () => string = () =>
+      `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
   ) {
     this.load();
   }
@@ -65,7 +66,7 @@ export class ChatQueue {
     if (!trimmed) return null;
     const item: QueueItem = {
       id: this.idGenerator(),
-      text: trimmed
+      text: trimmed,
     };
     this.queue.push(item);
     this.persist();
@@ -99,10 +100,7 @@ export class ChatQueue {
   }
 }
 
-export function drainNextForTurnEnd(
-  queue: ChatQueue,
-  ending: TurnEnding
-): QueueItem | null {
+export function drainNextForTurnEnd(queue: ChatQueue, ending: TurnEnding): QueueItem | null {
   if (ending !== "done") {
     return null;
   }

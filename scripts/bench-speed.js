@@ -3,14 +3,14 @@ async function runBench(runNum) {
     prompt: "Explain why the sky is blue, then write a haiku about it.",
     n_predict: 300,
     temperature: 0,
-    cache_prompt: false
+    cache_prompt: false,
   };
   const start = Date.now();
   const res = await fetch("http://127.0.0.1:11434/completion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180000) // 180s deadline exceeded guard
+    signal: AbortSignal.timeout(180000), // 180s deadline exceeded guard
   });
   const data = await res.json();
   const t = data.timings;
@@ -30,7 +30,7 @@ async function runBench(runNum) {
   return {
     prompt_tok_s: t.prompt_per_second,
     decode_tok_s: t.predicted_per_second,
-    n: t.predicted_n
+    n: t.predicted_n,
   };
 }
 

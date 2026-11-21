@@ -23,15 +23,19 @@ describe("Sprint 12 Phase 4 — Restart Controls (restart.test.ts)", () => {
         model: "swift-27b-mtp",
         gitShas: ["sha-orig-1"],
         milestoneSummary: [
-          { id: "M1", title: "Implement renderer", status: "completed", commitSha: "sha-orig-1" }
+          { id: "M1", title: "Implement renderer", status: "completed", commitSha: "sha-orig-1" },
         ],
-        deploymentRef: "deploy-orig"
+        deploymentRef: "deploy-orig",
       });
 
       const restarted = ledger.restartRun("run-orig-1");
 
       assert.notEqual(restarted.runId, original.runId, "Restarted run must have a new runId");
-      assert.equal(restarted.parentRunId, "run-orig-1", "parent_run_id must link to the original run");
+      assert.equal(
+        restarted.parentRunId,
+        "run-orig-1",
+        "parent_run_id must link to the original run"
+      );
       assert.equal(restarted.threadId, "thread-r1", "Thread ID should carry over");
       assert.equal(restarted.prompt, "Build markdown renderer");
       assert.equal(restarted.status, "running");
@@ -67,9 +71,9 @@ describe("Sprint 12 Phase 4 — Restart Controls (restart.test.ts)", () => {
         gitShas: ["sha-f1"],
         milestoneSummary: [
           { id: "M1", title: "Scaffold operator", status: "completed", commitSha: "sha-f1" },
-          { id: "M2", title: "Deploy CRD", status: "failed" }
+          { id: "M2", title: "Deploy CRD", status: "failed" },
         ],
-        deploymentRef: "failed"
+        deploymentRef: "failed",
       });
 
       const restarted = ledger.restartRun("run-failed-1");

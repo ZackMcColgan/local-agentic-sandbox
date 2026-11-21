@@ -21,7 +21,7 @@ const ZONE_ORDER = [
   "settings-notifications-card",
   "settings-memory-card",
   "settings-zone-about",
-  "settings-zone-danger"
+  "settings-zone-danger",
 ];
 
 describe("uir-3 Settings zones", () => {
@@ -43,13 +43,16 @@ describe("uir-3 Settings zones", () => {
             status: "starting",
             reachable: true,
             model: "qwen3.8-flash-next-test",
-            vram_mb: 16384
-          })
+            vram_mb: 16384,
+          }),
         };
       }
       if (u.includes("/api/settings/host")) {
         if (init && init.method === "POST") {
-          return { ok: true, json: async () => ({ hostAccessEnabled: true, allowUnattendedHostGit: false }) };
+          return {
+            ok: true,
+            json: async () => ({ hostAccessEnabled: true, allowUnattendedHostGit: false }),
+          };
         }
         return {
           ok: true,
@@ -57,8 +60,8 @@ describe("uir-3 Settings zones", () => {
             hostAccessEnabled: true,
             allowUnattendedHostGit: false,
             runnerAvailable: true,
-            recentActivity: gitActivity
-          })
+            recentActivity: gitActivity,
+          }),
         };
       }
       if (u.includes("/api/settings/notifications")) {
@@ -120,7 +123,10 @@ describe("uir-3 Settings zones", () => {
     const about = zoneEl("settings-zone-about");
     assert.ok(about, "about zone exists");
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
-    assert.ok(about.textContent.includes(`v${pkg.version}`), "about zone shows the package.json version");
+    assert.ok(
+      about.textContent.includes(`v${pkg.version}`),
+      "about zone shows the package.json version"
+    );
   });
 
   it("Live Status Strip shows live engine, host, model, and last-deploy values", async () => {
@@ -133,9 +139,9 @@ describe("uir-3 Settings zones", () => {
           previousSha: "0000000aaaa",
           newSha: "abc1234ffff",
           status: "deployed",
-          rollbackStatus: "none"
-        }
-      ]
+          rollbackStatus: "none",
+        },
+      ],
     });
     const strip = zoneEl("settings-live-status-strip");
     assert.ok(strip, "status strip exists");
@@ -175,12 +181,19 @@ describe("uir-3 Settings zones", () => {
       engineZone.querySelector('[aria-label="Restart llama-server"]'),
       "Restart control lives in the Engine zone"
     );
-    assert.ok(engineZone.innerHTML.includes("Default model"), "Models row lives in the Engine zone");
+    assert.ok(
+      engineZone.innerHTML.includes("Default model"),
+      "Models row lives in the Engine zone"
+    );
   });
 
   it("header-era controls exist exactly once (moved, not duplicated)", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../components/SettingsView.tsx"), "utf8");
-    for (const testid of ["host-access-toggle-btn", "notifications-test-btn", "settings-memory-textarea"]) {
+    for (const testid of [
+      "host-access-toggle-btn",
+      "notifications-test-btn",
+      "settings-memory-textarea",
+    ]) {
       const count = src.split(`data-testid="${testid}"`).length - 1;
       assert.equal(count, 1, `${testid} appears exactly once in SettingsView source`);
     }
@@ -204,7 +217,11 @@ describe("uir-3 Settings zones", () => {
     await act(async () => {
       toggle.click();
     });
-    assert.equal(toggle.getAttribute("aria-checked"), "true", "kill switch toggles ON from the Danger Zone");
+    assert.equal(
+      toggle.getAttribute("aria-checked"),
+      "true",
+      "kill switch toggles ON from the Danger Zone"
+    );
   });
 
   it("deploy history is capped at 2 entries with an expand control", async () => {
@@ -215,7 +232,7 @@ describe("uir-3 Settings zones", () => {
       previousSha: `prev-${n}`,
       newSha: `newsha-${n}`,
       status: "deployed" as const,
-      rollbackStatus: "none" as const
+      rollbackStatus: "none" as const,
     });
     await render({ deployHistory: [mk(1), mk(2), mk(3), mk(4)] });
     const zone = zoneEl("settings-zone-self-deploy");
@@ -239,14 +256,16 @@ describe("uir-3 Settings zones", () => {
       verb: `verb-${n}`,
       repo: "local-agentic-sandbox",
       branch: "develop",
-      result: "success"
+      result: "success",
     }));
     installFetch();
     await render();
     const list = container.querySelector('[data-testid="host-git-activity-list"]') as any;
     assert.ok(list, "activity list exists");
     assert.equal(list.children.length, 2, "only 2 activity entries visible while collapsed");
-    const expandBtn = container.querySelector('[data-testid="host-git-activity-expand-btn"]') as any;
+    const expandBtn = container.querySelector(
+      '[data-testid="host-git-activity-expand-btn"]'
+    ) as any;
     assert.ok(expandBtn, "activity expand control exists");
     await act(async () => {
       expandBtn.click();

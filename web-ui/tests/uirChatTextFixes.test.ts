@@ -20,7 +20,7 @@ function renderChat(messages: { id: string; role: "user" | "assistant"; content:
       onTracesUpdate: () => {},
       activeModel: "qwen3.8-flash-next-gyro-gyro-s",
       reasoningEffort: "low",
-      messages
+      messages,
     })
   );
 }
@@ -34,9 +34,7 @@ function classSegment(html: string, marker: string, span = 220): string {
 describe("UI Refresh slice 1 — chat text fixes", () => {
   it("UI-016: user prose wraps long unbreakable tokens (break-words + min-w-0 chain)", () => {
     const token = "x".repeat(140);
-    const html = renderChat([
-      { id: "u1", role: "user", content: `see ${token} end` }
-    ]);
+    const html = renderChat([{ id: "u1", role: "user", content: `see ${token} end` }]);
     assert.ok(html.includes(token), "long token must render");
     const prose = classSegment(html, "prose dark:prose-invert");
     assert.ok(
@@ -63,15 +61,15 @@ describe("UI Refresh slice 1 — chat text fixes", () => {
             reasoningEffort: "low" as const,
             messages: [],
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
+            updatedAt: new Date().toISOString(),
+          },
         ],
         selectedThreadId: "thread-1",
         activeNavView: "sessions",
         onSelectThread: () => {},
         onNewThread: () => {},
         onNavigate: () => {},
-        onOpenDrawer: () => {}
+        onOpenDrawer: () => {},
       })
     );
     assert.ok(html.includes(longTitle), "full title text must be present");
@@ -83,17 +81,15 @@ describe("UI Refresh slice 1 — chat text fixes", () => {
   });
 
   it("UI-014: a long user brief collapses behind a Show full brief toggle", () => {
-    const brief = ("Build the thing. " + "Detail line with enough words to matter. ".repeat(4) + "\n").repeat(4);
+    const brief = (
+      "Build the thing. " +
+      "Detail line with enough words to matter. ".repeat(4) +
+      "\n"
+    ).repeat(4);
     assert.ok(brief.length > 320);
     const html = renderChat([{ id: "u2", role: "user", content: brief }]);
-    assert.ok(
-      html.includes("Show full brief"),
-      "long brief must render a Show full brief toggle"
-    );
-    assert.ok(
-      html.includes("max-h-["),
-      "collapsed brief must clamp its height with a max-h class"
-    );
+    assert.ok(html.includes("Show full brief"), "long brief must render a Show full brief toggle");
+    assert.ok(html.includes("max-h-["), "collapsed brief must clamp its height with a max-h class");
     assert.ok(
       html.includes('data-testid="brief-collapse-toggle"'),
       "collapse toggle must carry the brief-collapse-toggle test id"

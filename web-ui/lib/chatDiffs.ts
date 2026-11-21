@@ -42,7 +42,7 @@ export function resolveWorkspaceFilePath(
   }
   return {
     absPath: resolvedTarget,
-    relPath: rel
+    relPath: rel,
   };
 }
 
@@ -221,10 +221,7 @@ export function computeUnifiedFileDiff(
   }
 
   const cleanPath = relPath.replace(/\\/g, "/");
-  const diffLines: string[] = [
-    `--- a/${cleanPath}`,
-    `+++ b/${cleanPath}`
-  ];
+  const diffLines: string[] = [`--- a/${cleanPath}`, `+++ b/${cleanPath}`];
 
   for (const [startIdx, endIdx] of hunkRanges) {
     let beforeCount = 0;
@@ -254,7 +251,9 @@ export function computeUnifiedFileDiff(
   if (totalDiffLines > maxLines) {
     const omittedLines = totalDiffLines - maxLines;
     const truncatedLines = diffLines.slice(0, maxLines);
-    truncatedLines.push(`# ... truncated (${omittedLines} of ${totalDiffLines} diff lines omitted)`);
+    truncatedLines.push(
+      `# ... truncated (${omittedLines} of ${totalDiffLines} diff lines omitted)`
+    );
     return {
       path: cleanPath,
       diff: truncatedLines.join("\n"),
@@ -262,7 +261,7 @@ export function computeUnifiedFileDiff(
       removedLines,
       truncated: true,
       totalDiffLines,
-      omittedLines
+      omittedLines,
     };
   }
 
@@ -270,7 +269,7 @@ export function computeUnifiedFileDiff(
     path: cleanPath,
     diff: diffLines.join("\n"),
     addedLines,
-    removedLines
+    removedLines,
   };
 }
 

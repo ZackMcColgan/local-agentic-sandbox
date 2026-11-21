@@ -79,13 +79,15 @@ export class ThrottledStreamSnapshot {
       traces: hasTraces ? traces : undefined,
       roundPromptTokens: this.lastRoundPromptTokens,
       status: "streaming",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     return true;
   }
 }
 
 /** True when a message is a mid-turn streaming assistant snapshot (client poll gate). */
-export function isLiveStreamingMessage(msg: { role?: string; status?: string } | null | undefined): boolean {
+export function isLiveStreamingMessage(
+  msg: { role?: string; status?: string } | null | undefined
+): boolean {
   return Boolean(msg && msg.role === "assistant" && msg.status === "streaming");
 }

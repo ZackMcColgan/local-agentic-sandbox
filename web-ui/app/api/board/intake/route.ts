@@ -61,16 +61,10 @@ export async function POST(req: NextRequest) {
       );
     }
     if (err instanceof IntakeModelError) {
-      return NextResponse.json(
-        { error: err.message },
-        { status: err.statusCode }
-      );
+      return NextResponse.json({ error: err.message }, { status: err.statusCode });
     }
     if (err instanceof ModelUnavailableError) {
-      return NextResponse.json(
-        { error: err.message },
-        { status: 503 }
-      );
+      return NextResponse.json({ error: err.message }, { status: 503 });
     }
     const message = err instanceof Error ? err.message : "Board intake failed";
     return NextResponse.json({ error: message }, { status: 500 });

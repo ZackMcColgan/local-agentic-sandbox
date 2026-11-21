@@ -30,7 +30,8 @@ export async function GET() {
     const schedulesPath = path.join(workspaceDir, "schedules.json");
 
     // 1. Read daemon heartbeat
-    let daemonData: { active: boolean; pid: number; lastTick: string; stale: boolean } | null = null;
+    let daemonData: { active: boolean; pid: number; lastTick: string; stale: boolean } | null =
+      null;
     let isDaemonValid = false;
 
     if (fs.existsSync(daemonHbPath)) {
@@ -49,7 +50,7 @@ export async function GET() {
             active: parsed.active,
             pid: Number(parsed.pid) || 0,
             lastTick: parsed.lastTick,
-            stale: isStale
+            stale: isStale,
           };
           isDaemonValid = true;
         }
@@ -74,15 +75,11 @@ export async function GET() {
       try {
         const raw = fs.readFileSync(schedulerHbPath, "utf8");
         const parsed = JSON.parse(raw);
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          typeof parsed.active === "boolean"
-        ) {
+        if (parsed && typeof parsed === "object" && typeof parsed.active === "boolean") {
           schedulerData = {
             active: parsed.active,
             scheduleId: parsed.scheduleId || "",
-            lastHeartbeat: parsed.lastHeartbeat || ""
+            lastHeartbeat: parsed.lastHeartbeat || "",
           };
         }
       } catch {
@@ -126,8 +123,8 @@ export async function GET() {
       schedules: {
         total,
         enabled,
-        nextRun
-      }
+        nextRun,
+      },
     };
 
     return NextResponse.json(report, { status: 200 });
@@ -137,7 +134,7 @@ export async function GET() {
         status: "not-running",
         daemon: null,
         scheduler: null,
-        schedules: { total: 0, enabled: 0, nextRun: null }
+        schedules: { total: 0, enabled: 0, nextRun: null },
       },
       { status: 200 }
     );

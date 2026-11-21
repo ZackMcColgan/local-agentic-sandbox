@@ -1,10 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  normalizeMcpUrl,
-  parseToolCallsFromText,
-  cleanResidualToolTags
-} from "../lib/toolParser";
+import { normalizeMcpUrl, parseToolCallsFromText, cleanResidualToolTags } from "../lib/toolParser";
 
 describe("Tool Parser & URL Normalization Suite", () => {
   describe("normalizeMcpUrl", () => {
@@ -96,7 +92,8 @@ describe("Tool Parser & URL Normalization Suite", () => {
     });
 
     it("returns empty array for plain conversational text", () => {
-      const text = "Sure! Here is the best way to bulk import JIRA stories using CSV import or Jira REST API.";
+      const text =
+        "Sure! Here is the best way to bulk import JIRA stories using CSV import or Jira REST API.";
       const calls = parseToolCallsFromText(text, allowedTools);
       assert.equal(calls.length, 0);
     });

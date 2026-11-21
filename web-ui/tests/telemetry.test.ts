@@ -7,22 +7,22 @@ test("OpenTelemetry Distributed Tracing Suite", async (t) => {
     const tracer = new TelemetryTracer("test_session_123");
     const rootSpan = tracer.startSpan("agent.turn", undefined, {
       mode: "auto",
-      model: "gemma4:e4b"
+      model: "gemma4:e4b",
     });
 
     assert.equal(rootSpan.spanId, tracer.getRootSpanId());
 
     const triageSpan = tracer.startSpan("router.triage", rootSpan.spanId, {
-      model: "gemma4:e4b"
+      model: "gemma4:e4b",
     });
     triageSpan.end("ok", { result: "SIMPLE_EXECUTION" });
 
     const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan.spanId, {
-      tool: "workspace_run_command"
+      tool: "workspace_run_command",
     });
 
     const bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
-      command: "pytest"
+      command: "pytest",
     });
     bashSpan.end("ok", { exit_code: 0 });
     toolSpan.end("ok");
@@ -74,66 +74,69 @@ test("OpenTelemetry Distributed Tracing Suite", async (t) => {
     assert.equal(parseTraceparent("invalid"), null);
   });
 
-  await t.test("Phase E: Distributed span propagation across supervisor -> planner -> worker -> critic", async () => {
-    const { OvernightSupervisor } = await import("../lib/subagents/supervisor");
-    const tracer = new TelemetryTracer("test_supervisor_trace");
-    const supervisor = new OvernightSupervisor({
-      checkpointDirectory: "tmp/test-chk",
-      tracer
-    });
+  await t.test(
+    "Phase E: Distributed span propagation across supervisor -> planner -> worker -> critic",
+    async () => {
+      const { OvernightSupervisor } = await import("../lib/subagents/supervisor");
+      const tracer = new TelemetryTracer("test_supervisor_trace");
+      const supervisor = new OvernightSupervisor({
+        checkpointDirectory: "tmp/test-chk",
+        tracer,
+      });
 
-    const mockTask: any = {
-      taskId: "task-telemetry-eval",
-      goal: "Implement OTel propagation",
-      currentMilestoneIndex: 0,
-      milestones: [
-        { id: "m1", title: "Milestone 1", description: "First milestone", status: "pending" }
-      ],
-      checkpoints: []
-    };
-
-    const result = await supervisor.executeMilestoneWithTelemetry(mockTask, 0, async () => {
-      return {
-        diff: "diff --git a/file b/file\n+test",
-        gitSha: "abc123sha",
-        approved: true,
-        feedback: ["Clean pass"]
+      const mockTask: any = {
+        taskId: "task-telemetry-eval",
+        goal: "Implement OTel propagation",
+        currentMilestoneIndex: 0,
+        milestones: [
+          { id: "m1", title: "Milestone 1", description: "First milestone", status: "pending" },
+        ],
+        checkpoints: [],
       };
-    });
 
-    assert.ok(result.traceId);
-    assert.ok(result.supervisorSpanId);
-    assert.ok(result.plannerSpanId);
-    assert.ok(result.workerSpanId);
-    assert.ok(result.criticSpanId);
+      const result = await supervisor.executeMilestoneWithTelemetry(mockTask, 0, async () => {
+        return {
+          diff: "diff --git a/file b/file\n+test",
+          gitSha: "abc123sha",
+          approved: true,
+          feedback: ["Clean pass"],
+        };
+      });
 
-    const session = getTraceSession("test_supervisor_trace");
-    assert.ok(session);
+      assert.ok(result.traceId);
+      assert.ok(result.supervisorSpanId);
+      assert.ok(result.plannerSpanId);
+      assert.ok(result.workerSpanId);
+      assert.ok(result.criticSpanId);
 
-    // Verify parent-child linkage:
-    // supervisor -> planner -> worker -> critic
-    const spans = session.spans;
-    const supSpan = spans.find((s) => s.spanId === result.supervisorSpanId);
-    const planSpan = spans.find((s) => s.spanId === result.plannerSpanId);
-    const workSpan = spans.find((s) => s.spanId === result.workerSpanId);
-    const critSpan = spans.find((s) => s.spanId === result.criticSpanId);
+      const session = getTraceSession("test_supervisor_trace");
+      assert.ok(session);
 
-    assert.ok(supSpan, "Supervisor span must exist");
-    assert.ok(planSpan, "Planner span must exist");
-    assert.ok(workSpan, "Worker span must exist");
-    assert.ok(critSpan, "Critic span must exist");
+      // Verify parent-child linkage:
+      // supervisor -> planner -> worker -> critic
+      const spans = session.spans;
+      const supSpan = spans.find((s) => s.spanId === result.supervisorSpanId);
+      const planSpan = spans.find((s) => s.spanId === result.plannerSpanId);
+      const workSpan = spans.find((s) => s.spanId === result.workerSpanId);
+      const critSpan = spans.find((s) => s.spanId === result.criticSpanId);
 
-    // All spans must share the same traceId
-    assert.equal(planSpan.traceId, supSpan.traceId);
-    assert.equal(workSpan.traceId, supSpan.traceId);
-    assert.equal(critSpan.traceId, supSpan.traceId);
+      assert.ok(supSpan, "Supervisor span must exist");
+      assert.ok(planSpan, "Planner span must exist");
+      assert.ok(workSpan, "Worker span must exist");
+      assert.ok(critSpan, "Critic span must exist");
 
-    // Verify parent-child linkage:
-    // Planner is child of Supervisor
-    assert.equal(planSpan.parentSpanId, supSpan.spanId);
-    // Worker is child of Planner
-    assert.equal(workSpan.parentSpanId, planSpan.spanId);
-    // Critic is child of Worker
-    assert.equal(critSpan.parentSpanId, workSpan.spanId);
-  });
+      // All spans must share the same traceId
+      assert.equal(planSpan.traceId, supSpan.traceId);
+      assert.equal(workSpan.traceId, supSpan.traceId);
+      assert.equal(critSpan.traceId, supSpan.traceId);
+
+      // Verify parent-child linkage:
+      // Planner is child of Supervisor
+      assert.equal(planSpan.parentSpanId, supSpan.spanId);
+      // Worker is child of Planner
+      assert.equal(workSpan.parentSpanId, planSpan.spanId);
+      // Critic is child of Worker
+      assert.equal(critSpan.parentSpanId, workSpan.spanId);
+    }
+  );
 });

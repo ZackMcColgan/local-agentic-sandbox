@@ -77,7 +77,7 @@ function buildLlamaServerArgs(config = {}) {
     "512",
     "--context-shift",
     "--keep",
-    "4"
+    "4",
   ];
 
   if (mmprojPath) {
@@ -94,7 +94,7 @@ function buildLlamaServerEnv(baseEnv = process.env, config = {}) {
   const existingPath = baseEnv.PATH || baseEnv.Path || "";
   return {
     ...baseEnv,
-    PATH: `${binDir};${existingPath}`
+    PATH: `${binDir};${existingPath}`,
   };
 }
 
@@ -102,7 +102,7 @@ function stopAnyOllamaProcesses(logFn = console.log) {
   if (process.platform !== "win32") return;
   try {
     execSync(
-      'powershell.exe -NoProfile -Command "Get-Process -Name \'ollama*\' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"',
+      "powershell.exe -NoProfile -Command \"Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue\"",
       { stdio: "ignore" }
     );
     logFn("[llama-standalone] Verified zero Ollama processes running.");
@@ -114,9 +114,7 @@ function stopAnyOllamaProcesses(logFn = console.log) {
 function handleControlRequest(req, res, state, options = {}) {
   const token = req.headers["x-control-token"];
   const expectedToken =
-    options.controlToken ||
-    process.env.LLM_SUPERVISOR_TOKEN ||
-    "local-sandbox-token-2026";
+    options.controlToken || process.env.LLM_SUPERVISOR_TOKEN || "local-sandbox-token-2026";
   if (!token || (expectedToken && token !== expectedToken)) {
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Unauthorized", status: "unauthorized" }));
@@ -127,17 +125,20 @@ function handleControlRequest(req, res, state, options = {}) {
   const pathname = parsedUrl.pathname;
 
   if (req.method === "GET" && pathname === "/control/status") {
-    const uptime_s = state.spawnedAt && state.status === "running"
-      ? Math.floor((Date.now() - state.spawnedAt) / 1000)
-      : 0;
+    const uptime_s =
+      state.spawnedAt && state.status === "running"
+        ? Math.floor((Date.now() - state.spawnedAt) / 1000)
+        : 0;
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      status: state.status,
-      pid: state.childProc ? state.childProc.pid : null,
-      uptime_s,
-      model: state.model || DEFAULT_MODEL_ALIAS,
-      vram_mb: state.vramMb || DEFAULT_VRAM_MB
-    }));
+    res.end(
+      JSON.stringify({
+        status: state.status,
+        pid: state.childProc ? state.childProc.pid : null,
+        uptime_s,
+        model: state.model || DEFAULT_MODEL_ALIAS,
+        vram_mb: state.vramMb || DEFAULT_VRAM_MB,
+      })
+    );
     return;
   }
 
@@ -197,44 +198,53 @@ function createControlServer(state, options = {}) {
     // Engine is stopped
     if (state.status === "stopped") {
       res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: {
-          message: ENGINE_STOPPED_MESSAGE,
-          type: "engine_stopped"
-        }
-      }));
+      res.end(
+        JSON.stringify({
+          error: {
+            message: ENGINE_STOPPED_MESSAGE,
+            type: "engine_stopped",
+          },
+        })
+      );
       return;
     }
 
     // Engine is starting
     if (state.status === "starting") {
       res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: {
-          message: "LLM engine is starting...",
-          type: "engine_starting"
-        }
-      }));
+      res.end(
+        JSON.stringify({
+          error: {
+            message: "LLM engine is starting...",
+            type: "engine_starting",
+          },
+        })
+      );
       return;
     }
 
     // Proxy request to backend llama-server
-    writeLog(`[llama-standalone] ${req.socket?.remoteAddress || "client"} -> ${req.method} ${req.url}`);
+    writeLog(
+      `[llama-standalone] ${req.socket?.remoteAddress || "client"} -> ${req.method} ${req.url}`
+    );
     const proxyHeaders = { ...req.headers };
     proxyHeaders.host = `127.0.0.1:${backendPort}`;
 
-    const proxyReq = http.request({
-      host: "127.0.0.1",
-      port: backendPort,
-      method: req.method,
-      path: req.url,
-      headers: proxyHeaders
-    }, (proxyRes) => {
-      if (!res.headersSent) {
-        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+    const proxyReq = http.request(
+      {
+        host: "127.0.0.1",
+        port: backendPort,
+        method: req.method,
+        path: req.url,
+        headers: proxyHeaders,
+      },
+      (proxyRes) => {
+        if (!res.headersSent) {
+          res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        }
+        proxyRes.pipe(res);
       }
-      proxyRes.pipe(res);
-    });
+    );
 
     res.on("close", () => {
       if (!proxyReq.destroyed) {
@@ -246,12 +256,14 @@ function createControlServer(state, options = {}) {
       writeLog(`[llama-standalone] Proxy error: ${err.message}`);
       if (!res.headersSent) {
         res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          error: {
-            message: `Engine proxy error: ${err.message}`,
-            type: "engine_proxy_error"
-          }
-        }));
+        res.end(
+          JSON.stringify({
+            error: {
+              message: `Engine proxy error: ${err.message}`,
+              type: "engine_proxy_error",
+            },
+          })
+        );
       } else {
         try {
           res.destroy();
@@ -284,9 +296,7 @@ function startStandaloneSupervisor(options = {}) {
   stopAnyOllamaProcesses(writeLog);
 
   const controlToken =
-    options.controlToken ||
-    process.env.LLM_SUPERVISOR_TOKEN ||
-    "local-sandbox-token-2026";
+    options.controlToken || process.env.LLM_SUPERVISOR_TOKEN || "local-sandbox-token-2026";
   writeLog(`[llama-standalone] Control token: ${controlToken}`);
 
   const binaryPath = options.binaryPath || DEFAULT_BINARY_PATH;
@@ -303,7 +313,7 @@ function startStandaloneSupervisor(options = {}) {
     childProc: null,
     spawnedAt: null,
     model: options.alias || DEFAULT_MODEL_ALIAS,
-    vramMb: DEFAULT_VRAM_MB
+    vramMb: DEFAULT_VRAM_MB,
   };
 
   const spawnServer = () => {
@@ -312,11 +322,13 @@ function startStandaloneSupervisor(options = {}) {
     state.model = options.alias || DEFAULT_MODEL_ALIAS;
     stopAnyOllamaProcesses(() => {});
     const serverArgs = buildLlamaServerArgs(options);
-    writeLog(`[llama-standalone] Spawning official standalone llama-server: ${binaryPath} ${serverArgs.join(" ")}`);
+    writeLog(
+      `[llama-standalone] Spawning official standalone llama-server: ${binaryPath} ${serverArgs.join(" ")}`
+    );
     childProc = spawn(binaryPath, serverArgs, {
       env,
       stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true
+      windowsHide: true,
     });
 
     state.childProc = childProc;
@@ -364,7 +376,7 @@ function startStandaloneSupervisor(options = {}) {
       spawnServer();
     },
     backendPort,
-    writeLog
+    writeLog,
   });
 
   const onListening = () => {
@@ -380,7 +392,11 @@ function startStandaloneSupervisor(options = {}) {
   }
 
   let controlServer = null;
-  if (options.controlPort && options.controlPort !== bridgePort && options.controlPort !== backendPort) {
+  if (
+    options.controlPort &&
+    options.controlPort !== bridgePort &&
+    options.controlPort !== backendPort
+  ) {
     controlServer = createControlServer(state, {
       controlToken,
       spawnFn: () => {
@@ -388,7 +404,7 @@ function startStandaloneSupervisor(options = {}) {
         spawnServer();
       },
       backendPort,
-      writeLog
+      writeLog,
     });
     controlServer.listen(options.controlPort, "127.0.0.1", () => {
       writeLog(`[llama-standalone] Dedicated control listener on 127.0.0.1:${options.controlPort}`);
@@ -441,7 +457,7 @@ module.exports = {
   stopAnyOllamaProcesses,
   handleControlRequest,
   createControlServer,
-  startStandaloneSupervisor
+  startStandaloneSupervisor,
 };
 
 if (require.main === module) {

@@ -26,10 +26,13 @@ describe("route-path serialization through serializeTurn (AC1)", () => {
     const runTurn = (job: { id: string }) =>
       new Promise<void>((resolve) => {
         order.push(`start:${job.id}`);
-        setTimeout(() => {
-          order.push(`end:${job.id}`);
-          resolve();
-        }, job.id === "A" ? 40 : 10);
+        setTimeout(
+          () => {
+            order.push(`end:${job.id}`);
+            resolve();
+          },
+          job.id === "A" ? 40 : 10
+        );
       });
     const a = serializeTurn(queue, { id: "A", threadId: "t1", prompt: "a" }, { runTurn });
     const b = serializeTurn(queue, { id: "B", threadId: "t2", prompt: "b" }, { runTurn });
@@ -52,8 +55,16 @@ describe("route-path worktree isolation through serializeTurn (AC2)", () => {
         assert.equal(fs.existsSync(path.join(wt!.path, "new.txt")), false);
       }
     };
-    const a = serializeTurn(queue, { id: "A", threadId: "t1", prompt: "a" }, { repoRoot: root, runTurn });
-    const b = serializeTurn(queue, { id: "B", threadId: "t2", prompt: "b" }, { repoRoot: root, runTurn });
+    const a = serializeTurn(
+      queue,
+      { id: "A", threadId: "t1", prompt: "a" },
+      { repoRoot: root, runTurn }
+    );
+    const b = serializeTurn(
+      queue,
+      { id: "B", threadId: "t2", prompt: "b" },
+      { repoRoot: root, runTurn }
+    );
     await Promise.all([a.settled, b.settled]);
     // main checkout untouched by both turns
     assert.equal(fs.readFileSync(path.join(root, "f.txt"), "utf8"), "base\n");
@@ -68,15 +79,27 @@ describe("queue position surfaces for UI (AC3)", () => {
     // later microtask, so a resolve handle assigned inside runTurn would not
     // exist yet when the test releases the gate.
     let releaseA: () => void = () => {};
-    const aGate = new Promise<void>((resolve) => { releaseA = resolve; });
-    const runTurn = (job: { id: string }) =>
-      job.id === "A" ? aGate : Promise.resolve();
+    const aGate = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    const runTurn = (job: { id: string }) => (job.id === "A" ? aGate : Promise.resolve());
     const positions: number[] = [];
-    serializeTurn(queue, { id: "A", threadId: "t1", prompt: "a" }, { runTurn, onQueued: (p) => positions.push(p) });
-    const b = serializeTurn(queue, { id: "B", threadId: "t2", prompt: "b" }, { runTurn, onQueued: (p) => positions.push(p) });
+    serializeTurn(
+      queue,
+      { id: "A", threadId: "t1", prompt: "a" },
+      { runTurn, onQueued: (p) => positions.push(p) }
+    );
+    const b = serializeTurn(
+      queue,
+      { id: "B", threadId: "t2", prompt: "b" },
+      { runTurn, onQueued: (p) => positions.push(p) }
+    );
     assert.equal(b.queuePosition, 1);
     assert.deepEqual(positions, [1]); // A started immediately (no queue event), B queued at 1
-    assert.equal(resolveTurnStatusPhase({ isStreaming: true, queuePosition: 1 }), "Queued (position 1)");
+    assert.equal(
+      resolveTurnStatusPhase({ isStreaming: true, queuePosition: 1 }),
+      "Queued (position 1)"
+    );
     releaseA();
     await b.settled;
   });
@@ -84,7 +107,9 @@ describe("queue position surfaces for UI (AC3)", () => {
   it("executes overlapping turns with distinct per-turn runTurn closures so queued SSE writers close", async () => {
     const queue = new JobQueue();
     let releaseA!: () => void;
-    const gateA = new Promise<void>((r) => { releaseA = r; });
+    const gateA = new Promise<void>((r) => {
+      releaseA = r;
+    });
     const executedA: string[] = [];
     const executedB: string[] = [];
     let turnAFinalized = false;
@@ -100,7 +125,7 @@ describe("queue position surfaces for UI (AC3)", () => {
           await gateA;
           turnAFinalized = true;
         },
-      },
+      }
     );
 
     // Let Turn A start and pause on gateA before Turn B enqueues
@@ -119,17 +144,21 @@ describe("queue position surfaces for UI (AC3)", () => {
           await writerB.write(new TextEncoder().encode("data: ok\n\n"));
           await writerB.close();
         },
-      },
+      }
     );
 
     releaseA();
     const firstChunk = await Promise.race([
       readerB.read(),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("reader.read timed out after 2000ms")), 2000)),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("reader.read timed out after 2000ms")), 2000)
+      ),
     ]);
     const eofChunk = await Promise.race([
       readerB.read(),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("reader EOF timed out after 2000ms")), 2000)),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("reader EOF timed out after 2000ms")), 2000)
+      ),
     ]);
     await Promise.all([a.settled, b.settled]);
 
@@ -152,7 +181,7 @@ describe("queue position surfaces for UI (AC3)", () => {
           runTurn: async (job, worktree) => {
             observed.push({ id: job.id, worktree });
           },
-        },
+        }
       );
       await turn.settled;
       assert.deepEqual(observed, [{ id: "bad-wt", worktree: null }]);
@@ -163,12 +192,18 @@ describe("queue position surfaces for UI (AC3)", () => {
 });
 describe("wiring is live, not dead code (audit guard)", () => {
   it("chat route imports and calls serializeTurn", () => {
-    const src = fs.readFileSync(path.join(__dirname, "..", "app", "api", "chat", "route.ts"), "utf8");
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "app", "api", "chat", "route.ts"),
+      "utf8"
+    );
     assert.match(src, /from "@\/lib\/chatTurnGate"/);
     assert.match(src, /serializeTurn\(/);
   });
   it("chat route wires the singleton queue, per-job repoRoot, and queue_position emission", () => {
-    const src = fs.readFileSync(path.join(__dirname, "..", "app", "api", "chat", "route.ts"), "utf8");
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "app", "api", "chat", "route.ts"),
+      "utf8"
+    );
     assert.match(src, /const chatJobQueue = new JobQueue\(\)/);
     assert.match(src, /repoRoot: resolveJobRepoRoot\(\)/);
     assert.match(src, /queue_position: position/);
@@ -188,29 +223,41 @@ describe("pre-start queued-abort SSE cleanup (AUD-11)", () => {
   it("aborted queued turn settles with runTurn never invoked and onSettled cleanup fired", async () => {
     const queue = new JobQueue();
     let releaseA!: () => void;
-    const gateA = new Promise<void>((r) => { releaseA = r; });
-
-    const a = serializeTurn(queue, { id: "A", threadId: "t1", prompt: "a" }, {
-      runTurn: async () => { await gateA; },
+    const gateA = new Promise<void>((r) => {
+      releaseA = r;
     });
+
+    const a = serializeTurn(
+      queue,
+      { id: "A", threadId: "t1", prompt: "a" },
+      {
+        runTurn: async () => {
+          await gateA;
+        },
+      }
+    );
 
     const controllerB = new AbortController();
     let runTurnBInvoked = false;
     let settledStatus: string | null = null;
     let cleanupCount = 0;
 
-    const b = serializeTurn(queue, { id: "B", threadId: "t2", prompt: "b" }, {
-      signal: controllerB.signal,
-      runTurn: async () => {
-        runTurnBInvoked = true;
-      },
-      onSettled: (status) => {
-        settledStatus = status;
-        if (!runTurnBInvoked) {
-          cleanupCount++;
-        }
-      },
-    });
+    const b = serializeTurn(
+      queue,
+      { id: "B", threadId: "t2", prompt: "b" },
+      {
+        signal: controllerB.signal,
+        runTurn: async () => {
+          runTurnBInvoked = true;
+        },
+        onSettled: (status) => {
+          settledStatus = status;
+          if (!runTurnBInvoked) {
+            cleanupCount++;
+          }
+        },
+      }
+    );
 
     // Abort B while A is still holding the queue/slot
     controllerB.abort();
@@ -223,7 +270,10 @@ describe("pre-start queued-abort SSE cleanup (AUD-11)", () => {
   });
 
   it("chat route tracks runTurnStarted and cleans up pre-start SSE resources on settle", () => {
-    const src = fs.readFileSync(path.join(__dirname, "..", "app", "api", "chat", "route.ts"), "utf8");
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "app", "api", "chat", "route.ts"),
+      "utf8"
+    );
     assert.match(src, /runTurnStarted/);
     assert.match(src, /onSettled:\s*\(\)\s*=>/);
   });

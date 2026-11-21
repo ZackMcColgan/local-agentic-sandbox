@@ -12,7 +12,7 @@ import {
   getPublicNotificationStatus,
   notify,
   resolveSettingsDir,
-  getNotificationSettingsFilePath
+  getNotificationSettingsFilePath,
 } from "../lib/notifications";
 import { GET, POST } from "../app/api/settings/notifications/route";
 import { SettingsView } from "../components/SettingsView";
@@ -49,11 +49,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     const libSourcePath = path.resolve(__dirname, "../lib/notifications.ts");
     const source = fs.readFileSync(libSourcePath, "utf8");
 
-    assert.equal(
-      source.includes("AppData"),
-      false,
-      "notifications.ts must not reference AppData"
-    );
+    assert.equal(source.includes("AppData"), false, "notifications.ts must not reference AppData");
     assert.equal(
       source.includes("USERPROFILE"),
       false,
@@ -82,7 +78,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     assert.deepEqual(status, {
       configured: false,
       enabled: true,
-      reason: "missing_credentials"
+      reason: "missing_credentials",
     });
 
     // Verify deploy/k8s/web-ui.yaml wires credentials
@@ -111,7 +107,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     const toggleReq = new Request("http://localhost/api/settings/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggle", enabled: false })
+      body: JSON.stringify({ action: "toggle", enabled: false }),
     });
     const toggleRes = await POST(toggleReq);
     assert.equal(toggleRes.status, 200);
@@ -131,7 +127,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     const enableReq = new Request("http://localhost/api/settings/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggle", enabled: true })
+      body: JSON.stringify({ action: "toggle", enabled: true }),
     });
     await POST(enableReq);
 
@@ -142,14 +138,14 @@ describe("Outbound Telegram Notifications Suite", () => {
         status: 200,
         json: async () => ({
           ok: true,
-          result: { message_id: 4242 }
-        })
+          result: { message_id: 4242 },
+        }),
       } as Response;
     }) as typeof fetch;
 
     const notifyResult = await notify("test.ping", {
       title: "Ping Title",
-      body: "Ping Body"
+      body: "Ping Body",
     });
     assert.equal(notifyResult, true);
 
@@ -180,7 +176,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     const toggleReq = new Request("http://localhost/api/settings/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggle", enabled: true })
+      body: JSON.stringify({ action: "toggle", enabled: true }),
     });
     const toggleRes = await POST(toggleReq);
     const toggleBody = JSON.stringify(await toggleRes.json());
@@ -196,14 +192,14 @@ describe("Outbound Telegram Notifications Suite", () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, result: { message_id: 101 } })
+        json: async () => ({ ok: true, result: { message_id: 101 } }),
       } as Response;
     }) as typeof fetch;
 
     const testReq = new Request("http://localhost/api/settings/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "test" })
+      body: JSON.stringify({ action: "test" }),
     });
     const testRes = await POST(testReq);
     const testBody = JSON.stringify(await testRes.json());
@@ -219,7 +215,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     setTelegramConfig({
       botToken: "123456:FAKE_TOKEN",
       chatId: "987654",
-      enabled: true
+      enabled: true,
     });
 
     let capturedBody: any = null;
@@ -228,13 +224,13 @@ describe("Outbound Telegram Notifications Suite", () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, result: { message_id: 8888 } })
+        json: async () => ({ ok: true, result: { message_id: 8888 } }),
       } as Response;
     }) as typeof fetch;
 
     const result = await notify("task.completed", {
       title: "Fix file_name_v2.ts * [draft]",
-      body: "Updated path/to/my_file_1.ts & [link](test) _unclosed_ *bold*"
+      body: "Updated path/to/my_file_1.ts & [link](test) _unclosed_ *bold*",
     });
 
     assert.equal(result, true);
@@ -281,7 +277,7 @@ describe("Outbound Telegram Notifications Suite", () => {
         onClose: () => {},
         selectedModel: "qwen3.8-flash-next-gyro-gyro-s",
         onModelChange: () => {},
-        reasoningEffort: "medium"
+        reasoningEffort: "medium",
       })
     );
     assert.equal(
@@ -301,7 +297,7 @@ describe("Outbound Telegram Notifications Suite", () => {
     setTelegramConfig({
       botToken: "123456:VALID_TEST_TOKEN",
       chatId: "999999",
-      enabled: true
+      enabled: true,
     });
     global.fetch = (async (_url: any, init?: any) => {
       const body = JSON.parse(init?.body || "{}");
@@ -309,13 +305,13 @@ describe("Outbound Telegram Notifications Suite", () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, result: { message_id: 10 } })
+        json: async () => ({ ok: true, result: { message_id: 10 } }),
       } as Response;
     }) as typeof fetch;
 
     const payload = {
       title: "Host approval needed",
-      body: "Tap to review in the sandbox chat."
+      body: "Tap to review in the sandbox chat.",
     };
     const result = await notify("host.approval_pending", payload);
     assert.equal(result, true);

@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { generateMorningReport, formatMorningReportMarkdown } from "../lib/subagents/morningReport.js";
+import {
+  generateMorningReport,
+  formatMorningReportMarkdown,
+} from "../lib/subagents/morningReport.js";
 import { OvernightSupervisor, getRealGitSha } from "../lib/subagents/supervisor.js";
 import { TaskManifest } from "../lib/subagents/types.js";
 
@@ -47,7 +50,7 @@ describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
             status: "pending",
             builderIterations: 1,
             criticRounds: 1,
-            acceptanceCriteria: [{ id: "AC1", assertion: "All 8 migrations pass" }]
+            acceptanceCriteria: [{ id: "AC1", assertion: "All 8 migrations pass" }],
           },
           {
             id: "M2",
@@ -56,15 +59,15 @@ describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
             status: "pending",
             builderIterations: 2,
             criticRounds: 1,
-            acceptanceCriteria: [{ id: "AC2", assertion: "Catches bad payload validation bug" }]
-          }
+            acceptanceCriteria: [{ id: "AC2", assertion: "Catches bad payload validation bug" }],
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: "2026-10-02T10:00:00Z",
-        updatedAt: "2026-10-02T10:00:00Z"
+        updatedAt: "2026-10-02T10:00:00Z",
       };
 
       // Milestone 1 passes all 8 tests
@@ -73,7 +76,7 @@ describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
         diff: "Updated database migration schema",
         testsPassed: 8,
         testsFailed: 0,
-        testFile: "tests/migrations.test.ts"
+        testFile: "tests/migrations.test.ts",
       });
 
       assert.equal(task.milestones[0].testsPassed, 8);
@@ -85,7 +88,7 @@ describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
         diff: "Updated endpoint validation schema",
         testsPassed: 5,
         testsFailed: 2,
-        testFile: "tests/endpointValidation.test.ts"
+        testFile: "tests/endpointValidation.test.ts",
       });
 
       assert.equal(task.milestones[1].testsPassed, 5);
@@ -107,10 +110,10 @@ describe("Fix 2 — Real Test Counts Through Report Path Suite", () => {
           commitSha: m.commitSha,
           testsPassed: m.testsPassed ?? 0,
           testsFailed: m.testsFailed ?? 0,
-          diffSummary: m.diffSummary
+          diffSummary: m.diffSummary,
         })),
         ambiguityFlags: [],
-        parkedItems: []
+        parkedItems: [],
       });
 
       // Assert report honest totals

@@ -98,8 +98,8 @@ describe("UI-011a: trace rows carry accessible names", () => {
         })
       );
     });
-    const row = Array.from(container.querySelectorAll("button")).find(
-      (b) => (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
+    const row = Array.from(container.querySelectorAll("button")).find((b) =>
+      (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
     );
     assert.ok(row, "Completed-message proof rows must carry Tool: <name> aria-labels");
   });

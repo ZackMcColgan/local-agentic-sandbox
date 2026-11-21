@@ -170,7 +170,7 @@ export class UnattendedScheduler {
       enabled: true,
       createdAt: new Date().toISOString(),
       nextRun,
-      failureCount: 0
+      failureCount: 0,
     };
 
     const schedules = this.loadSchedules();
@@ -200,11 +200,21 @@ export class UnattendedScheduler {
     const totalCount = milestones.length;
     const ambiguities = manifest?.ambiguityFlags || [];
 
-    const milestonesTable = milestones.length > 0
-      ? milestones.map((m) => `| ${m.id} | ${m.title} | ${m.status} | ${m.builderIterations || 1} | ${m.criticRounds || 0} |`).join("\n")
-      : "| None | None | None | 0 | 0 |";
+    const milestonesTable =
+      milestones.length > 0
+        ? milestones
+            .map(
+              (m) =>
+                `| ${m.id} | ${m.title} | ${m.status} | ${m.builderIterations || 1} | ${m.criticRounds || 0} |`
+            )
+            .join("\n")
+        : "| None | None | None | 0 | 0 |";
 
-    const commitsSummary = milestones.filter((m) => m.commitSha).map((m) => `- \`${m.commitSha}\`: Milestone [${m.id}] ${m.title}`).join("\n") || "No new commits recorded.";
+    const commitsSummary =
+      milestones
+        .filter((m) => m.commitSha)
+        .map((m) => `- \`${m.commitSha}\`: Milestone [${m.id}] ${m.title}`)
+        .join("\n") || "No new commits recorded.";
 
     const passedTests = milestones.reduce((sum, m) => sum + (m.testsPassed || 0), 0);
     const failedTests = milestones.reduce((sum, m) => sum + (m.testsFailed || 0), 0);
@@ -247,7 +257,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         scheduleId,
         lastHeartbeat: new Date().toISOString(),
         attempt,
-        active
+        active,
       };
       fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(payload, null, 2), "utf8");
     } catch {}
@@ -261,7 +271,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     } catch {}
   }
 
-  async checkCrashAndRecover(): Promise<{ recovered: boolean; scheduleId?: string; attempt?: number }> {
+  async checkCrashAndRecover(): Promise<{
+    recovered: boolean;
+    scheduleId?: string;
+    attempt?: number;
+  }> {
     const hbPath = this.getHeartbeatPath();
     if (!fs.existsSync(hbPath)) return { recovered: false };
 
@@ -281,7 +295,9 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
       if (sched.failureCount >= 5) {
         sched.enabled = false;
-        console.warn(`[SCHEDULER CRASH BACKOFF] Schedule ${sched.id} disabled after 5 consecutive failed restarts. Flagged for morning review.`);
+        console.warn(
+          `[SCHEDULER CRASH BACKOFF] Schedule ${sched.id} disabled after 5 consecutive failed restarts. Flagged for morning review.`
+        );
         this.clearHeartbeat();
         this.saveSchedules(schedules);
         return { recovered: false, scheduleId: sched.id, attempt: nextAttempt };
@@ -327,14 +343,18 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       } catch {}
     };
 
-    logStream(`Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`);
+    logStream(
+      `Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`
+    );
 
-    const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator;
+    const planGen = (
+      options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined
+    )?.planGenerator;
     let planSpec: PlanSpec;
     if (planGen) {
       planSpec = await planGen({
         taskId: runId,
-        goal: sched.taskDescription
+        goal: sched.taskDescription,
       });
     } else if (options?.stepExecutor || options?.workerPool) {
       planSpec = {
@@ -351,14 +371,14 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
             status: "pending",
             builderIterations: 0,
             criticRounds: 0,
-            acceptanceCriteria: []
-          }
-        ]
+            acceptanceCriteria: [],
+          },
+        ],
       };
     } else {
       planSpec = await generatePlanSpec({
         taskId: runId,
-        goal: sched.taskDescription
+        goal: sched.taskDescription,
       });
     }
     const manifest: TaskManifest = {
@@ -371,14 +391,14 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         ...m,
         status: m.status || "pending",
         builderIterations: m.builderIterations ?? 0,
-        criticRounds: m.criticRounds ?? 0
+        criticRounds: m.criticRounds ?? 0,
       })),
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     try {
@@ -386,9 +406,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       if (options?.runner) {
         result = await options.runner(manifest);
       } else {
-        const supervisor = this.supervisor || new OvernightSupervisor({
-          checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints")
-        });
+        const supervisor =
+          this.supervisor ||
+          new OvernightSupervisor({
+            checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints"),
+          });
         const executor =
           options?.stepExecutor ||
           this.stepExecutor ||
@@ -396,11 +418,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
             workerPool: options?.workerPool || this.workerPool,
             repoRoot: this.workspaceDir,
             model: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
-            scope: manifest.scope
+            scope: manifest.scope,
           });
 
         result = await supervisor.executeTaskWithRecovery(manifest, {
-          stepExecutor: executor
+          stepExecutor: executor,
         });
       }
       if (result.status === "completed") {
@@ -427,7 +449,9 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
         await this.triggerMorningReport(runId, result);
         this.clearHeartbeat();
-        logStream(`Scheduled run finished with status '${result.status}': ${result.parkedReason || "Milestone execution failed"}`);
+        logStream(
+          `Scheduled run finished with status '${result.status}': ${result.parkedReason || "Milestone execution failed"}`
+        );
         return result;
       }
     } catch (err: any) {
@@ -464,13 +488,17 @@ export function getGlobalScheduler(options?: SchedulerOptions): UnattendedSchedu
   if (!globalScheduler || options || globalScheduler.workspaceDir !== currentWorkspace) {
     globalScheduler = new UnattendedScheduler({
       workspaceDir: currentWorkspace,
-      ...options
+      ...options,
     });
   }
   return globalScheduler;
 }
 
-export async function scheduleTask(cronExpr: string, taskDesc: string, options?: SchedulerOptions): Promise<ScheduleId> {
+export async function scheduleTask(
+  cronExpr: string,
+  taskDesc: string,
+  options?: SchedulerOptions
+): Promise<ScheduleId> {
   return await getGlobalScheduler(options).scheduleTask(cronExpr, taskDesc);
 }
 
@@ -482,7 +510,11 @@ export async function listSchedules(options?: SchedulerOptions): Promise<Schedul
   return await getGlobalScheduler(options).listSchedules();
 }
 
-export async function triggerMorningReport(runId: string, manifest?: TaskManifest, options?: SchedulerOptions): Promise<string> {
+export async function triggerMorningReport(
+  runId: string,
+  manifest?: TaskManifest,
+  options?: SchedulerOptions
+): Promise<string> {
   return await getGlobalScheduler(options).triggerMorningReport(runId, manifest);
 }
 
@@ -499,6 +531,6 @@ export async function triggerScheduleRun(
   if (!manifest) return null;
   return {
     runId: manifest.taskId,
-    status: manifest.status
+    status: manifest.status,
   };
 }

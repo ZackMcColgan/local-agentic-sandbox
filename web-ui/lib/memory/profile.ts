@@ -49,7 +49,7 @@ export function loadUserProfile(customPath?: string): UserProfile {
   const emptyProfile: UserProfile = {
     version: 1,
     entries: {},
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   if (!fs.existsSync(filePath)) {
@@ -63,18 +63,25 @@ export function loadUserProfile(customPath?: string): UserProfile {
     }
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      console.warn(`[UserProfile] Warning: corrupted profile JSON structure at ${filePath}. Starting with empty profile.`);
+      console.warn(
+        `[UserProfile] Warning: corrupted profile JSON structure at ${filePath}. Starting with empty profile.`
+      );
       return emptyProfile;
     }
 
     return {
       version: typeof parsed.version === "number" ? parsed.version : 1,
-      entries: parsed.entries && typeof parsed.entries === "object" && !Array.isArray(parsed.entries) ? parsed.entries : {},
+      entries:
+        parsed.entries && typeof parsed.entries === "object" && !Array.isArray(parsed.entries)
+          ? parsed.entries
+          : {},
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
-      ...parsed
+      ...parsed,
     };
   } catch (err: any) {
-    console.warn(`[UserProfile] Warning: corrupted profile JSON at ${filePath} (${err.message}). Starting with empty profile.`);
+    console.warn(
+      `[UserProfile] Warning: corrupted profile JSON at ${filePath} (${err.message}). Starting with empty profile.`
+    );
     return emptyProfile;
   }
 }
@@ -150,7 +157,7 @@ export function recordProfileEntry(
       value: existing.value,
       timestamp: existing.timestamp,
       sourceSessionId: existing.sourceSessionId,
-      origin: existing.origin
+      origin: existing.origin,
     };
 
     const updatedEntry: ProfileEntry = {
@@ -159,7 +166,7 @@ export function recordProfileEntry(
       sourceSessionId: options.sessionId,
       timestamp: now,
       origin: options.origin || "corrected",
-      history: [...(existing.history || []), historyItem]
+      history: [...(existing.history || []), historyItem],
     };
 
     profile.entries[normalizedKey] = updatedEntry;
@@ -174,7 +181,7 @@ export function recordProfileEntry(
     sourceSessionId: options.sessionId,
     timestamp: now,
     origin: options.origin || "user-stated",
-    history: []
+    history: [],
   };
 
   profile.entries[normalizedKey] = newEntry;
@@ -200,37 +207,46 @@ export function extractDurablePreferences(
   const results: Array<{ key: string; value: any; origin: "user-stated" | "corrected" }> = [];
 
   // 1. Explicit name preferences: "only call me Zack", "call me Zack", "my name is Zack", "I go by Zack"
-  const nameMatch = clean.match(/(?:only\s+call\s+me|please\s+call\s+me|call\s+me|my\s+name\s+is|i\s+go\s+by)\s+([A-Z][a-zA-Z0-9_\-\.]+)/i);
+  const nameMatch = clean.match(
+    /(?:only\s+call\s+me|please\s+call\s+me|call\s+me|my\s+name\s+is|i\s+go\s+by)\s+([A-Z][a-zA-Z0-9_\-\.]+)/i
+  );
   if (nameMatch && nameMatch[1]) {
     const rawName = nameMatch[1].replace(/[.,!?;:]+$/, "").trim();
-    if (rawName && !["a", "an", "the", "it", "bot", "assistant", "ai"].includes(rawName.toLowerCase())) {
+    if (
+      rawName &&
+      !["a", "an", "the", "it", "bot", "assistant", "ai"].includes(rawName.toLowerCase())
+    ) {
       const isCorrection = /actually|correction|change\s+my\s+name/i.test(clean);
       results.push({
         key: "preferred_name",
         value: rawName,
-        origin: isCorrection ? "corrected" : "user-stated"
+        origin: isCorrection ? "corrected" : "user-stated",
       });
     }
   }
 
   // 2. Explicit durable programming language / tool preferences
-  const langMatch = clean.match(/(?:always|prefer|please)\s+(?:use|write\s+code\s+in)\s+(typescript|javascript|python|rust|go|golang|c\+\+|java)/i);
+  const langMatch = clean.match(
+    /(?:always|prefer|please)\s+(?:use|write\s+code\s+in)\s+(typescript|javascript|python|rust|go|golang|c\+\+|java)/i
+  );
   if (langMatch && langMatch[1]) {
     const lang = langMatch[1].toLowerCase();
     results.push({
       key: "preferred_language",
       value: lang === "golang" ? "go" : lang,
-      origin: /correction|instead/i.test(clean) ? "corrected" : "user-stated"
+      origin: /correction|instead/i.test(clean) ? "corrected" : "user-stated",
     });
   }
 
   // 3. Explicit timezone or formatting preferences
-  const tzMatch = clean.match(/(?:my\s+timezone\s+is|i\s+am\s+in\s+timezone)\s+([A-Za-z0-9_\-\/]+)/i);
+  const tzMatch = clean.match(
+    /(?:my\s+timezone\s+is|i\s+am\s+in\s+timezone)\s+([A-Za-z0-9_\-\/]+)/i
+  );
   if (tzMatch && tzMatch[1]) {
     results.push({
       key: "timezone",
       value: tzMatch[1].trim(),
-      origin: "user-stated"
+      origin: "user-stated",
     });
   }
 
@@ -249,14 +265,16 @@ export function formatProfileForContext(profile: UserProfile): string {
 
   const lines = [
     "\n--- USER PROFILE & DURABLE PREFERENCES ---",
-    "Adhere to the following user preferences and verified facts:"
+    "Adhere to the following user preferences and verified facts:",
   ];
 
   for (const entry of entries) {
     if (entry.key === "preferred_name") {
       lines.push(`- Always address the user as '${entry.value}' (User stated).`);
     } else {
-      lines.push(`- ${entry.key}: ${typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value)}`);
+      lines.push(
+        `- ${entry.key}: ${typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value)}`
+      );
     }
   }
 

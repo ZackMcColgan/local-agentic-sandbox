@@ -25,19 +25,20 @@ const VARIANT_TABLE: VariantRow[] = [
   },
   {
     name: "XML <function=...> dialect",
-    roundContent: '<function=read_file><parameter=path>a.ts</parameter></function>',
+    roundContent: "<function=read_file><parameter=path>a.ts</parameter></function>",
     executedToolCallsCount: 0,
     expectedAction: "reprompt",
   },
   {
     name: "DeepSeek <|tool_call|> dialect",
-    roundContent: '<|tool_calls_section_begin|><|tool_call|>read_file',
+    roundContent: "<|tool_calls_section_begin|><|tool_call|>read_file",
     executedToolCallsCount: 0,
     expectedAction: "reprompt",
   },
   {
     name: "UI-086 hybrid (<tool_call> + <|im_start|> + function_calls> + <parameter=arguments>)",
-    roundContent: '<tool_call><|im_start|>function_calls><invoke name="run_command"><parameter=arguments>{"cmd":"ls"}</parameter></invoke>',
+    roundContent:
+      '<tool_call><|im_start|>function_calls><invoke name="run_command"><parameter=arguments>{"cmd":"ls"}</parameter></invoke>',
     executedToolCallsCount: 0,
     expectedAction: "reprompt",
     expectedMarkupOnly: true,
@@ -93,7 +94,11 @@ for (const row of VARIANT_TABLE) {
       executedToolCallsCount: row.executedToolCallsCount,
       consecutiveMarkupFailures: 0,
     });
-    assert.equal(res.action, row.expectedAction, `evaluateMarkupRound action mismatch for: ${row.name}`);
+    assert.equal(
+      res.action,
+      row.expectedAction,
+      `evaluateMarkupRound action mismatch for: ${row.name}`
+    );
     if (row.expectedMarkupOnly !== undefined) {
       assert.equal(
         isMarkupOnlyToolCall(row.roundContent),
@@ -106,5 +111,8 @@ for (const row of VARIANT_TABLE) {
 
 test("Phase A3 — containsToolCallMarkup returns false for empty string and plain prose", () => {
   assert.equal(containsToolCallMarkup(""), false);
-  assert.equal(containsToolCallMarkup("Plain prose mentioning tool_call without angle brackets."), false);
+  assert.equal(
+    containsToolCallMarkup("Plain prose mentioning tool_call without angle brackets."),
+    false
+  );
 });

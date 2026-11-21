@@ -191,9 +191,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
         aria-current={isSelected ? "true" : undefined}
         style={{ paddingLeft: `${12 + indentPx + 20}px` }}
         className={`w-full min-h-[44px] pr-3 flex items-center gap-2 text-left text-sm transition-colors min-w-0 ${
-          isSelected
-            ? "bg-emerald-500/10 text-emerald-400"
-            : "text-zinc-300 hover:bg-zinc-900/80"
+          isSelected ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-300 hover:bg-zinc-900/80"
         }`}
       >
         <FileText
@@ -223,9 +221,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
         <div className="h-12 px-3 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Folder className="w-4 h-4 shrink-0 text-zinc-400" />
-            <span className="text-sm font-medium text-zinc-100 truncate">
-              {rootName}
-            </span>
+            <span className="text-sm font-medium text-zinc-100 truncate">{rootName}</span>
           </div>
           <button
             type="button"
@@ -267,9 +263,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
 
         {/* Tree Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
-          {loading && (
-            <div className="p-4 text-sm text-zinc-400">Loading repository...</div>
-          )}
+          {loading && <div className="p-4 text-sm text-zinc-400">Loading repository...</div>}
 
           {!loading && revoked && (
             <div
@@ -322,9 +316,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
               </button>
             </div>
             <div className="flex-1 overflow-auto p-3 min-w-0">
-              {previewLoading && (
-                <div className="text-xs text-zinc-400">Loading file...</div>
-              )}
+              {previewLoading && <div className="text-xs text-zinc-400">Loading file...</div>}
               {!previewLoading && previewError && (
                 <div className="text-xs text-zinc-400">{previewError}</div>
               )}

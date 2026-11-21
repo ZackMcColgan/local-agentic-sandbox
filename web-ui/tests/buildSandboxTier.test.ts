@@ -9,7 +9,7 @@ import {
   validateSandboxEgress,
   pruneBuildCache,
   BUILD_CACHE_BUDGET_BYTES,
-  CACHE_MAX_AGE_DAYS
+  CACHE_MAX_AGE_DAYS,
 } from "../lib/sandbox/tierRunner.js";
 
 describe("Phase 1 — Two-Tier Build Sandbox & Resource Budgets Suite", () => {
@@ -55,8 +55,8 @@ describe("Phase 1 — Two-Tier Build Sandbox & Resource Budgets Suite", () => {
       name: "minimal-fixture-app",
       version: "1.0.0",
       scripts: {
-        build: "node -e \"console.log('Build succeeded')\""
-      }
+        build: "node -e \"console.log('Build succeeded')\"",
+      },
     };
     await fs.writeFile(
       path.join(tempWorkspace, "package.json"),
@@ -69,7 +69,7 @@ describe("Phase 1 — Two-Tier Build Sandbox & Resource Budgets Suite", () => {
       tier: "build",
       toolchain: "node:22",
       command: "npm run build",
-      workspaceDir: tempWorkspace
+      workspaceDir: tempWorkspace,
     });
 
     assert.equal(buildResult.status, "SUCCESS");
@@ -83,7 +83,7 @@ describe("Phase 1 — Two-Tier Build Sandbox & Resource Budgets Suite", () => {
       tier: "exec",
       toolchain: "node:22",
       command: "npm install",
-      workspaceDir: tempWorkspace
+      workspaceDir: tempWorkspace,
     });
 
     assert.equal(execResult.status, "SECURITY_DENIED");
@@ -118,11 +118,17 @@ describe("Phase 1 — Two-Tier Build Sandbox & Resource Budgets Suite", () => {
     assert.ok(pruneResult.prunedFiles.includes("old-cache.tar"));
 
     // Fresh file still exists
-    const freshExists = await fs.stat(freshFile).then(() => true).catch(() => false);
+    const freshExists = await fs
+      .stat(freshFile)
+      .then(() => true)
+      .catch(() => false);
     assert.equal(freshExists, true);
 
     // Old file was removed
-    const oldExists = await fs.stat(oldFile).then(() => true).catch(() => false);
+    const oldExists = await fs
+      .stat(oldFile)
+      .then(() => true)
+      .catch(() => false);
     assert.equal(oldExists, false);
   });
 });

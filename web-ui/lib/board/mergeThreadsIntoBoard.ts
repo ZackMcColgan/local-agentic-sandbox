@@ -28,7 +28,7 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
 
   const existingIds = new Set(boardItems.map((item) => item.id));
   const existingLinks = new Set(
-    boardItems.map((item) => item.threadLink).filter((link): link is string => Boolean(link)),
+    boardItems.map((item) => item.threadLink).filter((link): link is string => Boolean(link))
   );
 
   const merged = [...boardItems];
@@ -70,7 +70,7 @@ export async function mergeThreadsIntoBoard(boardItems: BoardItem[]): Promise<Bo
     for (const task of tasks) {
       const ghostId = `thread-${task.taskId}`;
       const hasMatchingThread = threads.some(
-        (t) => t.id === task.taskId || t.id === ghostId || t.taskId === task.taskId,
+        (t) => t.id === task.taskId || t.id === ghostId || t.taskId === task.taskId
       );
       if (hasMatchingThread) {
         continue;

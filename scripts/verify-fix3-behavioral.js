@@ -1,5 +1,5 @@
-const { exec } = require('child_process');
-const fs = require('fs');
+const { exec } = require("child_process");
+const fs = require("fs");
 
 setTimeout(() => {
   console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
@@ -9,7 +9,9 @@ setTimeout(() => {
 async function waitForPort(port, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`http://127.0.0.1:${port}/json`, {
+        signal: AbortSignal.timeout(15000),
+      });
       if (res.ok) return await res.json();
     } catch {}
     await new Promise((r) => setTimeout(r, 400));
@@ -28,8 +30,8 @@ async function testBehavioralSvg() {
 
   try {
     const tabs = await waitForPort(port);
-    const pageTab = tabs.find((t) => t.type === 'page');
-    if (!pageTab) throw new Error('No page tab found');
+    const pageTab = tabs.find((t) => t.type === "page");
+    if (!pageTab) throw new Error("No page tab found");
 
     const ws = new WebSocket(pageTab.webSocketDebuggerUrl);
 
@@ -74,14 +76,14 @@ async function testBehavioralSvg() {
           console.log("\n[Test 1] Pasting minimal SVG into chat input in live UI...");
 
           await send("Runtime.evaluate", {
-            expression: `document.querySelector('textarea').focus()`
+            expression: `document.querySelector('textarea').focus()`,
           });
 
           await send("Input.insertText", { text: minimalSvg });
           await new Promise((r) => setTimeout(r, 400));
 
           await send("Runtime.evaluate", {
-            expression: `document.querySelector('button[type="submit"]').click()`
+            expression: `document.querySelector('button[type="submit"]').click()`,
           });
 
           // Wait 2s for React render
@@ -99,22 +101,26 @@ async function testBehavioralSvg() {
                 };
               })()
             `,
-            returnByValue: true
+            returnByValue: true,
           });
           const val1 = check1.value || check1.result?.value || check1;
           console.log("Minimal SVG DOM verification result:", val1);
 
           if (!val1.redCirclesCount) {
-            throw new Error(`Minimal SVG circle was not found in rendered DOM! Result: ${JSON.stringify(val1)}`);
+            throw new Error(
+              `Minimal SVG circle was not found in rendered DOM! Result: ${JSON.stringify(val1)}`
+            );
           }
-          console.log("✅ Acceptance 1 passed: User pastes minimal SVG into chat → preview pane renders the graphic (<circle fill=\"red\"/>)!");
+          console.log(
+            '✅ Acceptance 1 passed: User pastes minimal SVG into chat → preview pane renders the graphic (<circle fill="red"/>)!'
+          );
 
           // -------------------------------------------------------------
           // Reset chat session cleanly for Test 2
           // -------------------------------------------------------------
           console.log("\nResetting session for Test 2...");
           await send("Runtime.evaluate", {
-            expression: `localStorage.clear()`
+            expression: `localStorage.clear()`,
           });
           await send("Page.navigate", { url: targetHost });
           await new Promise((r) => setTimeout(r, 3000));
@@ -126,14 +132,14 @@ async function testBehavioralSvg() {
           console.log("\n[Test 2] Pasting malicious SVG into chat input in live UI...");
 
           await send("Runtime.evaluate", {
-            expression: `document.querySelector('textarea').focus()`
+            expression: `document.querySelector('textarea').focus()`,
           });
 
           await send("Input.insertText", { text: maliciousSvg });
           await new Promise((r) => setTimeout(r, 400));
 
           await send("Runtime.evaluate", {
-            expression: `document.querySelector('button[type="submit"]').click()`
+            expression: `document.querySelector('button[type="submit"]').click()`,
           });
 
           await new Promise((r) => setTimeout(r, 2000));
@@ -152,7 +158,7 @@ async function testBehavioralSvg() {
                 };
               })()
             `,
-            returnByValue: true
+            returnByValue: true,
           });
           const val2 = check2.value || check2.result?.value || check2;
           console.log("Malicious SVG DOM verification result:", val2);
@@ -170,7 +176,9 @@ async function testBehavioralSvg() {
             throw new Error("❌ inert graphic was not rendered in preview pane!");
           }
 
-          console.log("✅ Acceptance 2 passed: User pastes malicious SVG → preview pane renders inert graphic (<circle fill=\"green\">), scripts stripped, onload stripped, zero execution!");
+          console.log(
+            '✅ Acceptance 2 passed: User pastes malicious SVG → preview pane renders inert graphic (<circle fill="green">), scripts stripped, onload stripped, zero execution!'
+          );
 
           ws.close();
           resolve();

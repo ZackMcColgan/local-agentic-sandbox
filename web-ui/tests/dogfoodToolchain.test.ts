@@ -6,11 +6,7 @@ import { execSync } from "child_process";
 import { convertDrawioToSvg, sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
 import { createCriticWorker, getResolvedGitSha } from "../lib/subagents/workerPool";
 import { Milestone } from "../lib/subagents/types";
-import {
-  checkDrawio,
-  getFixtureDrawioSvg,
-  logServiceMode
-} from "./helpers/serviceMocks.js";
+import { checkDrawio, getFixtureDrawioSvg, logServiceMode } from "./helpers/serviceMocks.js";
 
 describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () => {
   let useRealDrawio = false;
@@ -34,7 +30,10 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
     assert.ok(content.includes("<mxfile"), "Must contain <mxfile opening tag");
     assert.ok(content.includes("</mxfile>"), "Must contain </mxfile> closing tag");
     assert.ok(content.includes("<mxGraphModel"), "Must contain <mxGraphModel");
-    assert.ok(content.includes('background="#ffffff"'), "Must specify white canvas background #ffffff");
+    assert.ok(
+      content.includes('background="#ffffff"'),
+      "Must specify white canvas background #ffffff"
+    );
   });
 
   it("Verification 2: Toolchain converts docs/architecture.drawio to docs/architecture.svg (delete-and-regenerate)", () => {
@@ -42,17 +41,27 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
     if (fs.existsSync(svgPath)) {
       fs.unlinkSync(svgPath);
     }
-    assert.equal(fs.existsSync(svgPath), false, "docs/architecture.svg must be deleted prior to regeneration test");
+    assert.equal(
+      fs.existsSync(svgPath),
+      false,
+      "docs/architecture.svg must be deleted prior to regeneration test"
+    );
 
     // 2. Invoke the toolchain script or fallback to fixture when drawio CLI is unavailable
     const toolchainScript = path.resolve(repoRoot, "scripts/drawio-to-svg.ts");
     if (useRealDrawio && fs.existsSync(toolchainScript)) {
       const tsxPath = path.resolve(repoRoot, "web-ui/node_modules/tsx/dist/cli.mjs");
-      const output = execSync(`node "${tsxPath}" "${toolchainScript}" "${drawioPath}" "${svgPath}"`, {
-        encoding: "utf8",
-        cwd: repoRoot
-      });
-      assert.ok(output.includes("SUCCESS") || output.includes("Generated"), `Toolchain must report success: ${output}`);
+      const output = execSync(
+        `node "${tsxPath}" "${toolchainScript}" "${drawioPath}" "${svgPath}"`,
+        {
+          encoding: "utf8",
+          cwd: repoRoot,
+        }
+      );
+      assert.ok(
+        output.includes("SUCCESS") || output.includes("Generated"),
+        `Toolchain must report success: ${output}`
+      );
     } else {
       // Mock draw.io CLI wrapper: emit fixture SVG satisfying downstream validation logic
       const outDir = path.dirname(svgPath);
@@ -63,8 +72,14 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
     // 3. Check generated SVG file
     assert.ok(fs.existsSync(svgPath), "docs/architecture.svg must be created by toolchain");
     const svgContent = fs.readFileSync(svgPath, "utf8");
-    assert.ok(svgContent.length > 5000, `SVG file must be substantive (>5000 bytes), got ${svgContent.length}`);
-    assert.ok(svgContent.startsWith("<svg") || svgContent.includes("<svg"), "Must contain opening <svg tag");
+    assert.ok(
+      svgContent.length > 5000,
+      `SVG file must be substantive (>5000 bytes), got ${svgContent.length}`
+    );
+    assert.ok(
+      svgContent.startsWith("<svg") || svgContent.includes("<svg"),
+      "Must contain opening <svg tag"
+    );
     assert.ok(svgContent.includes("</svg>"), "Must contain closing </svg> tag");
     assert.ok(svgContent.includes("viewBox="), "Must contain responsive viewBox attribute");
 
@@ -78,7 +93,7 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
       "browser-mcp Scraper Pod",
       "builder-tier Toolchain Sandbox",
       "qdrant-service: Qdrant Vector",
-      "llm-service"
+      "llm-service",
     ];
 
     for (const label of requiredLabels) {
@@ -91,26 +106,38 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
 
   it("Verification 3: Real Git SHA resolution and no fabricated commit hashes", () => {
     const realSha = getResolvedGitSha(repoRoot);
-    assert.ok(/^[0-9a-f]{40}$/i.test(realSha), `Must be a genuine 40-character git SHA, got ${realSha}`);
-    assert.notEqual(realSha, "d7c84cb12a5e4b6c8d0e2f4a6b8c0d2e4f6a8b0c", "Must not be the fake fallback hash");
+    assert.ok(
+      /^[0-9a-f]{40}$/i.test(realSha),
+      `Must be a genuine 40-character git SHA, got ${realSha}`
+    );
+    assert.notEqual(
+      realSha,
+      "d7c84cb12a5e4b6c8d0e2f4a6b8c0d2e4f6a8b0c",
+      "Must not be the fake fallback hash"
+    );
 
     // Verifies against git log
     const gitHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
-    assert.equal(realSha.toLowerCase(), gitHead.toLowerCase(), "getResolvedGitSha must match actual git rev-parse HEAD");
+    assert.equal(
+      realSha.toLowerCase(),
+      gitHead.toLowerCase(),
+      "getResolvedGitSha must match actual git rev-parse HEAD"
+    );
   });
 
   it("Verification 4: Critic evaluated diffs without fail-open (abstained when model unreachable, approves conforming)", async () => {
     const milestone: Milestone = {
       id: "M-dogfood",
       title: "Architecture Diagram Conversion Toolchain",
-      description: "Convert docs/architecture.drawio to docs/architecture.svg with white background and clean vector output",
+      description:
+        "Convert docs/architecture.drawio to docs/architecture.svg with white background and clean vector output",
       acceptanceCriteria: [
         { id: "AC-1", assertion: "docs/architecture.svg generated and valid vector graphic" },
-        { id: "AC-2", assertion: "background is pure white #ffffff" }
+        { id: "AC-2", assertion: "background is pure white #ffffff" },
       ],
       status: "in_progress",
       builderIterations: 1,
-      criticRounds: 0
+      criticRounds: 0,
     };
 
     const savedFast = process.env.FAST_GRAPH_TEST;
@@ -119,13 +146,20 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
       // 1. Critic with unreachable endpoint must ABSTAIN, never fail-open
       const deadCritic = createCriticWorker({ ollamaUrl: "http://127.0.0.1:54321" });
       const deadReview = await deadCritic.evaluateMilestoneDiff(milestone, {
-        diff: "+ <svg background=\"#ffffff\"></svg>",
-        filesChanged: ["docs/architecture.svg"]
+        diff: '+ <svg background="#ffffff"></svg>',
+        filesChanged: ["docs/architecture.svg"],
       });
 
-      assert.equal(deadReview.approved, false, "Critic must NEVER approve when model endpoint is unreachable");
+      assert.equal(
+        deadReview.approved,
+        false,
+        "Critic must NEVER approve when model endpoint is unreachable"
+      );
       assert.equal(deadReview.abstained, true, "Critic review must record abstained: true");
-      assert.ok(deadReview.feedback.some(f => f.includes("abstaining")), "Feedback must explain abstention");
+      assert.ok(
+        deadReview.feedback.some((f) => f.includes("abstaining")),
+        "Feedback must explain abstention"
+      );
     } finally {
       if (savedFast !== undefined) process.env.FAST_GRAPH_TEST = savedFast;
       else delete process.env.FAST_GRAPH_TEST;
@@ -137,28 +171,32 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
         text: JSON.stringify({ approved: true, feedback: [], analysis: "All criteria satisfied" }),
         model: "injected-critic",
         loadDurationMs: 0,
-        totalDurationMs: 10
-      })
+        totalDurationMs: 10,
+      }),
     });
     const conformingDiff = `--- a/docs/architecture.svg\n+++ b/docs/architecture.svg\n@@ -0,0 +1,5 @@\n+<svg viewBox="0 0 1600 1100" xmlns="http://www.w3.org/2000/svg">\n+<rect fill="#ffffff" width="100%" height="100%"/>\n+</svg>`;
     const validReview = await approvingCritic.evaluateMilestoneDiff(milestone, {
       diff: conformingDiff,
-      filesChanged: ["docs/architecture.svg"]
+      filesChanged: ["docs/architecture.svg"],
     });
     assert.equal(validReview.approved, true, "Critic must approve clean conforming diff");
 
     // 3. Critic with rejected review must report approved: false
     const rejectingCritic = createCriticWorker({
       generate: async () => ({
-        text: JSON.stringify({ approved: false, feedback: ["Background color missing"], analysis: "Criteria violated" }),
+        text: JSON.stringify({
+          approved: false,
+          feedback: ["Background color missing"],
+          analysis: "Criteria violated",
+        }),
         model: "injected-critic",
         loadDurationMs: 0,
-        totalDurationMs: 10
-      })
+        totalDurationMs: 10,
+      }),
     });
     const rejectedReview = await rejectingCritic.evaluateMilestoneDiff(milestone, {
       diff: conformingDiff,
-      filesChanged: ["docs/architecture.svg"]
+      filesChanged: ["docs/architecture.svg"],
     });
     assert.equal(rejectedReview.approved, false, "Critic must report approved: false on rejection");
     assert.ok(rejectedReview.feedback.length > 0, "Critic must surface rejection feedback");

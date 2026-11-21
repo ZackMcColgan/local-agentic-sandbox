@@ -3,7 +3,7 @@ import {
   getProject,
   toggleAllowlist,
   deleteProject,
-  updateProject
+  updateProject,
 } from "@/lib/projects/projectStore";
 
 interface RouteParams {

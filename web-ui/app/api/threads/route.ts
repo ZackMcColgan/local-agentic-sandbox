@@ -1,7 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { ThreadStore, activeExecutionSet, Thread, resolveThreadsDir } from "@/lib/threads/threadStore";
+import {
+  ThreadStore,
+  activeExecutionSet,
+  Thread,
+  resolveThreadsDir,
+} from "@/lib/threads/threadStore";
 import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
@@ -74,11 +79,11 @@ export async function POST(req: Request) {
           {
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Planning engineering task for goal: ${goal}`
-          }
+            message: `Planning engineering task for goal: ${goal}`,
+          },
         ],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       supervisor.saveCheckpoint(manifest);
@@ -104,18 +109,21 @@ export async function POST(req: Request) {
               role: "user",
               content: goal,
               attachments: body.attachments,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             });
             thread.messages.push({
               id: `msg-${Date.now()}-a`,
               role: "assistant",
               content: "Started autonomous engineering run.",
               taskId,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             });
           } else {
             // Attach taskId to the last assistant message if present
-            const lastAssistant = thread.messages.slice().reverse().find(m => m.role === "assistant");
+            const lastAssistant = thread.messages
+              .slice()
+              .reverse()
+              .find((m) => m.role === "assistant");
             if (lastAssistant) {
               lastAssistant.taskId = taskId;
             }
@@ -130,7 +138,7 @@ export async function POST(req: Request) {
             taskId,
             scope,
             hostAccess: false,
-            ...(chunkBudget !== undefined ? { chunkBudget } : {})
+            ...(chunkBudget !== undefined ? { chunkBudget } : {}),
           });
         }
       } else {
@@ -142,14 +150,14 @@ export async function POST(req: Request) {
           taskId,
           scope,
           hostAccess: false,
-          ...(chunkBudget !== undefined ? { chunkBudget } : {})
+          ...(chunkBudget !== undefined ? { chunkBudget } : {}),
         });
         thread.messages.push({
           id: `msg-${Date.now()}-a`,
           role: "assistant",
           content: "Started autonomous engineering run.",
           taskId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
         threadStore.saveThread(thread);
       }
@@ -177,14 +185,18 @@ export async function POST(req: Request) {
             builder: effectiveModel,
             critic: effectiveModel,
             explorer: effectiveModel,
-            recorder: effectiveModel
-          }
+            recorder: effectiveModel,
+          },
         }),
         model: effectiveModel,
         scope,
         signal: planController.signal,
         onThinkingChunk: (_chunk: string, totalThinking: string) => {
-          if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || (manifest.status !== "active" && manifest.status !== "planning")) {
+          if (
+            !activeExecutionSet.has(taskId) ||
+            supervisor.isPaused(taskId) ||
+            (manifest.status !== "active" && manifest.status !== "planning")
+          ) {
             return;
           }
           manifest.builderThinking = totalThinking;
@@ -205,14 +217,18 @@ export async function POST(req: Request) {
             // Check if last entry is an in-flight thinking entry we can update, or append a new entry
             const journal = manifest.journal || [];
             const lastEntry = journal[journal.length - 1];
-            if (lastEntry && lastEntry.role === "builder" && lastEntry.message.startsWith("Analyzing:")) {
+            if (
+              lastEntry &&
+              lastEntry.role === "builder" &&
+              lastEntry.message.startsWith("Analyzing:")
+            ) {
               lastEntry.message = message;
               lastEntry.timestamp = new Date().toISOString();
             } else {
               journal.push({
                 timestamp: new Date().toISOString(),
                 role: "builder",
-                message
+                message,
               });
             }
             manifest.journal = journal;
@@ -225,7 +241,7 @@ export async function POST(req: Request) {
               console.warn(`[threads] Failed to write in-flight thinking checkpoint:`, saveErr);
             }
           }
-        }
+        },
       });
       (async () => {
         console.log(`[threads] decomposing goal for task ${taskId}`);
@@ -252,7 +268,7 @@ export async function POST(req: Request) {
               { priority: SlotPriority.P2_ORCHESTRATOR, label: `planner:${taskId}` },
               () => generatePlanSpec({ taskId, goal, toolchain, scope, model: effectiveModel })
             ),
-            abortPromise
+            abortPromise,
           ]);
           if (planController.signal.aborted) {
             const abortErr = new Error("Planning aborted by user");
@@ -265,13 +281,16 @@ export async function POST(req: Request) {
           manifest.journal.push({
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`
+            message: `Decomposed goal into ${planSpec.milestones.length} milestones (Scope: ${scope}). SPEC.md generated.`,
           });
           supervisor.saveCheckpoint(manifest);
 
           const currentThread = await threadStore.getThread(activeThreadId);
           if (currentThread) {
-            const lastAsst = currentThread.messages.slice().reverse().find(m => m.role === "assistant" && m.taskId === taskId);
+            const lastAsst = currentThread.messages
+              .slice()
+              .reverse()
+              .find((m) => m.role === "assistant" && m.taskId === taskId);
             if (lastAsst) {
               lastAsst.content = `Started autonomous engineering run (${planSpec.milestones.length} milestones).`;
             }
@@ -286,7 +305,7 @@ export async function POST(req: Request) {
             manifest.journal.push({
               timestamp: new Date().toISOString(),
               role: "planner",
-              message: "Planning aborted by user"
+              message: "Planning aborted by user",
             });
             supervisor.saveCheckpoint(manifest);
             const currentThread = await threadStore.getThread(activeThreadId);
@@ -297,7 +316,7 @@ export async function POST(req: Request) {
                 role: "assistant",
                 content: "Task cancelled: Planning aborted by user",
                 taskId,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
               });
               threadStore.saveThread(currentThread);
             }
@@ -311,7 +330,7 @@ export async function POST(req: Request) {
           manifest.journal.push({
             timestamp: new Date().toISOString(),
             role: "planner",
-            message: `Planning failed: ${manifest.parkedReason}`
+            message: `Planning failed: ${manifest.parkedReason}`,
           });
           supervisor.saveCheckpoint(manifest);
           const currentThread = await threadStore.getThread(activeThreadId);
@@ -322,7 +341,7 @@ export async function POST(req: Request) {
               role: "assistant",
               content: `Task failed: ${manifest.parkedReason}`,
               taskId,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             });
             threadStore.saveThread(currentThread);
           }
@@ -333,7 +352,10 @@ export async function POST(req: Request) {
 
         console.log(`[threads] launching task ${taskId}, calling executeTaskWithRecovery`);
         try {
-          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: planController.signal });
+          const result = await supervisor.executeTaskWithRecovery(manifest, {
+            stepExecutor: executor,
+            signal: planController.signal,
+          });
           console.log(`[threads] task ${taskId} finished with status: ${result.status}`);
 
           if (result.status === "completed") {
@@ -354,7 +376,7 @@ export async function POST(req: Request) {
                 process.env.WORKSPACE_DIR,
                 "/workspace",
                 process.cwd(),
-                path.resolve(process.cwd(), "..")
+                path.resolve(process.cwd(), ".."),
               ].filter(Boolean) as string[];
 
               const deliverables: Array<{ file: string; content: string }> = [];
@@ -398,7 +420,9 @@ export async function POST(req: Request) {
                   completionContent += `### \`${d.file}\`\n`;
                   if (d.content.trim()) {
                     const isSvg = d.file.endsWith(".svg") || d.content.includes("<svg");
-                    const fenceLang = isSvg ? "xml" : path.extname(d.file).replace(".", "") || "text";
+                    const fenceLang = isSvg
+                      ? "xml"
+                      : path.extname(d.file).replace(".", "") || "text";
                     completionContent += `\`\`\`${fenceLang}\n${d.content.trim()}\n\`\`\`\n\n`;
                   } else {
                     completionContent += `Deliverable committed as \`${d.file}\`.\n\n`;
@@ -411,11 +435,15 @@ export async function POST(req: Request) {
                 id: `msg-${Date.now()}-d`,
                 role: "assistant",
                 content: completionContent,
-                thought: builderReasoning || "Decomposed goal, verified syntax, and generated deliverable.",
+                thought:
+                  builderReasoning ||
+                  "Decomposed goal, verified syntax, and generated deliverable.",
                 taskId,
                 timestamp: new Date().toISOString(),
                 ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
-                ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+                ...(Array.isArray(result.verificationGaps)
+                  ? { verificationGaps: result.verificationGaps }
+                  : {}),
               } as any);
               threadStore.saveThread(currentThread);
             }
@@ -423,10 +451,20 @@ export async function POST(req: Request) {
             // Task ended in non-completed terminal state (failed, parked, cancelled)
             const currentThread = await threadStore.getThread(activeThreadId);
             if (currentThread) {
-              currentThread.status = result.status === "failed" || (result.status as string) === "crashed" ? "failed" : result.status === "paused" ? "paused" : "stopped";
-              const lastJournalReason = Array.isArray(result.journal) && result.journal.length > 0
-                ? [...result.journal].reverse().find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)?.message
-                : undefined;
+              currentThread.status =
+                result.status === "failed" || (result.status as string) === "crashed"
+                  ? "failed"
+                  : result.status === "paused"
+                    ? "paused"
+                    : "stopped";
+              const lastJournalReason =
+                Array.isArray(result.journal) && result.journal.length > 0
+                  ? [...result.journal]
+                      .reverse()
+                      .find(
+                        (j: any) => typeof j?.message === "string" && j.message.trim().length > 0
+                      )?.message
+                  : undefined;
               const reason =
                 result.errorSummary ||
                 result.parkedReason ||
@@ -440,19 +478,24 @@ export async function POST(req: Request) {
                 taskId,
                 timestamp: new Date().toISOString(),
                 ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
-                ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+                ...(Array.isArray(result.verificationGaps)
+                  ? { verificationGaps: result.verificationGaps }
+                  : {}),
               } as any);
               threadStore.saveThread(currentThread);
             }
           }
         } catch (err: any) {
-          console.error(`[threads] task ${taskId} executeTaskWithRecovery threw:`, err?.stack || err);
+          console.error(
+            `[threads] task ${taskId} executeTaskWithRecovery threw:`,
+            err?.stack || err
+          );
           manifest.status = "failed";
           manifest.parkedReason = err?.message || String(err);
           manifest.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
-            message: `Fatal execution error: ${manifest.parkedReason}`
+            message: `Fatal execution error: ${manifest.parkedReason}`,
           });
           supervisor.saveCheckpoint(manifest);
           const currentThread = await threadStore.getThread(activeThreadId);
@@ -463,7 +506,7 @@ export async function POST(req: Request) {
               role: "assistant",
               content: `Task failed: ${manifest.parkedReason}`,
               taskId,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             });
             threadStore.saveThread(currentThread);
           }
@@ -496,7 +539,7 @@ export async function POST(req: Request) {
       model: body.model,
       reasoningEffort: body.reasoningEffort,
       initialPrompt: body.initialPrompt,
-      attachments: body.attachments
+      attachments: body.attachments,
     });
 
     return NextResponse.json({ thread }, { status: 201 });

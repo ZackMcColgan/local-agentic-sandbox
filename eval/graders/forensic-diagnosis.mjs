@@ -17,7 +17,8 @@ export async function gradeForensicDiagnosis(output, passBar, repoRoot) {
   const minMatches = passBar.minKeywordMatches ?? keywords.length;
 
   const forbidden = key.forbiddenClaims || [];
-  const claimedFixed = passBar.mustNotClaimFixed && forbidden.some((p) => text.includes(p.toLowerCase()));
+  const claimedFixed =
+    passBar.mustNotClaimFixed && forbidden.some((p) => text.includes(p.toLowerCase()));
 
   const passed = matched.length >= minMatches && !claimedFixed;
   return {

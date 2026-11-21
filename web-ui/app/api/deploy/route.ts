@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   SelfDeployPipeline,
   isSelfDeployKillSwitchEnabled,
-  getGlobalSelfDeployHistory
+  getGlobalSelfDeployHistory,
 } from "@/lib/deploy/selfDeploy";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({
       selfDeployEnabled,
-      deployHistory
+      deployHistory,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       const enabled = Boolean(body.enabled);
       process.env.SELF_DEPLOY_ENABLED = enabled ? "true" : "false";
       return NextResponse.json({
-        selfDeployEnabled: enabled
+        selfDeployEnabled: enabled,
       });
     }
 
@@ -72,8 +72,14 @@ export async function POST(req: NextRequest) {
       // Real deployment URL and namespace via cluster / environment configuration
       const hostAddress = process.env.DEPLOY_HOST || "127.0.0.1";
       const deployPort = process.env.DEPLOY_PORT || "3001";
-      const deploymentNamespace = dryRunNamespace || `build-${taskId.slice(0, 12).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-      const deploymentUrl = dryRunUrl || process.env.DEPLOY_URL || `http://${hostAddress}:${deployPort}`;
+      const deploymentNamespace =
+        dryRunNamespace ||
+        `build-${taskId
+          .slice(0, 12)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")}`;
+      const deploymentUrl =
+        dryRunUrl || process.env.DEPLOY_URL || `http://${hostAddress}:${deployPort}`;
 
       task.deploymentUrl = deploymentUrl;
       task.deploymentNamespace = deploymentNamespace;
@@ -81,7 +87,7 @@ export async function POST(req: NextRequest) {
       task.journal.push({
         timestamp: new Date().toISOString(),
         role: "supervisor",
-        message: `Deployed build preview to namespace '${deploymentNamespace}' at ${deploymentUrl}`
+        message: `Deployed build preview to namespace '${deploymentNamespace}' at ${deploymentUrl}`,
       });
 
       supervisor.saveCheckpoint(task);
@@ -100,7 +106,9 @@ export async function POST(req: NextRequest) {
 
       const pipeline = new SelfDeployPipeline();
       const deployHistory = pipeline.getDeployHistory();
-      const latestDeploy = deployHistory.find((d) => d.branchName === task.branchName || d.deployId === task.taskId) || deployHistory[0];
+      const latestDeploy =
+        deployHistory.find((d) => d.branchName === task.branchName || d.deployId === task.taskId) ||
+        deployHistory[0];
 
       return NextResponse.json({
         success: true,
@@ -108,7 +116,7 @@ export async function POST(req: NextRequest) {
         deploymentUrl,
         deploymentNamespace,
         deployStatus: latestDeploy?.status || "deployed",
-        rollbackStatus: latestDeploy?.rollbackStatus || "none"
+        rollbackStatus: latestDeploy?.rollbackStatus || "none",
       });
     }
 
@@ -123,7 +131,7 @@ export async function POST(req: NextRequest) {
         hostAddress,
         imageTag,
         skipPreRollout,
-        preRollout
+        preRollout,
       } = body;
 
       let branchName = inputBranchName;
@@ -152,7 +160,7 @@ export async function POST(req: NextRequest) {
           body.dryRun
             ? {
                 commandRunner: async () => ({ exitCode: 0, stdout: "ok\n", stderr: "" }),
-                healthChecker: async () => ({ status: 200, ok: true })
+                healthChecker: async () => ({ status: 200, ok: true }),
               }
             : undefined
         );
@@ -165,7 +173,7 @@ export async function POST(req: NextRequest) {
         hostAddress,
         imageTag,
         skipPreRollout: Boolean(skipPreRollout),
-        preRollout: Boolean(preRollout)
+        preRollout: Boolean(preRollout),
       });
 
       if (task && supervisor) {
@@ -178,7 +186,7 @@ export async function POST(req: NextRequest) {
         task.journal.push({
           timestamp: new Date().toISOString(),
           role: "supervisor",
-          message: `SelfDeployPipeline executed: status=${record.status}, rollbackStatus=${record.rollbackStatus}, health=${record.healthCheckResult.status}`
+          message: `SelfDeployPipeline executed: status=${record.status}, rollbackStatus=${record.rollbackStatus}, health=${record.healthCheckResult.status}`,
         });
         supervisor.saveCheckpoint(task);
       }
@@ -186,7 +194,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: record.status === "deployed",
         ...record,
-        record
+        record,
       });
     }
 

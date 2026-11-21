@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import {
-  getPublicNotificationStatus,
-  setTelegramConfig,
-  notify
-} from "@/lib/notifications";
+import { getPublicNotificationStatus, setTelegramConfig, notify } from "@/lib/notifications";
 
 export async function GET() {
   try {
     const status = getPublicNotificationStatus();
     return NextResponse.json({
       ...status,
-      telegram: status
+      telegram: status,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -27,20 +23,20 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         ...status,
-        telegram: status
+        telegram: status,
       });
     }
 
     if (body.action === "test") {
       const ok = await notify("test.ping", {
         title: "Local Agentic Sandbox Test Ping",
-        body: "Outbound Telegram notifications are active and verified."
+        body: "Outbound Telegram notifications are active and verified.",
       });
       const status = getPublicNotificationStatus();
       return NextResponse.json({
         success: ok,
         ...status,
-        telegram: status
+        telegram: status,
       });
     }
 

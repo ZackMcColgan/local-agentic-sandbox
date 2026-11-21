@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { execFileSync } from "child_process";
-import fs from "node:fs"; import os from "node:os"; import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { JobQueue, submitJob, type QueuedJob } from "../lib/jobQueue";
 import { createJobWorktree, removeJobWorktree } from "../lib/worktree";
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
@@ -10,11 +12,21 @@ describe("AC1 sequential execution", () => {
   it("second job starts only after first finishes", async () => {
     const order: string[] = [];
     const q = new JobQueue();
-    const slow = (job: QueuedJob) => new Promise<void>((res) => { order.push(`start:${job.id}`); setTimeout(() => { order.push(`end:${job.id}`); res(); }, job.id === "A" ? 40 : 10); });
+    const slow = (job: QueuedJob) =>
+      new Promise<void>((res) => {
+        order.push(`start:${job.id}`);
+        setTimeout(
+          () => {
+            order.push(`end:${job.id}`);
+            res();
+          },
+          job.id === "A" ? 40 : 10
+        );
+      });
     const { settled } = submitJob(q, { id: "A", threadId: "t1", prompt: "a" }, slow);
     submitJob(q, { id: "B", threadId: "t2", prompt: "b" }, slow);
     await settled;
-    assert.deepEqual(order, ["start:A","end:A","start:B","end:B"]);
+    assert.deepEqual(order, ["start:A", "end:A", "start:B", "end:B"]);
   });
 });
 
@@ -22,7 +34,12 @@ describe("AC3 queue position", () => {
   it("while the first job runs, the waiting job reports position 1", async () => {
     const q = new JobQueue();
     let releaseA: () => void = () => {};
-    const exec = (job: QueuedJob) => job.id === "A" ? new Promise<void>((res) => { releaseA = res; }) : Promise.resolve();
+    const exec = (job: QueuedJob) =>
+      job.id === "A"
+        ? new Promise<void>((res) => {
+            releaseA = res;
+          })
+        : Promise.resolve();
     submitJob(q, { id: "A", threadId: "t1", prompt: "a" }, exec);
     submitJob(q, { id: "B", threadId: "t2", prompt: "b" }, exec);
     await new Promise((r) => setTimeout(r, 10));
@@ -35,8 +52,18 @@ describe("AC3 queue position", () => {
     await new Promise((r) => setTimeout(r, 20));
   });
   it("queued job renders 'Queued (position N)' in the UI phase reducer", () => {
-    assert.equal(resolveTurnStatusPhase({ isStreaming: true, queuePosition: 2 }), "Queued (position 2)");
-    assert.equal(resolveTurnStatusPhase({ isStreaming: true, queuePosition: 0, activeTool: "workspace_write_file" }), "Running workspace_write_file");
+    assert.equal(
+      resolveTurnStatusPhase({ isStreaming: true, queuePosition: 2 }),
+      "Queued (position 2)"
+    );
+    assert.equal(
+      resolveTurnStatusPhase({
+        isStreaming: true,
+        queuePosition: 0,
+        activeTool: "workspace_write_file",
+      }),
+      "Running workspace_write_file"
+    );
   });
 });
 
@@ -56,7 +83,8 @@ describe("AC2 worktree isolation", () => {
     const hB = createJobWorktree(root, "B");
     assert.equal(fs.readFileSync(path.join(hB.path, "f.txt"), "utf8"), "base\n");
     assert.equal(fs.existsSync(path.join(hB.path, "new.txt")), false);
-    removeJobWorktree(root, hA); removeJobWorktree(root, hB);
+    removeJobWorktree(root, hA);
+    removeJobWorktree(root, hB);
   });
 });
 
@@ -66,7 +94,9 @@ describe("distinct executor per queued job", () => {
     const seenByA: string[] = [];
     const seenByB: string[] = [];
     let releaseA!: () => void;
-    const gateA = new Promise<void>((r) => { releaseA = r; });
+    const gateA = new Promise<void>((r) => {
+      releaseA = r;
+    });
 
     q.enqueue({ id: "A", threadId: "t1", prompt: "a" });
     const drainA = q.drain(async (job) => {
@@ -76,7 +106,9 @@ describe("distinct executor per queued job", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     let resolveB!: () => void;
-    const doneB = new Promise<void>((r) => { resolveB = r; });
+    const doneB = new Promise<void>((r) => {
+      resolveB = r;
+    });
 
     q.enqueue({ id: "B", threadId: "t2", prompt: "b" });
     const drainB = q.drain(async (job) => {
@@ -87,7 +119,9 @@ describe("distinct executor per queued job", () => {
     releaseA();
     await Promise.race([
       Promise.all([drainA, drainB, doneB]),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("queued job B executor did not run within 1000ms")), 1000)),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("queued job B executor did not run within 1000ms")), 1000)
+      ),
     ]);
 
     assert.deepEqual(seenByA, ["A"]);

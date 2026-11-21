@@ -6,7 +6,7 @@ import os from "node:os";
 import {
   buildJobTokenRollup,
   computeThreadTokenEconomics,
-  type JobTokenRollup
+  type JobTokenRollup,
 } from "../lib/tokenEconomics";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { LlamaCppProvider } from "../lib/llm/provider";
@@ -28,7 +28,7 @@ function mockSseResponse(lines: string[]): Response {
     start(controller) {
       for (const l of lines) controller.enqueue(encoder.encode(l));
       controller.close();
-    }
+    },
   });
   return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
@@ -41,20 +41,24 @@ describe("Token Economics (a): provider usage plumbing carries prompt tokens", (
       mockSseResponse([
         'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
         'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1234,"completion_tokens":56}}\n\n',
-        "data: [DONE]\n\n"
+        "data: [DONE]\n\n",
       ]);
     try {
       const chunks: any[] = [];
       for await (const chunk of provider.streamChat("http://127.0.0.1:9", {
         model: "test-model",
-        messages: [{ role: "user", content: "hi" }]
+        messages: [{ role: "user", content: "hi" }],
       })) {
         chunks.push(chunk);
       }
       const finishChunk = chunks.find((c) => c.finish_reason === "stop");
       assert.ok(finishChunk, "a finish_reason chunk must be yielded");
       assert.equal(finishChunk.outputTokens, 56, "existing outputTokens plumbing preserved");
-      assert.equal(finishChunk.promptTokens, 1234, "prompt_tokens must ride the same usage plumbing");
+      assert.equal(
+        finishChunk.promptTokens,
+        1234,
+        "prompt_tokens must ride the same usage plumbing"
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -63,7 +67,11 @@ describe("Token Economics (a): provider usage plumbing carries prompt tokens", (
   it("LLMStreamChunk declares promptTokens alongside outputTokens", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../lib/llm/provider.ts"), "utf8");
     assert.match(src, /promptTokens\?:\s*number/, "LLMStreamChunk must declare promptTokens");
-    assert.match(src, /usage\?\.prompt_tokens/, "provider must read usage.prompt_tokens at the PR #63 extraction site");
+    assert.match(
+      src,
+      /usage\?\.prompt_tokens/,
+      "provider must read usage.prompt_tokens at the PR #63 extraction site"
+    );
   });
 });
 
@@ -73,7 +81,7 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
       rounds: 4,
       promptTokens: 10000,
       outputTokens: 320,
-      compactions: 2
+      compactions: 2,
     });
     assert.deepEqual(rollup, { rounds: 4, promptTokens: 10000, outputTokens: 320, compactions: 2 });
   });
@@ -87,15 +95,15 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
           role: "assistant",
           content: "a1",
           timestamp: "x",
-          tokenEconomics: { rounds: 3, promptTokens: 5000, outputTokens: 100, compactions: 1 }
+          tokenEconomics: { rounds: 3, promptTokens: 5000, outputTokens: 100, compactions: 1 },
         },
         {
           role: "assistant",
           content: "a2",
           timestamp: "x",
-          tokenEconomics: { rounds: 2, promptTokens: 4000, outputTokens: 80, compactions: 0 }
-        }
-      ]
+          tokenEconomics: { rounds: 2, promptTokens: 4000, outputTokens: 80, compactions: 0 },
+        },
+      ],
     };
     const agg = computeThreadTokenEconomics(thread);
     assert.deepEqual(agg, { rounds: 5, promptTokens: 9000, outputTokens: 180, compactions: 1 });
@@ -118,7 +126,7 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
       content: "first turn",
       timestamp: new Date().toISOString(),
       roundPromptTokens: [1000, 1200],
-      tokenEconomics: { rounds: 2, promptTokens: 2200, outputTokens: 50, compactions: 0 }
+      tokenEconomics: { rounds: 2, promptTokens: 2200, outputTokens: 50, compactions: 0 },
     });
     store.addMessage(threadId, {
       id: "a-2",
@@ -126,18 +134,36 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
       content: "second turn",
       timestamp: new Date().toISOString(),
       roundPromptTokens: [3000],
-      tokenEconomics: { rounds: 1, promptTokens: 3000, outputTokens: 40, compactions: 1 }
+      tokenEconomics: { rounds: 1, promptTokens: 3000, outputTokens: 40, compactions: 1 },
     });
 
     const thread = await store.getThread(threadId);
     assert.ok(thread, "thread must exist");
     const asst1 = thread!.messages.find((m: any) => m.id === "a-1") as any;
-    assert.deepEqual(asst1.roundPromptTokens, [1000, 1200], "per-round prompt tokens recorded on the message");
-    assert.deepEqual(asst1.tokenEconomics, { rounds: 2, promptTokens: 2200, outputTokens: 50, compactions: 0 });
+    assert.deepEqual(
+      asst1.roundPromptTokens,
+      [1000, 1200],
+      "per-round prompt tokens recorded on the message"
+    );
+    assert.deepEqual(asst1.tokenEconomics, {
+      rounds: 2,
+      promptTokens: 2200,
+      outputTokens: 50,
+      compactions: 0,
+    });
 
     // Thread-record rollup field (board item surface): the aggregate.
-    const expected: JobTokenRollup = { rounds: 3, promptTokens: 5200, outputTokens: 90, compactions: 1 };
-    assert.deepEqual((thread as any).tokenEconomics, expected, "thread record must carry the aggregated rollup");
+    const expected: JobTokenRollup = {
+      rounds: 3,
+      promptTokens: 5200,
+      outputTokens: 90,
+      compactions: 1,
+    };
+    assert.deepEqual(
+      (thread as any).tokenEconomics,
+      expected,
+      "thread record must carry the aggregated rollup"
+    );
 
     // Small read path: store-level accessor returns the same aggregate.
     assert.deepEqual(store.getTokenEconomics(threadId), expected);
@@ -147,15 +173,24 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
 });
 
 describe("Token Economics (a): chat route wiring (source assertions)", () => {
-  const routeSrc = fs.readFileSync(
-    path.resolve(__dirname, "../app/api/chat/route.ts"),
-    "utf8"
-  );
+  const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
 
   it("route records per-round prompt tokens and persists the rollup on the final assistant message", () => {
-    assert.match(routeSrc, /roundPromptTokens\.push\(/, "route must push a prompt-token record per round");
-    assert.match(routeSrc, /roundPromptTokens:\s*roundPromptTokens/, "per-round array must be persisted on the assistant message");
-    assert.match(routeSrc, /tokenEconomics:\s*buildJobTokenRollup/, "final assistant message must carry the job rollup");
+    assert.match(
+      routeSrc,
+      /roundPromptTokens\.push\(/,
+      "route must push a prompt-token record per round"
+    );
+    assert.match(
+      routeSrc,
+      /roundPromptTokens:\s*roundPromptTokens/,
+      "per-round array must be persisted on the assistant message"
+    );
+    assert.match(
+      routeSrc,
+      /tokenEconomics:\s*buildJobTokenRollup/,
+      "final assistant message must carry the job rollup"
+    );
     assert.match(routeSrc, /turnCompactionCount/, "compaction count must be tracked per turn");
   });
 });

@@ -9,36 +9,63 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
   });
 
   it("classifies create/generate filetype patterns as SINGLE_ARTIFACT", () => {
-    assert.equal(classifyTaskComplexity("generate a html report for monthly sales"), "SINGLE_ARTIFACT");
-    assert.equal(classifyTaskComplexity("make me a json file with user configuration"), "SINGLE_ARTIFACT");
+    assert.equal(
+      classifyTaskComplexity("generate a html report for monthly sales"),
+      "SINGLE_ARTIFACT"
+    );
+    assert.equal(
+      classifyTaskComplexity("make me a json file with user configuration"),
+      "SINGLE_ARTIFACT"
+    );
     assert.equal(classifyTaskComplexity("Create an svg icon of a sun"), "SINGLE_ARTIFACT");
     assert.equal(classifyTaskComplexity("create a csv of mock employee data"), "SINGLE_ARTIFACT");
-    assert.equal(classifyTaskComplexity("generate a md document explaining architecture"), "SINGLE_ARTIFACT");
-    assert.equal(classifyTaskComplexity("make a txt log of recent transactions"), "SINGLE_ARTIFACT");
+    assert.equal(
+      classifyTaskComplexity("generate a md document explaining architecture"),
+      "SINGLE_ARTIFACT"
+    );
+    assert.equal(
+      classifyTaskComplexity("make a txt log of recent transactions"),
+      "SINGLE_ARTIFACT"
+    );
   });
 
   it("classifies explicit single file outputs as SINGLE_ARTIFACT", () => {
-    assert.equal(classifyTaskComplexity("Write weather.svg with tomorrow forecast"), "SINGLE_ARTIFACT");
+    assert.equal(
+      classifyTaskComplexity("Write weather.svg with tomorrow forecast"),
+      "SINGLE_ARTIFACT"
+    );
     assert.equal(classifyTaskComplexity("Create output/weather.svg"), "SINGLE_ARTIFACT");
     assert.equal(classifyTaskComplexity("Build index.html landing page"), "SINGLE_ARTIFACT");
   });
 
   it("classifies single script or small utility prompts as SIMPLE_SCRIPT", () => {
     assert.equal(classifyTaskComplexity("write a python script to ping servers"), "SIMPLE_SCRIPT");
-    assert.equal(classifyTaskComplexity("create a small utility to resize images"), "SIMPLE_SCRIPT");
+    assert.equal(
+      classifyTaskComplexity("create a small utility to resize images"),
+      "SIMPLE_SCRIPT"
+    );
     assert.equal(classifyTaskComplexity("make a bash script to backup database"), "SIMPLE_SCRIPT");
   });
 
   it("defaults multi-file or full systems to PROJECT", () => {
-    assert.equal(classifyTaskComplexity("Build a full stack Next.js app with auth, database, and telemetry"), "PROJECT");
-    assert.equal(classifyTaskComplexity("Refactor the supervisor and worker pool architecture"), "PROJECT");
-    assert.equal(classifyTaskComplexity("Implement microservices mesh with ingress and redis"), "PROJECT");
+    assert.equal(
+      classifyTaskComplexity("Build a full stack Next.js app with auth, database, and telemetry"),
+      "PROJECT"
+    );
+    assert.equal(
+      classifyTaskComplexity("Refactor the supervisor and worker pool architecture"),
+      "PROJECT"
+    );
+    assert.equal(
+      classifyTaskComplexity("Implement microservices mesh with ingress and redis"),
+      "PROJECT"
+    );
   });
 
   it("SINGLE_ARTIFACT generates exactly 1 milestone with plannedFiles containing 1 entry", async () => {
     const spec = await generatePlanSpec({
       taskId: "task-single-artifact-test",
-      goal: "Create a svg of the weather tomorrow"
+      goal: "Create a svg of the weather tomorrow",
     });
 
     assert.equal(spec.complexity, "SINGLE_ARTIFACT");
@@ -52,7 +79,9 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
     // Acceptance criteria check
     assert.ok(m.acceptanceCriteria.length >= 1);
     const hasValidCriteria = m.acceptanceCriteria.some(
-      (ac) => ac.assertion.toLowerCase().includes("valid") || ac.assertion.toLowerCase().includes("exists")
+      (ac) =>
+        ac.assertion.toLowerCase().includes("valid") ||
+        ac.assertion.toLowerCase().includes("exists")
     );
     assert.ok(hasValidCriteria);
   });
@@ -62,7 +91,7 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
       const spec = await generatePlanSpec({
         taskId: "task-snippet-ts-hello",
         goal: "Create a typescript hello world",
-        scope: "SNIPPET"
+        scope: "SNIPPET",
       });
 
       assert.equal(spec.scope, "SNIPPET");
@@ -71,17 +100,22 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
       assert.equal(m.plannedFiles?.length, 1);
       assert.ok(
         m.description.includes("Generate ONLY the requested file") &&
-        m.description.includes("Do NOT create supporting code, project scaffolding, build configs, or API clients"),
+          m.description.includes(
+            "Do NOT create supporting code, project scaffolding, build configs, or API clients"
+          ),
         "Builder prompt must forbid scaffolding and extra code"
       );
-      assert.ok(!spec.milestones.some((item) => item.title.includes("Initialize TypeScript project")), "Must not have project initialization step");
+      assert.ok(
+        !spec.milestones.some((item) => item.title.includes("Initialize TypeScript project")),
+        "Must not have project initialization step"
+      );
     });
 
     it("SNIPPET scope forces exactly 1 milestone for 'Create a svg of the weather tomorrow'", async () => {
       const spec = await generatePlanSpec({
         taskId: "task-snippet-weather-svg",
         goal: "Create a svg of the weather tomorrow",
-        scope: "SNIPPET"
+        scope: "SNIPPET",
       });
 
       assert.equal(spec.scope, "SNIPPET");
@@ -98,20 +132,23 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
             { id: "M1", title: "Write ping script", plannedFiles: ["ping.py"] },
             { id: "M2", title: "Add timeout handler", plannedFiles: ["ping.py"] },
             { id: "M3", title: "Add extra docs", plannedFiles: ["README.md"] },
-            { id: "M4", title: "Add extra tests", plannedFiles: ["test_ping.py"] }
-          ]
-        })
+            { id: "M4", title: "Add extra tests", plannedFiles: ["test_ping.py"] },
+          ],
+        }),
       });
 
       const spec = await generatePlanSpec({
         taskId: "task-script-test",
         goal: "write a python script to ping servers",
         scope: "SCRIPT",
-        generate: mockGenerate as any
+        generate: mockGenerate as any,
       });
 
       assert.equal(spec.scope, "SCRIPT");
-      assert.ok(spec.milestones.length <= 2, `SCRIPT must cap at 2 milestones max, got ${spec.milestones.length}`);
+      assert.ok(
+        spec.milestones.length <= 2,
+        `SCRIPT must cap at 2 milestones max, got ${spec.milestones.length}`
+      );
     });
 
     it("PROJECT scope preserves full multi-milestone decomposition for 'Build a REST API'", async () => {
@@ -120,16 +157,20 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
           milestones: [
             { id: "M1", title: "Define routes & schema", plannedFiles: ["src/routes.ts"] },
             { id: "M2", title: "Implement controller logic", plannedFiles: ["src/controller.ts"] },
-            { id: "M3", title: "Add authentication & integration tests", plannedFiles: ["src/auth.ts"] }
-          ]
-        })
+            {
+              id: "M3",
+              title: "Add authentication & integration tests",
+              plannedFiles: ["src/auth.ts"],
+            },
+          ],
+        }),
       });
 
       const spec = await generatePlanSpec({
         taskId: "task-project-rest-api",
         goal: "Build a REST API",
         scope: "PROJECT",
-        generate: mockGenerate as any
+        generate: mockGenerate as any,
       });
 
       assert.equal(spec.scope, "PROJECT");
@@ -147,7 +188,12 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
       const capturedRequests: any[] = [];
       const spyGenerate = async (req: any) => {
         capturedRequests.push(req);
-        if (req.prompt && (req.prompt.includes("CRITIC") || req.prompt.includes("grade") || req.prompt.includes("VERDICT"))) {
+        if (
+          req.prompt &&
+          (req.prompt.includes("CRITIC") ||
+            req.prompt.includes("grade") ||
+            req.prompt.includes("VERDICT"))
+        ) {
           return { text: "VERDICT: APPROVED\nAll tests pass" };
         }
         return { text: "```typescript\nexport const foo = 42;\n```" };
@@ -155,13 +201,13 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
 
       const workerPool = new WorkerPool({
         scope: "PROJECT",
-        generate: spyGenerate as any
+        generate: spyGenerate as any,
       });
 
       const executor = createProductionStepExecutor({
         workerPool,
         scope: "PROJECT",
-        repoRoot: tmpDir
+        repoRoot: tmpDir,
       });
 
       const milestone = {
@@ -172,7 +218,7 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
         builderIterations: 0,
         criticRounds: 0,
         plannedFiles: ["foo.ts"],
-        acceptanceCriteria: [{ id: "AC1", assertion: "foo exists", fileMatch: "foo.ts" }]
+        acceptanceCriteria: [{ id: "AC1", assertion: "foo exists", fileMatch: "foo.ts" }],
       };
 
       try {
@@ -183,7 +229,9 @@ describe("Planner Scope Calibration — Stop Overbuilding Simple Tasks", () => {
           assert.equal(req.scope, "PROJECT", `Expected req.scope to be PROJECT, got ${req.scope}`);
         }
       } finally {
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {}
       }
     });
   });

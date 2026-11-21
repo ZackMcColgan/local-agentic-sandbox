@@ -117,7 +117,11 @@ export async function runJobMode({
     if (tracePath) {
       fs.writeFileSync(
         tracePath,
-        JSON.stringify({ taskId, prompt, output: "", durationMs: Date.now() - start, raw: lastThread }, null, 2),
+        JSON.stringify(
+          { taskId, prompt, output: "", durationMs: Date.now() - start, raw: lastThread },
+          null,
+          2
+        ),
         "utf8"
       );
     }
@@ -126,7 +130,9 @@ export async function runJobMode({
   while (true) {
     if (Date.now() - start >= timeoutMs) {
       writeFailureTrace();
-      throw new Error(`Sandbox job ${threadId} timed out after ${timeoutMs}ms (last status: ${lastThread?.status})`);
+      throw new Error(
+        `Sandbox job ${threadId} timed out after ${timeoutMs}ms (last status: ${lastThread?.status})`
+      );
     }
     await new Promise((r) => setTimeout(r, pollIntervalMs));
     const pollRes = await fetchImpl(`${baseUrl}/api/threads/${threadId}`);
@@ -149,7 +155,10 @@ export async function runJobMode({
   const messages = Array.isArray(lastThread?.messages) ? lastThread.messages : [];
   const lastAssistant = [...messages]
     .reverse()
-    .find((m) => m?.role === "assistant" && typeof m?.content === "string" && m.content.trim().length > 0);
+    .find(
+      (m) =>
+        m?.role === "assistant" && typeof m?.content === "string" && m.content.trim().length > 0
+    );
 
   if (lastThread?.status === "failed" || lastThread?.status === "stopped") {
     writeFailureTrace();
@@ -159,7 +168,9 @@ export async function runJobMode({
 
   if (!lastAssistant) {
     writeFailureTrace();
-    throw new Error(`Sandbox job ${threadId} finished (${lastThread?.status}) with no assistant message content`);
+    throw new Error(
+      `Sandbox job ${threadId} finished (${lastThread?.status}) with no assistant message content`
+    );
   }
 
   return {
@@ -222,16 +233,22 @@ export function formatScorecardMd(scorecard) {
   ];
   for (const r of scorecard.results) {
     const verdict = r.passed ? "PASS" : "FAIL";
-    lines.push(`| ${r.id} | **${verdict}** | ${r.durationMs} | \`${JSON.stringify(r.evidence)}\` |`);
+    lines.push(
+      `| ${r.id} | **${verdict}** | ${r.durationMs} | \`${JSON.stringify(r.evidence)}\` |`
+    );
   }
   if (scorecard.slotMetrics) {
     const m = scorecard.slotMetrics;
     lines.push("");
     lines.push("## Slot Utilization & Preemption");
     lines.push("");
-    lines.push(`- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`);
+    lines.push(
+      `- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`
+    );
     lines.push(`- **Preemptions**: ${m.preemptionsCount}`);
-    lines.push(`- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`);
+    lines.push(
+      `- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`
+    );
     lines.push(`- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`);
   }
   lines.push("");
@@ -246,9 +263,7 @@ async function main() {
   }
 
   const pack = JSON.parse(fs.readFileSync(path.join(repoRoot, "eval/pack.json"), "utf8"));
-  const selected = args.all
-    ? pack.tasks
-    : pack.tasks.filter((t) => t.id === args.task);
+  const selected = args.all ? pack.tasks : pack.tasks.filter((t) => t.id === args.task);
 
   if (selected.length === 0) {
     console.error("No matching tasks. Specify --all or --task <id>.");
@@ -271,7 +286,7 @@ async function main() {
     packVersion: pack.version,
     runId,
     mode: args.mode,
-    target: args.mode === "job" ? (args.sandboxUrl || "http://127.0.0.1:3000") : args.endpoint,
+    target: args.mode === "job" ? args.sandboxUrl || "http://127.0.0.1:3000" : args.endpoint,
     passedCount: completedJobs,
     totalCount: results.length,
     slotMetrics: {

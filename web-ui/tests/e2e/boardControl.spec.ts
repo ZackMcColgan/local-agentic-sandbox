@@ -7,7 +7,9 @@ async function openBoardView(page: import("@playwright/test").Page, isMobile: bo
     await page.locator('button[aria-label="Open navigation menu"]').first().click();
   }
   await page
-    .locator('[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board"), nav button:has-text("Board")')
+    .locator(
+      '[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board"), nav button:has-text("Board")'
+    )
     .first()
     .click();
   await expect(page.getByTestId("board-control-pill")).toBeVisible();
@@ -110,7 +112,11 @@ function setupBoardStubs(
             control: controlState,
             abortResult:
               body.action === "stop"
-                ? { abortedTurns: ["thread-active-1"], cancelledTasks: ["task-active-1"], unloadedModels: [] }
+                ? {
+                    abortedTurns: ["thread-active-1"],
+                    cancelledTasks: ["task-active-1"],
+                    unloadedModels: [],
+                  }
                 : undefined,
           }),
         });
@@ -159,7 +165,9 @@ test.describe("Board Start / Pause / Stop controls — Mobile", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("renders Start, Pause, Stop buttons and state pill without horizontal overflow on mobile", async ({ page }) => {
+  test("renders Start, Pause, Stop buttons and state pill without horizontal overflow on mobile", async ({
+    page,
+  }) => {
     const stubs = setupBoardStubs(page, "stopped");
     await stubs.install();
     await openBoardView(page, true);
@@ -187,7 +195,9 @@ test.describe("Board Start / Pause / Stop controls — Desktop", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("Stop during an active job aborts server turn and returns slot to idle (stubbed job route)", async ({ page }) => {
+  test("Stop during an active job aborts server turn and returns slot to idle (stubbed job route)", async ({
+    page,
+  }) => {
     const stubs = setupBoardStubs(page, "running");
     await stubs.install();
     await openBoardView(page, false);
@@ -200,7 +210,9 @@ test.describe("Board Start / Pause / Stop controls — Desktop", () => {
     expect(stubs.isActiveJobAborted()).toBe(true);
   });
 
-  test("Pause finishes current chunk cleanly and issues no next item (stubbed job route)", async ({ page }) => {
+  test("Pause finishes current chunk cleanly and issues no next item (stubbed job route)", async ({
+    page,
+  }) => {
     const stubs = setupBoardStubs(page, "running");
     await stubs.install();
     await openBoardView(page, false);

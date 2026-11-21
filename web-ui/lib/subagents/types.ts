@@ -128,7 +128,17 @@ export interface CheckpointState {
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "planning" | "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
+export type TaskStatus =
+  | "planning"
+  | "queued"
+  | "active"
+  | "completed"
+  | "parked"
+  | "failed"
+  | "cancelled"
+  | "stopped"
+  | "paused"
+  | "crashed";
 
 export interface TaskJournalEntry {
   timestamp: string;

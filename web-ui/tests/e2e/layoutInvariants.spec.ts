@@ -25,7 +25,9 @@ test.describe("Layout Invariants & Visual Baselines", () => {
       await hamburger.click();
     } else {
       // On desktop, click nav drawer trigger or open drawer
-      const drawerBtn = page.locator('button[title="Open navigation menu"], button[aria-label="Open navigation menu"]').first();
+      const drawerBtn = page
+        .locator('button[title="Open navigation menu"], button[aria-label="Open navigation menu"]')
+        .first();
       if (await drawerBtn.isVisible()) {
         await drawerBtn.click();
       } else {
@@ -50,7 +52,11 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await page.goto("/");
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Builds"), div.rounded-r-3xl button:has-text("Builds")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Builds"), div.rounded-r-3xl button:has-text("Builds")'
+        )
+        .click();
     } else {
       await page.locator('button:has-text("Builds")').first().click();
     }
@@ -65,7 +71,11 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     // UI-019: header Projects button is desktop-only; mobile uses the drawer.
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")'
+        )
+        .click();
     } else {
       await page.locator('button[aria-label="Open Projects"]').click();
     }
@@ -74,19 +84,28 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await expect(page).toHaveScreenshot("projects-view.png");
   });
 
-  test("Projects Registration Modal — layout invariants and baseline", async ({ page, isMobile }) => {
+  test("Projects Registration Modal — layout invariants and baseline", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     // UI-019: header Projects button is desktop-only; mobile uses the drawer.
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")'
+        )
+        .click();
     } else {
       await page.locator('button[aria-label="Open Projects"]').click();
     }
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
 
     // Click "Register Folder" (desktop) or "Register" (mobile) button
-    const registerBtn = page.locator('button:has-text("Register"), button:has-text("New Project")').first();
+    const registerBtn = page
+      .locator('button:has-text("Register"), button:has-text("New Project")')
+      .first();
     await registerBtn.click();
 
     const modal = page.locator('[data-testid="add-project-modal"]').first();
@@ -99,7 +118,9 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await expect(page).toHaveScreenshot("projects-modal.png");
   });
 
-  test("UI-084: chat header bar contains all children at 412px phone viewport", async ({ page }) => {
+  test("UI-084: chat header bar contains all children at 412px phone viewport", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 412, height: 915 });
     await page.goto("/");
     const header = page.locator("header").first();
@@ -126,7 +147,11 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await page.goto("/");
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Skills"), div.rounded-r-3xl button:has-text("Skills")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Skills"), div.rounded-r-3xl button:has-text("Skills")'
+        )
+        .click();
     } else {
       await page.locator('button:has-text("Skills")').first().click();
     }
@@ -140,7 +165,11 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await page.goto("/");
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Morning report"), div.rounded-r-3xl button:has-text("Morning report")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Morning report"), div.rounded-r-3xl button:has-text("Morning report")'
+        )
+        .click();
     } else {
       await page.locator('button:has-text("Morning Report")').first().click();
     }
@@ -154,7 +183,11 @@ test.describe("Layout Invariants & Visual Baselines", () => {
     await page.goto("/");
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Settings"), div.rounded-r-3xl button:has-text("Settings")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Settings"), div.rounded-r-3xl button:has-text("Settings")'
+        )
+        .click();
     } else {
       await page.locator('button:has-text("Settings")').first().click();
     }

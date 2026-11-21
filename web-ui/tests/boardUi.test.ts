@@ -118,7 +118,10 @@ describe("Board UI", () => {
     );
 
     assert.match(html, /Add to the board/);
-    assert.match(html, /New items land in Queued\. Nothing reaches the board without you behind it\./);
+    assert.match(
+      html,
+      /New items land in Queued\. Nothing reaches the board without you behind it\./
+    );
     assert.match(html, /Ask the assistant/);
     assert.match(html, /Write it myself/);
     assert.match(html, /However it arrives, the item shows its author\./);

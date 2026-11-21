@@ -5,13 +5,18 @@ import path from "path";
 import {
   parseThinkingAndContent,
   computeModelOptions,
-  resolveEffectiveReasoningEffort
+  resolveEffectiveReasoningEffort,
 } from "../lib/chatUtils.js";
-import { isReasoningEffortSupported, getModelProfile, PRESET_MODEL_PROFILES } from "../config/models.js";
+import {
+  isReasoningEffortSupported,
+  getModelProfile,
+  PRESET_MODEL_PROFILES,
+} from "../config/models.js";
 
 describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   it("parses completed <think>...</think> blocks into thought and content using real implementation", () => {
-    const input = "<think>\nLet's plan the architecture.\n1. Add SVG viewer.\n</think>\nHere is the diagram.";
+    const input =
+      "<think>\nLet's plan the architecture.\n1. Add SVG viewer.\n</think>\nHere is the diagram.";
     const parsed = parseThinkingAndContent(input);
     assert.equal(parsed.thought, "Let's plan the architecture.\n1. Add SVG viewer.");
     assert.equal(parsed.content, "Here is the diagram.");
@@ -23,14 +28,19 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
     assert.equal(parsed1.thought, "I am starting to analyze the prompt");
     assert.equal(parsed1.content, "");
 
-    const streamChunk2 = "<think>I am starting to analyze the prompt\nNow generating vector graphic...";
+    const streamChunk2 =
+      "<think>I am starting to analyze the prompt\nNow generating vector graphic...";
     const parsed2 = parseThinkingAndContent(streamChunk2);
-    assert.equal(parsed2.thought, "I am starting to analyze the prompt\nNow generating vector graphic...");
+    assert.equal(
+      parsed2.thought,
+      "I am starting to analyze the prompt\nNow generating vector graphic..."
+    );
     assert.equal(parsed2.content, "");
   });
 
   it("transitions seamlessly from thinking stream to content stream once </think> is closed", () => {
-    const fullStream = "<think>Thought complete.</think>\n```xml\n<svg viewBox='0 0 100 100'></svg>\n```";
+    const fullStream =
+      "<think>Thought complete.</think>\n```xml\n<svg viewBox='0 0 100 100'></svg>\n```";
     const parsed = parseThinkingAndContent(fullStream);
     assert.equal(parsed.thought, "Thought complete.");
     assert.ok(parsed.content.includes("<svg viewBox='0 0 100 100'>"));
@@ -44,7 +54,8 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   });
 
   it("parses SSE NDJSON data events accurately", () => {
-    const sseChunk = 'data: {"type":"token","content":"<think>planning"}\n\ndata: {"type":"token","content":" step 1</think>Done"}\n\n';
+    const sseChunk =
+      'data: {"type":"token","content":"<think>planning"}\n\ndata: {"type":"token","content":" step 1</think>Done"}\n\n';
     const lines = sseChunk.split("\n\n");
     let accumulated = "";
     for (const line of lines) {
@@ -102,7 +113,10 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   });
 
   it("CI standing rule: no test file re-implements functions exported by implementation modules", () => {
-    const testsDir = path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "tests")) ? "tests" : "web-ui/tests");
+    const testsDir = path.resolve(
+      process.cwd(),
+      fs.existsSync(path.join(process.cwd(), "tests")) ? "tests" : "web-ui/tests"
+    );
     const testFiles = fs.readdirSync(testsDir).filter((f) => f.endsWith(".test.ts"));
 
     const bannedFunctionNames = [
@@ -111,7 +125,7 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
       "resolveEffectiveReasoningEffort",
       "sanitizeSvg",
       "convertDrawioToSvg",
-      "isSvgCode"
+      "isSvgCode",
     ];
 
     for (const file of testFiles) {
@@ -122,9 +136,13 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
         const line = lines[i];
         if (line.includes("import") || line.includes("from") || line.includes("//")) continue;
         for (const fnName of bannedFunctionNames) {
-          const fnDecl = new RegExp(`\\bfunction\\s+${fnName}\\s*\\(|\\b(?:const|let|var)\\s+${fnName}\\s*=\\s*(?:\\([^)]*\\)|function|async)`);
+          const fnDecl = new RegExp(
+            `\\bfunction\\s+${fnName}\\s*\\(|\\b(?:const|let|var)\\s+${fnName}\\s*=\\s*(?:\\([^)]*\\)|function|async)`
+          );
           if (fnDecl.test(line)) {
-            assert.fail(`Process violation: ${file}:${i + 1} re-implements ${fnName}. All tests must import from implementation modules.`);
+            assert.fail(
+              `Process violation: ${file}:${i + 1} re-implements ${fnName}. All tests must import from implementation modules.`
+            );
           }
         }
       }
@@ -134,7 +152,10 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   describe("Sprint 13 Task 2 — Eliminate Pre-Chat Stall & shouldConsultLocalOracle", () => {
     it("shouldConsultLocalOracle returns false for general conversational/weather prompts", async () => {
       const { shouldConsultLocalOracle } = await import("../lib/chatUtils.js");
-      assert.equal(shouldConsultLocalOracle("Explain what the weather will be like in Spanish Fort tomorrow"), false);
+      assert.equal(
+        shouldConsultLocalOracle("Explain what the weather will be like in Spanish Fort tomorrow"),
+        false
+      );
       assert.equal(shouldConsultLocalOracle("What about Saturday?"), false);
       assert.equal(shouldConsultLocalOracle("Hello, how are you today?"), false);
     });
@@ -144,7 +165,10 @@ describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
       assert.equal(shouldConsultLocalOracle("How does supervisor.ts handle checkpoints?"), true);
       assert.equal(shouldConsultLocalOracle("Where is mcp-runner configured?"), true);
       assert.equal(shouldConsultLocalOracle("Can you check the k8s deployment?"), true);
-      assert.equal(shouldConsultLocalOracle("Explain how the worker and critic verify tests"), true);
+      assert.equal(
+        shouldConsultLocalOracle("Explain how the worker and critic verify tests"),
+        true
+      );
     });
   });
 });

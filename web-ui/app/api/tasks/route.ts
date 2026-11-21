@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { generatePlanSpec } from "@/lib/subagents/planner";
-import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
+import {
+  OvernightSupervisor,
+  createProductionStepExecutor,
+  cancelTask,
+} from "@/lib/subagents/supervisor";
 import { generateMorningReport, MorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 import { activeExecutionSet } from "@/lib/threads/threadStore";
@@ -11,7 +15,9 @@ const tasksRegistry = new Map<string, TaskManifest>();
 const activeAbortControllers = new Map<string, AbortController>();
 const supervisor = new OvernightSupervisor();
 
-async function resolveTaskById(taskId: string | null | undefined): Promise<TaskManifest | undefined> {
+async function resolveTaskById(
+  taskId: string | null | undefined
+): Promise<TaskManifest | undefined> {
   if (!taskId) return undefined;
   let task = tasksRegistry.get(taskId);
   if (!task) {
@@ -53,7 +59,7 @@ export async function POST(req: Request) {
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
-            message: `Reverted judgment call for [${flag.id}]: ${flag.judgmentCall}`
+            message: `Reverted judgment call for [${flag.id}]: ${flag.judgmentCall}`,
           });
           supervisor.saveCheckpoint(task);
           return NextResponse.json({ success: true, flag });
@@ -73,7 +79,7 @@ export async function POST(req: Request) {
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
-            message: `User guidance applied to [${flag.id}]: "${instruction}". Adjustment queued.`
+            message: `User guidance applied to [${flag.id}]: "${instruction}". Adjustment queued.`,
           });
           supervisor.saveCheckpoint(task);
           return NextResponse.json({ success: true, flag });
@@ -116,20 +122,20 @@ export async function POST(req: Request) {
           {
             timestamp: nowIso,
             role: "planner",
-            message: plannerResolutionError
+            message: plannerResolutionError,
           },
           {
             timestamp: nowIso,
             role: "supervisor",
-            message: "Execution was not started because planning failed."
-          }
+            message: "Execution was not started because planning failed.",
+          },
         ]
       : [
           {
             timestamp: nowIso,
             role: "planner",
-            message: `Decomposed goal into ${planSpec!.milestones.length} milestones. SPEC.md generated.`
-          }
+            message: `Decomposed goal into ${planSpec!.milestones.length} milestones. SPEC.md generated.`,
+          },
         ];
 
     const manifest: TaskManifest = {
@@ -148,7 +154,7 @@ export async function POST(req: Request) {
       autoDeployOnGreen: Boolean(body.autoDeployOnGreen),
       journal,
       startedAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
     };
 
     tasksRegistry.set(taskId, manifest);
@@ -164,7 +170,10 @@ export async function POST(req: Request) {
       (async () => {
         try {
           const executor = createProductionStepExecutor({ signal: abortController.signal });
-          const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: abortController.signal });
+          const result = await supervisor.executeTaskWithRecovery(manifest, {
+            stepExecutor: executor,
+            signal: abortController.signal,
+          });
           tasksRegistry.set(taskId, result);
           supervisor.saveCheckpoint(result);
         } catch (err: any) {
@@ -185,7 +194,7 @@ export async function POST(req: Request) {
         taskId,
         manifest,
         specMarkdown,
-        status: plannerResolutionError ? "parked" : autoExecute ? "active" : "pending"
+        status: plannerResolutionError ? "parked" : autoExecute ? "active" : "pending",
       },
       { status: 201 }
     );
@@ -218,7 +227,9 @@ export async function GET(req: Request) {
   const activeQuery = url.searchParams.get("active") === "true";
   if (!taskId || activeQuery) {
     const list = Array.from(tasksRegistry.values()).sort(
-      (a, b) => new Date(b.updatedAt || b.startedAt).getTime() - new Date(a.updatedAt || a.startedAt).getTime()
+      (a, b) =>
+        new Date(b.updatedAt || b.startedAt).getTime() -
+        new Date(a.updatedAt || a.startedAt).getTime()
     );
     const activeTask = list.find((t) => t.status === "active") || list[0] || null;
     return NextResponse.json({ tasks: list, activeTask });
@@ -247,17 +258,17 @@ export async function GET(req: Request) {
         commitSha: m.commitSha,
         testsPassed: m.testsPassed ?? 0,
         testsFailed: m.testsFailed ?? 0,
-        diffSummary: m.diffSummary
+        diffSummary: m.diffSummary,
       })),
       ambiguityFlags: task.ambiguityFlags,
-      parkedItems: task.parkedReason ? [task.parkedReason] : []
+      parkedItems: task.parkedReason ? [task.parkedReason] : [],
     });
   }
 
   return NextResponse.json({
     task,
     morningReport,
-    activeWorkers: activeAbortControllers.has(taskId) ? 1 : 0
+    activeWorkers: activeAbortControllers.has(taskId) ? 1 : 0,
   });
 }
 
@@ -280,7 +291,7 @@ export async function DELETE(req: Request) {
     task.journal.push({
       timestamp: new Date().toISOString(),
       role: "supervisor",
-      message: "Cancellation token triggered. Worker pool returned to idle; VRAM released."
+      message: "Cancellation token triggered. Worker pool returned to idle; VRAM released.",
     });
     supervisor.saveCheckpoint(task);
   }
@@ -288,6 +299,6 @@ export async function DELETE(req: Request) {
 
   return NextResponse.json({
     status: "cancelled",
-    activeWorkers: 0
+    activeWorkers: 0,
   });
 }

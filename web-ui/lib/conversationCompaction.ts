@@ -97,8 +97,12 @@ LENGTH: your output must be substantially shorter than the source. Cut narrative
  * Default (unset or unrecognized) is "extraction" — flag OFF reproduces
  * extraction behavior exactly.
  */
-export function resolveCompactionStrategy(env?: Record<string, string | undefined>): CompactionStrategy {
-  const raw = (env?.COMPACTION_STRATEGY ?? process.env.COMPACTION_STRATEGY ?? "").trim().toLowerCase();
+export function resolveCompactionStrategy(
+  env?: Record<string, string | undefined>
+): CompactionStrategy {
+  const raw = (env?.COMPACTION_STRATEGY ?? process.env.COMPACTION_STRATEGY ?? "")
+    .trim()
+    .toLowerCase();
   return raw === "hybrid" ? "hybrid" : "extraction";
 }
 
@@ -153,10 +157,11 @@ export interface IdentifierCoverageResult {
  * git SHA, and URL present in the extraction digest must appear verbatim in
  * the model summary. A summary failing the check is rejected.
  */
-export function verifyIdentifierCoverage(digest: string, summary: string): IdentifierCoverageResult {
-  const extracted = extractIdentifiersAndErrors([
-    { role: "assistant", content: digest }
-  ]);
+export function verifyIdentifierCoverage(
+  digest: string,
+  summary: string
+): IdentifierCoverageResult {
+  const extracted = extractIdentifiersAndErrors([{ role: "assistant", content: digest }]);
   const missing: string[] = [];
   for (const id of [...extracted.filePaths, ...extracted.gitShas, ...extracted.urls]) {
     if (!summary.includes(id)) {
@@ -178,7 +183,10 @@ export function verifyIdentifierCoverage(digest: string, summary: string): Ident
  * of progress. Deadlines are injectable via req.inactivityMs /
  * req.totalDeadlineMs so tests can use short values.
  */
-async function runSummarizationWithinDeadlines(req: SummarizeRequest, summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>): Promise<SummarizeResult> {
+async function runSummarizationWithinDeadlines(
+  req: SummarizeRequest,
+  summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>
+): Promise<SummarizeResult> {
   const controller = new AbortController();
   const inactivityMs = req.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS;
   const totalMs = req.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS;
@@ -193,7 +201,11 @@ async function runSummarizationWithinDeadlines(req: SummarizeRequest, summarize:
   // The callback receives the deadline controller's signal (so a deadline
   // aborts the model stream itself) plus the progress hook (re-arm the
   // inactivity timer per chunk).
-  const guardedReq: SummarizeRequest = { ...req, signal: controller.signal, onProgress: resetInactivity };
+  const guardedReq: SummarizeRequest = {
+    ...req,
+    signal: controller.signal,
+    onProgress: resetInactivity,
+  };
 
   try {
     const result = await Promise.race([
@@ -203,7 +215,7 @@ async function runSummarizationWithinDeadlines(req: SummarizeRequest, summarize:
           reject(new Error("timeout"));
         });
         if (controller.signal.aborted) reject(new Error("timeout"));
-      })
+      }),
     ]);
     return typeof result === "string" ? { text: result } : result;
   } finally {
@@ -253,7 +265,7 @@ export async function runHybridCompaction(
   const base = compactConversationHistory(messages, {
     maxContentTokens: options.maxContentTokens,
     compactionThreshold: options.compactionThreshold,
-    preserveRecentMessages: options.preserveRecentMessages
+    preserveRecentMessages: options.preserveRecentMessages,
   });
 
   const digestIndex = base.messages[0]?.role === "system" ? 1 : 0;
@@ -265,7 +277,7 @@ export async function runHybridCompaction(
       extractionDigest: base.compacted ? base.messages[digestIndex]?.content : undefined,
       liveContent: base.compacted ? base.messages[digestIndex]?.content : undefined,
       modelSummaryUsed: false,
-      fallback: false
+      fallback: false,
     };
   }
 
@@ -274,7 +286,7 @@ export async function runHybridCompaction(
       ...base,
       strategy: "hybrid",
       modelSummaryUsed: false,
-      fallback: false
+      fallback: false,
     };
   }
 
@@ -287,7 +299,7 @@ export async function runHybridCompaction(
       extractionDigest: base.messages[digestIndex]?.content,
       liveContent: base.messages[digestIndex]?.content,
       modelSummaryUsed: false,
-      fallback: false
+      fallback: false,
     };
   }
 
@@ -301,7 +313,7 @@ export async function runHybridCompaction(
     temperature: SUMMARIZATION_TEMPERATURE,
     maxTokens: SUMMARIZATION_MAX_TOKENS,
     inactivityMs: options.inactivityMs ?? SUMMARIZATION_INACTIVITY_MS,
-    totalDeadlineMs: options.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS
+    totalDeadlineMs: options.totalDeadlineMs ?? SUMMARIZATION_TOTAL_DEADLINE_MS,
     // signal + onProgress are supplied by the deadline wrapper; the wrapper's
     // AbortController is the only thing that ever aborts the pass.
   };
@@ -318,7 +330,7 @@ export async function runHybridCompaction(
       modelSummaryUsed: false,
       fallback: true,
       fallbackReason: reason,
-      replacedMessages
+      replacedMessages,
     };
   };
 
@@ -327,7 +339,11 @@ export async function runHybridCompaction(
     result = await runSummarizationWithinDeadlines(req, options.summarize);
   } catch (err: any) {
     const msg = String(err?.message ?? err);
-    return fallbackToDigest(msg.includes("timeout") || msg.includes("deadline") || msg.includes("abort") ? "timeout" : "generation_failure");
+    return fallbackToDigest(
+      msg.includes("timeout") || msg.includes("deadline") || msg.includes("abort")
+        ? "timeout"
+        : "generation_failure"
+    );
   }
 
   if (!result.text.trim()) {
@@ -358,7 +374,7 @@ export async function runHybridCompaction(
     liveContent: result.text,
     modelSummaryUsed: true,
     fallback: false,
-    replacedMessages
+    replacedMessages,
   };
 }
 
@@ -376,7 +392,8 @@ export function extractIdentifiersAndErrors(messages: any[]): {
   const urlsSet = new Set<string>();
   const errorLines: string[] = [];
 
-  const filePathRegex = /(?:^|[\s"'(\`])((?:[a-zA-Z]:[\\/]|\/|\.\.?\/|[a-zA-Z0-9_-]+\/)[a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9]{1,12})(?=$|[\s"'\)\`,;:])/gm;
+  const filePathRegex =
+    /(?:^|[\s"'(\`])((?:[a-zA-Z]:[\\/]|\/|\.\.?\/|[a-zA-Z0-9_-]+\/)[a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9]{1,12})(?=$|[\s"'\)\`,;:])/gm;
   const gitShaRegex = /\b([0-9a-f]{7,40})\b/gi;
   const urlRegex = /\b(https?:\/\/[^\s<>"'\)]+)/gi;
 
@@ -400,7 +417,8 @@ export function extractIdentifiersAndErrors(messages: any[]): {
       }
     }
 
-    const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || "");
+    const content =
+      typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || "");
     if (!content) continue;
 
     for (const m of content.matchAll(filePathRegex)) {
@@ -436,7 +454,7 @@ export function extractIdentifiersAndErrors(messages: any[]): {
     filePaths: Array.from(filePathsSet),
     gitShas: Array.from(gitShasSet),
     urls: Array.from(urlsSet),
-    errorLines
+    errorLines,
   };
 }
 
@@ -486,7 +504,7 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
   const { filePaths, gitShas, urls, errorLines } = extractIdentifiersAndErrors(olderMessages);
 
   const lines: string[] = [
-    "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens)."
+    "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).",
   ];
 
   if (userQueries.length > 0) {
@@ -516,17 +534,24 @@ export function summarizeTurnHistory(olderMessages: any[]): string {
     lines.push("\nRetained Identifiers & Artifacts:");
     if (filePaths.length > 0) {
       const displayed = filePaths.slice(0, maxFilePaths).join(", ");
-      const overflow = filePaths.length > maxFilePaths ? ` (+${filePaths.length - maxFilePaths} more file paths omitted)` : "";
+      const overflow =
+        filePaths.length > maxFilePaths
+          ? ` (+${filePaths.length - maxFilePaths} more file paths omitted)`
+          : "";
       lines.push(`- File paths: ${displayed}${overflow}`);
     }
     if (gitShas.length > 0) {
       const displayed = gitShas.slice(0, maxGitShas).join(", ");
-      const overflow = gitShas.length > maxGitShas ? ` (+${gitShas.length - maxGitShas} more git SHAs omitted)` : "";
+      const overflow =
+        gitShas.length > maxGitShas
+          ? ` (+${gitShas.length - maxGitShas} more git SHAs omitted)`
+          : "";
       lines.push(`- Git SHAs: ${displayed}${overflow}`);
     }
     if (urls.length > 0) {
       const displayed = urls.slice(0, maxUrls).join(", ");
-      const overflow = urls.length > maxUrls ? ` (+${urls.length - maxUrls} more URLs omitted)` : "";
+      const overflow =
+        urls.length > maxUrls ? ` (+${urls.length - maxUrls} more URLs omitted)` : "";
       lines.push(`- URLs: ${displayed}${overflow}`);
     }
   }
@@ -591,7 +616,7 @@ export function compactConversationHistory(
 
   compactedMessages.push({
     role: "assistant",
-    content: summaryContent
+    content: summaryContent,
   });
 
   compactedMessages.push(...recentMessages);
@@ -603,6 +628,6 @@ export function compactConversationHistory(
     messages: compactedMessages,
     tokensBefore,
     tokensAfter,
-    replacedMessages: olderMessages
+    replacedMessages: olderMessages,
   };
 }

@@ -6,7 +6,7 @@ import { execSync } from "child_process";
 import {
   OvernightSupervisor,
   createOvernightGraph,
-  createProductionStepExecutor
+  createProductionStepExecutor,
 } from "../lib/subagents/supervisor.js";
 import { TaskManifest, Milestone } from "../lib/subagents/types.js";
 import { WorkerPool } from "../lib/subagents/workerPool.js";
@@ -26,7 +26,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     try {
       const supervisor = new OvernightSupervisor({
         checkpointDirectory: testCheckpointDir,
-        stallTimeoutMs: 10000
+        stallTimeoutMs: 10000,
       });
 
       const task: TaskManifest = {
@@ -43,7 +43,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "Setup complete" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
+            criticRounds: 0,
           },
           {
             id: "M2",
@@ -52,7 +52,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-2", assertion: "Core complete" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
+            criticRounds: 0,
           },
           {
             id: "M3",
@@ -61,15 +61,15 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-3", assertion: "Verified" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       let workerCrashSimulated = false;
@@ -83,9 +83,9 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
           }
           return {
             status: "completed",
-            gitSha: `commit-${m.id}-${attempt}`
+            gitSha: `commit-${m.id}-${attempt}`,
           };
-        }
+        },
       });
 
       assert.equal(result.status, "completed", "Task must complete after resuming from checkpoint");
@@ -93,7 +93,11 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       assert.equal(result.milestones[1].status, "completed");
       assert.equal(result.milestones[2].status, "completed");
       assert.ok(result.checkpoints.length >= 2, "Checkpoints must have been recorded");
-      assert.equal(workerCrashSimulated, true, "Worker crash must have been simulated and recovered");
+      assert.equal(
+        workerCrashSimulated,
+        true,
+        "Worker crash must have been simulated and recovered"
+      );
     } finally {
       if (fs.existsSync(testCheckpointDir)) {
         fs.rmSync(testCheckpointDir, { recursive: true, force: true });
@@ -110,7 +114,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       // 1. First supervisor instance runs Milestone 1, saves checkpoint, and dies
       let supervisor1: OvernightSupervisor | null = new OvernightSupervisor({
         checkpointDirectory: testCheckpointDir,
-        stallTimeoutMs: 10000
+        stallTimeoutMs: 10000,
       });
 
       const initialTask: TaskManifest = {
@@ -127,7 +131,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "Done" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
+            criticRounds: 0,
           },
           {
             id: "M2",
@@ -136,20 +140,20 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-2", assertion: "Done" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       // Run only first step and simulate supervisor SIGKILL / host reboot
       const stateAfterStep1 = await supervisor1.executeSingleMilestone(initialTask, 0, {
-        gitSha: "sha-step-1"
+        gitSha: "sha-step-1",
       });
       assert.equal(stateAfterStep1.milestones[0].status, "completed");
 
@@ -159,21 +163,29 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       // 2. New supervisor instance starts up (fresh reboot / new container)
       const supervisor2 = new OvernightSupervisor({
         checkpointDirectory: testCheckpointDir,
-        stallTimeoutMs: 10000
+        stallTimeoutMs: 10000,
       });
 
       // Resume task from disk checkpoint
       const resumedState = await supervisor2.resumeTaskFromCheckpoint(taskId);
       assert.ok(resumedState, "Resumed state must be recovered from disk checkpoint");
-      assert.equal(resumedState.milestones[0].status, "completed", "Milestone 1 must remain completed");
-      assert.equal(resumedState.currentMilestoneIndex, 1, "Must resume from Milestone 2, not restart at 0");
+      assert.equal(
+        resumedState.milestones[0].status,
+        "completed",
+        "Milestone 1 must remain completed"
+      );
+      assert.equal(
+        resumedState.currentMilestoneIndex,
+        1,
+        "Must resume from Milestone 2, not restart at 0"
+      );
 
       // Execute remaining step to completion
       const completedTask = await supervisor2.executeTaskWithRecovery(resumedState, {
         stepExecutor: async (m) => ({
           status: "completed",
-          gitSha: `sha-${m.id}-final`
-        })
+          gitSha: `sha-${m.id}-final`,
+        }),
       });
 
       assert.equal(completedTask.status, "completed");
@@ -192,7 +204,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       // Test with short 100ms stall threshold to verify state snapshot & parking logic
       const supervisor = new OvernightSupervisor({
         checkpointDirectory: testCheckpointDir,
-        stallTimeoutMs: 100
+        stallTimeoutMs: 100,
       });
 
       const stalledTask: TaskManifest = {
@@ -209,15 +221,15 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "Never satisfied" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date(Date.now() - 500).toISOString(),
-        updatedAt: new Date(Date.now() - 500).toISOString() // 500ms ago -> stalled relative to 100ms
+        updatedAt: new Date(Date.now() - 500).toISOString(), // 500ms ago -> stalled relative to 100ms
       };
 
       const result = await supervisor.checkStallAndReconcile(stalledTask);
@@ -238,7 +250,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     try {
       const supervisor = new OvernightSupervisor({
         checkpointDirectory: testCheckpointDir,
-        stallTimeoutMs: 10000
+        stallTimeoutMs: 10000,
       });
 
       const task: TaskManifest = {
@@ -255,23 +267,20 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "Work verified" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
-      await assert.rejects(
-        async () => {
-          await supervisor.executeTaskWithRecovery(task);
-        },
-        /no stepExecutor provided; refusing to fake completion/i
-      );
+      await assert.rejects(async () => {
+        await supervisor.executeTaskWithRecovery(task);
+      }, /no stepExecutor provided; refusing to fake completion/i);
 
       // Verify that milestones were NOT marked completed
       assert.equal(task.milestones[0].status, "pending", "Pending milestones must remain pending");
@@ -290,12 +299,21 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     try {
       // Initialize a temporary git repository
       execSync("git init", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
-      execSync("git config user.email \"test@example.com\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
-      execSync("git config user.name \"Test\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
+      execSync('git config user.email "test@example.com"', {
+        cwd: testRepo,
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      execSync('git config user.name "Test"', { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
       fs.writeFileSync(path.join(testRepo, "initial.txt"), "initial", "utf8");
       execSync("git add initial.txt", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
-      execSync("git commit -m \"initial commit\"", { cwd: testRepo, stdio: ["pipe", "pipe", "ignore"] });
-      const initialHead = execSync("git rev-parse HEAD", { cwd: testRepo, encoding: "utf8" }).trim();
+      execSync('git commit -m "initial commit"', {
+        cwd: testRepo,
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const initialHead = execSync("git rev-parse HEAD", {
+        cwd: testRepo,
+        encoding: "utf8",
+      }).trim();
 
       // Create an unrelated local edit that must NOT be swept into a commit
       fs.writeFileSync(path.join(testRepo, "unrelated.txt"), "unrelated change", "utf8");
@@ -309,7 +327,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             iterations: 1,
             synthetic: false,
             targetFile: "", // Explicitly empty targetFile
-            stuck: false
+            stuck: false,
           };
         }
         if (job.role === "critic") {
@@ -318,7 +336,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             feedback: [],
             abstained: false,
             synthetic: false,
-            verdict: "approved"
+            verdict: "approved",
           };
         }
         return job.taskFn(new AbortController().signal);
@@ -326,7 +344,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
 
       const stepExecutor = createProductionStepExecutor({
         workerPool: mockPool,
-        repoRoot: testRepo
+        repoRoot: testRepo,
       });
 
       const milestone: Milestone = {
@@ -336,7 +354,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
         acceptanceCriteria: [{ id: "AC-1", assertion: "Criterion" }],
         status: "pending",
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
       const res = await stepExecutor(milestone, 1);
@@ -345,11 +363,17 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       assert.equal(res.status, "failed", "Milestone must fail when builder targetFile is missing");
 
       // Assert no git add / git commit occurred
-      const currentHead = execSync("git rev-parse HEAD", { cwd: testRepo, encoding: "utf8" }).trim();
+      const currentHead = execSync("git rev-parse HEAD", {
+        cwd: testRepo,
+        encoding: "utf8",
+      }).trim();
       assert.equal(currentHead, initialHead, "Git HEAD must not change when targetFile is missing");
 
       const gitStatus = execSync("git status --porcelain", { cwd: testRepo, encoding: "utf8" });
-      assert.ok(gitStatus.includes("?? unrelated.txt"), "Unrelated files must not be staged or committed");
+      assert.ok(
+        gitStatus.includes("?? unrelated.txt"),
+        "Unrelated files must not be staged or committed"
+      );
     } finally {
       if (fs.existsSync(testRepo)) {
         fs.rmSync(testRepo, { recursive: true, force: true });
@@ -364,7 +388,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
     try {
       const supervisor = new OvernightSupervisor({
         checkpointDirectory: testDir,
-        stallTimeoutMs: 60000
+        stallTimeoutMs: 60000,
       });
 
       const task: TaskManifest = {
@@ -381,27 +405,27 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "Waits 2s" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const slowExecutor = async (m: Milestone, attempt: number) => {
         // Simulate a 2s slow model inference
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         return {
           status: "completed" as const,
           gitSha: "sha-slow-ok",
           diff: "+export const slow = true;",
           builderIterations: 1,
           criticRounds: 1,
-          builderModel: "swift-27b-mtp"
+          builderModel: "swift-27b-mtp",
         };
       };
 
@@ -435,7 +459,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       const threadWithUsage = store.createThread({
         id: `thread-usage-${Date.now()}`,
         title: "Token usage test",
-        isTest: true
+        isTest: true,
       });
       const taskWithUsage: TaskManifest = {
         taskId: `task-usage-${Date.now()}`,
@@ -452,7 +476,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "ok" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
+            criticRounds: 0,
           },
           {
             id: "M2",
@@ -461,15 +485,15 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-2", assertion: "ok" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const resWithUsage = await supervisor.executeTaskWithRecovery(taskWithUsage, {
@@ -481,7 +505,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
               rounds: 2,
               promptTokens: 1200,
               outputTokens: 350,
-              roundPromptTokens: [500, 700]
+              roundPromptTokens: [500, 700],
             };
           }
           return {
@@ -490,16 +514,24 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             rounds: 1,
             promptTokens: 900,
             outputTokens: 150,
-            roundPromptTokens: [900]
+            roundPromptTokens: [900],
           };
-        }
+        },
       });
 
       assert.equal(resWithUsage.status, "completed");
       const rollup = store.getTokenEconomics(threadWithUsage.id);
       assert.equal(rollup.rounds, 3, "Completed job rollup must sum rounds across milestones");
-      assert.equal(rollup.promptTokens, 2100, "Completed job rollup must sum promptTokens across milestones");
-      assert.equal(rollup.outputTokens, 500, "Completed job rollup must sum outputTokens across milestones");
+      assert.equal(
+        rollup.promptTokens,
+        2100,
+        "Completed job rollup must sum promptTokens across milestones"
+      );
+      assert.equal(
+        rollup.outputTokens,
+        500,
+        "Completed job rollup must sum outputTokens across milestones"
+      );
       const loadedThread = await store.getThread(threadWithUsage.id);
       assert.equal(
         latestRoundPromptTokens(loadedThread?.messages),
@@ -511,7 +543,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
       const threadNoUsage = store.createThread({
         id: `thread-no-usage-${Date.now()}`,
         title: "No token usage test",
-        isTest: true
+        isTest: true,
       });
       const taskNoUsage: TaskManifest = {
         ...taskWithUsage,
@@ -525,19 +557,19 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
             acceptanceCriteria: [{ id: "AC-1", assertion: "ok" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
-        journal: []
+        journal: [],
       };
 
       const resNoUsage = await supervisor.executeTaskWithRecovery(taskNoUsage, {
         stepExecutor: async () => ({
           status: "completed",
-          gitSha: "sha-no-usage"
-        })
+          gitSha: "sha-no-usage",
+        }),
       });
       assert.equal(resNoUsage.status, "completed");
       const zeroRollup = store.getTokenEconomics(threadNoUsage.id);

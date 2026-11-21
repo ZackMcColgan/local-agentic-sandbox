@@ -49,7 +49,9 @@ test.describe("Phase B3 — Unhappy paths @chaos", () => {
     expect(chatCalls).toBe(1);
   });
 
-  test("Severed stream mid-response: honest error/end-state, no stuck streaming", async ({ page }) => {
+  test("Severed stream mid-response: honest error/end-state, no stuck streaming", async ({
+    page,
+  }) => {
     await page.route("**/api/chat", async (route) => {
       await route.abort("failed");
     });

@@ -110,8 +110,8 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
         })
       );
     });
-    const row = Array.from(container.querySelectorAll("button")).find(
-      (b) => (b.getAttribute("aria-label") || "").includes("Tool: search_web")
+    const row = Array.from(container.querySelectorAll("button")).find((b) =>
+      (b.getAttribute("aria-label") || "").includes("Tool: search_web")
     );
     assert.ok(row, "ChatStream must surface live trace rows in the live block");
   });
@@ -183,8 +183,8 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       });
 
       // Row rendered from the trace event received before the cut.
-      const rowBefore = Array.from(container.querySelectorAll("button")).find(
-        (b) => (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
+      const rowBefore = Array.from(container.querySelectorAll("button")).find((b) =>
+        (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
       );
       assert.ok(rowBefore, "Trace row must render from the event received before the cut");
 
@@ -192,10 +192,13 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
       await act(async () => {
         await new Promise((r) => setTimeout(r, 50));
       });
-      const rowAfter = Array.from(container.querySelectorAll("button")).find(
-        (b) => (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
+      const rowAfter = Array.from(container.querySelectorAll("button")).find((b) =>
+        (b.getAttribute("aria-label") || "").includes("Tool: workspace_grep")
       );
-      assert.ok(rowAfter, "After the stream cut, the live client must keep the trace row it already rendered");
+      assert.ok(
+        rowAfter,
+        "After the stream cut, the live client must keep the trace row it already rendered"
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -267,7 +270,11 @@ describe("UI-003 / UI-011b: live trace rows during a turn", () => {
 
       // After stream sever, the live client must not stay stuck in a running/streaming state.
       const stopBtn = container.querySelector('[data-testid="stop-button"]');
-      assert.equal(stopBtn, null, "Live client must not remain in running/stop-button state after stream sever");
+      assert.equal(
+        stopBtn,
+        null,
+        "Live client must not remain in running/stop-button state after stream sever"
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -349,10 +356,17 @@ describe("trace duplication and live-trace scoping", () => {
         });
       }
       if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
-        return new Response(JSON.stringify({ threads: [{ id: "t1", title: "Thread 1", updatedAt: new Date().toISOString() }] }), { status: 200 });
+        return new Response(
+          JSON.stringify({
+            threads: [{ id: "t1", title: "Thread 1", updatedAt: new Date().toISOString() }],
+          }),
+          { status: 200 }
+        );
       }
       if (url.includes("/api/threads/t1")) {
-        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), { status: 200 });
+        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), {
+          status: 200,
+        });
       }
       return new Response(JSON.stringify({}), { status: 200 });
     }) as typeof fetch;
@@ -396,7 +410,9 @@ describe("trace duplication and live-trace scoping", () => {
       assert.equal(toolButtons.length, 3, `Expected 3 trace rows, got ${toolButtons.length}`);
       assert.ok((toolButtons[0].getAttribute("aria-label") || "").includes("search_web"));
       assert.ok((toolButtons[1].getAttribute("aria-label") || "").includes("workspace_read_file"));
-      assert.ok((toolButtons[2].getAttribute("aria-label") || "").includes("workspace_run_command"));
+      assert.ok(
+        (toolButtons[2].getAttribute("aria-label") || "").includes("workspace_run_command")
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -412,12 +428,19 @@ describe("trace duplication and live-trace scoping", () => {
       if (url.includes("/api/chat")) {
         const stream = new ReadableStream({
           start(controller) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "trace", trace: trace("search_web") })}\n\n`));
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "trace", trace: trace("search_web") })}\n\n`
+              )
+            );
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
             controller.close();
           },
         });
-        return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+        return new Response(stream, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
       }
       if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
         return new Response(
@@ -431,10 +454,14 @@ describe("trace duplication and live-trace scoping", () => {
         );
       }
       if (url.includes("/api/threads/t1")) {
-        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), { status: 200 });
+        return new Response(JSON.stringify({ thread: { id: "t1", messages: [] }, task: null }), {
+          status: 200,
+        });
       }
       if (url.includes("/api/threads/t2")) {
-        return new Response(JSON.stringify({ thread: { id: "t2", messages: [] }, task: null }), { status: 200 });
+        return new Response(JSON.stringify({ thread: { id: "t2", messages: [] }, task: null }), {
+          status: 200,
+        });
       }
       return new Response(JSON.stringify({}), { status: 200 });
     }) as typeof fetch;
@@ -470,8 +497,8 @@ describe("trace duplication and live-trace scoping", () => {
       }
 
       // Switch to Thread 2 (or New Chat if sidebar thread list is collapsed)
-      const switchBtn = Array.from(container.querySelectorAll("button, [role='button'], div")).find((el) =>
-        (el.textContent || "").trim() === "Thread 2"
+      const switchBtn = Array.from(container.querySelectorAll("button, [role='button'], div")).find(
+        (el) => (el.textContent || "").trim() === "Thread 2"
       ) as HTMLElement | undefined;
       assert.ok(switchBtn, "Thread switch button must exist");
       await act(async () => {

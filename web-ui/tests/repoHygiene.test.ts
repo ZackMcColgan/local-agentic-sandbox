@@ -37,7 +37,9 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
   it("no tracked files in git ls-files end with .scratch or .updated", () => {
     const output = execSync("git ls-files", { cwd: repoRoot, encoding: "utf8" });
     const lines = output.split(/\r?\n/).filter(Boolean);
-    const violating = lines.filter((file) => file.endsWith(".scratch") || file.endsWith(".updated"));
+    const violating = lines.filter(
+      (file) => file.endsWith(".scratch") || file.endsWith(".updated")
+    );
     assert.deepEqual(violating, [], "No tracked files should end with .scratch or .updated");
   });
 
@@ -51,8 +53,14 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
   it("brand hygiene: no antigravity references in UI components, configs, or docs, and version is 2.0.0", () => {
     const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
     assert.equal(rootPkg.version, "2.0.0", "Root package.json version must be 2.0.0");
-    const webUiPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "web-ui", "package.json"), "utf8"));
-    assert.equal(webUiPkg.version, rootPkg.version, "web-ui package.json version must match root package.json version (single version source)");
+    const webUiPkg = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, "web-ui", "package.json"), "utf8")
+    );
+    assert.equal(
+      webUiPkg.version,
+      rootPkg.version,
+      "web-ui package.json version must match root package.json version (single version source)"
+    );
 
     const targets: string[] = [];
     // UI components
@@ -81,12 +89,19 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
       const lines = content.split(/\r?\n/);
       lines.forEach((lineText, idx) => {
         if (/antigravity/i.test(lineText)) {
-          violations.push({ file: path.relative(repoRoot, file), line: idx + 1, text: lineText.trim() });
+          violations.push({
+            file: path.relative(repoRoot, file),
+            line: idx + 1,
+            text: lineText.trim(),
+          });
         }
       });
     }
 
-    assert.deepEqual(violations, [], `Found antigravity references in UI/docs:\n${JSON.stringify(violations, null, 2)}`);
+    assert.deepEqual(
+      violations,
+      [],
+      `Found antigravity references in UI/docs:\n${JSON.stringify(violations, null, 2)}`
+    );
   });
 });
-

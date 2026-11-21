@@ -104,13 +104,14 @@ describe("Artifact download naming & MIME", () => {
             React.createElement(CodeBlock, {
               code: "<html><body><h1>Hello</h1></body></html>",
               language: "html",
-              filename: "page.html"
+              filename: "page.html",
             })
           );
         });
 
         const dlBtn = Array.from(container.querySelectorAll("button")).find(
-          (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+          (b) =>
+            b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
         );
         assert.ok(dlBtn !== undefined, "HTML CodeBlock must render Download button");
 
@@ -154,13 +155,14 @@ describe("Artifact download naming & MIME", () => {
             React.createElement(CodeBlock, {
               code: "print('hello world')",
               language: "python",
-              filename: "script.py"
+              filename: "script.py",
             })
           );
         });
 
         const dlBtn = Array.from(container.querySelectorAll("button")).find(
-          (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+          (b) =>
+            b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
         );
         assert.ok(dlBtn !== undefined, "Generic CodeBlock must render Download button");
 

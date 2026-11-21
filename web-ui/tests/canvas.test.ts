@@ -18,9 +18,9 @@ describe("E1: buildDiffFiles deduplication (UI-032)", () => {
         " <svg>",
         "-  <rect />",
         "-  <circle />",
-        "+  <rect width=\"100\" />",
-        "+  <circle r=\"20\" />",
-        "+  <path d=\"M0 0\" />",
+        '+  <rect width="100" />',
+        '+  <circle r="20" />',
+        '+  <path d="M0 0" />',
         "+  <text>Hi</text>",
         "+  <g />",
         " </svg>",
@@ -45,13 +45,14 @@ describe("E2: CodeBlock plain-text fallback & clean SVG naming (UI-039)", () => 
   });
 
   it("unnamed SVG uses 'diagram.svg' or its <title> instead of 'snippet.svg'", () => {
-    const plainSvg = "<svg viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\"/></svg>";
+    const plainSvg = '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>';
     const htmlPlain = renderToStaticMarkup(
       React.createElement(CodeBlock, { language: "svg", code: plainSvg })
     );
     assert.equal(htmlPlain.includes("snippet.svg"), false);
 
-    const titledSvg = "<svg viewBox=\"0 0 10 10\"><title>System Flow</title><rect width=\"10\" height=\"10\"/></svg>";
+    const titledSvg =
+      '<svg viewBox="0 0 10 10"><title>System Flow</title><rect width="10" height="10"/></svg>';
     const htmlTitled = renderToStaticMarkup(
       React.createElement(CodeBlock, { language: "svg", code: titledSvg })
     );

@@ -25,9 +25,12 @@ const dir = fsSync.mkdtempSync(path.join(os.tmpdir(), "mcp-test-workspace-"));
 process.env.WORKSPACE_DIR = dir;
 
 const gitIdentity = [
-  "-c", "safe.directory=*",
-  "-c", "user.name=Autonomous Agent",
-  "-c", "user.email=agent@local-sandbox.internal",
+  "-c",
+  "safe.directory=*",
+  "-c",
+  "user.name=Autonomous Agent",
+  "-c",
+  "user.email=agent@local-sandbox.internal",
 ];
 
 execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
@@ -37,7 +40,11 @@ fsSync.writeFileSync(
   "utf8"
 );
 execFileSync("git", [...gitIdentity, "add", "-A"], { cwd: dir, stdio: "ignore" });
-execFileSync("git", [...gitIdentity, "commit", "-m", "chore: initialize persistent agent workspace"], { cwd: dir, stdio: "ignore" });
+execFileSync(
+  "git",
+  [...gitIdentity, "commit", "-m", "chore: initialize persistent agent workspace"],
+  { cwd: dir, stdio: "ignore" }
+);
 
 export const TEST_WORKSPACE_DIR = dir;
 

@@ -12,7 +12,7 @@ export async function checkOllama(baseUrl = "http://127.0.0.1:11434"): Promise<b
   if (ollamaAvailable !== null) return ollamaAvailable;
   try {
     const res = await fetch(`${baseUrl}/api/tags`, {
-      signal: AbortSignal.timeout(600)
+      signal: AbortSignal.timeout(600),
     });
     ollamaAvailable = res.ok;
   } catch {
@@ -30,7 +30,7 @@ export async function checkQdrant(url = "http://127.0.0.1:6333"): Promise<boolea
   if (qdrantAvailable !== null) return qdrantAvailable;
   try {
     const res = await fetch(`${url}/collections`, {
-      signal: AbortSignal.timeout(600)
+      signal: AbortSignal.timeout(600),
     });
     qdrantAvailable = res.ok;
   } catch {
@@ -92,7 +92,8 @@ function installFetchInterceptor() {
   }
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
     // Preserving degradation tests: do NOT intercept intentional failure endpoints (e.g. port 9999 or 54321)
     if (url.includes(":9999") || url.includes(":54321")) {
@@ -106,8 +107,8 @@ function installFetchInterceptor() {
           JSON.stringify({
             models: [
               { name: "swift-27b-mtp", modified_at: new Date().toISOString() },
-              { name: "all-minilm", modified_at: new Date().toISOString() }
-            ]
+              { name: "all-minilm", modified_at: new Date().toISOString() },
+            ],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -116,10 +117,10 @@ function installFetchInterceptor() {
       if (url.includes("/api/embeddings") || url.includes("/api/embed")) {
         // Return dense 384-dimensional vector of real numbers
         const embedding = new Array(384).fill(0).map((_, i) => Math.sin(i * 0.1) * 0.5);
-        return new Response(
-          JSON.stringify({ embedding }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ embedding }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       if (url.includes("/api/generate")) {
@@ -133,7 +134,11 @@ function installFetchInterceptor() {
         const model: string = body.model || "swift-27b-mtp";
 
         // Check if prompt is a critic evaluation
-        if (prompt.includes("critic") || prompt.includes("Adversarial code review") || prompt.includes("Critically inspect the diff")) {
+        if (
+          prompt.includes("critic") ||
+          prompt.includes("Adversarial code review") ||
+          prompt.includes("Critically inspect the diff")
+        ) {
           const hasFlaw =
             prompt.includes("// FORCED_FLAW") ||
             (prompt.includes("egress-mesh") && prompt.includes("network = ai-mesh")) ||
@@ -145,12 +150,14 @@ function installFetchInterceptor() {
                 model,
                 response: JSON.stringify({
                   approved: false,
-                  feedback: ["Discrepancy detected: criterion requirements violated by diff content."],
-                  analysis: "Diff fails acceptance criteria."
+                  feedback: [
+                    "Discrepancy detected: criterion requirements violated by diff content.",
+                  ],
+                  analysis: "Diff fails acceptance criteria.",
                 }),
                 done: true,
                 load_duration: 1000,
-                total_duration: 50000
+                total_duration: 50000,
               }),
               { status: 200, headers: { "Content-Type": "application/json" } }
             );
@@ -162,18 +169,21 @@ function installFetchInterceptor() {
               response: JSON.stringify({
                 approved: true,
                 feedback: [],
-                analysis: "All acceptance criteria verified."
+                analysis: "All acceptance criteria verified.",
               }),
               done: true,
               load_duration: 1000,
-              total_duration: 50000
+              total_duration: 50000,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } }
           );
         }
 
         // If prompt is planner
-        if (prompt.includes("planner") || prompt.includes("Decompose the following goal into 3 to 5 verifiable")) {
+        if (
+          prompt.includes("planner") ||
+          prompt.includes("Decompose the following goal into 3 to 5 verifiable")
+        ) {
           return new Response(
             JSON.stringify({
               model,
@@ -184,25 +194,25 @@ function installFetchInterceptor() {
                     id: "M1",
                     title: "Topology Discovery",
                     description: "Catalog services and networks",
-                    acceptanceCriteria: [{ id: "AC1", assertion: "5 services cataloged" }]
+                    acceptanceCriteria: [{ id: "AC1", assertion: "5 services cataloged" }],
                   },
                   {
                     id: "M2",
                     title: "Draw.io Generation",
                     description: "Produce diagram with white background",
-                    acceptanceCriteria: [{ id: "AC2", assertion: "Valid draw.io XML produced" }]
+                    acceptanceCriteria: [{ id: "AC2", assertion: "Valid draw.io XML produced" }],
                   },
                   {
                     id: "M3",
                     title: "Verification",
                     description: "Verify diagram against specification",
-                    acceptanceCriteria: [{ id: "AC3", assertion: "Vector diagram verified" }]
-                  }
-                ]
+                    acceptanceCriteria: [{ id: "AC3", assertion: "Vector diagram verified" }],
+                  },
+                ],
               }),
               done: true,
               load_duration: 1000,
-              total_duration: 50000
+              total_duration: 50000,
             }),
             { status: 200, headers: { "Content-Type": "application/json" } }
           );
@@ -214,7 +224,7 @@ function installFetchInterceptor() {
             response: "Mocked model output",
             done: true,
             load_duration: 1000,
-            total_duration: 50000
+            total_duration: 50000,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -227,18 +237,21 @@ function installFetchInterceptor() {
         if (init?.method === "DELETE") {
           return new Response(JSON.stringify({ result: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
           });
         }
 
         if (init?.method === "PUT" && !url.includes("/points")) {
           return new Response(JSON.stringify({ result: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
           });
         }
 
-        if (url.includes("/points?wait=true") || (init?.method === "PUT" && url.includes("/points"))) {
+        if (
+          url.includes("/points?wait=true") ||
+          (init?.method === "PUT" && url.includes("/points"))
+        ) {
           return new Response(
             JSON.stringify({ result: { operation_id: 1, status: "completed" } }),
             { status: 200, headers: { "Content-Type": "application/json" } }
@@ -247,10 +260,10 @@ function installFetchInterceptor() {
 
         if (url.includes("/points/search")) {
           if (url.includes("test-empty")) {
-            return new Response(
-              JSON.stringify({ result: [] }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            );
+            return new Response(JSON.stringify({ result: [] }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           return new Response(
@@ -264,10 +277,11 @@ function installFetchInterceptor() {
                     filePath: "docs/ADR-002-langgraph-supervisor-checkpoints.md",
                     startLine: 45,
                     endLine: 55,
-                    content: "The supervisor handles a crashed worker by reading the latest checkpoint and restarting the milestone."
-                  }
-                }
-              ]
+                    content:
+                      "The supervisor handles a crashed worker by reading the latest checkpoint and restarting the milestone.",
+                  },
+                },
+              ],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } }
           );
@@ -282,11 +296,11 @@ function installFetchInterceptor() {
               config: {
                 params: {
                   vectors: {
-                    size: 384
-                  }
-                }
-              }
-            }
+                    size: 384,
+                  },
+                },
+              },
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );

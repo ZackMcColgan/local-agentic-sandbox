@@ -1,7 +1,3 @@
 {
-  "validCitationIds": [
-    "tool:read_file#1",
-    "tool:run_command#2",
-    "tool:grep#3"
-  ]
+  "validCitationIds": ["tool:read_file#1", "tool:run_command#2", "tool:grep#3"]
 }

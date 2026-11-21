@@ -11,7 +11,7 @@ export function getInitialWelcomeMessage(modelUsed: string = DEFAULT_PRIMARY_MOD
     id: "initial-welcome",
     role: "assistant",
     content: "Welcome! I'm your local AI agent. How can I help you today?",
-    modelUsed
+    modelUsed,
   };
 }
 
@@ -32,12 +32,12 @@ export function sanitizeMessagesForStorage(messages: ChatMessage[]): ChatMessage
       size: att.size,
       // Strip any raw data URL from previewUrl to keep localStorage footprint minimal
       previewUrl: att.previewUrl?.startsWith("data:") ? undefined : att.previewUrl,
-      isImage: att.isImage
+      isImage: att.isImage,
     })),
     modelUsed: msg.modelUsed,
     durationMs: msg.durationMs,
     thinkingDurationMs: msg.thinkingDurationMs,
-    phaseTimings: msg.phaseTimings
+    phaseTimings: msg.phaseTimings,
   }));
 }
 
@@ -64,7 +64,8 @@ export function loadChatHistory(defaultModel: string = DEFAULT_PRIMARY_MODEL): C
 
     // Validate that items conform to ChatMessage structure
     const valid = parsed.every(
-      (m: any) => m && typeof m === "object" && typeof m.id === "string" && typeof m.role === "string"
+      (m: any) =>
+        m && typeof m === "object" && typeof m.id === "string" && typeof m.role === "string"
     );
 
     if (!valid) {

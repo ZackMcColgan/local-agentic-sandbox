@@ -28,29 +28,34 @@ export const DESCRIBE_TOOL_SCHEMA = {
   type: "function",
   function: {
     name: DESCRIBE_TOOL_NAME,
-    description: "Retrieve the full JSON schema and parameter specification for a tool before first use.",
+    description:
+      "Retrieve the full JSON schema and parameter specification for a tool before first use.",
     parameters: {
       type: "object",
       properties: {
         tool_name: {
           type: "string",
-          description: "The name of the tool to describe (e.g. 'workspace_write_file', 'execute_sandboxed_python')"
-        }
+          description:
+            "The name of the tool to describe (e.g. 'workspace_write_file', 'execute_sandboxed_python')",
+        },
       },
       required: ["tool_name"],
-      additionalProperties: false
-    }
-  }
+      additionalProperties: false,
+    },
+  },
 };
 
 export const KNOWN_ONE_LINERS: Record<string, string> = {
-  search_web: "search_web(query, limit?): Web search. YOU formulate query: info need only, resolve references from history.",
+  search_web:
+    "search_web(query, limit?): Web search. YOU formulate query: info need only, resolve references from history.",
   fetch_webpage_markdown: "fetch_webpage_markdown(url): Fetch URL as markdown.",
   workspace_get_tree: "workspace_get_tree(max_depth?): Directory tree.",
   workspace_grep: "workspace_grep(pattern, path_filter?): Search codebase with regex.",
-  workspace_read_file: "workspace_read_file(path, start_line?, end_line?, offset?, limit?): Read file contents with line numbers and pagination.",
+  workspace_read_file:
+    "workspace_read_file(path, start_line?, end_line?, offset?, limit?): Read file contents with line numbers and pagination.",
   workspace_write_file: "workspace_write_file(path, content): Write code, MD, or SVG files.",
-  workspace_patch_file: "workspace_patch_file(path, patches[{search, replace}]): Surgically patch an existing file with exact search-and-replace edits. Preferred over workspace_write_file for edits to existing files.",
+  workspace_patch_file:
+    "workspace_patch_file(path, patches[{search, replace}]): Surgically patch an existing file with exact search-and-replace edits. Preferred over workspace_write_file for edits to existing files.",
   workspace_run_command: "workspace_run_command(command, timeout_ms?): Run commands in sandbox.",
   git_status: "git_status(): Inspect git branch status.",
   git_diff: "git_diff(staged?, file_path?): Inspect diff.",
@@ -58,7 +63,7 @@ export const KNOWN_ONE_LINERS: Record<string, string> = {
   git_commit: "git_commit(message): Commit staged changes.",
   execute_sandboxed_python: "execute_sandboxed_python(code): Run Python code.",
   verify_container_provenance: "verify_container_provenance(container_id): Verify provenance.",
-  docker_scout_policy_gate: "docker_scout_policy_gate(image_tag): Check CVEs against policy."
+  docker_scout_policy_gate: "docker_scout_policy_gate(image_tag): Check CVEs against policy.",
 };
 
 export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
@@ -68,10 +73,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search query text to execute" }
+        query: { type: "string", description: "Search query text to execute" },
       },
-      required: ["query"]
-    }
+      required: ["query"],
+    },
   },
   fetch_webpage_markdown: {
     name: "fetch_webpage_markdown",
@@ -79,10 +84,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Fully qualified public HTTP/HTTPS URL" }
+        url: { type: "string", description: "Fully qualified public HTTP/HTTPS URL" },
       },
-      required: ["url"]
-    }
+      required: ["url"],
+    },
   },
   workspace_get_tree: {
     name: "workspace_get_tree",
@@ -90,9 +95,9 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        max_depth: { type: "number", description: "Maximum directory depth" }
-      }
-    }
+        max_depth: { type: "number", description: "Maximum directory depth" },
+      },
+    },
   },
   workspace_grep: {
     name: "workspace_grep",
@@ -100,10 +105,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "Search pattern" }
+        pattern: { type: "string", description: "Search pattern" },
       },
-      required: ["pattern"]
-    }
+      required: ["pattern"],
+    },
   },
   workspace_read_file: {
     name: "workspace_read_file",
@@ -115,10 +120,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
         start_line: { type: "number", description: "Optional start line (1-indexed)" },
         end_line: { type: "number", description: "Optional end line (1-indexed)" },
         offset: { type: "number", description: "Optional line offset" },
-        limit: { type: "number", description: "Optional line count limit" }
+        limit: { type: "number", description: "Optional line count limit" },
       },
-      required: ["path"]
-    }
+      required: ["path"],
+    },
   },
   workspace_write_file: {
     name: "workspace_write_file",
@@ -127,33 +132,35 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
       type: "object",
       properties: {
         path: { type: "string", description: "Relative file path" },
-        content: { type: "string", description: "File content" }
+        content: { type: "string", description: "File content" },
       },
-      required: ["path", "content"]
-    }
+      required: ["path", "content"],
+    },
   },
   workspace_patch_file: {
     name: "workspace_patch_file",
-    description: "Surgically apply exact search-and-replace patches to an existing file. Preferred over workspace_write_file for edits to existing files.",
+    description:
+      "Surgically apply exact search-and-replace patches to an existing file. Preferred over workspace_write_file for edits to existing files.",
     parameters: {
       type: "object",
       properties: {
         path: { type: "string", description: "Relative file path" },
         patches: {
           type: "array",
-          description: "Search-and-replace patches, applied in order. Each search string must match the file exactly.",
+          description:
+            "Search-and-replace patches, applied in order. Each search string must match the file exactly.",
           items: {
             type: "object",
             properties: {
               search: { type: "string", description: "Exact string to search for" },
-              replace: { type: "string", description: "Replacement string" }
+              replace: { type: "string", description: "Replacement string" },
             },
-            required: ["search", "replace"]
-          }
-        }
+            required: ["search", "replace"],
+          },
+        },
       },
-      required: ["path", "patches"]
-    }
+      required: ["path", "patches"],
+    },
   },
   workspace_run_command: {
     name: "workspace_run_command",
@@ -161,20 +168,20 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        command: { type: "string", description: "Shell command" }
+        command: { type: "string", description: "Shell command" },
       },
-      required: ["command"]
-    }
+      required: ["command"],
+    },
   },
   git_status: {
     name: "git_status",
     description: "Inspect git branch status and unstaged changes.",
-    parameters: { type: "object" }
+    parameters: { type: "object" },
   },
   git_diff: {
     name: "git_diff",
     description: "Inspect branch unified diff.",
-    parameters: { type: "object" }
+    parameters: { type: "object" },
   },
   git_checkout_branch: {
     name: "git_checkout_branch",
@@ -182,10 +189,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        branch: { type: "string", description: "Branch name" }
+        branch: { type: "string", description: "Branch name" },
       },
-      required: ["branch"]
-    }
+      required: ["branch"],
+    },
   },
   git_commit: {
     name: "git_commit",
@@ -193,10 +200,10 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        message: { type: "string", description: "Commit message" }
+        message: { type: "string", description: "Commit message" },
       },
-      required: ["message"]
-    }
+      required: ["message"],
+    },
   },
   execute_sandboxed_python: {
     name: "execute_sandboxed_python",
@@ -204,21 +211,21 @@ export const DEFAULT_TOOL_SCHEMAS: Record<string, ToolFunctionSpec> = {
     parameters: {
       type: "object",
       properties: {
-        code: { type: "string", description: "Python code" }
+        code: { type: "string", description: "Python code" },
       },
-      required: ["code"]
-    }
+      required: ["code"],
+    },
   },
   verify_container_provenance: {
     name: "verify_container_provenance",
     description: "Inspect container security boundaries and SLSA attestations.",
-    parameters: { type: "object" }
+    parameters: { type: "object" },
   },
   docker_scout_policy_gate: {
     name: "docker_scout_policy_gate",
     description: "Evaluate container CVE vulnerabilities against policy.",
-    parameters: { type: "object" }
-  }
+    parameters: { type: "object" },
+  },
 };
 
 /**
@@ -253,9 +260,12 @@ export function deriveToolSignature(name: string, schema?: Record<string, any>):
  * Builds Layer 1 lightweight tool definitions from raw MCP tools or full tool functions.
  * Layer 1 tools keep names and one-liner descriptions with flexible open schemas (~300 tokens total).
  */
-export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; function?: ToolFunctionSpec }>): any[] {
+export function buildLayer1Tools(
+  tools: Array<McpToolItem | { type?: string; function?: ToolFunctionSpec }>
+): any[] {
   const layer1: any[] = [DESCRIBE_TOOL_SCHEMA];
-  const listToIterate = tools.length > 0 ? tools : Object.keys(KNOWN_ONE_LINERS).map(name => ({ name }));
+  const listToIterate =
+    tools.length > 0 ? tools : Object.keys(KNOWN_ONE_LINERS).map((name) => ({ name }));
 
   for (const t of listToIterate) {
     let name = "";
@@ -292,8 +302,8 @@ export function buildLayer1Tools(tools: Array<McpToolItem | { type?: string; fun
       function: {
         name,
         description: oneLiner,
-        parameters: toolParameters
-      }
+        parameters: toolParameters,
+      },
     });
   }
 
@@ -313,14 +323,14 @@ export function buildToolRegistry(
       map.set(t.function.name, {
         name: t.function.name,
         description: t.function.description,
-        parameters: t.function.parameters || {}
+        parameters: t.function.parameters || {},
       });
     } else if ("name" in t) {
       const mcp = t as McpToolItem;
       map.set(mcp.name, {
         name: mcp.name,
         description: mcp.description,
-        parameters: mcp.inputSchema || {}
+        parameters: mcp.inputSchema || {},
       });
     }
   }
@@ -351,7 +361,7 @@ export function describeTool(
   const available = registry instanceof Map ? Array.from(registry.keys()) : Object.keys(registry);
   const displayList = available.length > 0 ? available : Object.keys(KNOWN_ONE_LINERS);
   return {
-    error: `Unknown tool '${toolName}'. Available tools: ${displayList.join(", ")}`
+    error: `Unknown tool '${toolName}'. Available tools: ${displayList.join(", ")}`,
   };
 }
 

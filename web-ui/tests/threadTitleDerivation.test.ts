@@ -10,7 +10,10 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
   let store: ThreadStore;
 
   beforeEach(() => {
-    tmpDir = path.join(os.tmpdir(), `test-title-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    tmpDir = path.join(
+      os.tmpdir(),
+      `test-title-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     fs.mkdirSync(tmpDir, { recursive: true });
     store = new ThreadStore(tmpDir);
   });
@@ -53,8 +56,10 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       const idx = goal.indexOf(title);
       assert.ok(idx >= 0, `title is not a substring of the goal: ${title}`);
       if (idx + title.length < goal.length) {
-        assert.ok(/\s/.test(goal[idx + title.length]),
-          `title ends mid-word: ${title} (next source char: '${goal[idx + title.length]}')`);
+        assert.ok(
+          /\s/.test(goal[idx + title.length]),
+          `title ends mid-word: ${title} (next source char: '${goal[idx + title.length]}')`
+        );
       }
       assert.ok(!title.endsWith("-"), `title ends on a dangling hyphen: ${title}`);
     });
@@ -85,18 +90,27 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
     });
 
     it("does not strip ordinary words that merely start with 'job' or 'session'", () => {
-      assert.equal(deriveThreadTitle("Job board app for hiring listings"), "Job board app for hiring listings");
-      assert.equal(deriveThreadTitle("Sessions table migration for auth"), "Sessions table migration for auth");
+      assert.equal(
+        deriveThreadTitle("Job board app for hiring listings"),
+        "Job board app for hiring listings"
+      );
+      assert.equal(
+        deriveThreadTitle("Sessions table migration for auth"),
+        "Sessions table migration for auth"
+      );
     });
   });
 
   describe("ThreadStore.createThread uses derived titles", () => {
     it("createThread from a JOB-style initialPrompt yields a readable title", () => {
       const thread = store.createThread({
-        initialPrompt: "JOB — ui-qa-sweep (findings-only, docs-only sweep of the whole UI surface)"
+        initialPrompt: "JOB — ui-qa-sweep (findings-only, docs-only sweep of the whole UI surface)",
       });
       assert.ok(!thread.title.startsWith("JOB"), `title still carries JOB prefix: ${thread.title}`);
-      assert.ok(!thread.title.startsWith("Session"), `title still carries Session prefix: ${thread.title}`);
+      assert.ok(
+        !thread.title.startsWith("Session"),
+        `title still carries Session prefix: ${thread.title}`
+      );
       assert.ok(thread.title.startsWith("ui-qa-sweep"), `unexpected title: ${thread.title}`);
       assert.ok(thread.title.length <= 80, `title exceeds 80 chars: ${thread.title.length}`);
     });
@@ -104,7 +118,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
     it("explicit params.title still wins (existing behavior unchanged)", () => {
       const thread = store.createThread({
         title: "My hand-named thread",
-        initialPrompt: "JOB — some driver goal that should not become the title"
+        initialPrompt: "JOB — some driver goal that should not become the title",
       });
       assert.equal(thread.title, "My hand-named thread");
     });
@@ -124,7 +138,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
         id: "msg-1",
         role: "user",
         content: `${longFirstLine}\n\nSecond paragraph with extra details.`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       const loaded = await store.getThread(thread.id);
       assert.equal(loaded?.title, longFirstLine);
@@ -144,8 +158,8 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
           id: "msg-1",
           role: "user",
           content: longFirstLine,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       ];
       fs.writeFileSync(filePath, JSON.stringify(raw, null, 2));
 
@@ -158,7 +172,7 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
       const prompt = `JOB — ${longGoal}\n\nExtra details on line two.`;
       const thread = store.createThread({
         initialPrompt: prompt,
-        taskId: "task-job-1"
+        taskId: "task-job-1",
       });
       const loaded = await store.getThread(thread.id);
       assert.equal(loaded?.title, longGoal);
@@ -166,4 +180,3 @@ describe("UI-008 readable thread-list titles (record-side derivation)", () => {
     });
   });
 });
-

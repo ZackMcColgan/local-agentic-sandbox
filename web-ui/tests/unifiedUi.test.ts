@@ -61,7 +61,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
         title: "Rebuild settings in Material 3",
         model: "qwen3.8:27b-q3_k_m",
         reasoningEffort: "medium",
-        initialPrompt: "Rebuild settings in Material 3"
+        initialPrompt: "Rebuild settings in Material 3",
       });
 
       assert.ok(fs.existsSync(store.getFilePath(thread.id)), "Thread file must exist on disk");
@@ -80,7 +80,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       const thread = store.createThread({
         title: "Long running engineering task",
         initialPrompt: "Run complex refactor",
-        taskId: "task-crash-test"
+        taskId: "task-crash-test",
       });
       thread.status = "active";
       store.saveThread(thread);
@@ -121,7 +121,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             status: "completed",
             builderIterations: 1,
             criticRounds: 1,
-            commitSha: "sha-1"
+            commitSha: "sha-1",
           },
           {
             id: "m2",
@@ -130,7 +130,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             acceptanceCriteria: [{ id: "ac2", assertion: "components updated" }],
             status: "in_progress",
             builderIterations: 2,
-            criticRounds: 1
+            criticRounds: 1,
           },
           {
             id: "m3",
@@ -139,8 +139,8 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             acceptanceCriteria: [{ id: "ac3", assertion: "theming validated" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
@@ -148,16 +148,16 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
           {
             timestamp: new Date().toISOString(),
             role: "builder",
-            message: "Analyzing config dependencies... ✨"
+            message: "Analyzing config dependencies... ✨",
           },
           {
             timestamp: new Date().toISOString(),
             role: "builder",
-            message: "Validating theme tokens... ✨"
-          }
+            message: "Validating theme tokens... ✨",
+          },
         ],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       let stopCalled = false;
@@ -168,7 +168,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             task: mockTask,
             onStopRun: () => {
               stopCalled = true;
-            }
+            },
           })
         );
       });
@@ -180,12 +180,17 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       assert.ok(html.includes("Migrate config schema to M3 tokens"), "Must render milestone 1");
       assert.ok(html.includes("Update UI components to M3"), "Must render active milestone 2");
       assert.ok(html.includes("Validate component theming"), "Must render pending milestone 3");
-      assert.ok(html.includes("Analyzing config dependencies"), "Must render worker thinking step 1");
+      assert.ok(
+        html.includes("Analyzing config dependencies"),
+        "Must render worker thinking step 1"
+      );
       assert.ok(html.includes("Stop run"), "Must render prominent Stop run button");
 
       // Click Stop run button
       const buttons = Array.from(container.querySelectorAll("button"));
-      const stopBtn = buttons.find((b) => b.textContent?.includes("Stop run")) || container.querySelector("button");
+      const stopBtn =
+        buttons.find((b) => b.textContent?.includes("Stop run")) ||
+        container.querySelector("button");
       assert.ok(stopBtn, "Stop button exists");
       await act(async () => {
         stopBtn!.click();
@@ -203,7 +208,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onTracesUpdate: () => {},
             activeModel: "qwen3.8:27b-q3_k_m",
             reasoningEffort: "medium",
-            messages: []
+            messages: [],
           })
         );
       });
@@ -215,7 +220,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
 
       const html = container.innerHTML;
       // Assert zero starter presets anywhere
-      assert.ok(!html.includes("Generate draw.io Architecture Diagram"), "Starter chips must not exist");
+      assert.ok(
+        !html.includes("Generate draw.io Architecture Diagram"),
+        "Starter chips must not exist"
+      );
       assert.ok(!html.includes("Audit Network Egress"), "Preset buttons must not exist");
       assert.ok(!html.includes("Execute Regression Gate"), "Preset prompt chips must be deleted");
     });
@@ -228,13 +236,14 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onTracesUpdate: () => {},
             activeModel: "qwen3.8:27b-q3_k_m",
             reasoningEffort: "medium",
-            messages: []
+            messages: [],
           })
         );
       });
 
       const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
-      const fiveLinePrompt = "Line 1: Refactor UI\nLine 2: Add M3 Tokens\nLine 3: Implement bottom sheet\nLine 4: Add stop controls\nLine 5: Run tests";
+      const fiveLinePrompt =
+        "Line 1: Refactor UI\nLine 2: Add M3 Tokens\nLine 3: Implement bottom sheet\nLine 4: Add stop controls\nLine 5: Run tests";
 
       await act(async () => {
         textarea.value = fiveLinePrompt;
@@ -243,7 +252,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
 
       // Assert value set without truncation
       assert.equal(textarea.value, fiveLinePrompt);
-      assert.ok(textarea.className.includes("min-h-[72px]"), "Textarea has at least 3 rows min-height");
+      assert.ok(
+        textarea.className.includes("min-h-[72px]"),
+        "Textarea has at least 3 rows min-height"
+      );
     });
   });
 
@@ -262,7 +274,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       let stopCalled = false;
@@ -277,14 +289,17 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onStopTask: () => {
               stopCalled = true;
             },
-            messages: []
+            messages: [],
           })
         );
       });
 
       // Query stop button by title "Stop generation / halt workers"
       const stopButton = container.querySelector('button[title="Stop generation / halt workers"]');
-      assert.ok(stopButton !== null, "Send button must morph into dark stop button while task is running");
+      assert.ok(
+        stopButton !== null,
+        "Send button must morph into dark stop button while task is running"
+      );
 
       await act(async () => {
         (stopButton as HTMLButtonElement).click();
@@ -300,7 +315,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onTracesUpdate: () => {},
             activeModel: "qwen3.8:27b-q3_k_m",
             reasoningEffort: "medium",
-            messages: []
+            messages: [],
           })
         );
       });
@@ -326,7 +341,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
           updatedAt: new Date().toISOString(),
           model: "qwen3.8",
           reasoningEffort: "medium",
-          messages: []
+          messages: [],
         },
         {
           id: "t2",
@@ -336,8 +351,8 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
           updatedAt: new Date(Date.now() - 7200000).toISOString(),
           model: "qwen3.8",
           reasoningEffort: "medium",
-          messages: []
-        }
+          messages: [],
+        },
       ];
 
       let selectedId = "t1";
@@ -350,7 +365,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onSelectThread: (id) => {
               selectedId = id;
             },
-            onNewThread: () => {}
+            onNewThread: () => {},
           })
         );
       });
@@ -386,13 +401,15 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             reasoningEffort: effort,
             onReasoningChange: (e) => {
               effort = e;
-            }
+            },
           })
         );
       });
 
       const html = container.innerHTML;
-      assert.ok(html.includes("Model &amp; thinking effort") || html.includes("Model & thinking effort"));
+      assert.ok(
+        html.includes("Model &amp; thinking effort") || html.includes("Model & thinking effort")
+      );
       assert.ok(html.includes("qwen3.8"), "Renders qwen3.8 model option");
       assert.ok(html.includes("gemma4:e4b"), "Renders gemma4 model option");
       assert.ok(html.includes("Fast"), "Renders Fast effort segment");
@@ -420,7 +437,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             onNewSession: () => {
               newSessionCalled = true;
             },
-            pendingSkillsCount: 3
+            pendingSkillsCount: 3,
           })
         );
       });
@@ -451,7 +468,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             reasoningEffort: "medium",
             onOpenModelSheet: () => {
               modelSheetOpened = true;
-            }
+            },
           })
         );
       });
@@ -482,7 +499,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
           React.createElement(BuildsView, {
             onOpenDrawer: () => {},
             activeTask: null,
-            onSelectThread: () => {}
+            onSelectThread: () => {},
           })
         );
       });
@@ -495,7 +512,7 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
             activeView: "sessions",
             onNavigate: () => {},
             onNewSession: () => {},
-            pendingSkillsCount: 0
+            pendingSkillsCount: 0,
           })
         );
       });
@@ -507,7 +524,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     it("Task 1: ArtifactRenderers.tsx exists and LiveRunBlock imports from it instead of ChatStream", () => {
       const artifactPath = path.resolve(__dirname, "../components/ArtifactRenderers.tsx");
       assert.ok(fs.existsSync(artifactPath), "ArtifactRenderers.tsx must exist");
-      const liveRunContent = fs.readFileSync(path.resolve(__dirname, "../components/LiveRunBlock.tsx"), "utf8");
+      const liveRunContent = fs.readFileSync(
+        path.resolve(__dirname, "../components/LiveRunBlock.tsx"),
+        "utf8"
+      );
       assert.ok(
         liveRunContent.includes('from "./ArtifactRenderers"'),
         "LiveRunBlock must import from ./ArtifactRenderers, not ./ChatStream"
@@ -522,13 +542,19 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       const hookPath = path.resolve(__dirname, "../lib/hooks/useTheme.ts");
       assert.ok(fs.existsSync(hookPath), "web-ui/lib/hooks/useTheme.ts must exist");
 
-      const chatStreamContent = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      const chatStreamContent = fs.readFileSync(
+        path.resolve(__dirname, "../components/ChatStream.tsx"),
+        "utf8"
+      );
       assert.ok(
         !chatStreamContent.includes("Toggle theme"),
         "ChatStream header/menu must NOT contain 'Toggle theme' button"
       );
 
-      const sidebarContent = fs.readFileSync(path.resolve(__dirname, "../components/ThreadsSidebar.tsx"), "utf8");
+      const sidebarContent = fs.readFileSync(
+        path.resolve(__dirname, "../components/ThreadsSidebar.tsx"),
+        "utf8"
+      );
       assert.ok(
         !sidebarContent.includes("Toggle theme"),
         "ThreadsSidebar header/menu must NOT contain 'Toggle theme' button"
@@ -537,20 +563,39 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
 
     it("Task 3: Orphaned components (Navbar.tsx, WorkerTiles.tsx, ModelSelector.tsx) are deleted", () => {
       const compDir = path.resolve(__dirname, "../components");
-      assert.equal(fs.existsSync(path.join(compDir, "Navbar.tsx")), false, "Navbar.tsx must be deleted");
-      assert.equal(fs.existsSync(path.join(compDir, "WorkerTiles.tsx")), false, "WorkerTiles.tsx must be deleted");
-      assert.equal(fs.existsSync(path.join(compDir, "ModelSelector.tsx")), false, "ModelSelector.tsx must be deleted");
+      assert.equal(
+        fs.existsSync(path.join(compDir, "Navbar.tsx")),
+        false,
+        "Navbar.tsx must be deleted"
+      );
+      assert.equal(
+        fs.existsSync(path.join(compDir, "WorkerTiles.tsx")),
+        false,
+        "WorkerTiles.tsx must be deleted"
+      );
+      assert.equal(
+        fs.existsSync(path.join(compDir, "ModelSelector.tsx")),
+        false,
+        "ModelSelector.tsx must be deleted"
+      );
       // DiffViewer must be kept for U2
-      assert.ok(fs.existsSync(path.join(compDir, "DiffViewer.tsx")), "DiffViewer.tsx must be kept for Sprint U2");
+      assert.ok(
+        fs.existsSync(path.join(compDir, "DiffViewer.tsx")),
+        "DiffViewer.tsx must be kept for Sprint U2"
+      );
     });
 
     it("Task 4: design-tokens.css exists in app/ and is imported in globals.css, and banned purple hexes are removed", () => {
       const tokensPath = path.resolve(__dirname, "../app/design-tokens.css");
-      assert.ok(fs.existsSync(tokensPath), "web-ui/app/design-tokens.css must exist as a committed file");
+      assert.ok(
+        fs.existsSync(tokensPath),
+        "web-ui/app/design-tokens.css must exist as a committed file"
+      );
 
       const globalsCss = fs.readFileSync(path.resolve(__dirname, "../app/globals.css"), "utf8");
       assert.ok(
-        globalsCss.includes('@import "./design-tokens.css";') || globalsCss.includes("@import './design-tokens.css';"),
+        globalsCss.includes('@import "./design-tokens.css";') ||
+          globalsCss.includes("@import './design-tokens.css';"),
         "globals.css must @import './design-tokens.css';"
       );
 
@@ -567,7 +612,11 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
         }
       }
 
-      assert.deepEqual(violations, [], `Banned M3 purple/muddy hexes found in components: ${violations.join(", ")}`);
+      assert.deepEqual(
+        violations,
+        [],
+        `Banned M3 purple/muddy hexes found in components: ${violations.join(", ")}`
+      );
     });
   });
 
@@ -587,31 +636,48 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
       // Rail must include labeled views: Chat, Builds, Morning Report/Report, Skills, Settings
       const requiredLabels = ["Chat", "Builds", "Report", "Skills", "Settings"];
       for (const label of requiredLabels) {
-        assert.ok(pageSrc.includes(label), `Navigation must contain explicit text label '${label}'`);
+        assert.ok(
+          pageSrc.includes(label),
+          `Navigation must contain explicit text label '${label}'`
+        );
       }
     });
 
     it("Task 2: Sessions and Workspace panels are collapsible independently with [◧ Sessions] and [◨ Workspace] toggles", () => {
       const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
-      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      const chatStreamSrc = fs.readFileSync(
+        path.resolve(__dirname, "../components/ChatStream.tsx"),
+        "utf8"
+      );
 
       // Check header panel toggle buttons
       assert.ok(
-        chatStreamSrc.includes("Sessions") && (chatStreamSrc.includes("◧") || chatStreamSrc.toLowerCase().includes("togglesidebar") || chatStreamSrc.includes("PanelLeft")),
+        chatStreamSrc.includes("Sessions") &&
+          (chatStreamSrc.includes("◧") ||
+            chatStreamSrc.toLowerCase().includes("togglesidebar") ||
+            chatStreamSrc.includes("PanelLeft")),
         "Header must have [◧ Sessions] toggle button"
       );
       assert.ok(
-        chatStreamSrc.includes("Workspace") && (chatStreamSrc.includes("◨") || chatStreamSrc.toLowerCase().includes("toggleworkspace") || chatStreamSrc.toLowerCase().includes("toggleinspector") || chatStreamSrc.includes("PanelRight")),
+        chatStreamSrc.includes("Workspace") &&
+          (chatStreamSrc.includes("◨") ||
+            chatStreamSrc.toLowerCase().includes("toggleworkspace") ||
+            chatStreamSrc.toLowerCase().includes("toggleinspector") ||
+            chatStreamSrc.includes("PanelRight")),
         "Header must have [◨ Workspace] toggle button"
       );
 
       // Check collapsible panel classes or state
       assert.ok(
-        pageSrc.includes("collapsed-sidebar") || pageSrc.includes("isSidebarOpen") || pageSrc.includes("showSidebar"),
+        pageSrc.includes("collapsed-sidebar") ||
+          pageSrc.includes("isSidebarOpen") ||
+          pageSrc.includes("showSidebar"),
         "Must support collapsible Sessions panel"
       );
       assert.ok(
-        pageSrc.includes("collapsed-inspector") || pageSrc.includes("isWorkspaceOpen") || pageSrc.includes("showWorkspace"),
+        pageSrc.includes("collapsed-inspector") ||
+          pageSrc.includes("isWorkspaceOpen") ||
+          pageSrc.includes("showWorkspace"),
         "Must support collapsible Workspace panel"
       );
     });
@@ -625,7 +691,10 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     });
 
     it("Task 4: ChatStream.tsx centers messages within an 840px max-width track", () => {
-      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      const chatStreamSrc = fs.readFileSync(
+        path.resolve(__dirname, "../components/ChatStream.tsx"),
+        "utf8"
+      );
       assert.ok(
         chatStreamSrc.includes("max-w-[840px]") || chatStreamSrc.includes("chat-track"),
         "ChatStream messages must be constrained to a centered 840px max-width conversation track"

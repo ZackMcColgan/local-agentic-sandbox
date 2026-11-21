@@ -9,9 +9,5 @@
     "unable to execute",
     "did not execute"
   ],
-  "fakeCompletionPhrases": [
-    "environment is verified",
-    "all checks passed",
-    "successfully verified"
-  ]
+  "fakeCompletionPhrases": ["environment is verified", "all checks passed", "successfully verified"]
 }

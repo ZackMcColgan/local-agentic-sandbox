@@ -168,7 +168,7 @@ export function extractTaskArtifacts(task: TaskManifest): MorningReportArtifact[
       path: cleaned,
       previewUrl: `/api/files?path=${encodeURIComponent(cleaned)}`,
       threadUrl: task.threadId ? `/?thread=${encodeURIComponent(task.threadId)}` : undefined,
-      taskId: task.taskId
+      taskId: task.taskId,
     });
   };
 
@@ -224,9 +224,13 @@ function resolveTaskOutcome(task: TaskManifest): {
     return { status: "parked", parkedReason: reason };
   }
 
-  const hasFailedMilestone = (task.milestones || []).some((m) => m.status === "failed" || m.status === "rejected");
+  const hasFailedMilestone = (task.milestones || []).some(
+    (m) => m.status === "failed" || m.status === "rejected"
+  );
   if (task.status === "failed" || task.status === "crashed" || hasFailedMilestone) {
-    const failedM = (task.milestones || []).find((m) => m.status === "failed" || m.status === "rejected");
+    const failedM = (task.milestones || []).find(
+      (m) => m.status === "failed" || m.status === "rejected"
+    );
     const journalErr = [...(task.journal || [])]
       .reverse()
       .find((j) => /crash|error|fail/i.test(j.message))?.message;
@@ -244,7 +248,7 @@ function resolveTaskOutcome(task: TaskManifest): {
   if (task.status === "stopped" || task.status === "cancelled") {
     return {
       status: task.status,
-      parkedReason: task.parkedReason || "Task stopped before completion."
+      parkedReason: task.parkedReason || "Task stopped before completion.",
     };
   }
 
@@ -266,7 +270,8 @@ export function generateOvernightMorningReport(
 ): OvernightMorningReport {
   const startHour = options?.windowStartHour ?? 22;
   const endHour = options?.windowEndHour ?? 7;
-  const windowFilter = options?.windowFilter || (options?.filterOvernightWindow ? "overnight" : undefined);
+  const windowFilter =
+    options?.windowFilter || (options?.filterOvernightWindow ? "overnight" : undefined);
 
   let candidateTasks = Array.isArray(tasks) ? [...tasks] : [];
   if (windowFilter === "24h") {
@@ -277,7 +282,11 @@ export function generateOvernightMorningReport(
     });
   } else if (windowFilter === "overnight" || options?.filterOvernightWindow) {
     const windowFiltered = candidateTasks.filter((t) =>
-      isWithinOvernightWindow(t.startedAt || t.updatedAt || new Date().toISOString(), startHour, endHour)
+      isWithinOvernightWindow(
+        t.startedAt || t.updatedAt || new Date().toISOString(),
+        startHour,
+        endHour
+      )
     );
     // Fallback to all candidate tasks if none strictly matched the clock hours so the report is never blank after a run
     if (windowFiltered.length > 0) {
@@ -330,7 +339,7 @@ export function generateOvernightMorningReport(
         seenGlobalArtifactPaths.add(norm);
         allArtifacts.push({
           ...art,
-          path: norm
+          path: norm,
         });
       }
     }
@@ -348,7 +357,7 @@ export function generateOvernightMorningReport(
         testsPassed: m.testsPassed ?? 0,
         testsFailed: m.testsFailed ?? 0,
         diffSummary: m.diffSummary,
-        notes: m.criticCritique
+        notes: m.criticCritique,
       };
     });
 
@@ -380,7 +389,9 @@ export function generateOvernightMorningReport(
       projectId: task.projectId,
       projectName: task.projectName,
       projectRoot: task.projectRoot,
-      reviewUrl: task.reviewUrl || (task.projectId ? `/projects?projectId=${task.projectId}&tab=diffs` : undefined)
+      reviewUrl:
+        task.reviewUrl ||
+        (task.projectId ? `/projects?projectId=${task.projectId}&tab=diffs` : undefined),
     };
 
     entries.push(entry);
@@ -392,7 +403,7 @@ export function generateOvernightMorningReport(
         goal: task.goal,
         status: "parked",
         reason: outcome.parkedReason || "Parked awaiting manual review.",
-        threadUrl: task.threadId ? `/?thread=${encodeURIComponent(task.threadId)}` : undefined
+        threadUrl: task.threadId ? `/?thread=${encodeURIComponent(task.threadId)}` : undefined,
       });
     } else if (outcome.status === "failed") {
       attentionItems.push({
@@ -401,7 +412,7 @@ export function generateOvernightMorningReport(
         goal: task.goal,
         status: "failed",
         reason: outcome.errorSummary || "Task failed verification.",
-        threadUrl: task.threadId ? `/?thread=${encodeURIComponent(task.threadId)}` : undefined
+        threadUrl: task.threadId ? `/?thread=${encodeURIComponent(task.threadId)}` : undefined,
       });
     }
   }
@@ -420,7 +431,7 @@ export function generateOvernightMorningReport(
     artifactsProduced: allArtifacts,
     attentionItems,
     slotMetrics: getSharedSlotScheduler().getMetrics(),
-    summaryMarkdown: ""
+    summaryMarkdown: "",
   };
 
   report.summaryMarkdown = formatOvernightMorningReportMarkdown(report);
@@ -441,7 +452,7 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
     "## 1. What Ran",
     "",
     "| Task ID | Goal | Status | Duration | Artifacts |",
-    "| :--- | :--- | :--- | :--- | :--- |"
+    "| :--- | :--- | :--- | :--- | :--- |",
   ];
 
   for (const t of report.tasks) {
@@ -450,15 +461,17 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
       t.status === "completed"
         ? `✅ Completed${pushSuffix}`
         : t.status === "parked"
-        ? `⚠️ Parked${pushSuffix}`
-        : t.status === "failed"
-        ? `❌ Failed${pushSuffix}`
-        : `🔄 ${t.status}${pushSuffix}`;
+          ? `⚠️ Parked${pushSuffix}`
+          : t.status === "failed"
+            ? `❌ Failed${pushSuffix}`
+            : `🔄 ${t.status}${pushSuffix}`;
     const artLinks =
       t.artifacts.length > 0
         ? t.artifacts.map((a) => `[${a.name}](${a.previewUrl})`).join(", ")
         : "—";
-    lines.push(`| \`${t.taskId}\` | ${t.goal} | ${statusBadge} | ${t.durationFormatted} | ${artLinks} |`);
+    lines.push(
+      `| \`${t.taskId}\` | ${t.goal} | ${statusBadge} | ${t.durationFormatted} | ${artLinks} |`
+    );
   }
 
   lines.push("");
@@ -468,7 +481,9 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
     lines.push("No file artifacts were produced during this window.");
   } else {
     for (const art of report.artifactsProduced) {
-      lines.push(`- **[${art.name}](${art.previewUrl})** (\`${art.path}\`) — Task \`${art.taskId}\``);
+      lines.push(
+        `- **[${art.name}](${art.previewUrl})** (\`${art.path}\`) — Task \`${art.taskId}\``
+      );
     }
   }
 
@@ -489,9 +504,13 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
     lines.push("");
     lines.push("## 4. Slot Utilization & Preemption");
     lines.push("");
-    lines.push(`- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`);
+    lines.push(
+      `- **Slot Utilization**: ${m.slotUtilizationPct}% (generating ${m.generatingMs}ms / tool wait ${m.waitingToolMs}ms / CI wait ${m.waitingCiMs}ms / idle ${m.idleGapMs}ms)`
+    );
     lines.push(`- **Preemptions**: ${m.preemptionsCount}`);
-    lines.push(`- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`);
+    lines.push(
+      `- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`
+    );
     lines.push(`- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`);
   }
 
@@ -520,7 +539,7 @@ export function getCanonicalCheckpointDir(): string {
       : null,
     path.resolve(process.cwd(), ".agent/checkpoints"),
     path.resolve(process.cwd(), ".checkpoints"),
-    path.resolve("/tmp/.agent/checkpoints")
+    path.resolve("/tmp/.agent/checkpoints"),
   ].filter(Boolean) as string[];
 
   for (const dir of candidates) {
@@ -593,7 +612,7 @@ export function generateMorningReport(input: MorningReportInput): MorningReport 
     totalTestsPassed,
     totalTestsFailed,
     durationFormatted,
-    summaryMarkdown: ""
+    summaryMarkdown: "",
   };
 
   report.summaryMarkdown = formatMorningReportMarkdown(report);
@@ -608,12 +627,12 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
     report.status === "completed"
       ? "✅ **Status: COMPLETED**"
       : report.status === "parked"
-      ? "⚠️ **Status: PARKED (Requires operator review)**"
-      : report.status === "failed"
-      ? "❌ **Status: FAILED**"
-      : report.status === "cancelled"
-      ? "🛑 **Status: CANCELLED**"
-      : "🔄 **Status: ACTIVE**";
+        ? "⚠️ **Status: PARKED (Requires operator review)**"
+        : report.status === "failed"
+          ? "❌ **Status: FAILED**"
+          : report.status === "cancelled"
+            ? "🛑 **Status: CANCELLED**"
+            : "🔄 **Status: ACTIVE**";
 
   const pushDisplay = report.pushStatus ? ` | Push: \`${report.pushStatus}\`` : "";
   const lines: string[] = [
@@ -630,7 +649,7 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
     "## 1. Milestones & Test Verification",
     "",
     "| Milestone | Status | Commit SHA | Tests Passed | Tests Failed | Diff Summary |",
-    "| :--- | :--- | :--- | :--- | :--- | :--- |"
+    "| :--- | :--- | :--- | :--- | :--- | :--- |",
   ];
 
   for (const m of report.milestones) {
@@ -641,7 +660,9 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
   }
 
   lines.push("");
-  lines.push(`**Total Test Suite Result**: **${report.totalTestsPassed} passed**, **${report.totalTestsFailed} failed**.`);
+  lines.push(
+    `**Total Test Suite Result**: **${report.totalTestsPassed} passed**, **${report.totalTestsFailed} failed**.`
+  );
   lines.push("");
   lines.push("---");
   lines.push("");
@@ -652,10 +673,17 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
   if (report.testTiers && report.testTiers.length > 0) {
     lines.push(`## ${sectionNumber}. Test Verification Tiers (Phase C)`);
     lines.push("");
-    lines.push("| Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |");
+    lines.push(
+      "| Tier | Command | Status | Duration | Budget | Tests Passed | Tests Failed | Details |"
+    );
     lines.push("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
     for (const tier of report.testTiers) {
-      const statusIcon = tier.status === "passed" ? "✅ Passed" : tier.status === "failed" ? "❌ Failed" : "⏸️ Skipped";
+      const statusIcon =
+        tier.status === "passed"
+          ? "✅ Passed"
+          : tier.status === "failed"
+            ? "❌ Failed"
+            : "⏸️ Skipped";
       const budgetStr = tier.budgetSeconds ? `<${tier.budgetSeconds}s` : "—";
       lines.push(
         `| **${tier.name}** | \`${tier.command}\` | ${statusIcon} | ${tier.durationSeconds}s | ${budgetStr} | ${tier.testsPassed} | ${tier.testsFailed} | ${tier.details || "—"} |`
@@ -668,13 +696,19 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
   }
 
   // Ambiguity Flags Section
-  lines.push(`## ${sectionNumber}. Ambiguity Flags & Judgment Calls (${report.ambiguityFlags.length})`);
+  lines.push(
+    `## ${sectionNumber}. Ambiguity Flags & Judgment Calls (${report.ambiguityFlags.length})`
+  );
   lines.push("");
   if (report.ambiguityFlags.length === 0) {
     lines.push("No ambiguities encountered. Execution adhered strictly to the specification.");
   } else {
-    lines.push("Per Autonomy Policy (Oct 2, 2026), the overnight builder never blocks on ambiguity.");
-    lines.push("The following judgment calls were made, committed, and flagged for morning review:");
+    lines.push(
+      "Per Autonomy Policy (Oct 2, 2026), the overnight builder never blocks on ambiguity."
+    );
+    lines.push(
+      "The following judgment calls were made, committed, and flagged for morning review:"
+    );
     lines.push("");
 
     for (const flag of report.ambiguityFlags) {
@@ -751,9 +785,7 @@ export function formatDrainReportMarkdown(report: DrainReport): string {
   lines.push(
     `- **Owner Wait (P0)**: p50=${m.ownerWaitMs.p50}ms, p95=${m.ownerWaitMs.p95}ms (n=${m.ownerWaitMs.count})`
   );
-  lines.push(
-    `- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`
-  );
+  lines.push(`- **Throughput**: ${m.jobsPerHour} jobs/hr (${m.completedJobs} completed)`);
 
   return lines.join("\n");
 }

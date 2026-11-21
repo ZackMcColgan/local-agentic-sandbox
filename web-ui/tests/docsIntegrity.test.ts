@@ -11,11 +11,12 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     "ARCHITECTURE.md",
     "docs/KUBERNETES_DEPLOYMENT.md",
     "docs/AI_GOVERNANCE.md",
-    "deploy/modelfiles/README.md"
+    "deploy/modelfiles/README.md",
   ];
 
   it("extracts all relative Markdown links and asserts every referenced file exists on disk", () => {
-    const linkRegex = /\[([^\]]+)\]\(((\.{1,2}\/|docs\/|web-ui\/|mcp-server\/|deploy\/)[^)#\s]+)(?:#[^)]*)?\)/g;
+    const linkRegex =
+      /\[([^\]]+)\]\(((\.{1,2}\/|docs\/|web-ui\/|mcp-server\/|deploy\/)[^)#\s]+)(?:#[^)]*)?\)/g;
 
     for (const relDoc of docsToCheck) {
       const fullDocPath = path.join(repoRoot, relDoc);
@@ -55,10 +56,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
   });
 
   it("README.md and deploy/modelfiles/README.md reference swift-15-27b-mtp as active model", () => {
-    const targetFiles = [
-      "README.md",
-      "deploy/modelfiles/README.md"
-    ];
+    const targetFiles = ["README.md", "deploy/modelfiles/README.md"];
 
     for (const relFile of targetFiles) {
       const fullPath = path.join(repoRoot, relFile);
@@ -91,7 +89,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
       "web-ui/lib/ledger/runLedger.ts",
       "web-ui/lib/git/workerGitOps.ts",
       "web-ui/lib/deploy/selfDeploy.ts",
-      "mcp-server/src/tools/workspaceTools.ts"
+      "mcp-server/src/tools/workspaceTools.ts",
     ];
 
     for (const proof of requiredProofs) {
@@ -123,8 +121,14 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     // Assert OWASP Top 10 for Agentic Applications
     assert.ok(govContent.includes("OWASP"), "Must reference OWASP framework");
     assert.ok(govContent.includes("ASI01"), "Must reference OWASP ASI01 (Agent Goal Hijack)");
-    assert.ok(govContent.includes("ASI02"), "Must reference OWASP ASI02 (Tool Misuse & Exploitation)");
-    assert.ok(govContent.includes("ASI03"), "Must reference OWASP ASI03 (Identity & Privilege Abuse)");
+    assert.ok(
+      govContent.includes("ASI02"),
+      "Must reference OWASP ASI02 (Tool Misuse & Exploitation)"
+    );
+    assert.ok(
+      govContent.includes("ASI03"),
+      "Must reference OWASP ASI03 (Identity & Privilege Abuse)"
+    );
 
     // Assert relative links to enforcement source files
     const requiredEnforcementFiles = [
@@ -137,7 +141,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
       "web-ui/lib/git/workerGitOps.ts",
       "web-ui/lib/deploy/selfDeploy.ts",
       "web-ui/lib/memory/profile.ts",
-      "mcp-server/src/tools/attestation.ts"
+      "mcp-server/src/tools/attestation.ts",
     ];
 
     for (const relFile of requiredEnforcementFiles) {
@@ -154,7 +158,8 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     // Assert README.md links to docs/AI_GOVERNANCE.md
     const readmeContent = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
     assert.ok(
-      readmeContent.includes("docs/AI_GOVERNANCE.md") || readmeContent.includes("./docs/AI_GOVERNANCE.md"),
+      readmeContent.includes("docs/AI_GOVERNANCE.md") ||
+        readmeContent.includes("./docs/AI_GOVERNANCE.md"),
       "README.md must link to ./docs/AI_GOVERNANCE.md"
     );
   });

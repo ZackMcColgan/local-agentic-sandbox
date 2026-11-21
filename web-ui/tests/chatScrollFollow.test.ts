@@ -33,10 +33,7 @@ describe("Smart Streaming Scroll Follow & Sticky Pill", () => {
   });
 
   it("restores auto-follow mode when user clicks Jump to bottom", () => {
-    assert.ok(
-      content.includes("scrollToBottom"),
-      "ChatStream must implement scrollToBottom"
-    );
+    assert.ok(content.includes("scrollToBottom"), "ChatStream must implement scrollToBottom");
     assert.ok(
       content.includes("setIsUserScrolledUp(false)"),
       "scrollToBottom must reset isUserScrolledUp to false"
@@ -44,7 +41,11 @@ describe("Smart Streaming Scroll Follow & Sticky Pill", () => {
   });
 
   it("simulates scroll distance threshold logic", () => {
-    function computeIsUserScrolledUp(scrollHeight: number, scrollTop: number, clientHeight: number): boolean {
+    function computeIsUserScrolledUp(
+      scrollHeight: number,
+      scrollTop: number,
+      clientHeight: number
+    ): boolean {
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       return distanceFromBottom > 90;
     }

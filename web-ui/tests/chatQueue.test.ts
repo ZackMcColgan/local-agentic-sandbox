@@ -7,7 +7,7 @@ import {
   drainNextForTurnEnd,
   queueStorageKey,
   type StorageLike,
-  type TurnEnding
+  type TurnEnding,
 } from "../lib/chatQueue";
 
 /** In-memory StorageLike fake — same contract localStorage satisfies. */
@@ -15,9 +15,13 @@ function makeFakeStorage(): StorageLike & { dump(): Map<string, string> } {
   const store = new Map<string, string>();
   return {
     getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
-    setItem: (key: string, value: string) => { store.set(key, value); },
-    removeItem: (key: string) => { store.delete(key); },
-    dump: () => store
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    dump: () => store,
   };
 }
 
@@ -53,7 +57,10 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       q.enqueue("one");
       q.enqueue("two");
       q.enqueue("three");
-      assert.deepEqual(q.items().map((i) => i.text), ["one", "two", "three"]);
+      assert.deepEqual(
+        q.items().map((i) => i.text),
+        ["one", "two", "three"]
+      );
     });
 
     it("queues are isolated per thread id", () => {
@@ -61,8 +68,14 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       const b = new ChatQueue(storage, "thread-b", nextId);
       a.enqueue("for a");
       b.enqueue("for b");
-      assert.deepEqual(a.items().map((i) => i.text), ["for a"]);
-      assert.deepEqual(b.items().map((i) => i.text), ["for b"]);
+      assert.deepEqual(
+        a.items().map((i) => i.text),
+        ["for a"]
+      );
+      assert.deepEqual(
+        b.items().map((i) => i.text),
+        ["for b"]
+      );
     });
   });
 
@@ -73,8 +86,13 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       q.enqueue("two");
       const drained = q.shiftNext();
       assert.equal(drained?.text, "one");
-      assert.deepEqual(q.items().map((i) => i.text), ["two"]);
-      assert.deepEqual(JSON.parse(storage.getItem(queueStorageKey("thread-a"))!), [{ id: "item-1", text: "two" }]);
+      assert.deepEqual(
+        q.items().map((i) => i.text),
+        ["two"]
+      );
+      assert.deepEqual(JSON.parse(storage.getItem(queueStorageKey("thread-a"))!), [
+        { id: "item-1", text: "two" },
+      ]);
     });
 
     it("shiftNext on an empty queue returns null and mutates nothing", () => {
@@ -89,7 +107,11 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       q.enqueue("follow-up 2");
       const sent = drainNextForTurnEnd(q, "done");
       assert.equal(sent?.text, "follow-up 1", "DONE must drain exactly one item");
-      assert.deepEqual(q.items().map((i) => i.text), ["follow-up 2"], "only one item drains per turn end");
+      assert.deepEqual(
+        q.items().map((i) => i.text),
+        ["follow-up 2"],
+        "only one item drains per turn end"
+      );
     });
 
     it("no drain on abort or error endings — the queue pauses", () => {
@@ -97,8 +119,16 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       q.enqueue("pending");
       assert.equal(drainNextForTurnEnd(q, "abort"), null, "abort must not auto-fire the queue");
       assert.equal(drainNextForTurnEnd(q, "error"), null, "error must not auto-fire the queue");
-      assert.deepEqual(q.items().map((i) => i.text), ["pending"], "queue survives abort/error intact");
-      assert.equal(drainNextForTurnEnd(q, "done")?.text, "pending", "queue resumes on the next DONE");
+      assert.deepEqual(
+        q.items().map((i) => i.text),
+        ["pending"],
+        "queue survives abort/error intact"
+      );
+      assert.equal(
+        drainNextForTurnEnd(q, "done")?.text,
+        "pending",
+        "queue resumes on the next DONE"
+      );
     });
   });
 
@@ -108,7 +138,10 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       const a = q.enqueue("keep");
       const b = q.enqueue("drop");
       assert.equal(q.remove(b!.id), true);
-      assert.deepEqual(q.items().map((i) => i.id), [a!.id]);
+      assert.deepEqual(
+        q.items().map((i) => i.id),
+        [a!.id]
+      );
       assert.equal(q.remove("nonexistent"), false);
     });
 
@@ -118,7 +151,11 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       q.enqueue("two");
       q.clearAll();
       assert.equal(q.items().length, 0);
-      assert.equal(storage.getItem(queueStorageKey("thread-a")), null, "clearAll must remove the storage key");
+      assert.equal(
+        storage.getItem(queueStorageKey("thread-a")),
+        null,
+        "clearAll must remove the storage key"
+      );
     });
   });
 
@@ -129,7 +166,10 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
       first.enqueue("survives reload 2");
 
       const reopened = new ChatQueue(storage, "thread-a", nextId);
-      assert.deepEqual(reopened.items().map((i) => i.text), ["survives reload 1", "survives reload 2"]);
+      assert.deepEqual(
+        reopened.items().map((i) => i.text),
+        ["survives reload 1", "survives reload 2"]
+      );
 
       const otherThread = new ChatQueue(storage, "thread-b", nextId);
       assert.equal(otherThread.items().length, 0, "another thread must see an empty queue");
@@ -145,19 +185,31 @@ describe("CHAT-QUEUE — message queue for the sandbox (behavioral)", () => {
 
   describe("decideSendAction gating", () => {
     it("idle with text sends immediately", () => {
-      assert.equal(decideSendAction({ running: false, hasAttachments: false, text: "hello" }), "send");
+      assert.equal(
+        decideSendAction({ running: false, hasAttachments: false, text: "hello" }),
+        "send"
+      );
     });
 
     it("running with text enqueues instead of sending", () => {
-      assert.equal(decideSendAction({ running: true, hasAttachments: false, text: "queued follow-up" }), "enqueue");
+      assert.equal(
+        decideSendAction({ running: true, hasAttachments: false, text: "queued follow-up" }),
+        "enqueue"
+      );
     });
 
     it("running with attachments is blocked with the attachments hint", () => {
-      assert.equal(decideSendAction({ running: true, hasAttachments: true, text: "look at this file" }), "blocked-attachments");
+      assert.equal(
+        decideSendAction({ running: true, hasAttachments: true, text: "look at this file" }),
+        "blocked-attachments"
+      );
     });
 
     it("running with nothing to enqueue stays blocked", () => {
-      assert.equal(decideSendAction({ running: true, hasAttachments: false, text: "   " }), "blocked-attachments");
+      assert.equal(
+        decideSendAction({ running: true, hasAttachments: false, text: "   " }),
+        "blocked-attachments"
+      );
     });
 
     it("idle with attachments only still sends", () => {

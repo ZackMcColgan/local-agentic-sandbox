@@ -12,7 +12,8 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     const dbPath = path.join(tmpDir, "runs.db");
 
     try {
-      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } = await import("../lib/deploy/selfDeploy.js");
+      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } =
+        await import("../lib/deploy/selfDeploy.js");
       clearInMemoryDeployHistoryForTest();
       const { RunLedger } = await import("../lib/ledger/runLedger.js");
 
@@ -26,7 +27,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
           executedCommands.push([file, ...args].join(" "));
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
         },
-        healthChecker: async () => ({ status: 200, ok: true })
+        healthChecker: async () => ({ status: 200, ok: true }),
       });
 
       const result = await pipeline.executeSelfDeploy({
@@ -34,7 +35,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         previousSha: "sha-prev-001",
         newSha: "sha-new-002",
         deploymentName: "web-ui",
-        namespace: "local-agentic-sandbox"
+        namespace: "local-agentic-sandbox",
       });
 
       assert.equal(result.status, "deployed");
@@ -42,9 +43,15 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       assert.equal(result.previousSha, "sha-prev-001");
       assert.equal(result.newSha, "sha-new-002");
       assert.equal(result.healthCheckResult.ok, true);
-      assert.ok(result.timeline.some((t) => t.stage === "rebuild_image" && t.status === "completed"));
-      assert.ok(result.timeline.some((t) => t.stage === "rolling_update" && t.status === "completed"));
-      assert.ok(result.timeline.some((t) => t.stage === "health_check" && t.status === "completed"));
+      assert.ok(
+        result.timeline.some((t) => t.stage === "rebuild_image" && t.status === "completed")
+      );
+      assert.ok(
+        result.timeline.some((t) => t.stage === "rolling_update" && t.status === "completed")
+      );
+      assert.ok(
+        result.timeline.some((t) => t.stage === "health_check" && t.status === "completed")
+      );
 
       // Verify default image name format: local-agentic-sandbox-web-ui:<shortSha>
       const setImageCmd = executedCommands.find((c) => c.includes("set image"));
@@ -99,7 +106,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
     const result = await pipeline.executeSelfDeploy({
@@ -107,7 +114,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       previousSha: "sha-prev-111",
       newSha: "sha-new-222",
       deploymentName: "web-ui",
-      namespace: "local-agentic-sandbox"
+      namespace: "local-agentic-sandbox",
     });
 
     assert.equal(result.status, "rolled_back");
@@ -133,10 +140,8 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         healthCallCount++;
         // First check (new deploy): fails 503
         // Second check (after rollback): succeeds 200
-        return healthCallCount === 1
-          ? { status: 503, ok: false }
-          : { status: 200, ok: true };
-      }
+        return healthCallCount === 1 ? { status: 503, ok: false } : { status: 200, ok: true };
+      },
     });
 
     const result = await pipeline.executeSelfDeploy({
@@ -144,7 +149,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       previousSha: "sha-good-111",
       newSha: "sha-bad-222",
       deploymentName: "web-ui",
-      namespace: "local-agentic-sandbox"
+      namespace: "local-agentic-sandbox",
     });
 
     assert.equal(result.status, "rolled_back");
@@ -164,21 +169,25 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       commandRunner: async (file: string, args: string[]) => ({
         exitCode: 0,
         stdout: "ok\n",
-        stderr: ""
+        stderr: "",
       }),
       // Both initial check and rollback check fail
-      healthChecker: async () => ({ status: 503, ok: false })
+      healthChecker: async () => ({ status: 503, ok: false }),
     });
 
     const result = await pipeline.executeSelfDeploy({
       branchName: "feature/critical-failure",
       previousSha: "sha-good",
-      newSha: "sha-broken"
+      newSha: "sha-broken",
     });
 
     assert.equal(result.status, "rollback_failed");
     assert.equal(result.rollbackStatus, "failed");
-    assert.ok(result.errorMessage?.includes("CRITICAL: Deployment rolled back but health check still failing"));
+    assert.ok(
+      result.errorMessage?.includes(
+        "CRITICAL: Deployment rolled back but health check still failing"
+      )
+    );
   });
 
   it("Fix 7.1: Rejects command injection in namespace or deploymentName and prevents command execution", async () => {
@@ -190,7 +199,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       commandRunner: async () => {
         commandsRan++;
         return { exitCode: 0, stdout: "", stderr: "" };
-      }
+      },
     });
 
     // Malicious namespace
@@ -200,7 +209,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
           branchName: "feature/test-inject",
           previousSha: "sha1",
           newSha: "sha2",
-          namespace: "evil; rm -rf /"
+          namespace: "evil; rm -rf /",
         });
       },
       /Invalid Kubernetes namespace/i,
@@ -214,7 +223,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
           branchName: "feature/test-inject",
           previousSha: "sha1",
           newSha: "sha2",
-          deploymentName: "deploy$(touch /tmp/pwned)"
+          deploymentName: "deploy$(touch /tmp/pwned)",
         });
       },
       /Invalid Kubernetes deployment/i,
@@ -238,14 +247,14 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
           executedArgs.push({ file, args });
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
         },
-        healthChecker: async () => ({ status: 200, ok: true })
+        healthChecker: async () => ({ status: 200, ok: true }),
       });
 
       const maliciousSha = `abc$(touch "${pwnedFile}")`;
       await pipeline.executeSelfDeploy({
         branchName: "feature/sha-test",
         previousSha: "sha1",
-        newSha: maliciousSha
+        newSha: maliciousSha,
       });
 
       assert.equal(fs.existsSync(pwnedFile), false, "Shell payload in SHA must NEVER execute");
@@ -267,14 +276,14 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       healthChecker: async (url) => {
         probedUrl = url;
         return { status: 200, ok: true };
-      }
+      },
     });
 
     await pipeline.executeSelfDeploy({
       branchName: "feature/host-test",
       previousSha: "sha-1",
       newSha: "sha-2",
-      hostAddress: "192.168.1.50"
+      hostAddress: "192.168.1.50",
     });
 
     assert.equal(probedUrl, "http://192.168.1.50:3001/api/sandbox-status");
@@ -290,7 +299,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         await pipeline.executeSelfDeploy({
           branchName: "feature/feature-x",
           previousSha: "sha-1",
-          newSha: "sha-2"
+          newSha: "sha-2",
         });
       },
       /Self-deploy is disabled by kill switch/i,
@@ -307,7 +316,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       commandRunner: async (file: string, args: string[]) => {
         invokedCommands.push([file, ...args].join(" "));
         return { exitCode: 0, stdout: "", stderr: "" };
-      }
+      },
     });
 
     await assert.rejects(
@@ -316,7 +325,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
           branchName: "feat/task-kill-switch-check",
           previousSha: "sha-1",
           newSha: "sha-2",
-          preRollout: true
+          preRollout: true,
         });
       },
       /Self-deploy is disabled by kill switch/i,
@@ -340,7 +349,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         await pipeline.executeSelfDeploy({
           branchName: "main",
           previousSha: "sha-1",
-          newSha: "sha-2"
+          newSha: "sha-2",
         });
       },
       /Self-deploy directly from main is strictly blocked/i,
@@ -373,9 +382,9 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
             status: "rolled_back",
             rollbackStatus: "rolled_back",
             healthCheckStatus: 503,
-            errorMessage: "HTTP 503 CrashLoopBackOff"
-          }
-        ]
+            errorMessage: "HTTP 503 CrashLoopBackOff",
+          },
+        ],
       })
     );
 
@@ -395,13 +404,14 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         "# Queue Steer Runlog",
         "- 2026-11-12T10:00:00Z | DONE prod 1111aaaa | initial deploy",
         "- 2026-11-13T21:00:00Z | DONE prod abc1234def | Lane D deploy",
-        ""
+        "",
       ].join("\n"),
       "utf-8"
     );
 
     try {
-      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } = await import("../lib/deploy/selfDeploy.js");
+      const { SelfDeployPipeline, clearInMemoryDeployHistoryForTest } =
+        await import("../lib/deploy/selfDeploy.js");
       clearInMemoryDeployHistoryForTest();
       const { RunLedger } = await import("../lib/ledger/runLedger.js");
       const ledger = new RunLedger(dbPath);
@@ -409,7 +419,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
       const pipeline = new SelfDeployPipeline({
         enabled: true,
         ledger,
-        runlogPath
+        runlogPath,
       } as any);
 
       const history = pipeline.getDeployHistory();

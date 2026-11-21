@@ -53,9 +53,13 @@ describe("Parameterization — Round Generation Cap: ROUND_MAX_TOKENS (16,384) o
         const opts = resolveRoundModelOptions({
           model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
           requestedEffort: "medium",
-          hasCompletedToolCalls: true
+          hasCompletedToolCalls: true,
         });
-        assert.equal(opts.num_predict, ROUND_MAX_TOKENS, "Must return ROUND_MAX_TOKENS instead of omitting num_predict on post-tool round");
+        assert.equal(
+          opts.num_predict,
+          ROUND_MAX_TOKENS,
+          "Must return ROUND_MAX_TOKENS instead of omitting num_predict on post-tool round"
+        );
         assert.equal(opts.temperature, 0.2);
         assert.equal(opts.reasoning_effort, "low");
       } finally {
@@ -70,9 +74,13 @@ describe("Parameterization — Round Generation Cap: ROUND_MAX_TOKENS (16,384) o
         const opts = resolveRoundModelOptions({
           model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
           isArtifactTurn: true,
-          requestedEffort: "xhigh"
+          requestedEffort: "xhigh",
         });
-        assert.equal(opts.num_predict, ROUND_MAX_TOKENS, "Must return ROUND_MAX_TOKENS instead of omitting num_predict on artifact turn");
+        assert.equal(
+          opts.num_predict,
+          ROUND_MAX_TOKENS,
+          "Must return ROUND_MAX_TOKENS instead of omitting num_predict on artifact turn"
+        );
         assert.equal(opts.temperature, 0.2);
       } finally {
         process.env.LLM_ENGINE = originalEngine;
@@ -82,16 +90,20 @@ describe("Parameterization — Round Generation Cap: ROUND_MAX_TOKENS (16,384) o
     it("final synthesis rounds", () => {
       const opts = resolveRoundModelOptions({
         model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
-        isSynthesisOrFinalRound: true
+        isSynthesisOrFinalRound: true,
       });
-      assert.equal(opts.num_predict, ROUND_MAX_TOKENS, "Must return ROUND_MAX_TOKENS for final synthesis round");
+      assert.equal(
+        opts.num_predict,
+        ROUND_MAX_TOKENS,
+        "Must return ROUND_MAX_TOKENS for final synthesis round"
+      );
       assert.equal(opts.temperature, 0.2);
     });
 
     it("preserves numKeep calculation for compaction summary rounds", () => {
       const opts = resolveRoundModelOptions({
         model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
-        numKeep: 1024
+        numKeep: 1024,
       });
       assert.equal(opts.num_predict, 2048 + 1024);
       assert.equal(opts.n_keep, 1024);

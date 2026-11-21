@@ -3,6 +3,7 @@ import type { BoardItem } from "./boardStore";
 export const FLOW_MONITOR_STAGE2_DEFAULT = false;
 
 export const REQUIRED_PR_CHECKS = [
+  "Lint & Format",
   "Typecheck (full error report)",
   "Unit Tests & Static Analysis",
   "Code Coverage Report",
@@ -109,10 +110,7 @@ function isCheckFailed(check: PrCheckResult): boolean {
  * Evaluates PR check conclusions against the required 5-check bar on the PR head SHA.
  * Returns "running" if any required check is missing or still in progress.
  */
-export function evaluatePrChecks(
-  headSha: string,
-  checks: PrCheckResult[]
-): PrCheckVerdict {
+export function evaluatePrChecks(headSha: string, checks: PrCheckResult[]): PrCheckVerdict {
   for (const check of checks) {
     if (isCheckFailed(check)) {
       return {
@@ -148,10 +146,7 @@ export function evaluatePrChecks(
  * A green verdict is only valid for the head SHA it was evaluated against.
  * Any head change voids the verdict.
  */
-export function isVerdictValidForHead(
-  verdict: PrCheckVerdict,
-  currentHeadSha: string
-): boolean {
+export function isVerdictValidForHead(verdict: PrCheckVerdict, currentHeadSha: string): boolean {
   return verdict.status === "green" && verdict.headSha === currentHeadSha;
 }
 
@@ -182,10 +177,7 @@ export function composeFixCycleBrief(
   ].join("\n");
 }
 
-function isSameRootCause(
-  prev: PreviousFailure | undefined,
-  verdict: PrCheckVerdict
-): boolean {
+function isSameRootCause(prev: PreviousFailure | undefined, verdict: PrCheckVerdict): boolean {
   if (!prev || verdict.status !== "red") return false;
   const sameJob = prev.job.trim().toLowerCase() === (verdict.failingJob ?? "").trim().toLowerCase();
   const sameError = prev.error.trim().toLowerCase() === (verdict.error ?? "").trim().toLowerCase();
@@ -199,9 +191,7 @@ function isSameRootCause(
  *
  * Stage 2 gate defaults to OFF (shadow mode): logs the decision and issues nothing.
  */
-export async function monitorPrToConclusion(
-  opts: MonitorPrOptions
-): Promise<MonitorPrResult> {
+export async function monitorPrToConclusion(opts: MonitorPrOptions): Promise<MonitorPrResult> {
   const log = opts.log ?? ((msg: string) => console.info(msg));
   const snapshot = await opts.pollChecks(opts.item);
   const verdict = evaluatePrChecks(snapshot.headSha, snapshot.checks);

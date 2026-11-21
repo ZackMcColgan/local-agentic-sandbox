@@ -11,11 +11,11 @@ describe("Critic Worker — Validation, Rejection, and Fail-Closed Abstention", 
     dependencies: [],
     acceptanceCriteria: [
       { id: "c1", assertion: "Canvas background is #ffffff" },
-      { id: "c2", assertion: "Diagram models browser-mcp attached to egress-mesh" }
+      { id: "c2", assertion: "Diagram models browser-mcp attached to egress-mesh" },
     ],
     status: "in_progress",
     builderIterations: 1,
-    criticRounds: 0
+    criticRounds: 0,
   };
 
   it("approves valid builder output meeting all criteria", async () => {
@@ -23,13 +23,13 @@ describe("Critic Worker — Validation, Rejection, and Fail-Closed Abstention", 
       text: JSON.stringify({
         approved: true,
         feedback: [],
-        analysis: "All criteria verified against diff lines."
+        analysis: "All criteria verified against diff lines.",
       }),
       prompt_tokens: 100,
       completion_tokens: 25,
       total_tokens: 125,
       model: "swift-27b-mtp",
-      duration_ms: 120
+      duration_ms: 120,
     });
 
     const critic = createCriticWorker({ generate: mockGenerate });
@@ -52,13 +52,13 @@ describe("Critic Worker — Validation, Rejection, and Fail-Closed Abstention", 
       text: JSON.stringify({
         approved: false,
         feedback: ["Diff specifies network=ai-mesh instead of required egress-mesh."],
-        analysis: "Network configuration violates acceptance criteria."
+        analysis: "Network configuration violates acceptance criteria.",
       }),
       prompt_tokens: 100,
       completion_tokens: 30,
       total_tokens: 130,
       model: "swift-27b-mtp",
-      duration_ms: 130
+      duration_ms: 130,
     });
 
     const critic = createCriticWorker({ generate: mockGenerate });

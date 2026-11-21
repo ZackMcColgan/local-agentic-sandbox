@@ -16,7 +16,7 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
       reasoningEffort: "medium",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      messages: [{ id: "m1", role: "user", content: "hello", timestamp: new Date().toISOString() }]
+      messages: [{ id: "m1", role: "user", content: "hello", timestamp: new Date().toISOString() }],
     },
     {
       id: "thread-abc-2",
@@ -26,8 +26,8 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
       reasoningEffort: "medium",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      messages: []
-    }
+      messages: [],
+    },
   ];
 
   it("1. Renders visible overflow (⋯) button with data-testid='thread-overflow-btn' on every thread row", () => {
@@ -37,15 +37,25 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
         selectedThreadId: "thread-abc-1",
         onSelectThread: () => {},
         onNewThread: () => {},
-        onDeleteThread: () => {}
+        onDeleteThread: () => {},
       })
     );
 
-    assert.ok(html.includes('data-testid="thread-overflow-btn"'), "Must render data-testid='thread-overflow-btn'");
+    assert.ok(
+      html.includes('data-testid="thread-overflow-btn"'),
+      "Must render data-testid='thread-overflow-btn'"
+    );
     const overflowMatches = html.match(/data-testid="thread-overflow-btn"/g);
-    assert.strictEqual(overflowMatches?.length, 2, "Each thread row must have a visible overflow button");
+    assert.strictEqual(
+      overflowMatches?.length,
+      2,
+      "Each thread row must have a visible overflow button"
+    );
     // Ensure it is not hidden with opacity-0
-    assert.ok(!html.includes('opacity-0 group-hover:opacity-100'), "Overflow button must not be hidden behind hover-only opacity-0");
+    assert.ok(
+      !html.includes("opacity-0 group-hover:opacity-100"),
+      "Overflow button must not be hidden behind hover-only opacity-0"
+    );
   });
 
   it("2. Thread rows have tabIndex=0 and accessible role/labels for keyboard navigation", () => {
@@ -55,12 +65,15 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
         selectedThreadId: "thread-abc-1",
         onSelectThread: () => {},
         onNewThread: () => {},
-        onDeleteThread: () => {}
+        onDeleteThread: () => {},
       })
     );
 
     assert.ok(html.includes('tabindex="0"'), "Thread row must be focusable via tabindex=0");
-    assert.ok(html.includes('data-testid="thread-row-thread-abc-1"'), "Must include testid for individual rows");
+    assert.ok(
+      html.includes('data-testid="thread-row-thread-abc-1"'),
+      "Must include testid for individual rows"
+    );
   });
 
   it("3. Action Sheet and Confirm Dialog structure adheres to permanent deletion contract", () => {
@@ -73,17 +86,29 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     );
 
     // Three equivalent paths
-    assert.ok(sidebarSrc.includes('handleTouchStart'), "Must implement touch long-press handler");
-    assert.ok(sidebarSrc.includes('data-testid="thread-overflow-btn"'), "Must have visible overflow button");
+    assert.ok(sidebarSrc.includes("handleTouchStart"), "Must implement touch long-press handler");
     assert.ok(
-      sidebarSrc.includes('e.key === "Delete"') || sidebarSrc.includes('e.key === \'Delete\''),
+      sidebarSrc.includes('data-testid="thread-overflow-btn"'),
+      "Must have visible overflow button"
+    );
+    assert.ok(
+      sidebarSrc.includes('e.key === "Delete"') || sidebarSrc.includes("e.key === 'Delete'"),
       "Must open confirm dialog on Delete key on row"
     );
 
     // ONE confirm dialog naming thread title and permanent text
-    assert.ok(sidebarSrc.includes('data-testid="thread-delete-dialog"'), "Must have confirm dialog");
-    assert.ok(sidebarSrc.includes('data-testid="confirm-delete-btn"'), "Must have confirm delete button");
-    assert.ok(sidebarSrc.includes('data-testid="cancel-delete-btn"'), "Must have cancel delete button");
+    assert.ok(
+      sidebarSrc.includes('data-testid="thread-delete-dialog"'),
+      "Must have confirm dialog"
+    );
+    assert.ok(
+      sidebarSrc.includes('data-testid="confirm-delete-btn"'),
+      "Must have confirm delete button"
+    );
+    assert.ok(
+      sidebarSrc.includes('data-testid="cancel-delete-btn"'),
+      "Must have cancel delete button"
+    );
     assert.ok(
       sidebarSrc.includes("This action is permanent and cannot be undone"),
       "Must display permanent deletion warning text"
@@ -91,24 +116,38 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
 
     // Trapped focus and Escape handling
     assert.ok(sidebarSrc.includes('e.key === "Escape"'), "Escape key must close dialogs");
-    assert.ok(sidebarSrc.includes('e.key === "Tab"'), "Focus must be trapped inside confirm dialog");
-    assert.ok(sidebarSrc.includes('lastActiveElementRef.current?.focus()'), "Focus must return to list element");
+    assert.ok(
+      sidebarSrc.includes('e.key === "Tab"'),
+      "Focus must be trapped inside confirm dialog"
+    );
+    assert.ok(
+      sidebarSrc.includes("lastActiveElementRef.current?.focus()"),
+      "Focus must return to list element"
+    );
   });
 
   it("4. App page handleDeleteThread returns UI to neutral state when deleting active thread", () => {
     const fs = require("fs");
     const path = require("path");
-    const pageSrc = fs.readFileSync(
-      path.resolve(__dirname, "../app/page.tsx"),
-      "utf-8"
-    );
+    const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8");
 
-    const deleteHandlerMatch = pageSrc.match(/const handleDeleteThread = async \([^)]*\) => {[\s\S]*?};/);
+    const deleteHandlerMatch = pageSrc.match(
+      /const handleDeleteThread = async \([^)]*\) => {[\s\S]*?};/
+    );
     assert.ok(deleteHandlerMatch, "handleDeleteThread must exist in page.tsx");
     const handlerBody = deleteHandlerMatch[0];
-    assert.ok(handlerBody.includes('setSelectedThreadId(null)'), "Must reset selectedThreadId to null");
-    assert.ok(handlerBody.includes('setMessages([])'), "Must clear messages on active thread deletion");
-    assert.ok(handlerBody.includes('setActiveTask(null)'), "Must clear active task on active thread deletion");
+    assert.ok(
+      handlerBody.includes("setSelectedThreadId(null)"),
+      "Must reset selectedThreadId to null"
+    );
+    assert.ok(
+      handlerBody.includes("setMessages([])"),
+      "Must clear messages on active thread deletion"
+    );
+    assert.ok(
+      handlerBody.includes("setActiveTask(null)"),
+      "Must clear active task on active thread deletion"
+    );
   });
 
   it("5. NavigationDrawer renders visible overflow (⋯) button and accessible rows for mobile sessions", () => {
@@ -122,14 +161,24 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
         threads: sampleThreads,
         selectedThreadId: "thread-abc-1",
         onSelectThread: () => {},
-        onDeleteThread: () => {}
+        onDeleteThread: () => {},
       })
     );
 
-    assert.ok(html.includes('data-testid="thread-overflow-btn"'), "NavigationDrawer must render data-testid='thread-overflow-btn'");
+    assert.ok(
+      html.includes('data-testid="thread-overflow-btn"'),
+      "NavigationDrawer must render data-testid='thread-overflow-btn'"
+    );
     const overflowMatches = html.match(/data-testid="thread-overflow-btn"/g);
-    assert.strictEqual(overflowMatches?.length, 2, "Each session row in NavigationDrawer must have a visible overflow button");
-    assert.ok(html.includes('data-testid="thread-row-thread-abc-1"'), "Must include testid for individual drawer session rows");
+    assert.strictEqual(
+      overflowMatches?.length,
+      2,
+      "Each session row in NavigationDrawer must have a visible overflow button"
+    );
+    assert.ok(
+      html.includes('data-testid="thread-row-thread-abc-1"'),
+      "Must include testid for individual drawer session rows"
+    );
     assert.ok(html.includes('tabindex="0"'), "Session rows must be focusable via tabindex=0");
   });
 
@@ -142,21 +191,33 @@ describe("PART B — Thread Deletion UI Contract & Affordances", () => {
     );
 
     // Three equivalent paths
-    assert.ok(drawerSrc.includes('handleTouchStart'), "Must implement touch long-press handler");
-    assert.ok(drawerSrc.includes('handleTouchMove'), "Must implement touch move threshold");
-    assert.ok(drawerSrc.includes('handleTouchEnd'), "Must implement touch end handler");
-    assert.ok(drawerSrc.includes('data-testid="thread-overflow-btn"'), "Must have visible overflow button");
+    assert.ok(drawerSrc.includes("handleTouchStart"), "Must implement touch long-press handler");
+    assert.ok(drawerSrc.includes("handleTouchMove"), "Must implement touch move threshold");
+    assert.ok(drawerSrc.includes("handleTouchEnd"), "Must implement touch end handler");
     assert.ok(
-      drawerSrc.includes('e.key === "Delete"') || drawerSrc.includes('e.key === \'Delete\''),
+      drawerSrc.includes('data-testid="thread-overflow-btn"'),
+      "Must have visible overflow button"
+    );
+    assert.ok(
+      drawerSrc.includes('e.key === "Delete"') || drawerSrc.includes("e.key === 'Delete'"),
       "Must open confirm dialog on Delete key on row"
     );
 
     // Confirm dialog and Action sheet
     assert.ok(drawerSrc.includes('data-testid="thread-action-sheet"'), "Must have action sheet");
-    assert.ok(drawerSrc.includes('data-testid="action-sheet-delete-btn"'), "Must have action sheet delete button");
+    assert.ok(
+      drawerSrc.includes('data-testid="action-sheet-delete-btn"'),
+      "Must have action sheet delete button"
+    );
     assert.ok(drawerSrc.includes('data-testid="thread-delete-dialog"'), "Must have confirm dialog");
-    assert.ok(drawerSrc.includes('data-testid="confirm-delete-btn"'), "Must have confirm delete button");
-    assert.ok(drawerSrc.includes('data-testid="cancel-delete-btn"'), "Must have cancel delete button");
+    assert.ok(
+      drawerSrc.includes('data-testid="confirm-delete-btn"'),
+      "Must have confirm delete button"
+    );
+    assert.ok(
+      drawerSrc.includes('data-testid="cancel-delete-btn"'),
+      "Must have cancel delete button"
+    );
     assert.ok(
       drawerSrc.includes("This action is permanent and cannot be undone"),
       "Must display permanent deletion warning text"

@@ -13,7 +13,7 @@ async function main() {
     docs.push({
       filePath: `docs/${f}`,
       corpus: "docs",
-      content
+      content,
     });
   }
 

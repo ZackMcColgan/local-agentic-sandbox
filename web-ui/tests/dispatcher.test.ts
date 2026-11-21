@@ -35,7 +35,13 @@ test("stage flag defaults to OFF (shadow mode)", () => {
 test("selects exactly the head eligible item, skipping parked and unmet dependencies", () => {
   const board: DispatcherBoardItem[] = [
     makeItem({ id: "done-1", key: "#1", status: "done", title: "Already done" }),
-    makeItem({ id: "parked-1", key: "#2", status: "parked", parkedReason: "Waiting on owner", title: "Parked" }),
+    makeItem({
+      id: "parked-1",
+      key: "#2",
+      status: "parked",
+      parkedReason: "Waiting on owner",
+      title: "Parked",
+    }),
     makeItem({
       id: "blocked-1",
       key: "#3",

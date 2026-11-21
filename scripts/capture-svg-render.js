@@ -1,6 +1,6 @@
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { exec } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 setTimeout(() => {
   console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
@@ -10,7 +10,9 @@ setTimeout(() => {
 async function waitForPort(port, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`http://127.0.0.1:${port}/json`, {
+        signal: AbortSignal.timeout(15000),
+      });
       if (res.ok) return await res.json();
     } catch {}
     await new Promise((r) => setTimeout(r, 400));
@@ -22,12 +24,13 @@ const mockMessages = JSON.stringify([
   {
     id: "user-1",
     role: "user",
-    content: "Draw an architecture diagram for a two-tier application in SVG format."
+    content: "Draw an architecture diagram for a two-tier application in SVG format.",
   },
   {
     id: "assistant-1",
     role: "assistant",
-    content: "There we go! The SVG has been written via the tool call to `two_tier_architecture.svg` in your workspace, featuring web presentation and server data tiers with secure boundary isolation.",
+    content:
+      "There we go! The SVG has been written via the tool call to `two_tier_architecture.svg` in your workspace, featuring web presentation and server data tiers with secure boundary isolation.",
     traces: [
       {
         tool: "workspace_write_file",
@@ -68,7 +71,7 @@ const mockMessages = JSON.stringify([
   <text x="450" y="121" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">Backend API Service</text>
   <rect x="350" y="148" width="200" height="42" rx="8" fill="#d1fae5" stroke="#6ee7b7" />
   <text x="450" y="174" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#065f46">PostgreSQL &amp; Storage</text>
-</svg>`
+</svg>`,
         },
         result: {
           content: [
@@ -78,23 +81,24 @@ const mockMessages = JSON.stringify([
                 status: "SUCCESS",
                 path: "two_tier_architecture.svg",
                 bytes_written: 2450,
-                is_diagram: true
-              })
-            }
-          ]
-        }
-      }
-    ]
+                is_diagram: true,
+              }),
+            },
+          ],
+        },
+      },
+    ],
   },
   {
     id: "user-2",
     role: "user",
-    content: "Render two_tier_aws_architecture.drawio.svg as well"
+    content: "Render two_tier_aws_architecture.drawio.svg as well",
   },
   {
     id: "assistant-2",
     role: "assistant",
-    content: "I have updated the diagram for AWS cloud environment with ALB, Web Servers, ElastiCache Redis, and RDS database layers.",
+    content:
+      "I have updated the diagram for AWS cloud environment with ALB, Web Servers, ElastiCache Redis, and RDS database layers.",
     traces: [
       {
         tool: "workspace_write_file",
@@ -135,7 +139,7 @@ const mockMessages = JSON.stringify([
       </root>
     </mxGraphModel>
   </diagram>
-</mxfile>`
+</mxfile>`,
         },
         result: {
           content: [
@@ -145,14 +149,14 @@ const mockMessages = JSON.stringify([
                 status: "SUCCESS",
                 path: "two_tier_aws_architecture.drawio.svg",
                 bytes_written: 5566,
-                is_diagram: true
-              })
-            }
-          ]
-        }
-      }
-    ]
-  }
+                is_diagram: true,
+              }),
+            },
+          ],
+        },
+      },
+    ],
+  },
 ]);
 
 async function captureSvg(url, width, height, isMobile, outputPath) {
@@ -163,8 +167,8 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
 
   try {
     const tabs = await waitForPort(port);
-    const pageTab = tabs.find((t) => t.type === 'page');
-    if (!pageTab) throw new Error('No page tab found');
+    const pageTab = tabs.find((t) => t.type === "page");
+    if (!pageTab) throw new Error("No page tab found");
 
     await new Promise((resolve, reject) => {
       const ws = new WebSocket(pageTab.webSocketDebuggerUrl);
@@ -174,7 +178,7 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
         ws.send(
           JSON.stringify({
             id: 1,
-            method: 'Emulation.setDeviceMetricsOverride',
+            method: "Emulation.setDeviceMetricsOverride",
             params: {
               width,
               height,
@@ -189,13 +193,13 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
           ws.send(
             JSON.stringify({
               id: 2,
-              method: 'Runtime.evaluate',
+              method: "Runtime.evaluate",
               params: {
                 expression: `
                   localStorage.setItem('local_agent_chat_history_v1', ${JSON.stringify(mockMessages)});
                   location.reload();
-                `
-              }
+                `,
+              },
             })
           );
         }, 500);
@@ -205,8 +209,8 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
           ws.send(
             JSON.stringify({
               id: 3,
-              method: 'Page.captureScreenshot',
-              params: { format: 'png' },
+              method: "Page.captureScreenshot",
+              params: { format: "png" },
             })
           );
         }, 2500);
@@ -215,7 +219,7 @@ async function captureSvg(url, width, height, isMobile, outputPath) {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.id === 3 && data.result?.data) {
-          fs.writeFileSync(outputPath, Buffer.from(data.result.data, 'base64'));
+          fs.writeFileSync(outputPath, Buffer.from(data.result.data, "base64"));
           console.log(`Saved screenshot: ${outputPath}`);
           ws.close();
           resolve();

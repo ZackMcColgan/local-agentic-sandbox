@@ -2,10 +2,7 @@ import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import {
-  WorkerPool,
-  resolveModelRosterFromEnv
-} from "../lib/subagents/workerPool.js";
+import { WorkerPool, resolveModelRosterFromEnv } from "../lib/subagents/workerPool.js";
 
 describe("Phase 2 — Item 4: Model Roster Refresh Suite", () => {
   const savedEnv = { ...process.env };

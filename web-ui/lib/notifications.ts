@@ -9,11 +9,7 @@ export interface TelegramConfig {
 }
 
 export type NotificationEvent =
-  | "task.completed"
-  | "task.failed"
-  | "morning_report.ready"
-  | "test.ping"
-  | "host.approval_pending";
+  "task.completed" | "task.failed" | "morning_report.ready" | "test.ping" | "host.approval_pending";
 
 export interface NotificationPayload {
   title: string;
@@ -66,7 +62,7 @@ export function loadPersistedNotificationSettings(): PersistedNotificationSettin
       const parsed = JSON.parse(content);
       return {
         enabled: typeof parsed?.enabled === "boolean" ? parsed.enabled : defaultEnabled,
-        ...(parsed?.lastResult ? { lastResult: parsed.lastResult } : {})
+        ...(parsed?.lastResult ? { lastResult: parsed.lastResult } : {}),
       };
     } catch {
       // Fallback on corrupt file
@@ -81,7 +77,7 @@ export function savePersistedNotificationSettings(
   const current = loadPersistedNotificationSettings();
   const updated: PersistedNotificationSettings = {
     ...current,
-    ...patch
+    ...patch,
   };
 
   const dir = resolveSettingsDir();
@@ -114,17 +110,15 @@ export function resolveHermesTelegramConfig(): TelegramConfig {
   const envChatId = process.env.TELEGRAM_CHAT_ID || "";
   const persisted = loadPersistedNotificationSettings();
 
-  const botToken =
-    configOverride?.botToken !== undefined ? configOverride.botToken : envBotToken;
-  const chatId =
-    configOverride?.chatId !== undefined ? configOverride.chatId : envChatId;
+  const botToken = configOverride?.botToken !== undefined ? configOverride.botToken : envBotToken;
+  const chatId = configOverride?.chatId !== undefined ? configOverride.chatId : envChatId;
   const enabled =
     configOverride?.enabled !== undefined ? configOverride.enabled : persisted.enabled;
 
   return {
     botToken,
     chatId,
-    enabled: Boolean(botToken && chatId && enabled)
+    enabled: Boolean(botToken && chatId && enabled),
   };
 }
 
@@ -134,7 +128,7 @@ export function setTelegramConfig(config: Partial<TelegramConfig>): TelegramConf
   }
   configOverride = {
     ...(configOverride || {}),
-    ...config
+    ...config,
   };
   return resolveHermesTelegramConfig();
 }
@@ -157,7 +151,7 @@ export function getPublicNotificationStatus(): PublicNotificationStatus {
     configured,
     enabled,
     ...(reason ? { reason } : {}),
-    ...(persisted.lastResult ? { lastResult: persisted.lastResult } : {})
+    ...(persisted.lastResult ? { lastResult: persisted.lastResult } : {}),
   };
 }
 
@@ -183,12 +177,12 @@ export async function notify(
     event === "task.completed"
       ? "✅"
       : event === "task.failed"
-      ? "❌"
-      : event === "morning_report.ready"
-      ? "☀️"
-      : event === "host.approval_pending"
-      ? "⚠️"
-      : "🔔";
+        ? "❌"
+        : event === "morning_report.ready"
+          ? "☀️"
+          : event === "host.approval_pending"
+            ? "⚠️"
+            : "🔔";
 
   let message = `${emoji} ${payload.title}\n\n${payload.body}`;
   if (payload.url) {
@@ -202,9 +196,9 @@ export async function notify(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: cfg.chatId,
-        text: message
+        text: message,
       }),
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!res.ok) {
@@ -213,8 +207,8 @@ export async function notify(
           event,
           ok: false,
           at: new Date().toISOString(),
-          errorSummary: `HTTP ${res.status}`
-        }
+          errorSummary: `HTTP ${res.status}`,
+        },
       });
       return false;
     }
@@ -228,8 +222,8 @@ export async function notify(
         event,
         ok: true,
         at: new Date().toISOString(),
-        ...(messageId !== undefined ? { messageId } : {})
-      }
+        ...(messageId !== undefined ? { messageId } : {}),
+      },
     });
 
     return true;
@@ -243,8 +237,8 @@ export async function notify(
         event,
         ok: false,
         at: new Date().toISOString(),
-        errorSummary: safeErr
-      }
+        errorSummary: safeErr,
+      },
     });
     return false;
   }

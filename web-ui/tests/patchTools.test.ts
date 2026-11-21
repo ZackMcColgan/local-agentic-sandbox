@@ -6,10 +6,7 @@ import { HOST_TOOLS_DEFINITIONS, generateHostFileDiff } from "../lib/hostMode";
 import { KNOWN_ONE_LINERS, DEFAULT_TOOL_SCHEMAS } from "../lib/progressiveTools";
 import { applyReplaceString } from "../../host-bridge/replaceString";
 
-const routeSource = fs.readFileSync(
-  path.resolve(__dirname, "../app/api/chat/route.ts"),
-  "utf8"
-);
+const routeSource = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
 const bridgeServerSource = fs.readFileSync(
   path.resolve(__dirname, "../../host-bridge/server.ts"),
   "utf8"
@@ -24,7 +21,11 @@ describe("patch tools: host_replace_string is defined for the model", () => {
     assert.ok(params.properties.path, "path property required");
     assert.ok(params.properties.oldString, "oldString property required");
     assert.ok(params.properties.newString, "newString property required");
-    assert.equal(params.properties.replaceAll?.type, "boolean", "replaceAll is an optional boolean");
+    assert.equal(
+      params.properties.replaceAll?.type,
+      "boolean",
+      "replaceAll is an optional boolean"
+    );
     for (const req of ["path", "oldString", "newString"]) {
       assert.ok(params.required.includes(req), `${req} must be in required[]`);
     }
@@ -34,8 +35,16 @@ describe("patch tools: host_replace_string is defined for the model", () => {
     const defs = HOST_TOOLS_DEFINITIONS as any[];
     const entry = defs.find((d) => d?.function?.name === "host_replace_string");
     assert.ok(entry);
-    assert.match(entry.function.description, /host_write_file/, "description must contrast with host_write_file");
-    assert.match(entry.function.description, /existing file/i, "description must scope it to existing files");
+    assert.match(
+      entry.function.description,
+      /host_write_file/,
+      "description must contrast with host_write_file"
+    );
+    assert.match(
+      entry.function.description,
+      /existing file/i,
+      "description must scope it to existing files"
+    );
   });
 
   it("the host bridge daemon dispatches host_replace_string", () => {
@@ -105,10 +114,7 @@ describe("patch tools: diff preview agrees with the replace core", () => {
       { preImageExists: true, preImageContent: "a b a" }
     );
     assert.ok(diff, "diff must be generated for host_replace_string");
-    assert.ok(
-      JSON.stringify(diff).includes("a X a"),
-      "diff preview must show the replaced line"
-    );
+    assert.ok(JSON.stringify(diff).includes("a X a"), "diff preview must show the replaced line");
   });
 
   it("generateHostFileDiff renders replaceAll results and literal dollar text", () => {
@@ -150,7 +156,10 @@ describe("patch tools: standing discipline in the system prompt", () => {
   it("the chat route system prompt carries the file editing discipline block", () => {
     assert.ok(routeSource.includes("FILE EDITING DISCIPLINE"), "discipline header missing");
     assert.ok(routeSource.includes("host_replace_string"), "prompt must name host_replace_string");
-    assert.ok(routeSource.includes("workspace_patch_file"), "prompt must name workspace_patch_file");
+    assert.ok(
+      routeSource.includes("workspace_patch_file"),
+      "prompt must name workspace_patch_file"
+    );
     assert.match(routeSource, /one file at a time/i, "prompt must require one-file-at-a-time work");
   });
 });

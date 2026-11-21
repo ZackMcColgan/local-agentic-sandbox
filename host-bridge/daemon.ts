@@ -10,7 +10,7 @@ async function probeHealth(port: number): Promise<{ ok: boolean; sha?: string }>
         port,
         path: "/health",
         timeout: 2000,
-        headers: { Host: `127.0.0.1:${port}` }
+        headers: { Host: `127.0.0.1:${port}` },
       },
       (res) => {
         let data = "";
@@ -57,10 +57,14 @@ export async function runDaemon() {
     console.log(`[HostRunner] Bound strictly to 127.0.0.1:${port} (PID: ${process.pid})`);
   } catch (err: any) {
     if (err.code === "EADDRINUSE") {
-      console.warn(`[HostRunner] Port ${port} is already in use. Probing running instance /health...`);
+      console.warn(
+        `[HostRunner] Port ${port} is already in use. Probing running instance /health...`
+      );
       const probe = await probeHealth(port);
       if (probe.ok && probe.sha === manifest.bridgeSourceSha256) {
-        console.log(`[HostRunner] Compatible daemon already running with matching SHA-256 (${manifest.bridgeSourceSha256}). Exiting cleanly (0).`);
+        console.log(
+          `[HostRunner] Compatible daemon already running with matching SHA-256 (${manifest.bridgeSourceSha256}). Exiting cleanly (0).`
+        );
         process.exit(0);
       } else {
         console.error(

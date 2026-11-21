@@ -16,7 +16,7 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
         taskDescription: "Audit and refactor auth module",
         enabled: true,
         createdAt: new Date().toISOString(),
-        nextRun: new Date().toISOString()
+        nextRun: new Date().toISOString(),
       };
       scheduler.saveSchedules([sched]);
 
@@ -38,7 +38,7 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
                 acceptanceCriteria: [{ id: "AC-1", assertion: "Auth analyzed" }],
                 status: "pending",
                 builderIterations: 0,
-                criticRounds: 0
+                criticRounds: 0,
               },
               {
                 id: "M-PLAN-2",
@@ -47,12 +47,12 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
                 acceptanceCriteria: [{ id: "AC-2", assertion: "Tests pass" }],
                 status: "pending",
                 builderIterations: 0,
-                criticRounds: 0
-              }
-            ]
+                criticRounds: 0,
+              },
+            ],
           } as any;
         },
-        runner: async (m: Record<string, unknown>) => ({ ...m, status: "completed" })
+        runner: async (m: Record<string, unknown>) => ({ ...m, status: "completed" }),
       } as any);
 
       assert.strictEqual(plannerCalled, true, "Planner must be called by executeScheduledRun");

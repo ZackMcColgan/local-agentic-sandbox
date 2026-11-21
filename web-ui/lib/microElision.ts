@@ -58,7 +58,10 @@ export function buildToolResultStub(meta: ElisionMeta): string {
 }
 
 /** Recovers the path/command/url/query target from the paired tool call args. */
-function recoverTarget(msg: any, pairedCall: any): { target?: string; targetKind: ElisionMeta["targetKind"] } {
+function recoverTarget(
+  msg: any,
+  pairedCall: any
+): { target?: string; targetKind: ElisionMeta["targetKind"] } {
   let args: Record<string, any> = {};
   const raw = pairedCall?.function?.arguments;
   if (typeof raw === "string") {
@@ -77,16 +80,20 @@ function recoverTarget(msg: any, pairedCall: any): { target?: string; targetKind
   const queryKeys = ["query", "q", "search_query"];
 
   for (const k of pathKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "path" };
+    if (typeof args[k] === "string" && args[k].trim())
+      return { target: args[k].trim(), targetKind: "path" };
   }
   for (const k of commandKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "command" };
+    if (typeof args[k] === "string" && args[k].trim())
+      return { target: args[k].trim(), targetKind: "command" };
   }
   for (const k of urlKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "url" };
+    if (typeof args[k] === "string" && args[k].trim())
+      return { target: args[k].trim(), targetKind: "url" };
   }
   for (const k of queryKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "query" };
+    if (typeof args[k] === "string" && args[k].trim())
+      return { target: args[k].trim(), targetKind: "query" };
   }
   return { targetKind: "none" };
 }
@@ -150,7 +157,7 @@ export function applyMicroElision(messages: any[], currentRound: number): MicroE
       round: precedingAssistantRounds > 0 ? precedingAssistantRounds : currentRound,
       target,
       targetKind,
-      originalChars: content.length
+      originalChars: content.length,
     };
 
     msg.content = buildToolResultStub(meta);

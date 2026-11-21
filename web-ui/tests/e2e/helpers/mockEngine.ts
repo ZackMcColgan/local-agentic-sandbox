@@ -11,7 +11,10 @@ export interface MockOptions {
  * Sets up Playwright route intercepts to stub all backend / LLM APIs hermetically.
  * Ensures tests run fast with zero external dependencies and zero GPU requirements.
  */
-export async function setupStubbedEngineRoutes(page: Page, options: MockOptions = {}): Promise<void> {
+export async function setupStubbedEngineRoutes(
+  page: Page,
+  options: MockOptions = {}
+): Promise<void> {
   const {
     modelName = "swift-15-27b-mtp",
     engineRunning = true,
@@ -131,7 +134,10 @@ export async function setupStubbedEngineRoutes(page: Page, options: MockOptions 
     }
     const thread = currentThreads.find((t) => t.id === id);
     if (!thread) {
-      await route.fulfill({ status: 200, body: JSON.stringify({ id, title: "Session", messages: [] }) });
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ id, title: "Session", messages: [] }),
+      });
       return;
     }
     await route.fulfill({

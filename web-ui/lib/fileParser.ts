@@ -13,8 +13,7 @@ export async function parseAttachment(
   size: number,
   base64Data: string
 ): Promise<ParsedAttachment> {
-  const isImage =
-    type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
+  const isImage = type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
 
   // If Image: extract raw base64 for vision models
   if (isImage) {
@@ -24,7 +23,7 @@ export async function parseAttachment(
       type,
       size,
       isImage: true,
-      rawBase64
+      rawBase64,
     };
   }
 
@@ -41,7 +40,7 @@ export async function parseAttachment(
           name,
           type,
           size,
-          textContent: data.text
+          textContent: data.text,
         };
       } else if (pdfModule.PDFParse) {
         const parser = new (pdfModule.PDFParse as any)({ data: buffer });
@@ -51,7 +50,7 @@ export async function parseAttachment(
           name,
           type,
           size,
-          textContent: text
+          textContent: text,
         };
       }
     } catch (err: any) {
@@ -60,7 +59,7 @@ export async function parseAttachment(
         name,
         type,
         size,
-        textContent: `[Error reading PDF ${name}: ${err.message}]`
+        textContent: `[Error reading PDF ${name}: ${err.message}]`,
       };
     }
   }
@@ -77,7 +76,7 @@ export async function parseAttachment(
         name,
         type,
         size,
-        textContent: result.value
+        textContent: result.value,
       };
     } catch (err: any) {
       console.warn(`[FileParser] Error parsing DOCX ${name}:`, err.message);
@@ -85,7 +84,7 @@ export async function parseAttachment(
         name,
         type,
         size,
-        textContent: `[Error reading DOCX ${name}: ${err.message}]`
+        textContent: `[Error reading DOCX ${name}: ${err.message}]`,
       };
     }
   }
@@ -97,14 +96,14 @@ export async function parseAttachment(
       name,
       type,
       size,
-      textContent
+      textContent,
     };
   } catch {
     return {
       name,
       type,
       size,
-      textContent: `[Binary document ${name} attached]`
+      textContent: `[Binary document ${name} attached]`,
     };
   }
 }

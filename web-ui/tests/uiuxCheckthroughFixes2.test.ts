@@ -21,14 +21,21 @@ describe("UI-087: queue deck scroller + steer deck remove & clear-all", () => {
       "chat-queue-deck outer container should not have overflow-x-auto (Clear all must stay pinned outside)"
     );
 
-    const queueBlock = src.slice(src.indexOf('data-testid="chat-queue-deck"'), src.indexOf('data-testid="chat-queue-clear-all"'));
+    const queueBlock = src.slice(
+      src.indexOf('data-testid="chat-queue-deck"'),
+      src.indexOf('data-testid="chat-queue-clear-all"')
+    );
     assert.ok(
-      queueBlock.includes("flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none"),
+      queueBlock.includes(
+        "flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none"
+      ),
       "queue chips container should be the horizontal scroller (overflow-x-auto scrollbar-none)"
     );
 
     // Steer deck: outer deck should NOT have overflow-x-auto; inner chips container should
-    const steerDeckMatch = src.match(/data-testid="chat-steer-pending-deck"[^>]*className="([^"]+)"/);
+    const steerDeckMatch = src.match(
+      /data-testid="chat-steer-pending-deck"[^>]*className="([^"]+)"/
+    );
     assert.ok(steerDeckMatch, "chat-steer-pending-deck should exist");
     assert.ok(
       !steerDeckMatch[1].includes("overflow-x-auto"),
@@ -64,10 +71,7 @@ describe("UI-083: board scrolling on mobile", () => {
       !src.includes("setTouchStartX"),
       "BoardView should not use React state (setTouchStartX) for touch tracking"
     );
-    assert.ok(
-      src.includes("useRef"),
-      "BoardView should use a ref for touch start coordinates"
-    );
+    assert.ok(src.includes("useRef"), "BoardView should use a ref for touch start coordinates");
   });
 
   it("requires horizontal dominance (|dx| > 50 && |dx| > 2 * |dy|) to flip columns", () => {

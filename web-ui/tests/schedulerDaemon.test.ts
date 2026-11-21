@@ -33,8 +33,8 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
           enabled: true,
           createdAt: new Date(now - 100000).toISOString(),
           nextRun: new Date(now - 10000).toISOString(),
-          failureCount: 0
-        }
+          failureCount: 0,
+        },
       ];
       scheduler.saveSchedules(schedules);
 
@@ -44,7 +44,11 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
         return null;
       };
 
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, scheduler, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
       const dueCount = await daemon.tick();
 
       assert.equal(dueCount, 1);
@@ -71,8 +75,8 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
           enabled: false,
           createdAt: new Date(now - 100000).toISOString(),
           nextRun: new Date(now - 10000).toISOString(),
-          failureCount: 0
-        }
+          failureCount: 0,
+        },
       ];
       scheduler.saveSchedules(schedules);
 
@@ -82,7 +86,11 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
         return null;
       };
 
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, scheduler, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
       const dueCount = await daemon.tick();
 
       assert.equal(dueCount, 0);
@@ -106,8 +114,8 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
           createdAt: new Date(now - 100000).toISOString(),
           nextRun: new Date(now - 10000).toISOString(),
           backoffUntil: new Date(now + 60000).toISOString(),
-          failureCount: 1
-        }
+          failureCount: 1,
+        },
       ];
       scheduler.saveSchedules(schedules);
 
@@ -117,7 +125,11 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
         return null;
       };
 
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, scheduler, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
       const dueCount = await daemon.tick();
 
       assert.equal(dueCount, 0);
@@ -140,7 +152,7 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
           enabled: true,
           createdAt: new Date(now - 100000).toISOString(),
           nextRun: new Date(now - 10000).toISOString(),
-          failureCount: 0
+          failureCount: 0,
         },
         {
           id: "sched-pass",
@@ -149,8 +161,8 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
           enabled: true,
           createdAt: new Date(now - 100000).toISOString(),
           nextRun: new Date(now - 5000).toISOString(),
-          failureCount: 0
-        }
+          failureCount: 0,
+        },
       ];
       scheduler.saveSchedules(schedules);
 
@@ -163,7 +175,11 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
         return null;
       };
 
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, scheduler, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
       const dueCount = await daemon.tick();
 
       assert.equal(dueCount, 2);
@@ -190,13 +206,17 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
         return { recovered: true, scheduleId: "sched-recovered", attempt: 2 };
       };
 
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, scheduler, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
       const hbPath = daemon.getHeartbeatPath();
       const staleHeartbeat = {
         pid: 99999,
         startedAt: new Date(Date.now() - 600000).toISOString(),
         lastTick: new Date(Date.now() - 360000).toISOString(),
-        active: true
+        active: true,
       };
       fs.writeFileSync(hbPath, JSON.stringify(staleHeartbeat, null, 2), "utf8");
 
@@ -216,7 +236,10 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
   it("SIGTERM sets shutdown flag and marks heartbeat inactive", async () => {
     setup();
     try {
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, registerSignalHandlers: true });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        registerSignalHandlers: true,
+      });
       daemon.writeHeartbeat(true);
 
       assert.equal(daemon.shutdownRequested, false);
@@ -237,7 +260,10 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
   it("Log file created with correct format and rotatable", () => {
     setup();
     try {
-      const daemon = new SchedulerDaemon({ workspaceDir: testWorkspace, registerSignalHandlers: false });
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        registerSignalHandlers: false,
+      });
       daemon.log("INFO", "Scheduled maintenance check");
       daemon.log("WARN", "Disk threshold near 80%");
       daemon.log("ERROR", "Unhandled task failure");

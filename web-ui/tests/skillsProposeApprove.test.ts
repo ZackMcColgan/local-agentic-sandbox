@@ -30,8 +30,8 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
           action: "propose",
           candidateId: "clamp-output-rule",
           title: "Always Clamp Tool Outputs",
-          solutionSummary: "Enforce MAX_TOOL_OUTPUT_CHARS clamp across all tool executions."
-        })
+          solutionSummary: "Enforce MAX_TOOL_OUTPUT_CHARS clamp across all tool executions.",
+        }),
       });
 
       const proposeRes = await postSkills(proposeReq as any);
@@ -53,7 +53,10 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
       const getData = await getRes.json();
       assert.ok(Array.isArray(getData.pendingCandidates));
       const foundPending = getData.pendingCandidates.find((c: any) => c.id === "clamp-output-rule");
-      assert.ok(foundPending, "Proposed candidate must appear in GET /api/skills pendingCandidates");
+      assert.ok(
+        foundPending,
+        "Proposed candidate must appear in GET /api/skills pendingCandidates"
+      );
       assert.equal(foundPending.title, "Always Clamp Tool Outputs");
     });
 
@@ -65,8 +68,8 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
           action: "propose",
           slug: "svg-self-contained-rule",
           name: "Inline Self-Contained SVG",
-          content: "Always emit pure self-contained SVG elements inside svg code fences."
-        })
+          content: "Always emit pure self-contained SVG elements inside svg code fences.",
+        }),
       });
 
       const proposeRes = await postSkills(proposeReq as any);
@@ -82,8 +85,8 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "approve",
-          slug: "svg-self-contained-rule"
-        })
+          slug: "svg-self-contained-rule",
+        }),
       });
 
       const approveRes = await postSkills(approveReq as any);
@@ -97,7 +100,9 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
       const getRes = await getSkills(getReq as any);
       const getData = await getRes.json();
       assert.ok(Array.isArray(getData.activeSkills));
-      const foundActive = getData.activeSkills.some((s: string) => s.includes("svg-self-contained-rule"));
+      const foundActive = getData.activeSkills.some((s: string) =>
+        s.includes("svg-self-contained-rule")
+      );
       assert.ok(foundActive, "Promoted skill file must appear in activeSkills list");
     });
 
@@ -111,8 +116,8 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
             action: "propose",
             candidateId: "strict-test-gate",
             title: "Strict Test Gate",
-            solutionSummary: "Never bypass test gate."
-          })
+            solutionSummary: "Never bypass test gate.",
+          }),
         }) as any
       );
 
@@ -122,8 +127,8 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "approve",
-          candidateId: "strict-test-gate"
-        })
+          candidateId: "strict-test-gate",
+        }),
       });
 
       const approveRes = await postSkills(approveReq as any);
@@ -144,7 +149,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         new Request("http://localhost:3000/api/skills", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ candidateId: "foo" })
+          body: JSON.stringify({ candidateId: "foo" }),
         }) as any
       );
       assert.equal(resMissingAction.status, 400);
@@ -153,7 +158,7 @@ describe("Skills Propose & Approve API Flow & Thread Branch Hygiene", () => {
         new Request("http://localhost:3000/api/skills", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "propose" })
+          body: JSON.stringify({ action: "propose" }),
         }) as any
       );
       assert.equal(resMissingId.status, 400);

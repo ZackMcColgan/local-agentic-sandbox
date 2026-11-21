@@ -36,12 +36,14 @@ describe("OLED true black — dark mode canvas surfaces", () => {
 
   it("globals: dark background token and body paint are pure black", () => {
     const css = read("app/globals.css");
-    const dark = css.slice(css.indexOf('.dark, [data-theme="dark"]'));
+    const darkStart = css.search(/\.dark,\s*\[data-theme="dark"\]/);
+    assert.ok(darkStart >= 0, "dark theme block exists in globals.css");
+    const dark = css.slice(darkStart);
     assert.match(dark, /--background:\s*0 0% 0%/, "shadcn background is 0 0% 0%");
     assert.match(
       css,
       /html\.dark body,\s*\nhtml\[data-theme="dark"\] body \{\s*\n\s*color-scheme: dark !important;\s*\n\s*background-color: #000000 !important;/,
-      "body paints #000000 in dark mode",
+      "body paints #000000 in dark mode"
     );
     assert.ok(!css.includes("#09090b"), "no zinc-950 left in globals");
   });

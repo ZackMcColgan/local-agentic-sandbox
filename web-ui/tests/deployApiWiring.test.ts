@@ -35,9 +35,9 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         method: "POST",
         headers: {
           host: "localhost:3000",
-          origin: "http://localhost:3000"
+          origin: "http://localhost:3000",
         },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true }),
       });
       const res = await POST(req);
       assert.equal(res.status, 200);
@@ -59,9 +59,9 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         method: "POST",
         headers: {
           host: "localhost:3000",
-          origin: "http://evil.example.com"
+          origin: "http://evil.example.com",
         },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true }),
       });
       const crossRes = await POST(crossOriginReq);
       assert.equal(crossRes.status, 403);
@@ -71,9 +71,9 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       const noOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
         method: "POST",
         headers: {
-          host: "localhost:3000"
+          host: "localhost:3000",
         },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true }),
       });
       const noOriginRes = await POST(noOriginReq);
       assert.equal(noOriginRes.status, 403);
@@ -84,9 +84,9 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         method: "POST",
         headers: {
           host: "localhost:3000",
-          referer: "http://localhost:3000/settings"
+          referer: "http://localhost:3000/settings",
         },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: true }),
       });
       const refererRes = await POST(refererReq);
       assert.equal(refererRes.status, 200);
@@ -115,15 +115,15 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
           status: "completed",
           builderIterations: 1,
           criticRounds: 1,
-          acceptanceCriteria: []
-        }
+          acceptanceCriteria: [],
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(task);
@@ -139,8 +139,8 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
           taskId: task.taskId,
           threadId: "t-1",
           dryRunUrl: "http://localhost:30123",
-          dryRunNamespace: "build-test0001"
-        })
+          dryRunNamespace: "build-test0001",
+        }),
       });
 
       const res = await POST(req);
@@ -176,7 +176,7 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       supervisor.saveCheckpoint(task);
@@ -188,16 +188,22 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
           method: "POST",
           body: JSON.stringify({
             action: "deployBuild",
-            taskId: task.taskId
-          })
+            taskId: task.taskId,
+          }),
         });
 
         const res = await POST(req);
         assert.equal(res.status, 200);
         const data = await res.json();
         // Must NOT match fake 30100+ port pattern or 192.168.50.254 fake IP
-        assert.ok(!data.deploymentUrl.includes("192.168.50.254"), "Must not use hardcoded fake IP 192.168.50.254");
-        assert.ok(!data.deploymentUrl.match(/:30[1-9]\d{2}/), "Must not use fake charCode hash port");
+        assert.ok(
+          !data.deploymentUrl.includes("192.168.50.254"),
+          "Must not use hardcoded fake IP 192.168.50.254"
+        );
+        assert.ok(
+          !data.deploymentUrl.match(/:30[1-9]\d{2}/),
+          "Must not use fake charCode hash port"
+        );
       } finally {
         process.env.CHECKPOINT_DIR = originalCheckDir;
         fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -214,7 +220,7 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         React.createElement(BuildsView, {
           onOpenDrawer: () => {},
           activeTask: null,
-          onSelectThread: () => {}
+          onSelectThread: () => {},
         })
       );
 
@@ -225,7 +231,7 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       assert.ok(html.includes("Rollback"), "Must render rollback button");
       assert.ok(
         window.document.body.textContent?.includes("Merge to develop & Deploy") ||
-        window.document.body.textContent?.includes("Merge to `develop` & Deploy"),
+          window.document.body.textContent?.includes("Merge to `develop` & Deploy"),
         "Must render 1-click merge to develop & deploy button"
       );
       assert.ok(html.includes("Isolated Branch"), "Must render Isolated Branch pipeline step");

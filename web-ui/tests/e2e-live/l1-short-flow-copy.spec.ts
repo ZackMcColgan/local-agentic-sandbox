@@ -1,12 +1,21 @@
 import { test, expect } from "@playwright/test";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L1: Short Flow & Copy Affordance @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("runs short search flow, verifies copy button feedback, and completes contextual follow-up", async ({ page, baseURL }) => {
+  test("runs short search flow, verifies copy button feedback, and completes contextual follow-up", async ({
+    page,
+    baseURL,
+  }) => {
     test.setTimeout(DEADLINES.HEAVY);
     const url = baseURL || "http://192.168.50.254";
 

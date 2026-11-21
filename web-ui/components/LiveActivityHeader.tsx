@@ -40,7 +40,7 @@ export function LiveActivityHeader({
   phaseLabel,
   activityLabel = null,
   isStreaming = true,
-  nowMs
+  nowMs,
 }: LiveActivityHeaderProps) {
   const [tickedNowMs, setTickedNowMs] = useState<number>(() => nowMs ?? Date.now());
 
@@ -122,7 +122,10 @@ export function LiveActivityHeader({
 
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
-        <div className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden" aria-hidden="true">
+        <div
+          className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden"
+          aria-hidden="true"
+        >
           <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400" />
         </div>
       )}
@@ -152,7 +155,10 @@ export function LiveActivityHeader({
             const isInFlight =
               !isFailed &&
               (tr.status === "running" ||
-                (isStreaming && idx === traces.length - 1 && tr.durationMs == null && tr.status !== "completed"));
+                (isStreaming &&
+                  idx === traces.length - 1 &&
+                  tr.durationMs == null &&
+                  tr.status !== "completed"));
             const target =
               (typeof tr.args?.path === "string" && tr.args.path) ||
               (typeof tr.args?.file === "string" && tr.args.file) ||
@@ -167,8 +173,8 @@ export function LiveActivityHeader({
                   isFailed
                     ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30"
                     : isInFlight
-                    ? "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border border-cyan-500/30"
-                    : "text-stone-700 dark:text-stone-300"
+                      ? "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border border-cyan-500/30"
+                      : "text-stone-700 dark:text-stone-300"
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -180,14 +186,16 @@ export function LiveActivityHeader({
                     <span className="text-emerald-600 dark:text-emerald-400 shrink-0">✓</span>
                   )}
                   <span className="font-semibold truncate">{tr.tool}</span>
-                  {target && <span className="text-zinc-600 dark:text-zinc-400 truncate">{target}</span>}
+                  {target && (
+                    <span className="text-zinc-600 dark:text-zinc-400 truncate">{target}</span>
+                  )}
                 </div>
                 <span className="text-[11px] text-zinc-600 dark:text-zinc-400 tabular-nums shrink-0">
                   {tr.durationMs != null
                     ? `${tr.durationMs}ms`
                     : isInFlight
-                    ? formatElapsedDuration(elapsedSeconds)
-                    : ""}
+                      ? formatElapsedDuration(elapsedSeconds)
+                      : ""}
                 </span>
               </div>
             );

@@ -7,18 +7,17 @@ import {
   createBuilderWorker,
   createCriticWorker,
   createRecorderWorker,
-  WorkerPool
+  WorkerPool,
 } from "../lib/subagents/workerPool.js";
 import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,
   disableOllamaMock,
-  logServiceMode
+  logServiceMode,
 } from "./helpers/serviceMocks.js";
 
 describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
-
   let useRealOllama = false;
 
   before(async () => {
@@ -40,7 +39,11 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
     assert.ok(tools.includes("workspace_read_file"), "Must have workspace_read_file");
 
     // Must NOT have modification tools
-    assert.equal(tools.includes("workspace_write_file"), false, "Explorer must not have write tool");
+    assert.equal(
+      tools.includes("workspace_write_file"),
+      false,
+      "Explorer must not have write tool"
+    );
     assert.equal(tools.includes("workspace_run_command"), false, "Explorer must not have run tool");
     assert.equal(tools.includes("git_commit"), false, "Explorer must not have git commit tool");
   });
@@ -68,23 +71,26 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
       acceptanceCriteria: [
         {
           id: "AC-1",
-          assertion: "browser-mcp must be on egress-mesh network"
-        }
+          assertion: "browser-mcp must be on egress-mesh network",
+        },
       ],
       status: "in_progress",
       builderIterations: 1,
       criticRounds: 0,
-      diffSummary: "+ browser-mcp: network = ai-mesh" // Intentional seeded discrepancy
+      diffSummary: "+ browser-mcp: network = ai-mesh", // Intentional seeded discrepancy
     };
 
     const review = await critic.evaluateMilestoneDiff(milestone, {
       diff: "+ browser-mcp: network = ai-mesh",
-      filesChanged: ["docker-compose.yml"]
+      filesChanged: ["docker-compose.yml"],
     });
 
     assert.equal(review.approved, false, "Critic must reject seeded discrepancy");
     assert.ok(review.feedback.length > 0, "Critic must provide explanatory feedback notes");
-    assert.ok(review.feedback.some(f => f.includes("egress-mesh") || f.includes("network")), "Feedback must point out criteria discrepancy");
+    assert.ok(
+      review.feedback.some((f) => f.includes("egress-mesh") || f.includes("network")),
+      "Feedback must point out criteria discrepancy"
+    );
   });
 
   it("Critic approves matching diff without self-grading homework", async () => {
@@ -96,19 +102,19 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
       acceptanceCriteria: [
         {
           id: "AC-2",
-          assertion: "background must be #ffffff"
-        }
+          assertion: "background must be #ffffff",
+        },
       ],
       status: "in_progress",
       builderIterations: 1,
       criticRounds: 0,
-      diffSummary: "+ background=\"#ffffff\""
+      diffSummary: '+ background="#ffffff"',
     };
 
     const conformingDiff = `--- a/docs/architecture.drawio\n+++ b/docs/architecture.drawio\n@@ -1,3 +1,3 @@\n-<mxGraphModel background="#000000">\n+<mxGraphModel background="#ffffff">`;
     const review = await critic.evaluateMilestoneDiff(milestone, {
       diff: conformingDiff,
-      filesChanged: ["docs/architecture.drawio"]
+      filesChanged: ["docs/architecture.drawio"],
     });
     assert.equal(review.approved, true, "Critic must approve conforming diff");
   });
@@ -128,36 +134,45 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
         acceptanceCriteria: [{ id: "AC-1", assertion: "Typo fixed" }],
         status: "completed",
         builderIterations: 1,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
       const result1 = await recorder.evaluateAndRecordSkill(trivialMilestone, {
         lesson: "Fixed spelling in comment",
-        nonTrivialFlag: false
+        nonTrivialFlag: false,
       });
-      assert.equal(result1.promoted, false, "1-iteration trivial fix must NOT be promoted to skills");
+      assert.equal(
+        result1.promoted,
+        false,
+        "1-iteration trivial fix must NOT be promoted to skills"
+      );
 
       // Case 2: Multi-iteration (>= 2) fix -> MUST record to skills
       const nonTrivialMilestone: Milestone = {
         id: "M-deep",
         title: "Recover from SVG black polygon clipping",
-        description: "Path without fill=none caused polygon artifact; solved by adding fill=none and gutter route",
+        description:
+          "Path without fill=none caused polygon artifact; solved by adding fill=none and gutter route",
         acceptanceCriteria: [{ id: "AC-2", assertion: "Diagram renders cleanly" }],
         status: "completed",
         builderIterations: 3,
-        criticRounds: 1
+        criticRounds: 1,
       };
 
       const result2 = await recorder.evaluateAndRecordSkill(nonTrivialMilestone, {
-        lesson: "Always declare fill='none' on SVG path connectors to prevent default black polygon fills",
-        nonTrivialFlag: true
+        lesson:
+          "Always declare fill='none' on SVG path connectors to prevent default black polygon fills",
+        nonTrivialFlag: true,
       });
       assert.equal(result2.promoted, true, "Multi-iteration fix must be promoted to skills");
       assert.ok(result2.skillFilePath, "Skill file path must be returned");
       assert.ok(fs.existsSync(result2.skillFilePath), "Skill file must exist on disk");
 
       const fileContent = fs.readFileSync(result2.skillFilePath, "utf8");
-      assert.ok(fileContent.includes("fill='none'"), "Skill content must record the learned pattern");
+      assert.ok(
+        fileContent.includes("fill='none'"),
+        "Skill content must record the learned pattern"
+      );
     } finally {
       if (fs.existsSync(tempSkillsDir)) {
         fs.rmSync(tempSkillsDir, { recursive: true, force: true });
@@ -171,8 +186,8 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
       modelRoster: {
         planner: "swift-27b-mtp",
         builder: "swift-27b-mtp",
-        critic: "swift-27b-mtp"
-      }
+        critic: "swift-27b-mtp",
+      },
     });
 
     const abortController = new AbortController();
@@ -187,7 +202,7 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
           await new Promise((r) => setTimeout(r, 50));
         }
         return "finished";
-      }
+      },
     });
 
     // Cancel after 60ms
@@ -201,6 +216,10 @@ describe("Phase 1 — Worker Pool & Specialized Subagents Suite", () => {
       "Worker must reject with abort error upon receiving cancellation token"
     );
 
-    assert.equal(pool.getActiveWorkerCount(), 0, "Active worker count must return to 0 (idle) immediately");
+    assert.equal(
+      pool.getActiveWorkerCount(),
+      0,
+      "Active worker count must return to 0 (idle) immediately"
+    );
   });
 });

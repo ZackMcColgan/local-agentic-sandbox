@@ -8,10 +8,13 @@
 ## 1. Executive Summary & Problem Statement
 
 ### The Problem
+
 Autonomous AI coding agents need to generate, test, and debug code in real time. Running agent-generated scripts directly on developer workstations or production hosts poses severe security risks: arbitrary execution, credential theft, and network exfiltration.
 
 ### The Solution
+
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
+
 1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) with a 27B fallback (`swift-15-27b-mtp`) and 128K context window, keeping inference local with no cloud dependency.
 2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 13 autonomous developer and attestation tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
@@ -24,7 +27,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 ## 2. System Architecture & Topology
 
 [![local-agentic-sandbox Architecture](./docs/architecture.drawio.svg)](./docs/architecture.drawio.svg)
-*Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, sandboxed MCP execution boundary, isolated browser scraper, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio).*
+_Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `local-agentic-sandbox`, sandboxed MCP execution boundary, isolated browser scraper, and host GPU inference. Edit source: [docs/architecture.drawio](./docs/architecture.drawio)._
 
 ### 2.1 Component Architecture Diagram
 
@@ -94,33 +97,35 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 ## 3. Network & Security Isolation Matrix
 
-| Component / Pod | Placement | Filesystem Mode | Linux Capabilities | User ID | Role & Network Isolation |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`mcp-runner`** | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`). |
-| **`browser-mcp`** | `local-agentic-sandbox` | Read-Only App | Default (No Privs) | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only. |
-| **`web-ui`** | `local-agentic-sandbox` | Read-Write | Default | Non-Root | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge. |
-| **`otel-collector`**| `local-agentic-sandbox` | Ephemeral | Default (No Privs) | Non-Root | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686). |
-| **`strata`** | Host Process / PCIe | Local Drive | Host Native | Host User | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 27B fallback (`swift-15-27b-mtp`), 128K context. |
-| **`host-bridge`** | Host Process | Local Drive | Host Native | Host User | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only). |
+| Component / Pod      | Placement               | Filesystem Mode       | Linux Capabilities  | User ID           | Role & Network Isolation                                                                                                                                                                    |
+| :------------------- | :---------------------- | :-------------------- | :------------------ | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`mcp-runner`**     | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`).                                                                                 |
+| **`browser-mcp`**    | `local-agentic-sandbox` | Read-Only App         | Default (No Privs)  | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only.                                            |
+| **`web-ui`**         | `local-agentic-sandbox` | Read-Write            | Default             | Non-Root          | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge. |
+| **`otel-collector`** | `local-agentic-sandbox` | Ephemeral             | Default (No Privs)  | Non-Root          | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686).                                                                                                                                |
+| **`strata`**         | Host Process / PCIe     | Local Drive           | Host Native         | Host User         | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 27B fallback (`swift-15-27b-mtp`), 128K context.                                       |
+| **`host-bridge`**    | Host Process            | Local Drive           | Host Native         | Host User         | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only).                                                      |
 
 ### 3.1 Host-Filesystem Write Trust Boundary (`./workspace:/workspace:rw`)
 
 The MCP toolchain container mounts the host directory `./workspace` into `/workspace` with read-write access (`:rw`):
-* **Design Rationale**: This direct bind mount enables seamless local pair programming. Code files, git feature branches, test suites, architecture diagrams (`.drawio.svg`), and learned agent skills (`.agent/skills/`) generated by the model are written directly to the host filesystem so the developer can review, inspect, and run them locally without manual exports.
-* **Trust Implications & Blast Radius**:
-  * Any tool execution by the autonomous agent (`workspace_write_file`, `workspace_run_command`) operates directly on files inside `./workspace` with the permissions of the host process running Docker.
-  * While path traversal outside `/workspace` is strictly rejected by `resolveSafePath()` and container root is read-only, **any file within `./workspace` can be modified or overwritten** by the agent or by commands executed via `workspace_run_command`.
-  * **Operational Hardening**:
+
+- **Design Rationale**: This direct bind mount enables seamless local pair programming. Code files, git feature branches, test suites, architecture diagrams (`.drawio.svg`), and learned agent skills (`.agent/skills/`) generated by the model are written directly to the host filesystem so the developer can review, inspect, and run them locally without manual exports.
+- **Trust Implications & Blast Radius**:
+  - Any tool execution by the autonomous agent (`workspace_write_file`, `workspace_run_command`) operates directly on files inside `./workspace` with the permissions of the host process running Docker.
+  - While path traversal outside `/workspace` is strictly rejected by `resolveSafePath()` and container root is read-only, **any file within `./workspace` can be modified or overwritten** by the agent or by commands executed via `workspace_run_command`.
+  - **Operational Hardening**:
     1. Never symlink sensitive host directories (such as `~/.ssh`, `~/.aws`, `~/.kube`, or system credentials) into `./workspace`.
     2. Treat `./workspace` as an untrusted code sandbox that is monitored via version control. Git initializes an automatic repository with commit history inside `./workspace` to allow tracking and reverting agent modifications.
 
 ### 3.2 LAN Reverse Proxy Bridge Security Tradeoff
 
 The LAN reverse proxy bridge (`scripts/lan-bridge.js`) binds to `0.0.0.0` on ports `80` and `3000` without authentication:
-* **Owner Decision**: Unrestricted access across the local home area network allows seamless pairing from mobile phones and tablets (e.g. `http://192.168.50.254/`) via simple browser bookmarks without authentication friction.
-* **Blast Radius**: Any device on the home LAN (guests, personal phones, IoT devices) can access the Web UI and drive `workspace_run_command`. Execution is strictly restricted to the containerized `/workspace` sandbox under UID `10001` with no host-level privileges.
-* **Startup Warning**: On launch, the bridge emits an explicit security notice in console logs referencing the documentation.
-* **Opt-In Hardening**: If token protection is required in the future, the bridge supports an optional `BRIDGE_AUTH_TOKEN` environment variable with bookmark query parameter (`?token=...`) auto-hydration into secure cookies.
+
+- **Owner Decision**: Unrestricted access across the local home area network allows seamless pairing from mobile phones and tablets (e.g. `http://192.168.50.254/`) via simple browser bookmarks without authentication friction.
+- **Blast Radius**: Any device on the home LAN (guests, personal phones, IoT devices) can access the Web UI and drive `workspace_run_command`. Execution is strictly restricted to the containerized `/workspace` sandbox under UID `10001` with no host-level privileges.
+- **Startup Warning**: On launch, the bridge emits an explicit security notice in console logs referencing the documentation.
+- **Opt-In Hardening**: If token protection is required in the future, the bridge supports an optional `BRIDGE_AUTH_TOKEN` environment variable with bookmark query parameter (`?token=...`) auto-hydration into secure cookies.
 
 ---
 

@@ -48,7 +48,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       prompt: prompt.trim(),
       mode: mode || "now",
       scheduleTime,
-      executeInline: false
+      executeInline: false,
     });
 
     return NextResponse.json({ task }, { status: 201 });

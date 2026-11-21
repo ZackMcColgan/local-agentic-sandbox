@@ -456,9 +456,7 @@ for (const width of PHONE_WIDTHS) {
       isMobile: true,
     });
 
-    test("renders greeting text intact without stray superscript or clipping", async ({
-      page,
-    }) => {
+    test("renders greeting text intact without stray superscript or clipping", async ({ page }) => {
       await setupStubbedEngineRoutes(page, { threads: [] });
       await page.goto("/");
 

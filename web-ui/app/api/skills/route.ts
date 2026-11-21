@@ -6,7 +6,7 @@ import {
   approveSkillCandidate,
   rejectSkillCandidate,
   listActiveSkills,
-  SkillCandidate
+  SkillCandidate,
 } from "@/lib/subagents/skillGate";
 import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
 
@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest) {
       pendingCandidates,
       allCandidates,
       activeSkills,
-      flywheelSkills
+      flywheelSkills,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
 
     if (!action || !id) {
       return NextResponse.json(
-        { error: "Missing required 'action' or candidate identifier ('candidateId', 'slug', or 'id')" },
+        {
+          error:
+            "Missing required 'action' or candidate identifier ('candidateId', 'slug', or 'id')",
+        },
         { status: 400 }
       );
     }
@@ -73,7 +76,7 @@ export async function POST(req: NextRequest) {
         proposed: true,
         candidateId: id,
         candidate: res.candidate,
-        isPendingApproval: true
+        isPendingApproval: true,
       });
     }
 

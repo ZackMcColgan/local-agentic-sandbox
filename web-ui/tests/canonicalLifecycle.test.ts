@@ -7,7 +7,7 @@ import { execSync } from "child_process";
 import {
   OvernightSupervisor,
   createProductionStepExecutor,
-  generateOvernightMorningReport
+  generateOvernightMorningReport,
 } from "../lib/subagents/supervisor.js";
 import { TaskManifest, Milestone } from "../lib/subagents/types.js";
 import { WorkerPool } from "../lib/subagents/workerPool.js";
@@ -25,14 +25,14 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
     try {
       // 1. Initialize isolated git repo
       execSync("git init", { cwd: tmpGit, stdio: "ignore" });
-      execSync("git config user.name \"Test Runner\"", { cwd: tmpGit, stdio: "ignore" });
-      execSync("git config user.email \"test@runner.local\"", { cwd: tmpGit, stdio: "ignore" });
+      execSync('git config user.name "Test Runner"', { cwd: tmpGit, stdio: "ignore" });
+      execSync('git config user.email "test@runner.local"', { cwd: tmpGit, stdio: "ignore" });
       fs.writeFileSync(path.join(tmpGit, "README.md"), "# Lifecycle Test Repo\n", "utf8");
       execSync("git add README.md", { cwd: tmpGit, stdio: "ignore" });
-      execSync("git commit -m \"Initial commit\"", { cwd: tmpGit, stdio: "ignore" });
+      execSync('git commit -m "Initial commit"', { cwd: tmpGit, stdio: "ignore" });
 
       const supervisor = new OvernightSupervisor({
-        checkpointDirectory: tmpCheckpoints
+        checkpointDirectory: tmpCheckpoints,
       });
 
       const task: TaskManifest = {
@@ -51,7 +51,7 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
             builderIterations: 0,
             criticRounds: 0,
             plannedFiles: ["foundation.ts"],
-            acceptanceCriteria: []
+            acceptanceCriteria: [],
           },
           {
             id: "M2",
@@ -62,14 +62,14 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
             builderIterations: 0,
             criticRounds: 0,
             plannedFiles: ["logic.ts"],
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       supervisor.saveCheckpoint(task);
@@ -84,14 +84,14 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
               exitCode: 1,
               passed: 0,
               failed: 1,
-              output: "FAIL: logic.test.ts assertion failed"
+              output: "FAIL: logic.test.ts assertion failed",
             };
           } else {
             return {
               exitCode: 0,
               passed: 4,
               failed: 0,
-              output: "PASS: 4 tests passed"
+              output: "PASS: 4 tests passed",
             };
           }
         }
@@ -103,45 +103,58 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
         scope: "PROJECT",
         generate: async (options: any) => {
           const prompt = options.prompt || "";
-          if (prompt.includes("strict, adversarial code review critic") || prompt.includes("Critique:") || prompt.includes("Review the proposed changes")) {
+          if (
+            prompt.includes("strict, adversarial code review critic") ||
+            prompt.includes("Critique:") ||
+            prompt.includes("Review the proposed changes")
+          ) {
             const body = JSON.stringify({
               approved: true,
               score: 95,
               verdict: "PASS",
-              feedback: ["Looks solid"]
+              feedback: ["Looks solid"],
             });
             return {
               text: body,
               content: body,
-              model: "mock-model"
+              model: "mock-model",
             };
           }
           // Builder generation
           const isM1 = prompt.includes("M1") || prompt.includes("foundation.ts");
           if (isM1) {
-            fs.writeFileSync(path.join(tmpGit, "foundation.ts"), "export const foundation = true;\n", "utf8");
-            const code = "```typescript\n// targetFile: foundation.ts\nexport const foundation = true;\n```";
+            fs.writeFileSync(
+              path.join(tmpGit, "foundation.ts"),
+              "export const foundation = true;\n",
+              "utf8"
+            );
+            const code =
+              "```typescript\n// targetFile: foundation.ts\nexport const foundation = true;\n```";
             return {
               text: code,
               content: code,
-              model: "mock-model"
+              model: "mock-model",
             };
           } else {
-            fs.writeFileSync(path.join(tmpGit, "logic.ts"), `export const logic = ${m2TestIteration};\n`, "utf8");
+            fs.writeFileSync(
+              path.join(tmpGit, "logic.ts"),
+              `export const logic = ${m2TestIteration};\n`,
+              "utf8"
+            );
             const code = `\`\`\`typescript\n// targetFile: logic.ts\nexport const logic = ${m2TestIteration};\n\`\`\``;
             return {
               text: code,
               content: code,
-              model: "mock-model"
+              model: "mock-model",
             };
           }
-        }
+        },
       });
 
       const executor = createProductionStepExecutor({
         workerPool: mockWorkerPool,
         repoRoot: tmpGit,
-        testRunner
+        testRunner,
       });
 
       // Execute Step 1: M1
@@ -182,7 +195,10 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
 
       // Verify pattern recording
       const gateStore = loadPendingQueue(tmpSkills);
-      assert.ok(gateStore.candidates["milestone-M2-multifix"], "Expected candidate pattern recorded for M2 multi-iteration fix");
+      assert.ok(
+        gateStore.candidates["milestone-M2-multifix"],
+        "Expected candidate pattern recorded for M2 multi-iteration fix"
+      );
       assert.equal(gateStore.candidates["milestone-M2-multifix"].occurrences, 1);
     } finally {
       process.env.SKILLS_DIR = origSkillsDir;

@@ -39,7 +39,10 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
 
     it("polls /api/engine periodically and posts start action", () => {
       assert.ok(pillFile.includes("/api/engine"), "Must reference /api/engine");
-      assert.ok(pillFile.includes('action: "start"'), "Must post action: start when Start button is clicked");
+      assert.ok(
+        pillFile.includes('action: "start"'),
+        "Must post action: start when Start button is clicked"
+      );
     });
   });
 
@@ -93,26 +96,32 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
 
     it("invokes /api/engine with start, stop, and restart actions", () => {
       assert.ok(
-        settingsFile.includes('/api/engine'),
+        settingsFile.includes("/api/engine"),
         "SettingsView must communicate with /api/engine"
       );
       assert.ok(
-        settingsFile.includes('action: "start"') || settingsFile.includes("handleEngineAction(\"start\")"),
+        settingsFile.includes('action: "start"') ||
+          settingsFile.includes('handleEngineAction("start")'),
         "SettingsView must dispatch start action"
       );
       assert.ok(
-        settingsFile.includes('action: "stop"') || settingsFile.includes("handleEngineAction(\"stop\")"),
+        settingsFile.includes('action: "stop"') ||
+          settingsFile.includes('handleEngineAction("stop")'),
         "SettingsView must dispatch stop action"
       );
       assert.ok(
-        settingsFile.includes('action: "restart"') || settingsFile.includes("handleEngineAction(\"restart\")"),
+        settingsFile.includes('action: "restart"') ||
+          settingsFile.includes('handleEngineAction("restart")'),
         "SettingsView must dispatch restart action"
       );
     });
   });
 
   describe("ModelBottomSheet Engine Management & AppShell Mobile Classes", () => {
-    const modelSheetFile = fs.readFileSync(path.join(componentsDir, "ModelBottomSheet.tsx"), "utf-8");
+    const modelSheetFile = fs.readFileSync(
+      path.join(componentsDir, "ModelBottomSheet.tsx"),
+      "utf-8"
+    );
     const pageFile = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf-8");
 
     it("EngineStatusPill provides Stop button when running and posts action: stop", () => {
@@ -121,14 +130,26 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
     });
 
     it("ModelBottomSheet provides Engine Management card with toggle", () => {
-      assert.ok(modelSheetFile.includes("Standalone llama.cpp Engine"), "Must contain engine label");
-      assert.ok(modelSheetFile.includes("Start Engine"), "Must contain Start Engine button when stopped");
-      assert.ok(modelSheetFile.includes('/api/engine'), "Must call /api/engine");
+      assert.ok(
+        modelSheetFile.includes("Standalone llama.cpp Engine"),
+        "Must contain engine label"
+      );
+      assert.ok(
+        modelSheetFile.includes("Start Engine"),
+        "Must contain Start Engine button when stopped"
+      );
+      assert.ok(modelSheetFile.includes("/api/engine"), "Must call /api/engine");
     });
 
     it("page.tsx applies mobile-sidebar-open and mobile-inspector-open to app-shell", () => {
-      assert.ok(pageFile.includes("mobile-sidebar-open"), "app-shell must include mobile-sidebar-open class");
-      assert.ok(pageFile.includes("mobile-inspector-open"), "app-shell must include mobile-inspector-open class");
+      assert.ok(
+        pageFile.includes("mobile-sidebar-open"),
+        "app-shell must include mobile-sidebar-open class"
+      );
+      assert.ok(
+        pageFile.includes("mobile-inspector-open"),
+        "app-shell must include mobile-inspector-open class"
+      );
     });
   });
 });

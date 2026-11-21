@@ -70,10 +70,7 @@ export function BoardView({
     return map;
   }, [filteredItems]);
 
-  const itemById = useMemo(
-    () => new Map(items.map((i) => [i.id, i])),
-    [items]
-  );
+  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
   const handleCreateManual = async (input: {
     title: string;
@@ -108,20 +105,23 @@ export function BoardView({
   const renderCard = (item: BoardItem) => {
     const isLive = item.status === "working";
     const isDone = item.status === "done";
-    const dotColor = isLive ? "bg-cyan-400 animate-pulse" : isDone ? "bg-emerald-400" : "bg-stone-500";
+    const dotColor = isLive
+      ? "bg-cyan-400 animate-pulse"
+      : isDone
+        ? "bg-emerald-400"
+        : "bg-stone-500";
     const deps = item.dependencies ?? [];
     const allDepsDone =
-      deps.length > 0 &&
-      deps.every((depId) => itemById.get(depId)?.status === "done");
-    const waitingOn = deps
-      .map((depId) => itemById.get(depId)?.key || depId)
-      .join(", ");
+      deps.length > 0 && deps.every((depId) => itemById.get(depId)?.status === "done");
+    const waitingOn = deps.map((depId) => itemById.get(depId)?.key || depId).join(", ");
 
     return (
       <div
         key={item.id}
         className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] surface-card p-3.5 transition-all ${
-          isLive ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40" : "hover:border-white/[0.18]"
+          isLive
+            ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40"
+            : "hover:border-white/[0.18]"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -150,9 +150,7 @@ export function BoardView({
         )}
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
-          <div className="pt-2 text-[12px] text-emerald-300">
-            {item.parkedReason}
-          </div>
+          <div className="pt-2 text-[12px] text-emerald-300">{item.parkedReason}</div>
         )}
 
         {item.status === "done" && item.evidence?.prNumber && (
@@ -258,8 +256,8 @@ export function BoardView({
             controlState === "running"
               ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
               : controlState === "paused"
-              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-              : "border-white/[0.12] bg-[#15151b] text-stone-300"
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                : "border-white/[0.12] bg-[#15151b] text-stone-300"
           }`}
         >
           <span
@@ -267,17 +265,17 @@ export function BoardView({
               controlState === "running"
                 ? "bg-cyan-400 animate-pulse"
                 : controlState === "paused"
-                ? "bg-emerald-400"
-                : "bg-stone-400"
+                  ? "bg-emerald-400"
+                  : "bg-stone-400"
             }`}
           />
           {controlState === "running"
             ? "Running"
             : controlState === "paused"
-            ? stopAtBoundary
-              ? "Paused · boundary"
-              : "Paused"
-            : "Stopped"}
+              ? stopAtBoundary
+                ? "Paused · boundary"
+                : "Paused"
+              : "Stopped"}
         </span>
         <div
           role="group"
@@ -381,9 +379,7 @@ export function BoardView({
               aria-label={`Show ${col.label}`}
               onClick={() => setActiveColIndex(idx)}
               className={`h-1.5 rounded-full transition-all ${
-                idx === activeColIndex
-                  ? "w-5 rounded-[3px] bg-emerald-500"
-                  : "w-1.5 bg-stone-700"
+                idx === activeColIndex ? "w-5 rounded-[3px] bg-emerald-500" : "w-1.5 bg-stone-700"
               }`}
             />
           ))}
@@ -403,12 +399,11 @@ export function BoardView({
               The next item starts itself when this one lands.
             </div>
           )}
-          {byStatus[activeCol.status].length === 0 &&
-            activeCol.status !== "working" && (
-              <div className="mt-3.5 rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-6 text-center text-[12.5px] text-zinc-400">
-                No items in {activeCol.label}
-              </div>
-            )}
+          {byStatus[activeCol.status].length === 0 && activeCol.status !== "working" && (
+            <div className="mt-3.5 rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-6 text-center text-[12.5px] text-zinc-400">
+              No items in {activeCol.label}
+            </div>
+          )}
         </div>
 
         <button
@@ -431,9 +426,7 @@ export function BoardView({
                 <h2 className="text-[12px] font-bold tracking-[1.1px] text-zinc-300">
                   {col.label}
                 </h2>
-                <span className="text-[11.5px] text-zinc-400">
-                  {colItems.length}
-                </span>
+                <span className="text-[11.5px] text-zinc-400">{colItems.length}</span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto touch-pan-y overscroll-contain pr-1">
                 {colItems.length === 0 ? (

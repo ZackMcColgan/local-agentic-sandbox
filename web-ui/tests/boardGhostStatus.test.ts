@@ -3,7 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { mapThreadStatusToBoardStatus, mergeThreadsIntoBoard } from "../lib/board/mergeThreadsIntoBoard";
+import {
+  mapThreadStatusToBoardStatus,
+  mergeThreadsIntoBoard,
+} from "../lib/board/mergeThreadsIntoBoard";
 import { selectHeadEligibleItem, type DispatcherBoardItem } from "../lib/board/dispatcher";
 
 function writeJson(filePath: string, data: unknown) {
@@ -37,11 +40,35 @@ test("mergeThreadsIntoBoard maps failed/stopped/paused/crashed/needs_input threa
 
     const now = "2026-11-18T12:00:00.000Z";
     const threadCases = [
-      { id: "t-failed", taskId: "task-failed", status: "failed", title: "Failed job", error: "Build exited 1" },
-      { id: "t-stopped", taskId: "task-stopped", status: "stopped", title: "Stopped job", error: "Stopped by operator" },
+      {
+        id: "t-failed",
+        taskId: "task-failed",
+        status: "failed",
+        title: "Failed job",
+        error: "Build exited 1",
+      },
+      {
+        id: "t-stopped",
+        taskId: "task-stopped",
+        status: "stopped",
+        title: "Stopped job",
+        error: "Stopped by operator",
+      },
       { id: "t-paused", taskId: "task-paused", status: "paused", title: "Paused job" },
-      { id: "t-crashed", taskId: "task-crashed", status: "crashed", title: "Crashed job", error: "SIGKILL" },
-      { id: "t-needs-input", taskId: "task-needs-input", status: "needs_input", title: "Needs input job", error: "Awaiting approval" },
+      {
+        id: "t-crashed",
+        taskId: "task-crashed",
+        status: "crashed",
+        title: "Crashed job",
+        error: "SIGKILL",
+      },
+      {
+        id: "t-needs-input",
+        taskId: "task-needs-input",
+        status: "needs_input",
+        title: "Needs input job",
+        error: "Awaiting approval",
+      },
     ];
 
     for (const tc of threadCases) {
@@ -69,8 +96,18 @@ test("mergeThreadsIntoBoard maps failed/stopped/paused/crashed/needs_input threa
 
     // Checkpoint ghosts without matching thread files
     const ghostCases = [
-      { taskId: "ghost-failed", status: "failed", goal: "Ghost failed goal", error: "Checkpoint failed" },
-      { taskId: "ghost-parked", status: "parked", goal: "Ghost parked goal", parkedReason: "Waiting on dependency" },
+      {
+        taskId: "ghost-failed",
+        status: "failed",
+        goal: "Ghost failed goal",
+        error: "Checkpoint failed",
+      },
+      {
+        taskId: "ghost-parked",
+        status: "parked",
+        goal: "Ghost parked goal",
+        parkedReason: "Waiting on dependency",
+      },
       { taskId: "ghost-paused", status: "paused", goal: "Ghost paused goal" },
       { taskId: "ghost-active", status: "active", goal: "Ghost active goal" },
     ];
@@ -88,10 +125,17 @@ test("mergeThreadsIntoBoard maps failed/stopped/paused/crashed/needs_input threa
 
     const merged = await mergeThreadsIntoBoard([]);
     const queuedItems = merged.filter((item) => item.status === "queued");
-    assert.equal(queuedItems.length, 0, `Expected 0 queued ghosts, got: ${JSON.stringify(queuedItems)}`);
+    assert.equal(
+      queuedItems.length,
+      0,
+      `Expected 0 queued ghosts, got: ${JSON.stringify(queuedItems)}`
+    );
 
     // Standalone chat thread must not appear on the board
-    assert.equal(merged.some((item) => item.id === "t-standalone"), false);
+    assert.equal(
+      merged.some((item) => item.id === "t-standalone"),
+      false
+    );
 
     // Failed/stopped/crashed/needs_input threads -> needs-attention with needsAttention: true and parkedReason
     for (const id of ["t-failed", "t-stopped", "t-crashed", "t-needs-input"]) {
@@ -99,7 +143,10 @@ test("mergeThreadsIntoBoard maps failed/stopped/paused/crashed/needs_input threa
       assert.ok(item, `Missing board item for ${id}`);
       assert.equal(item.status, "needs-attention");
       assert.equal(item.needsAttention, true);
-      assert.ok(item.parkedReason && item.parkedReason.length > 0, `Expected parkedReason for ${id}`);
+      assert.ok(
+        item.parkedReason && item.parkedReason.length > 0,
+        `Expected parkedReason for ${id}`
+      );
     }
 
     const failedItem = merged.find((i) => i.id === "t-failed");

@@ -13,7 +13,7 @@ describe("CHAT-STEER-SUBMIT UX — Mid-Turn Submit & Affordance Suite", () => {
       const action = decideSendAction({
         running: true,
         hasAttachments: false,
-        text: "Direct steering instruction"
+        text: "Direct steering instruction",
       });
       assert.equal(action, "enqueue");
     });
@@ -22,7 +22,7 @@ describe("CHAT-STEER-SUBMIT UX — Mid-Turn Submit & Affordance Suite", () => {
       const action = decideSendAction({
         running: true,
         hasAttachments: false,
-        text: "   "
+        text: "   ",
       });
       assert.equal(action, "blocked-attachments");
     });
@@ -31,10 +31,15 @@ describe("CHAT-STEER-SUBMIT UX — Mid-Turn Submit & Affordance Suite", () => {
   describe("ChatStream source inspection for non-negotiable UX affordances", () => {
     it("Stop button and Send button coexist without mutual exclusion", () => {
       // Must not use ternary {isGeneratingOrRunning ? <Stop> : <Send>}
-      const hasTernaryMorph = /\{isGeneratingOrRunning\s*\?\s*\(\s*<button[^>]*data-testid="stop-button"[\s\S]*?\)\s*:\s*\(\s*<button[^>]*data-testid="send-button"/m.test(
-        chatStreamSource
+      const hasTernaryMorph =
+        /\{isGeneratingOrRunning\s*\?\s*\(\s*<button[^>]*data-testid="stop-button"[\s\S]*?\)\s*:\s*\(\s*<button[^>]*data-testid="send-button"/m.test(
+          chatStreamSource
+        );
+      assert.equal(
+        hasTernaryMorph,
+        false,
+        "Send button must NOT be morphed/replaced by Stop button"
       );
-      assert.equal(hasTernaryMorph, false, "Send button must NOT be morphed/replaced by Stop button");
 
       // Both buttons must be rendered independently
       assert.ok(chatStreamSource.includes('data-testid="stop-button"'), "Stop button must exist");

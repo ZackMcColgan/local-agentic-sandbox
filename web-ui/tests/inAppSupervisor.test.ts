@@ -88,7 +88,15 @@ function makeMemoryAdapters(initialThreads: Thread[], bankedJobs: Set<string> = 
     },
   };
 
-  return { threads, createdThreads, dispatchedTurns, jobResumeCounts, jobNeedsAttention, threadAdapter, jobStore };
+  return {
+    threads,
+    createdThreads,
+    dispatchedTurns,
+    jobResumeCounts,
+    jobNeedsAttention,
+    threadAdapter,
+    jobStore,
+  };
 }
 
 describe("inAppSupervisor — 1. Stall detection", () => {
@@ -161,10 +169,8 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
       status: "active",
       updatedAt: new Date(now - STALL_WINDOW_MS - 5_000).toISOString(),
     });
-    const { createdThreads, dispatchedTurns, jobResumeCounts, threadAdapter, jobStore } = makeMemoryAdapters(
-      [thread],
-      new Set(["job-123"])
-    );
+    const { createdThreads, dispatchedTurns, jobResumeCounts, threadAdapter, jobStore } =
+      makeMemoryAdapters([thread], new Set(["job-123"]));
 
     const outcome = superviseStalledThread(thread, { now, threadAdapter, jobStore });
     assert.equal(outcome.action, "resumed");
@@ -180,11 +186,13 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
   it("allows second stall -> second resume, then third stall -> no resume + needsAttention", () => {
     assert.equal(MAX_AUTO_RESUMES, 2);
     const now = Date.now();
-    const t1 = makeThread({ id: "t1", taskId: "job-cap", updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString() });
-    const { createdThreads, dispatchedTurns, jobNeedsAttention, threadAdapter, jobStore } = makeMemoryAdapters(
-      [t1],
-      new Set(["job-cap"])
-    );
+    const t1 = makeThread({
+      id: "t1",
+      taskId: "job-cap",
+      updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString(),
+    });
+    const { createdThreads, dispatchedTurns, jobNeedsAttention, threadAdapter, jobStore } =
+      makeMemoryAdapters([t1], new Set(["job-cap"]));
 
     // 1st stall -> resume 1
     const r1 = superviseStalledThread(t1, { now, threadAdapter, jobStore });
@@ -192,14 +200,22 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
     assert.equal(createdThreads.length, 1);
 
     // 2nd stall -> resume 2
-    const t2 = makeThread({ id: createdThreads[0].id, taskId: "job-cap", updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString() });
+    const t2 = makeThread({
+      id: createdThreads[0].id,
+      taskId: "job-cap",
+      updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString(),
+    });
     const r2 = superviseStalledThread(t2, { now, threadAdapter, jobStore });
     assert.equal(r2.action, "resumed");
     assert.equal(createdThreads.length, 2);
     assert.equal(dispatchedTurns.length, 2);
 
     // 3rd stall -> cap reached, no resume, needsAttention surfaced
-    const t3 = makeThread({ id: createdThreads[1].id, taskId: "job-cap", updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString() });
+    const t3 = makeThread({
+      id: createdThreads[1].id,
+      taskId: "job-cap",
+      updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString(),
+    });
     const r3 = superviseStalledThread(t3, { now, threadAdapter, jobStore });
     assert.equal(r3.action, "needs_attention");
     assert.equal(createdThreads.length, 2);
@@ -236,10 +252,8 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
       taskId: "job-empty",
       updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString(),
     });
-    const { createdThreads, dispatchedTurns, jobNeedsAttention, threadAdapter, jobStore } = makeMemoryAdapters(
-      [thread],
-      new Set()
-    );
+    const { createdThreads, dispatchedTurns, jobNeedsAttention, threadAdapter, jobStore } =
+      makeMemoryAdapters([thread], new Set());
 
     const outcome = superviseStalledThread(thread, { now, threadAdapter, jobStore });
     assert.equal(outcome.action, "needs_attention");
@@ -256,7 +270,10 @@ describe("inAppSupervisor — 3. Bounded auto-resume", () => {
       taskId: undefined,
       updatedAt: new Date(now - STALL_WINDOW_MS - 1_000).toISOString(),
     });
-    const { createdThreads, dispatchedTurns, threadAdapter, jobStore } = makeMemoryAdapters([thread], new Set());
+    const { createdThreads, dispatchedTurns, threadAdapter, jobStore } = makeMemoryAdapters(
+      [thread],
+      new Set()
+    );
 
     const outcome = superviseStalledThread(thread, { now, threadAdapter, jobStore });
     assert.equal(outcome.action, "ended_only");

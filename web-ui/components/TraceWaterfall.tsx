@@ -2,7 +2,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Activity, Clock, Cpu, ShieldCheck, Terminal, Layers, RefreshCw, ChevronDown, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  Cpu,
+  ShieldCheck,
+  Terminal,
+  Layers,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 export interface AgentSpan {
   spanId: string;
@@ -31,14 +43,24 @@ interface TraceWaterfallProps {
   sessionId?: string;
 }
 
-const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: string; bgDark: string; borderLight: string; borderDark: string }> = {
+const SPAN_CONFIG: Record<
+  string,
+  {
+    label: string;
+    color: string;
+    bgLight: string;
+    bgDark: string;
+    borderLight: string;
+    borderDark: string;
+  }
+> = {
   "agent.turn": {
     label: "Root Agent Turn",
     color: "#059669",
     bgLight: "bg-emerald-50",
     bgDark: "bg-emerald-950/40",
     borderLight: "border-emerald-300",
-    borderDark: "border-emerald-600/40"
+    borderDark: "border-emerald-600/40",
   },
   "router.triage": {
     label: "Router Triage (Flash)",
@@ -46,7 +68,7 @@ const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: strin
     bgLight: "bg-purple-50",
     bgDark: "bg-purple-950/40",
     borderLight: "border-purple-300",
-    borderDark: "border-purple-600/40"
+    borderDark: "border-purple-600/40",
   },
   "model.reasoning": {
     label: "Model Reasoning / Thought",
@@ -54,7 +76,7 @@ const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: strin
     bgLight: "bg-amber-50",
     bgDark: "bg-amber-950/40",
     borderLight: "border-amber-300",
-    borderDark: "border-amber-600/40"
+    borderDark: "border-amber-600/40",
   },
   "mcp.tool_call": {
     label: "MCP Tool Call Dispatch",
@@ -62,7 +84,7 @@ const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: strin
     bgLight: "bg-sky-50",
     bgDark: "bg-sky-950/40",
     borderLight: "border-sky-300",
-    borderDark: "border-sky-600/40"
+    borderDark: "border-sky-600/40",
   },
   "sandbox.bash_exec": {
     label: "Sandbox Bash / Pytest Exec",
@@ -70,7 +92,7 @@ const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: strin
     bgLight: "bg-rose-50",
     bgDark: "bg-rose-950/40",
     borderLight: "border-rose-300",
-    borderDark: "border-rose-600/40"
+    borderDark: "border-rose-600/40",
   },
   "model.synthesis": {
     label: "Final Synthesis",
@@ -78,8 +100,8 @@ const SPAN_CONFIG: Record<string, { label: string; color: string; bgLight: strin
     bgLight: "bg-teal-50",
     bgDark: "bg-teal-950/40",
     borderLight: "border-teal-300",
-    borderDark: "border-teal-600/40"
-  }
+    borderDark: "border-teal-600/40",
+  },
 };
 
 export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => {
@@ -90,7 +112,9 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
   const fetchTraceData = async () => {
     setIsLoading(true);
     try {
-      const url = sessionId ? `/api/traces?sessionId=${encodeURIComponent(sessionId)}` : `/api/traces`;
+      const url = sessionId
+        ? `/api/traces?sessionId=${encodeURIComponent(sessionId)}`
+        : `/api/traces`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -117,7 +141,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
   const totalDuration = Math.max(
     session?.totalDurationMs || 0,
     spans.reduce((max, s) => {
-      const spanEnd = s.endTime || (s.startTime + (s.durationMs || 10));
+      const spanEnd = s.endTime || s.startTime + (s.durationMs || 10);
       return Math.max(max, spanEnd - sessionStart);
     }, 100),
     50
@@ -150,21 +174,27 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
       {/* Overview Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Total Duration</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">
+            Total Duration
+          </span>
           <span className="text-lg font-bold text-slate-900 dark:text-zinc-100 font-mono">
             {totalDuration.toLocaleString()} ms
           </span>
         </div>
 
         <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Active Spans</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">
+            Active Spans
+          </span>
           <span className="text-lg font-bold text-slate-900 dark:text-zinc-100 font-mono">
             {spans.length}
           </span>
         </div>
 
         <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Security Boundary</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">
+            Security Boundary
+          </span>
           <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1 font-mono">
             <ShieldCheck className="w-3.5 h-3.5" />
             UID 10001 Sandboxed
@@ -172,8 +202,13 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
         </div>
 
         <div className="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-sm">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">Trace ID</span>
-          <span className="text-[11px] font-mono text-slate-700 dark:text-zinc-300 truncate mt-1" title={session?.traceId || "No active trace"}>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-300">
+            Trace ID
+          </span>
+          <span
+            className="text-[11px] font-mono text-slate-700 dark:text-zinc-300 truncate mt-1"
+            title={session?.traceId || "No active trace"}
+          >
             {session?.traceId ? `${session.traceId.slice(0, 12)}...` : "idle"}
           </span>
         </div>
@@ -196,7 +231,8 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
         <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
           {spans.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-400">
-              No OpenTelemetry spans recorded yet. Trigger a query or command in chat to stream live distributed spans.
+              No OpenTelemetry spans recorded yet. Trigger a query or command in chat to stream live
+              distributed spans.
             </div>
           ) : (
             spans.map((span) => {
@@ -206,17 +242,24 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                 bgLight: "bg-slate-100",
                 bgDark: "bg-zinc-800",
                 borderLight: "border-slate-300",
-                borderDark: "border-zinc-700"
+                borderDark: "border-zinc-700",
               };
 
               const offsetMs = Math.max(0, span.startTime - sessionStart);
-              const durationMs = span.durationMs || (span.endTime ? Math.max(1, span.endTime - span.startTime) : 10);
+              const durationMs =
+                span.durationMs || (span.endTime ? Math.max(1, span.endTime - span.startTime) : 10);
               const leftPercent = Math.min(95, Math.max(0, (offsetMs / totalDuration) * 100));
-              const widthPercent = Math.min(100 - leftPercent, Math.max(3, (durationMs / totalDuration) * 100));
+              const widthPercent = Math.min(
+                100 - leftPercent,
+                Math.max(3, (durationMs / totalDuration) * 100)
+              );
               const isExpanded = expandedSpanId === span.spanId;
 
               return (
-                <div key={span.spanId} className="flex flex-col hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition-colors">
+                <div
+                  key={span.spanId}
+                  className="flex flex-col hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition-colors"
+                >
                   <div
                     onClick={() => setExpandedSpanId(isExpanded ? null : span.spanId)}
                     className="flex items-center px-3 py-2 text-xs cursor-pointer select-none"
@@ -244,7 +287,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                         style={{
                           left: `${leftPercent}%`,
                           width: `${widthPercent}%`,
-                          backgroundColor: cfg.color
+                          backgroundColor: cfg.color,
                         }}
                         className="absolute h-3.5 rounded shadow-sm opacity-90 transition-all duration-300"
                         title={`${span.name}: ${durationMs}ms (+${offsetMs}ms)`}
@@ -262,20 +305,32 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                     <div className="px-6 py-3 bg-slate-50/90 dark:bg-black/80 border-t border-slate-100 dark:border-zinc-800/70 text-[11px] flex flex-col gap-2">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-600 dark:text-zinc-400">
                         <div>
-                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">Span ID:</span>
+                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">
+                            Span ID:
+                          </span>
                           <span className="font-mono text-[10px]">{span.spanId}</span>
                         </div>
                         <div>
-                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">Parent ID:</span>
-                          <span className="font-mono text-[10px]">{span.parentSpanId || "root"}</span>
+                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">
+                            Parent ID:
+                          </span>
+                          <span className="font-mono text-[10px]">
+                            {span.parentSpanId || "root"}
+                          </span>
                         </div>
                         <div>
-                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">Offset:</span>
+                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">
+                            Offset:
+                          </span>
                           <span className="font-mono">+{offsetMs} ms</span>
                         </div>
                         <div>
-                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">Status:</span>
-                          <span className={`font-semibold ${span.status === "ok" ? "text-emerald-600" : "text-rose-600"}`}>
+                          <span className="font-semibold block text-slate-700 dark:text-zinc-300">
+                            Status:
+                          </span>
+                          <span
+                            className={`font-semibold ${span.status === "ok" ? "text-emerald-600" : "text-rose-600"}`}
+                          >
                             {span.status.toUpperCase()}
                           </span>
                         </div>
@@ -283,7 +338,9 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
 
                       {Object.keys(span.attributes).length > 0 && (
                         <div>
-                          <span className="font-semibold block text-slate-700 dark:text-zinc-300 mb-1">Attributes:</span>
+                          <span className="font-semibold block text-slate-700 dark:text-zinc-300 mb-1">
+                            Attributes:
+                          </span>
                           <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] overflow-x-auto text-slate-800 dark:text-zinc-200">
                             {JSON.stringify(span.attributes, null, 2)}
                           </pre>

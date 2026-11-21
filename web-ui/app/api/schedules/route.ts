@@ -3,7 +3,7 @@ import {
   scheduleTask,
   cancelSchedule,
   listSchedules,
-  calculateNextRun
+  calculateNextRun,
 } from "../../../lib/subagents/scheduler";
 
 export async function GET() {
@@ -27,7 +27,10 @@ export async function POST(req: Request | NextRequest) {
 
     const parts = cronExpression.trim().split(/\s+/);
     if (parts.length !== 5) {
-      return NextResponse.json({ error: "Invalid cron expression: must contain exactly 5 fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid cron expression: must contain exactly 5 fields" },
+        { status: 400 }
+      );
     }
 
     if (!taskDescription || typeof taskDescription !== "string" || !taskDescription.trim()) {
@@ -38,7 +41,10 @@ export async function POST(req: Request | NextRequest) {
     try {
       nextRun = calculateNextRun(cronExpression).toISOString();
     } catch (err: any) {
-      return NextResponse.json({ error: `Invalid cron expression: ${err.message}` }, { status: 400 });
+      return NextResponse.json(
+        { error: `Invalid cron expression: ${err.message}` },
+        { status: 400 }
+      );
     }
 
     const workspaceDir = process.env.WORKSPACE_DIR;

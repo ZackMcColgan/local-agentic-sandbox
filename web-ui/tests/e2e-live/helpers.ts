@@ -4,18 +4,14 @@ import fs from "fs";
 import path from "path";
 
 export const DEADLINES = {
-  FAST: 60000,           // 1m
-  NORMAL: 300000,        // 5m
-  HEAVY: 600000,         // 10m
-  WEDGING_LIMIT: 600000  // 10m (leaves 5m budget for watchdog verification within 15m runner deadline)
+  FAST: 60000, // 1m
+  NORMAL: 300000, // 5m
+  HEAVY: 600000, // 10m
+  WEDGING_LIMIT: 600000, // 10m (leaves 5m budget for watchdog verification within 15m runner deadline)
 };
 
 export type HangClassification =
-  | "TURN-DIED"
-  | "STREAM-DIED-TURN-LIVED"
-  | "ENGINE-WEDGED"
-  | "UI-HUNG"
-  | "QUEUED";
+  "TURN-DIED" | "STREAM-DIED-TURN-LIVED" | "ENGINE-WEDGED" | "UI-HUNG" | "QUEUED";
 
 let stopRecoveryCount = 0;
 
@@ -37,18 +33,23 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
   // 2. Addendum A §4: If still busy after 120s, attempt product API stop recovery (max 2 per run)
   if (stopRecoveryCount < 2) {
     stopRecoveryCount++;
-    console.warn(`[WATCHDOG RECOVERY #${stopRecoveryCount}] Slot busy after 120s. Invoking product API stop recovery...`);
+    console.warn(
+      `[WATCHDOG RECOVERY #${stopRecoveryCount}] Slot busy after 120s. Invoking product API stop recovery...`
+    );
     try {
       const thRes = await fetch(`${baseUrl}/api/threads`);
       if (thRes.ok) {
         const thData = await thRes.json();
-        const activeThreads = thData.threads?.filter((t: any) => t.status === "active" || t.status === "running") || [];
+        const activeThreads =
+          thData.threads?.filter((t: any) => t.status === "active" || t.status === "running") || [];
         for (const active of activeThreads) {
-          console.warn(`[WATCHDOG RECOVERY] Stopping active occupant thread '${active.id}' via POST /api/threads/${active.id}...`);
+          console.warn(
+            `[WATCHDOG RECOVERY] Stopping active occupant thread '${active.id}' via POST /api/threads/${active.id}...`
+          );
           await fetch(`${baseUrl}/api/threads/${active.id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "stop" })
+            body: JSON.stringify({ action: "stop" }),
           });
         }
       }
@@ -60,7 +61,9 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
     const stopWaitStart = Date.now();
     while (Date.now() - stopWaitStart < 60000) {
       try {
-        const res = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
+        const res = await fetch("http://127.0.0.1:8080/slots", {
+          signal: AbortSignal.timeout(3000),
+        });
         if (res.ok) {
           const slots = await res.json();
           const busy = slots.some((s: any) => s.is_processing);
@@ -74,7 +77,9 @@ export async function checkEngineWatchdog(baseUrl = "http://192.168.50.254"): Pr
     }
   }
 
-  throw new Error("[ENGINE-WEDGED] Strata LLM engine slot remained busy after product API stop recovery. Watchdog aborting.");
+  throw new Error(
+    "[ENGINE-WEDGED] Strata LLM engine slot remained busy after product API stop recovery. Watchdog aborting."
+  );
 }
 
 export function getCurrentPodRestartCount(): number {
@@ -89,9 +94,13 @@ export function getCurrentPodRestartCount(): number {
   }
 }
 
-export async function createFreshSession(page: Page, baseUrl: string, title = "Live E2E Session"): Promise<string> {
+export async function createFreshSession(
+  page: Page,
+  baseUrl: string,
+  title = "Live E2E Session"
+): Promise<string> {
   const res = await page.request.post(`${baseUrl}/api/threads`, {
-    data: { title }
+    data: { title },
   });
   if (!res.ok()) {
     throw new Error(`Failed to create thread via API: HTTP ${res.status()}`);
@@ -102,7 +111,10 @@ export async function createFreshSession(page: Page, baseUrl: string, title = "L
     throw new Error("No thread ID returned from /api/threads");
   }
 
-  await page.goto(`${baseUrl}/?thread=${encodeURIComponent(threadId)}`, { waitUntil: "networkidle", timeout: 30000 });
+  await page.goto(`${baseUrl}/?thread=${encodeURIComponent(threadId)}`, {
+    waitUntil: "networkidle",
+    timeout: 30000,
+  });
   await page.waitForSelector('textarea, [contenteditable="true"]', { timeout: 15000 });
   return threadId;
 }
@@ -112,8 +124,10 @@ export async function sendPrompt(page: Page, prompt: string): Promise<void> {
   await composer.fill(prompt);
   await page.waitForTimeout(300);
 
-  const sendBtn = page.locator('button[aria-label="Send message"], button[title="Send message"]').first();
-  if (await sendBtn.count() > 0 && await sendBtn.isEnabled()) {
+  const sendBtn = page
+    .locator('button[aria-label="Send message"], button[title="Send message"]')
+    .first();
+  if ((await sendBtn.count()) > 0 && (await sendBtn.isEnabled())) {
     await sendBtn.click();
   } else {
     await composer.press("Enter");
@@ -141,7 +155,9 @@ export async function awaitTurnCompletion(
         const thread = data.thread;
         const activeTurn = data.activeTurn;
         const lastMsg = thread?.messages?.[thread?.messages?.length - 1];
-        const lastAssistant = [...(thread?.messages || [])].reverse().find((m: any) => m.role === "assistant");
+        const lastAssistant = [...(thread?.messages || [])]
+          .reverse()
+          .find((m: any) => m.role === "assistant");
         lastObservedStatus = lastAssistant?.status || lastMsg?.status;
         lastContentLength = lastAssistant?.content?.length || 0;
 
@@ -153,14 +169,21 @@ export async function awaitTurnCompletion(
         if (Date.now() - lastHeartbeat >= 60000) {
           lastHeartbeat = Date.now();
           const elapsed = Math.round((Date.now() - start) / 1000);
-          console.log(`[${specName}] waiting… elapsed ${elapsed}s, state: ${lastObservedStatus || (activeTurn ? 'activeTurn' : 'unknown')}, len: ${lastContentLength}`);
+          console.log(
+            `[${specName}] waiting… elapsed ${elapsed}s, state: ${lastObservedStatus || (activeTurn ? "activeTurn" : "unknown")}, len: ${lastContentLength}`
+          );
         }
 
         // Turn completed cleanly when activeTurn is gone and an assistant message is completed
-        if (sawActivity && !activeTurn && lastAssistant && (lastAssistant.status === "completed" || !lastAssistant.status)) {
+        if (
+          sawActivity &&
+          !activeTurn &&
+          lastAssistant &&
+          (lastAssistant.status === "completed" || !lastAssistant.status)
+        ) {
           return {
             thread,
-            durationSec: parseFloat(((Date.now() - start) / 1000).toFixed(1))
+            durationSec: parseFloat(((Date.now() - start) / 1000).toFixed(1)),
           };
         }
       }
@@ -179,7 +202,9 @@ export async function awaitTurnCompletion(
 
   let slotBusy = false;
   try {
-    const slotRes = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
+    const slotRes = await fetch("http://127.0.0.1:8080/slots", {
+      signal: AbortSignal.timeout(3000),
+    });
     if (slotRes.ok) {
       const slots = await slotRes.json();
       slotBusy = slots.some((s: any) => s.is_processing);
@@ -189,15 +214,19 @@ export async function awaitTurnCompletion(
   let isTrulyWedged = false;
   if (slotBusy) {
     // Timeout & No-Response Doctrine: Check if slot accepts stop recovery or is permanently wedged
-    console.warn(`[WATCHDOG] Slot busy upon timeout. Testing if engine is wedged via product stop recovery...`);
+    console.warn(
+      `[WATCHDOG] Slot busy upon timeout. Testing if engine is wedged via product stop recovery...`
+    );
     try {
       await fetch(`${baseUrl}/api/threads/${threadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop" })
+        body: JSON.stringify({ action: "stop" }),
       });
       await new Promise((r) => setTimeout(r, 4000));
-      const verifyRes = await fetch("http://127.0.0.1:8080/slots", { signal: AbortSignal.timeout(3000) });
+      const verifyRes = await fetch("http://127.0.0.1:8080/slots", {
+        signal: AbortSignal.timeout(3000),
+      });
       if (verifyRes.ok) {
         const verifySlots = await verifyRes.json();
         isTrulyWedged = verifySlots.some((s: any) => s.is_processing);
@@ -222,8 +251,8 @@ export async function awaitTurnCompletion(
 
   const err = new Error(
     `[${classification}] Spec '${specName}' timed out after ${timeoutMs / 1000}s on thread '${threadId}'. ` +
-    `Observed status: ${lastObservedStatus}, Content len: ${lastContentLength}, Slot busy: ${slotBusy}, ` +
-    `Pod restarts: ${podRestarts}, Evidence saved to: ${screenshotPath}`
+      `Observed status: ${lastObservedStatus}, Content len: ${lastContentLength}, Slot busy: ${slotBusy}, ` +
+      `Pod restarts: ${podRestarts}, Evidence saved to: ${screenshotPath}`
   );
   (err as any).classification = classification;
   (err as any).threadId = threadId;

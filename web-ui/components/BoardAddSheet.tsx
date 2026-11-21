@@ -147,9 +147,7 @@ export function BoardAddSheet({
   };
 
   const toggleDep = (id: string) => {
-    setSelectedDeps((prev) =>
-      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
-    );
+    setSelectedDeps((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
   };
 
   return (
@@ -163,9 +161,7 @@ export function BoardAddSheet({
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-white/[0.18]" />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[19px] font-bold tracking-tight text-stone-50">
-              Add to the board
-            </h1>
+            <h1 className="text-[19px] font-bold tracking-tight text-stone-50">Add to the board</h1>
             <p className="pt-1 text-[12.5px] leading-relaxed text-stone-400">
               New items land in Queued. Nothing reaches the board without you behind it.
             </p>
@@ -189,7 +185,8 @@ export function BoardAddSheet({
             </span>
           </h2>
           <p className="pt-1.5 text-[12.5px] leading-relaxed text-stone-400">
-            Paste a plain-words request or multi-item spec. Preview the ordered stack first, then confirm in one tap.
+            Paste a plain-words request or multi-item spec. Preview the ordered stack first, then
+            confirm in one tap.
           </p>
 
           {!stagedItems ? (
@@ -224,8 +221,7 @@ export function BoardAddSheet({
             <div className="mt-3 space-y-2.5" data-testid="intake-preview-stack">
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-stone-200">
-                  Staged stack ({stagedItems.length}{" "}
-                  {stagedItems.length === 1 ? "item" : "items"})
+                  Staged stack ({stagedItems.length} {stagedItems.length === 1 ? "item" : "items"})
                 </span>
                 <button
                   type="button"
@@ -258,9 +254,7 @@ export function BoardAddSheet({
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-[12px] leading-snug text-stone-300">
-                      {item.brief}
-                    </p>
+                    <p className="mt-1 text-[12px] leading-snug text-stone-300">{item.brief}</p>
                     {item.dependencies.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1">
                         <span className="text-[11px] text-stone-400">Deps:</span>
@@ -319,9 +313,7 @@ export function BoardAddSheet({
 
         {/* Door 2: Write it myself */}
         <div className="mt-3.5 rounded-2xl border border-white/[0.10] bg-[#15151b] p-3.5">
-          <h2 className="text-[14.5px] font-semibold text-stone-100">
-            Write it myself
-          </h2>
+          <h2 className="text-[14.5px] font-semibold text-stone-100">Write it myself</h2>
           <p className="pt-1.5 text-[12.5px] leading-relaxed text-stone-400">
             Title, brief, dependencies — the full editor, same as any existing item.
           </p>

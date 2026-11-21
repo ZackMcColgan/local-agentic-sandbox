@@ -4,7 +4,9 @@ import fs from "fs";
 import path from "path";
 
 describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () => {
-  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
+  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy"))
+    ? process.cwd()
+    : path.resolve(process.cwd(), "..");
   const drawioPath = path.resolve(repoRoot, "docs/architecture.drawio");
   const svgPath = path.resolve(repoRoot, "docs/architecture.drawio.svg");
   const companionSvgPath = path.resolve(repoRoot, "docs/architecture.svg");
@@ -27,7 +29,7 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
       "Browser MCP",
       "Strata inference engine",
       "Host bridge",
-      "Host OS"
+      "Host OS",
     ];
 
     for (const label of requiredLabels) {
@@ -47,8 +49,14 @@ describe("Fix 4 — Architecture Diagram & SVG Pair Synchronization Suite", () =
     const svgContent = fs.readFileSync(svgPath, "utf8");
 
     // Both must use pure white background per UI standards
-    assert.ok(drawioContent.includes('background="#ffffff"'), "draw.io must use #ffffff background");
-    assert.ok(svgContent.includes('background-color: #ffffff') || svgContent.includes('fill="#ffffff"'), "SVG must use #ffffff background");
+    assert.ok(
+      drawioContent.includes('background="#ffffff"'),
+      "draw.io must use #ffffff background"
+    );
+    assert.ok(
+      svgContent.includes("background-color: #ffffff") || svgContent.includes('fill="#ffffff"'),
+      "SVG must use #ffffff background"
+    );
 
     assert.ok(Buffer.byteLength(drawioContent, "utf8") >= 5000, "draw.io must be >= 5,000 bytes");
     assert.ok(Buffer.byteLength(svgContent, "utf8") >= 5000, "SVG must be >= 5,000 bytes");

@@ -91,7 +91,11 @@ test("shadow mode (default OFF) prepares and verifies readiness but NEVER execut
   assert.equal(result.mode, "shadow");
   assert.equal(result.status, "shadow_prepared");
   assert.equal(result.rollbackTarget, "local-agentic-sandbox:v1.0.0-prev");
-  assert.equal(calls.some((c) => c.startsWith("S3:")), false, "setImage must NEVER be called in shadow mode");
+  assert.equal(
+    calls.some((c) => c.startsWith("S3:")),
+    false,
+    "setImage must NEVER be called in shadow mode"
+  );
   assert.ok(calls.includes("S2:local-agentic-sandbox:v1.1.0-dev:dryRun=true"));
 });
 

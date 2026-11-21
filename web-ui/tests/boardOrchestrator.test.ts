@@ -55,9 +55,27 @@ function makeSlotMetrics(overrides: Partial<SlotUtilizationMetrics> = {}): SlotU
 test("starts exactly the head eligible item and never starts a second job while one runs", async () => {
   const board: DispatcherBoardItem[] = [
     makeItem({ id: "done-0", key: "#0", status: "done", title: "Done dep" }),
-    makeItem({ id: "blocked-1", key: "#1", status: "queued", dependencies: ["missing"], title: "Blocked" }),
-    makeItem({ id: "eligible-1", key: "#2", status: "queued", dependencies: ["done-0"], title: "Head eligible" }),
-    makeItem({ id: "eligible-2", key: "#3", status: "queued", dependencies: [], title: "Second eligible" }),
+    makeItem({
+      id: "blocked-1",
+      key: "#1",
+      status: "queued",
+      dependencies: ["missing"],
+      title: "Blocked",
+    }),
+    makeItem({
+      id: "eligible-1",
+      key: "#2",
+      status: "queued",
+      dependencies: ["done-0"],
+      title: "Head eligible",
+    }),
+    makeItem({
+      id: "eligible-2",
+      key: "#3",
+      status: "queued",
+      dependencies: [],
+      title: "Second eligible",
+    }),
   ];
 
   let liveRunning = false;
@@ -68,7 +86,10 @@ test("starts exactly the head eligible item and never starts a second job while 
   const orchestrator = new BoardOrchestrator({
     items: board,
     getControlState: () => makeControl("running"),
-    getLiveJobState: () => ({ isRunning: liveRunning, runningJobId: liveRunning ? "job-active" : undefined }),
+    getLiveJobState: () => ({
+      isRunning: liveRunning,
+      runningJobId: liveRunning ? "job-active" : undefined,
+    }),
     getOwnerState: () => ({ isMidTurn: false }),
     getSlotMetrics: () => makeSlotMetrics(),
     operatorMemory: "Keep diffs small.",

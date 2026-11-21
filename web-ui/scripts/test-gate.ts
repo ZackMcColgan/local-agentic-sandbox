@@ -13,7 +13,11 @@ async function main() {
     } else if (arg.startsWith("--since=")) {
       options.sinceRef = arg.split("=")[1];
     } else if (arg.startsWith("--files=")) {
-      options.changedFiles = arg.split("=")[1].split(",").map((s) => s.trim()).filter(Boolean);
+      options.changedFiles = arg
+        .split("=")[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     } else if (arg === "--all") {
       options.changedFiles = [
         "web-ui/lib/svgUtils.ts",
@@ -22,7 +26,7 @@ async function main() {
         "web-ui/lib/toolParser.ts",
         "web-ui/lib/fileParser.ts",
         "web-ui/lib/ingestion/pipeline.ts",
-        "web-ui/app/api/tasks/route.ts"
+        "web-ui/app/api/tasks/route.ts",
       ];
     }
   }
@@ -46,7 +50,9 @@ async function main() {
   for (const t of outcome.testsRan) {
     console.log(`    -> ${t}`);
   }
-  console.log(`  Execution Time:         ${outcome.durationSeconds}s / ${outcome.budgetSeconds}s budget`);
+  console.log(
+    `  Execution Time:         ${outcome.durationSeconds}s / ${outcome.budgetSeconds}s budget`
+  );
 
   if (outcome.uncoveredFiles.length > 0) {
     console.error("\n❌ [test:gate] ZERO TEST COVERAGE REJECTION:");
@@ -70,10 +76,14 @@ async function main() {
   }
 
   if (outcome.status === "passed") {
-    console.log(`✅ [test:gate] PASSED: ${outcome.passed} tests passed, 0 failed in ${outcome.durationSeconds}s (<${outcome.budgetSeconds}s budget).\n`);
+    console.log(
+      `✅ [test:gate] PASSED: ${outcome.passed} tests passed, 0 failed in ${outcome.durationSeconds}s (<${outcome.budgetSeconds}s budget).\n`
+    );
     process.exit(0);
   } else {
-    console.error(`❌ [test:gate] FAILED: ${outcome.passed} passed, ${outcome.failed} failed in ${outcome.durationSeconds}s.\n`);
+    console.error(
+      `❌ [test:gate] FAILED: ${outcome.passed} passed, ${outcome.failed} failed in ${outcome.durationSeconds}s.\n`
+    );
     process.exit(1);
   }
 }

@@ -17,8 +17,8 @@ test("formatChatErrorMessage handles plain text, JSON errors, and prefixed engin
       error: {
         message: "Failed to allocate KV cache",
         type: "server_error",
-        code: 500
-      }
+        code: 500,
+      },
     })
   );
   assert.equal(jsonNested.summary, "Failed to allocate KV cache");
@@ -34,16 +34,12 @@ test("formatChatErrorMessage handles plain text, JSON errors, and prefixed engin
   assert.ok(prefixed.details.includes("Slot out of memory"));
 
   // 4. Flat JSON with error string
-  const jsonFlat = formatChatErrorMessage(
-    JSON.stringify({ error: "Context limit exceeded" })
-  );
+  const jsonFlat = formatChatErrorMessage(JSON.stringify({ error: "Context limit exceeded" }));
   assert.equal(jsonFlat.summary, "Context limit exceeded");
   assert.ok(jsonFlat.details);
 
   // 5. Flat JSON with message string
-  const jsonMessage = formatChatErrorMessage(
-    JSON.stringify({ message: "Engine unavailable" })
-  );
+  const jsonMessage = formatChatErrorMessage(JSON.stringify({ message: "Engine unavailable" }));
   assert.equal(jsonMessage.summary, "Engine unavailable");
   assert.ok(jsonMessage.details);
 
@@ -65,7 +61,7 @@ test("ChatStream.tsx implements 390px mobile header, trace collapsing, error car
   // Header buttons have responsive labels
   assert.ok(
     content.includes('<span className="hidden sm:inline">Workspace</span>') ||
-    content.includes("hidden sm:inline") && content.includes("Workspace"),
+      (content.includes("hidden sm:inline") && content.includes("Workspace")),
     "Workspace toggle label must be hidden on mobile (< sm:)"
   );
 
@@ -116,7 +112,8 @@ test("ThinkingPanel.tsx implements mobile compact badge and generous touch paddi
 
   // Badge text hides verbose 'Thought process · ' on mobile
   assert.ok(
-    content.includes("hidden sm:inline") && (content.includes("Thought process") || content.includes("Streaming")),
+    content.includes("hidden sm:inline") &&
+      (content.includes("Thought process") || content.includes("Streaming")),
     "ThinkingPanel badge text must collapse verbose prefix on mobile"
   );
 });
@@ -127,7 +124,8 @@ test("SvgViewer.tsx implements mobile-safe flex-wrap toolbar", () => {
 
   // Header toolbar wrapping and padding
   assert.ok(
-    content.includes("flex-wrap") && (content.includes("py-2.5 sm:px-4") || content.includes("px-3 py-2.5")),
+    content.includes("flex-wrap") &&
+      (content.includes("py-2.5 sm:px-4") || content.includes("px-3 py-2.5")),
     "SvgViewer header toolbar must support flex-wrap and responsive padding"
   );
 });
@@ -139,7 +137,7 @@ test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition fr
   // 1. ChatStream defines/uses upsertAssistant (or prev.some(msg => msg.id === assistantMsgId)) for in-flight resilience
   assert.ok(
     chatStreamContent.includes("upsertAssistant") &&
-    (chatStreamContent.includes("exists") || chatStreamContent.includes("prev.some")),
+      (chatStreamContent.includes("exists") || chatStreamContent.includes("prev.some")),
     "ChatStream upsertAssistant must verify existence and re-insert assistant message if wiped"
   );
 
@@ -150,7 +148,7 @@ test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition fr
   );
   assert.ok(
     chatStreamContent.includes("lastLinkedTaskMsgIndex = deduplicatedMessages") &&
-    chatStreamContent.includes("m.taskId ? i : -1"),
+      chatStreamContent.includes("m.taskId ? i : -1"),
     "ChatStream lastLinkedTaskMsgIndex must only map messages with explicit m.taskId"
   );
 
@@ -164,7 +162,7 @@ test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition fr
   );
   assert.ok(
     pageContent.includes("skipThreadLoadRef.current = data.thread.id") ||
-    pageContent.includes("skipThreadLoadRef.current = "),
+      pageContent.includes("skipThreadLoadRef.current = "),
     "page.tsx handleEnsureThread must set skipThreadLoadRef when creating a thread"
   );
   assert.ok(
@@ -179,7 +177,8 @@ test("ChatStream.tsx and page.tsx prevent thread auto-creation race condition fr
 
 test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream places tool traces above response", () => {
   // 1. Behavioral test on sanitizeSvg
-  const svgViewBoxOnly = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><rect width="800" height="500"/></svg>';
+  const svgViewBoxOnly =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><rect width="800" height="500"/></svg>';
   const sanitizedViewBox = sanitizeSvg(svgViewBoxOnly);
   const openingTagMatch = sanitizedViewBox.match(/<svg\b[^>]*>/i);
   assert.ok(openingTagMatch, "Sanitized output must contain an <svg> opening tag");
@@ -192,7 +191,8 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
     "Opening tag must preserve viewBox attribute"
   );
 
-  const svgWithExplicitWidth = '<svg width="400" height="300" viewBox="0 0 400 300"><circle cx="200" cy="150" r="50"/></svg>';
+  const svgWithExplicitWidth =
+    '<svg width="400" height="300" viewBox="0 0 400 300"><circle cx="200" cy="150" r="50"/></svg>';
   const sanitizedExplicit = sanitizeSvg(svgWithExplicitWidth);
   const explicitOpeningTag = (sanitizedExplicit.match(/<svg\b[^>]*>/i) || [""])[0];
   const widthMatches = explicitOpeningTag.match(/\bwidth\s*=/gi);
@@ -201,10 +201,7 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
     1,
     `SVG with existing width must not receive a duplicate width attribute. Tag: ${explicitOpeningTag}`
   );
-  assert.ok(
-    explicitOpeningTag.includes('width="400"'),
-    "Existing width value must be preserved"
-  );
+  assert.ok(explicitOpeningTag.includes('width="400"'), "Existing width value must be preserved");
 
   // 2. Structural check on SvgViewer.tsx
   const svgViewerPath = path.resolve(__dirname, "../components/SvgViewer.tsx");
@@ -229,5 +226,3 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
     `Inline tool traces (index ${tracesIndex}) must appear before markdown content (index ${markdownIndex}) in ChatStream assistant message view`
   );
 });
-
-

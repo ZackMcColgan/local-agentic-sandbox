@@ -62,10 +62,12 @@ export function evaluateChunkBudget(
 
 function getGitBranch(cwd: string): string {
   try {
-    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd,
-      encoding: "utf8",
-    }).trim() || "HEAD";
+    return (
+      execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd,
+        encoding: "utf8",
+      }).trim() || "HEAD"
+    );
   } catch {
     return "HEAD";
   }
@@ -380,9 +382,7 @@ export interface ChunkHandoffTarget {
  * exact checkpoint directory and `<taskId>.handoff.json` filename the
  * OvernightSupervisor reads (falling back to threadId when no taskId exists).
  */
-export function resolveChunkHandoffTarget(
-  input: ChunkHandoffTargetInput
-): ChunkHandoffTarget {
+export function resolveChunkHandoffTarget(input: ChunkHandoffTargetInput): ChunkHandoffTarget {
   const jobId =
     (input.taskId && input.taskId.trim()) ||
     (input.threadId && input.threadId.trim()) ||

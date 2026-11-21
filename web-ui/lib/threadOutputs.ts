@@ -76,25 +76,41 @@ export function resolveTurnOutputPath(
     : path.resolve(workspaceRoot, normalized);
 
   const relToOutputs = path.relative(threadOutputsDir, candidateAbs).replace(/\\/g, "/");
-  if (!relToOutputs.startsWith("..") && !path.isAbsolute(relToOutputs) && !/^[a-zA-Z]:/.test(relToOutputs)) {
+  if (
+    !relToOutputs.startsWith("..") &&
+    !path.isAbsolute(relToOutputs) &&
+    !/^[a-zA-Z]:/.test(relToOutputs)
+  ) {
     return relToOutputs || null;
   }
 
   const wsOutputsDir = path.resolve(workspaceRoot, ".agent/threads", cleanThreadId, "files");
   const relToWsOutputs = path.relative(wsOutputsDir, candidateAbs).replace(/\\/g, "/");
-  if (!relToWsOutputs.startsWith("..") && !path.isAbsolute(relToWsOutputs) && !/^[a-zA-Z]:/.test(relToWsOutputs)) {
+  if (
+    !relToWsOutputs.startsWith("..") &&
+    !path.isAbsolute(relToWsOutputs) &&
+    !/^[a-zA-Z]:/.test(relToWsOutputs)
+  ) {
     return relToWsOutputs || null;
   }
 
   const wsOldOutputsDir = path.resolve(workspaceRoot, cleanThreadId, "files");
   const relToWsOld = path.relative(wsOldOutputsDir, candidateAbs).replace(/\\/g, "/");
-  if (!relToWsOld.startsWith("..") && !path.isAbsolute(relToWsOld) && !/^[a-zA-Z]:/.test(relToWsOld)) {
+  if (
+    !relToWsOld.startsWith("..") &&
+    !path.isAbsolute(relToWsOld) &&
+    !/^[a-zA-Z]:/.test(relToWsOld)
+  ) {
     return relToWsOld || null;
   }
 
   const candidateThreadsAbs = path.resolve(threadsDir, normalized);
   const relToThreads = path.relative(threadOutputsDir, candidateThreadsAbs).replace(/\\/g, "/");
-  if (!relToThreads.startsWith("..") && !path.isAbsolute(relToThreads) && !/^[a-zA-Z]:/.test(relToThreads)) {
+  if (
+    !relToThreads.startsWith("..") &&
+    !path.isAbsolute(relToThreads) &&
+    !/^[a-zA-Z]:/.test(relToThreads)
+  ) {
     return relToThreads || null;
   }
 
@@ -153,7 +169,13 @@ export function collectTurnAttachments(
     } catch {}
 
     if (!stat) {
-      const wsFullPath = path.resolve(workspaceRoot, ".agent/threads", cleanThreadId, "files", relInsideOutputs);
+      const wsFullPath = path.resolve(
+        workspaceRoot,
+        ".agent/threads",
+        cleanThreadId,
+        "files",
+        relInsideOutputs
+      );
       try {
         if (fs.existsSync(wsFullPath)) {
           const s = fs.statSync(wsFullPath);
@@ -183,7 +205,7 @@ export function collectTurnAttachments(
         name: path.basename(relInsideOutputs),
         type: inferAttachmentMimeType(relInsideOutputs),
         size: stat.size,
-        previewUrl: `${cleanThreadId}/files/${relInsideOutputs.replace(/\\/g, "/")}`
+        previewUrl: `${cleanThreadId}/files/${relInsideOutputs.replace(/\\/g, "/")}`,
       });
     }
   }
@@ -222,4 +244,3 @@ export class ThreadTurnWriteTracker {
 }
 
 export * from "./chatDiffs";
-

@@ -25,10 +25,7 @@ import {
   type MechanicalCheckInput,
   type ReviewerGateResult,
 } from "./reviewerGate";
-import {
-  AgreementLedgerStore,
-  type PersistentAgreementLedger,
-} from "./agreementLedger";
+import { AgreementLedgerStore, type PersistentAgreementLedger } from "./agreementLedger";
 import {
   isSelfDeployVerifiedEnabled,
   runSelfDeployVerified,
@@ -270,7 +267,9 @@ export class BoardOrchestrator {
       if (!this.dryRunItems) {
         const source = this.deps.items
           ? this.deps.items
-          : (this.deps.boardStore ?? new BoardStore(this.deps.boardDir)).list() as DispatcherBoardItem[];
+          : ((
+              this.deps.boardStore ?? new BoardStore(this.deps.boardDir)
+            ).list() as DispatcherBoardItem[]);
         this.dryRunItems = source.map((item) => ({ ...item }));
       }
       return this.dryRunItems;
@@ -318,10 +317,7 @@ export class BoardOrchestrator {
     if (typeof this.deps.stageFlags?.flowMonitor === "boolean") {
       return this.deps.stageFlags.flowMonitor;
     }
-    return (
-      isFlowMonitorStage2Enabled(undefined) ||
-      process.env.BOARD_STAGE_FLOW_MONITOR === "true"
-    );
+    return isFlowMonitorStage2Enabled(undefined) || process.env.BOARD_STAGE_FLOW_MONITOR === "true";
   }
 
   private resolveReviewerGateEnabled(): boolean {
@@ -353,8 +349,7 @@ export class BoardOrchestrator {
         stage2Enabled,
         pollChecks: this.deps.flowMonitor.pollChecks,
         issueThread:
-          this.deps.flowMonitor.issueThread ??
-          (async () => ({ threadId: "shadow-noop" })),
+          this.deps.flowMonitor.issueThread ?? (async () => ({ threadId: "shadow-noop" })),
         log: this.log,
       });
     }
@@ -442,10 +437,8 @@ export class BoardOrchestrator {
 
     const getControl =
       this.deps.getControlState ?? (() => readBoardControlState(this.deps.boardDir));
-    const getLiveJob =
-      this.deps.getLiveJobState ?? (() => ({ isRunning: false }));
-    const getOwner =
-      this.deps.getOwnerState ?? (() => ({ isMidTurn: false }));
+    const getLiveJob = this.deps.getLiveJobState ?? (() => ({ isRunning: false }));
+    const getOwner = this.deps.getOwnerState ?? (() => ({ isMidTurn: false }));
     const getSlotMetrics =
       this.deps.getSlotMetrics ?? (() => getSharedSlotScheduler().getMetrics());
 
@@ -541,10 +534,7 @@ export class BoardOrchestrator {
             outcome: "failed",
             threadId: result.threadId,
             reason: finalIssue.message,
-            triage:
-              triage.action === "fixed"
-                ? { ...triage, action: "surfaced" }
-                : triage,
+            triage: triage.action === "fixed" ? { ...triage, action: "surfaced" } : triage,
             durationMs: Math.max(0, this.now() - itemStartMs),
           });
           continue;
@@ -667,14 +657,14 @@ export interface ExtractedJobMetadata {
 export function extractJobOutcomeMetadata(
   ...texts: Array<string | undefined>
 ): ExtractedJobMetadata {
-  const combined = texts.filter((t): t is string => typeof t === "string" && t.length > 0).join("\n");
+  const combined = texts
+    .filter((t): t is string => typeof t === "string" && t.length > 0)
+    .join("\n");
   if (!combined) return {};
 
   const result: ExtractedJobMetadata = {};
 
-  const prMatch =
-    /\/pull\/(\d+)\b/i.exec(combined) ??
-    /\bPR\s*#(\d+)\b/i.exec(combined);
+  const prMatch = /\/pull\/(\d+)\b/i.exec(combined) ?? /\bPR\s*#(\d+)\b/i.exec(combined);
   if (prMatch) {
     const parsed = Number.parseInt(prMatch[1], 10);
     if (Number.isInteger(parsed) && parsed > 0) {
@@ -703,8 +693,6 @@ export function extractJobOutcomeMetadata(
   return result;
 }
 
-export async function runBoardDrain(
-  deps: BoardOrchestratorDeps
-): Promise<DrainReport> {
+export async function runBoardDrain(deps: BoardOrchestratorDeps): Promise<DrainReport> {
   return new BoardOrchestrator(deps).drain();
 }

@@ -23,7 +23,10 @@ function detectToolchain(dirPath: string): string {
   try {
     if (fs.existsSync(path.join(dirPath, "package.json"))) return "node:22";
     if (fs.existsSync(path.join(dirPath, "Cargo.toml"))) return "rust:latest";
-    if (fs.existsSync(path.join(dirPath, "pyproject.toml")) || fs.existsSync(path.join(dirPath, "requirements.txt"))) {
+    if (
+      fs.existsSync(path.join(dirPath, "pyproject.toml")) ||
+      fs.existsSync(path.join(dirPath, "requirements.txt"))
+    ) {
       return "python:3.11";
     }
     if (fs.existsSync(path.join(dirPath, "go.mod"))) return "golang:latest";
@@ -36,7 +39,7 @@ function detectDefaultBranch(dirPath: string): string {
     const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: dirPath,
       encoding: "utf8",
-      stdio: ["pipe", "pipe", "ignore"]
+      stdio: ["pipe", "pipe", "ignore"],
     }).trim();
     if (branch && branch !== "HEAD") return branch;
   } catch {}
@@ -71,7 +74,8 @@ export async function GET(req: NextRequest) {
 
     for (const entry of entries) {
       if (entry.name.startsWith(".") && entry.name !== ".agent") continue;
-      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
+      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build")
+        continue;
 
       if (entry.isDirectory()) {
         const full = path.join(candidateNorm, entry.name);
@@ -85,7 +89,7 @@ export async function GET(req: NextRequest) {
           relPath: path.relative(allowedRoot, full).replace(/\\/g, "/"),
           isGitRepo,
           defaultBranch,
-          toolchain
+          toolchain,
         });
       }
     }
@@ -105,7 +109,7 @@ export async function GET(req: NextRequest) {
       relPath: path.relative(allowedRoot, candidateNorm).replace(/\\/g, "/") || ".",
       isAtRoot,
       parentPath,
-      items
+      items,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -124,7 +128,10 @@ export async function POST(req: NextRequest) {
       }
 
       const norm = path.normalize(path.resolve(targetPath));
-      if (!norm.startsWith(path.normalize(allowedRoot)) && !norm.startsWith(path.normalize(os.tmpdir()))) {
+      if (
+        !norm.startsWith(path.normalize(allowedRoot)) &&
+        !norm.startsWith(path.normalize(os.tmpdir()))
+      ) {
         return NextResponse.json({ error: "Target path outside allowed root" }, { status: 403 });
       }
 
@@ -138,7 +145,10 @@ export async function POST(req: NextRequest) {
       // Check if repo has any commits
       let hasCommits = false;
       try {
-        execFileSync("git", ["rev-parse", "HEAD"], { cwd: norm, stdio: ["pipe", "pipe", "ignore"] });
+        execFileSync("git", ["rev-parse", "HEAD"], {
+          cwd: norm,
+          stdio: ["pipe", "pipe", "ignore"],
+        });
         hasCommits = true;
       } catch {}
 
@@ -146,10 +156,16 @@ export async function POST(req: NextRequest) {
         // Create initial README commit so repo has a valid base commit
         const readmePath = path.join(norm, "README.md");
         if (!fs.existsSync(readmePath)) {
-          fs.writeFileSync(readmePath, `# ${path.basename(norm)}\n\nProject initialized.\n`, "utf8");
+          fs.writeFileSync(
+            readmePath,
+            `# ${path.basename(norm)}\n\nProject initialized.\n`,
+            "utf8"
+          );
         }
         execFileSync("git", ["config", "user.name", "Local Agent"], { cwd: norm });
-        execFileSync("git", ["config", "user.email", "agent@local-sandbox.internal"], { cwd: norm });
+        execFileSync("git", ["config", "user.email", "agent@local-sandbox.internal"], {
+          cwd: norm,
+        });
         execFileSync("git", ["add", "."], { cwd: norm });
         execFileSync("git", ["commit", "-m", "Initial commit"], { cwd: norm });
       }
@@ -159,13 +175,16 @@ export async function POST(req: NextRequest) {
         success: true,
         targetPath: norm,
         defaultBranch: "main",
-        toolchain
+        toolchain,
       });
     }
 
     if (action === "create-greenfield") {
       const projectName = (name || "new-project").trim();
-      const slug = projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-");
+      const slug = projectName
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .replace(/-+/g, "-");
       const projectsDir = path.join(allowedRoot, "projects");
       if (!fs.existsSync(projectsDir)) {
         fs.mkdirSync(projectsDir, { recursive: true });
@@ -173,14 +192,26 @@ export async function POST(req: NextRequest) {
 
       const projectPath = path.join(projectsDir, slug);
       if (fs.existsSync(projectPath)) {
-        return NextResponse.json({ error: `Project directory already exists: ${slug}` }, { status: 409 });
+        return NextResponse.json(
+          { error: `Project directory already exists: ${slug}` },
+          { status: 409 }
+        );
       }
 
       fs.mkdirSync(projectPath, { recursive: true });
-      execFileSync("git", ["init", "-b", "main"], { cwd: projectPath, stdio: ["pipe", "pipe", "ignore"] });
-      fs.writeFileSync(path.join(projectPath, "README.md"), `# ${projectName}\n\nProject initialized.\n`, "utf8");
+      execFileSync("git", ["init", "-b", "main"], {
+        cwd: projectPath,
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      fs.writeFileSync(
+        path.join(projectPath, "README.md"),
+        `# ${projectName}\n\nProject initialized.\n`,
+        "utf8"
+      );
       execFileSync("git", ["config", "user.name", "Local Agent"], { cwd: projectPath });
-      execFileSync("git", ["config", "user.email", "agent@local-sandbox.internal"], { cwd: projectPath });
+      execFileSync("git", ["config", "user.email", "agent@local-sandbox.internal"], {
+        cwd: projectPath,
+      });
       execFileSync("git", ["add", "."], { cwd: projectPath });
       execFileSync("git", ["commit", "-m", "Initial project commit"], { cwd: projectPath });
 
@@ -190,7 +221,7 @@ export async function POST(req: NextRequest) {
           projectPath,
           name: projectName,
           defaultBranch: "main",
-          toolchain: "node:22"
+          toolchain: "node:22",
         },
         { status: 201 }
       );

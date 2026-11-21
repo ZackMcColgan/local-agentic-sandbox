@@ -4,16 +4,8 @@ import { ThreadStore, type Thread } from "../threads/threadStore";
 import { prepareSelfDeployPlan } from "../selfDeployMachinery";
 import type { BoardOrchestratorDeps } from "./boardOrchestrator";
 import type { DispatcherBoardItem } from "./dispatcher";
-import type {
-  FlowMonitorBoardItem,
-  PrCheckResult,
-  PrChecksSnapshot,
-} from "./flowMonitor";
-import type {
-  GateVerdict,
-  MechanicalCheckInput,
-  ReviewerVerdict,
-} from "./reviewerGate";
+import type { FlowMonitorBoardItem, PrCheckResult, PrChecksSnapshot } from "./flowMonitor";
+import type { GateVerdict, MechanicalCheckInput, ReviewerVerdict } from "./reviewerGate";
 import type {
   BankRollbackResult,
   BuildImportResult,
@@ -124,8 +116,7 @@ function mapGhCheckRow(row: GhPrCheckRow): PrCheckResult | null {
     state === "TIMED_OUT" ||
     state === "ACTION_REQUIRED"
   ) {
-    const conclusion =
-      state === "TIMED_OUT" || state === "ACTION_REQUIRED" ? state : "FAILURE";
+    const conclusion = state === "TIMED_OUT" || state === "ACTION_REQUIRED" ? state : "FAILURE";
     return { name, status: "COMPLETED", conclusion };
   }
   if (bucket === "skipping" || state === "SKIPPED" || state === "NEUTRAL") {
@@ -140,13 +131,12 @@ function extractItemAllowlist(item: DispatcherBoardItem): string[] {
   if (!Array.isArray(candidate)) {
     return [];
   }
-  return candidate.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  return candidate.filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+  );
 }
 
-function parseReviewerVerdictContent(
-  threadId: string,
-  content: string
-): ReviewerVerdict {
+function parseReviewerVerdictContent(threadId: string, content: string): ReviewerVerdict {
   const lines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -225,8 +215,7 @@ export function createProductionStageDeps(
   options: ProductionStageDepsOptions = {}
 ): ProductionStageDeps {
   const execBridge: HostBridgeExecutor =
-    options.executeHostTool ??
-    ((tool, args) => defaultExecuteHostTool(tool, args));
+    options.executeHostTool ?? ((tool, args) => defaultExecuteHostTool(tool, args));
   const threadStore: StageThreadStore = options.threadStore ?? new ThreadStore();
   const dispatchChatTurn: ReviewerChatDispatcher =
     options.dispatchChatTurn ?? defaultDispatchChatTurn;
@@ -312,9 +301,8 @@ export function createProductionStageDeps(
         runHostCommand(`gh pr view ${prNum} --json headRefName`, 60),
       ]);
 
-      const diff = isCommandSuccess(diffRes) && typeof diffRes.stdout === "string"
-        ? diffRes.stdout
-        : "";
+      const diff =
+        isCommandSuccess(diffRes) && typeof diffRes.stdout === "string" ? diffRes.stdout : "";
 
       let commitSubjects: string[] = [];
       if (isCommandSuccess(commitsRes) && typeof commitsRes.stdout === "string") {
@@ -440,10 +428,7 @@ export function createProductionStageDeps(
           "kubectl -n local-agentic-sandbox get deployment web-ui -o jsonpath='{.spec.template.spec.containers[0].image}'",
           30
         ),
-        runHostCommand(
-          "kubectl -n local-agentic-sandbox get pods -l app=web-ui -o json",
-          30
-        ),
+        runHostCommand("kubectl -n local-agentic-sandbox get pods -l app=web-ui -o json", 30),
       ]);
 
       const image =
@@ -578,10 +563,7 @@ export function createProductionStageDeps(
       const threadListLoads = threadsStatus === 200;
 
       const ok =
-        rolloutSuccess &&
-        podRunningZeroRestarts &&
-        gatewayStatus === 200 &&
-        threadListLoads;
+        rolloutSuccess && podRunningZeroRestarts && gatewayStatus === 200 && threadListLoads;
 
       let failedStep: string | undefined;
       let observed: string | undefined;

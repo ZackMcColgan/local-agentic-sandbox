@@ -18,7 +18,7 @@ describe("Sprint 3 — Human Skill Gates (/api/skills)", () => {
       for (let i = 0; i < 3; i++) {
         recordObservedPattern("retry-jitter", {
           title: "Retry with Jitter",
-          solutionSummary: "Use exponential backoff with full jitter"
+          solutionSummary: "Use exponential backoff with full jitter",
         });
       }
 
@@ -36,7 +36,7 @@ describe("Sprint 3 — Human Skill Gates (/api/skills)", () => {
       // 3. Call POST /api/skills with action approve
       const reqApprove = new NextRequest("http://localhost:3000/api/skills", {
         method: "POST",
-        body: JSON.stringify({ action: "approve", candidateId: "retry-jitter" })
+        body: JSON.stringify({ action: "approve", candidateId: "retry-jitter" }),
       });
       const resApprove = await POST(reqApprove);
       assert.equal(resApprove.status, 200);
@@ -53,13 +53,13 @@ describe("Sprint 3 — Human Skill Gates (/api/skills)", () => {
       for (let i = 0; i < 3; i++) {
         recordObservedPattern("strict-eval", {
           title: "Strict Eval",
-          solutionSummary: "Use safe eval alternative"
+          solutionSummary: "Use safe eval alternative",
         });
       }
 
       const reqReject = new NextRequest("http://localhost:3000/api/skills", {
         method: "POST",
-        body: JSON.stringify({ action: "reject", candidateId: "strict-eval" })
+        body: JSON.stringify({ action: "reject", candidateId: "strict-eval" }),
       });
       const resReject = await POST(reqReject);
       assert.equal(resReject.status, 200);

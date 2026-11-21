@@ -65,7 +65,7 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     act(() => {
       root.render(
         React.createElement(ThinkingPanel, {
-          rawThought: "<tool_call>{\"name\":\"ls\"}</tool_call>",
+          rawThought: '<tool_call>{"name":"ls"}</tool_call>',
           isStreaming: false,
           durationMs: 2000,
         })
@@ -81,7 +81,10 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     const text = container.textContent ?? "";
     assert.match(text, /1 step/);
     const listItems = container.querySelectorAll("[data-testid^='phase-card-']");
-    assert.ok(listItems.length >= 1, `Expected at least 1 rendered step item, got ${listItems.length}`);
+    assert.ok(
+      listItems.length >= 1,
+      `Expected at least 1 rendered step item, got ${listItems.length}`
+    );
     assert.match(listItems[0].textContent ?? "", /Formulated response\./);
   });
 
@@ -209,7 +212,10 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
         (msg.phaseTimings?.thinkingMs ?? 0) +
         (msg.phaseTimings?.toolsMs ?? 0) +
         (msg.phaseTimings?.writingMs ?? 0);
-      assert.ok(Math.abs(sum - durationMs) <= 100, `Expected phase sum ${sum} near durationMs ${durationMs}`);
+      assert.ok(
+        Math.abs(sum - durationMs) <= 100,
+        `Expected phase sum ${sum} near durationMs ${durationMs}`
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

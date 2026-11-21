@@ -9,7 +9,7 @@ import {
   cancelSchedule,
   listSchedules,
   triggerMorningReport,
-  resetGlobalScheduler
+  resetGlobalScheduler,
 } from "../lib/subagents/scheduler.js";
 import { TaskManifest } from "../lib/subagents/types.js";
 import { type StepExecutor } from "../lib/subagents/supervisor.js";
@@ -32,7 +32,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Schedule persists to disk and reloads after simulated restart", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -41,7 +44,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
 
     try {
       const scheduler1 = new UnattendedScheduler({ storageFile, workspaceDir: testWorkspace });
-      const schedId = await scheduler1.scheduleTask("0 2 * * *", "Run nightly test and build suite");
+      const schedId = await scheduler1.scheduleTask(
+        "0 2 * * *",
+        "Run nightly test and build suite"
+      );
       assert.ok(schedId);
 
       const list1 = await scheduler1.listSchedules();
@@ -69,7 +75,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Crash during run triggers backoff restart (mocked crash)", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -107,7 +116,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Completed run generates morning report with correct sections", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -132,8 +144,8 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
             criticRounds: 1,
             commitSha: "sha-m1-abc1234",
             testsPassed: 14,
-            testsFailed: 0
-          }
+            testsFailed: 0,
+          },
         ],
         currentMilestoneIndex: 1,
         checkpoints: [],
@@ -145,13 +157,13 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
             judgmentCall: "Bound to 0.0.0.0 per lan-bridge config",
             reasoning: "Local test environment requires multi-device access",
             revertAction: { type: "re_plan", target: "M1" },
-            reviewed: false
-          }
+            reviewed: false,
+          },
         ],
         journal: [],
         startedAt: new Date(Date.now() - 3600000).toISOString(),
         updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString()
+        completedAt: new Date().toISOString(),
       };
 
       const reportContent = await scheduler.triggerMorningReport("run-report-1", mockManifest);
@@ -181,7 +193,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("Disabled schedule does not trigger", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -210,7 +225,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("executeScheduledRun with injected stepExecutor invokes executor per milestone and captures results", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -230,12 +248,12 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
           diff: "+fake line in file.ts",
           builderIterations: 2,
           criticRounds: 1,
-          builderModel: "swift-27b-mtp"
+          builderModel: "swift-27b-mtp",
         };
       };
 
       const result = await scheduler.executeScheduledRun(schedId, {
-        stepExecutor: fakeStepExecutor
+        stepExecutor: fakeStepExecutor,
       });
 
       assert.ok(result, "Scheduled run must return a manifest");
@@ -263,7 +281,10 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   });
 
   it("scheduled run against unreachable model fails loudly, parks task, and morning report surfaces failure", async () => {
-    const testWorkspace = path.resolve(process.cwd(), `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-scheduler-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     const savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -281,31 +302,51 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const failingPool = new WorkerPool({
         modelRoster: {
           builder: "swift-27b-mtp",
-          critic: "swift-27b-mtp"
+          critic: "swift-27b-mtp",
         },
         generate: async () => {
           throw new Error("connect ECONNREFUSED 127.0.0.1:11434");
-        }
+        },
       });
 
       const result = await scheduler.executeScheduledRun(schedId, {
-        workerPool: failingPool
+        workerPool: failingPool,
       });
 
       assert.ok(result, "Scheduled run must return a manifest");
-      assert.notEqual(result.status, "completed", "Status must NOT be completed when model is unreachable");
+      assert.notEqual(
+        result.status,
+        "completed",
+        "Status must NOT be completed when model is unreachable"
+      );
       assert.equal(result.status, "parked", "Status must be parked after recovery retries fail");
-      assert.ok(result.parkedReason?.includes("recovery attempts"), "Must record parkedReason indicating failure");
-      assert.equal(result.milestones[0].status, "failed", "Milestone must be failed, not completed");
+      assert.ok(
+        result.parkedReason?.includes("recovery attempts"),
+        "Must record parkedReason indicating failure"
+      );
+      assert.equal(
+        result.milestones[0].status,
+        "failed",
+        "Milestone must be failed, not completed"
+      );
 
       // Check morning report
       const dateStr = new Date().toISOString().slice(0, 10);
       const reportPath = path.join(testWorkspace, "reports", `morning-${dateStr}.md`);
       assert.ok(fs.existsSync(reportPath), "Morning report must exist");
       const reportContent = fs.readFileSync(reportPath, "utf8");
-      assert.ok(reportContent.includes("- **Status**: parked"), "Morning report must record parked status");
-      assert.ok(reportContent.includes("0 / 1 completed"), "Morning report must record 0 completed milestones");
-      assert.ok(reportContent.includes("No new commits recorded"), "Morning report must record no commits");
+      assert.ok(
+        reportContent.includes("- **Status**: parked"),
+        "Morning report must record parked status"
+      );
+      assert.ok(
+        reportContent.includes("0 / 1 completed"),
+        "Morning report must record 0 completed milestones"
+      );
+      assert.ok(
+        reportContent.includes("No new commits recorded"),
+        "Morning report must record no commits"
+      );
 
       // Check schedule state
       const schedules = await scheduler.listSchedules();

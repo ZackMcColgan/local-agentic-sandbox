@@ -10,13 +10,13 @@ import {
   toggleAllowlist,
   getProject,
   getProjectTask,
-  listProjectTasks
+  listProjectTasks,
 } from "../lib/projects/projectStore";
 import { runGit } from "../lib/projects/projectGit";
 import {
   startProjectTask,
   cancelActiveProjectTasks,
-  setEngineRunningCheckOverride
+  setEngineRunningCheckOverride,
 } from "../lib/projects/projectRunner";
 import { POST as postTask } from "../app/api/projects/[id]/tasks/route";
 import { POST as postEngine } from "../app/api/engine/route";
@@ -70,7 +70,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     const project = registerProject({
       name: "Runner Project",
       rootPath: testRepoDir,
-      baseBranch: "develop"
+      baseBranch: "develop",
     });
 
     const expectedBaseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -79,7 +79,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     const task = await startProjectTask({
       projectId: project.project_id,
       prompt: "Implement user authentication module",
-      executeInline: false // Setup task and branch without executing full multi-hour loop
+      executeInline: false, // Setup task and branch without executing full multi-hour loop
     });
 
     assert.ok(task.task_id);
@@ -100,21 +100,21 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
   it("Item 2: Rejects second concurrent task with 409 Conflict", async () => {
     const project = registerProject({
       name: "Conflict Test Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     // Start first task
     await startProjectTask({
       projectId: project.project_id,
       prompt: "First task",
-      executeInline: false
+      executeInline: false,
     });
 
     // Attempt second task via API route
     const req = new Request(`http://localhost:3000/api/projects/${project.project_id}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Second task" })
+      body: JSON.stringify({ prompt: "Second task" }),
     });
 
     const res = await postTask(req, { params: Promise.resolve({ id: project.project_id }) });
@@ -126,7 +126,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
   it("Item 3: Rejects revoked project with 403 Forbidden and zero workers spawned", async () => {
     const project = registerProject({
       name: "Revoked Runner Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     toggleAllowlist(project.project_id, false);
@@ -134,7 +134,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     const req = new Request(`http://localhost:3000/api/projects/${project.project_id}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Task on revoked project" })
+      body: JSON.stringify({ prompt: "Task on revoked project" }),
     });
 
     const res = await postTask(req, { params: Promise.resolve({ id: project.project_id }) });
@@ -146,7 +146,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
   it("Item 4: Returns 503 when agent engine is stopped, zero workers spawned", async () => {
     const project = registerProject({
       name: "Stopped Engine Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     // Mock engine check reporting stopped
@@ -155,7 +155,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     const req = new Request(`http://localhost:3000/api/projects/${project.project_id}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Task while engine offline" })
+      body: JSON.stringify({ prompt: "Task while engine offline" }),
     });
 
     const res = await postTask(req, { params: Promise.resolve({ id: project.project_id }) });
@@ -167,13 +167,13 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
   it("Item 5: Mid-run engine stop aborts runner and parks task", async () => {
     const project = registerProject({
       name: "Engine Stop Abort Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const task = await startProjectTask({
       projectId: project.project_id,
       prompt: "Long running overnight task",
-      executeInline: false
+      executeInline: false,
     });
 
     assert.equal(task.status, "running");
@@ -192,7 +192,7 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     const project = registerProject({
       name: "Two Milestone Project",
       rootPath: testRepoDir,
-      baseBranch: "develop"
+      baseBranch: "develop",
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -209,10 +209,14 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
         runGit(proj, ["commit", "-m", "feat: milestone 1 auth"]);
 
         // Milestone 2
-        fs.writeFileSync(path.join(proj.root_path, "db.ts"), "export const db = 'connected';", "utf8");
+        fs.writeFileSync(
+          path.join(proj.root_path, "db.ts"),
+          "export const db = 'connected';",
+          "utf8"
+        );
         runGit(proj, ["add", "db.ts"]);
         runGit(proj, ["commit", "-m", "feat: milestone 2 db"]);
-      }
+      },
     });
 
     assert.equal(completedTask.status, "completed");

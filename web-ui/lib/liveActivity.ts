@@ -89,7 +89,7 @@ export function streamBannerKind(input: {
  * thread with the most recent activity timestamp (updatedAt, falling back to createdAt).
  */
 export function pickMostRecentlyActiveThread<
-  T extends { id: string; updatedAt?: string; createdAt?: string }
+  T extends { id: string; updatedAt?: string; createdAt?: string },
 >(threads: T[]): T | null {
   if (!threads || threads.length === 0) return null;
   let best = threads[0];
@@ -128,7 +128,8 @@ export interface HostRunnerDisconnectClassification {
   remainingContent: string;
 }
 
-const HOST_DISCONNECT_LINE_RE = /^.*Host runner (?:daemon )?disconnected mid-(?:turn|watch)[^\n]*$/gim;
+const HOST_DISCONNECT_LINE_RE =
+  /^.*Host runner (?:daemon )?disconnected mid-(?:turn|watch)[^\n]*$/gim;
 const HOST_RECOVER_LINE_RE = /^.*Host runner (?:recovered|reconnected)[^\n]*$/gim;
 
 /**
@@ -153,7 +154,9 @@ export function classifyHostRunnerDisconnect(content: string): HostRunnerDisconn
 
   return {
     kind: hasRecovery ? "recovered" : "disconnected",
-    summary: hasRecovery ? "Host runner disconnected & recovered" : "Host runner disconnected mid-turn",
+    summary: hasRecovery
+      ? "Host runner disconnected & recovered"
+      : "Host runner disconnected mid-turn",
     remainingContent,
   };
 }
