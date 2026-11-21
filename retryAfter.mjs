@@ -1,21 +1,20 @@
 /**
- * Parses an HTTP `Retry-After` header value into milliseconds.
+ * Parses an HTTP `Retry-After` header value into a delay in milliseconds.
  *
- * Contract (per eval spec, AC-2-1 / AC-2-2 / AC-2-3):
+ * Contract (per brief / eval spec, AC-2-1 / AC-2-2 / AC-2-3):
  * - null / undefined / empty / whitespace-only -> null
- * - non-negative integer string (e.g. "120", "0", "000"):
- *     - "0" (any nowMs) -> 0
- *     - otherwise -> nowMs + seconds * 1000 (absolute retry timestamp;
- *       nowMs defaults to 0 so default calls yield a plain delay)
- * - valid HTTP-date string -> Math.max(0, Date.parse(value) - nowMs)
- *   (delay relative to nowMs; past dates clamp to 0)
- * - negative, non-integer, or unparseable -> null
+ * - non-negative integer string (e.g. "120", "0", "000") -> seconds * 1000
+ *   (a plain delay, independent of nowMs)
+ * - valid HTTP-date string (e.g. "Wed, 21 Oct 2015 07:28:00 GMT") ->
+ *   Math.max(0, Date.parse(value) - nowMs), where nowMs defaults to Date.now()
+ *   (past dates clamp to 0)
+ * - negative (e.g. "-5") or non-integer (e.g. "1.5") or unparseable -> null
  *
  * @param {string | null | undefined} headerValue
  * @param {number} [nowMs]
  * @returns {number | null}
  */
-export function parseRetryAfter(headerValue, nowMs = 0) {
+export function parseRetryAfter(headerValue, nowMs = Date.now()) {
   if (headerValue === null || headerValue === undefined) {
     return null;
   }
@@ -36,13 +35,9 @@ export function parseRetryAfter(headerValue, nowMs = 0) {
     if (!Number.isInteger(numeric) || numeric < 0) {
       return null;
     }
-    // AC-2-2 / AC-2-3: zero seconds is always 0 regardless of nowMs.
-    if (numeric === 0) {
-      return 0;
-    }
-    // AC-2-1: with an explicit nowMs, integer seconds yield an absolute
-    // retry timestamp; with the default nowMs (0), this is a plain delay.
-    return nowMs + numeric * 1000;
+    // AC-2-1 / AC-2-2 / AC-2-3: integer seconds yield a plain delay
+    // (seconds * 1000), independent of nowMs. Zero yields 0.
+    return numeric * 1000;
   }
 
   // Otherwise treat as an HTTP-date; clamp past dates to 0.

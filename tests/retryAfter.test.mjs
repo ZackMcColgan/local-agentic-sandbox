@@ -28,8 +28,8 @@ test('parseRetryAfter newline-only header value returns null', () => {
 
 test('[AC-2-1] parseRetryAfter integer seconds converts to milliseconds', () => {
   assert.strictEqual(parseRetryAfter('120', 0), 120000);
-  const now = Date.now();
-  assert.strictEqual(parseRetryAfter('120', now), now + 120000);
+  // Plain delay is independent of nowMs.
+  assert.strictEqual(parseRetryAfter('120', Date.now()), 120000);
 });
 
 test('[AC-2-2] parseRetryAfter zero seconds with explicit now returns 0', () => {
