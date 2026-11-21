@@ -5,7 +5,8 @@ import { ChatStream, ChatMessage } from "@/components/ChatStream";
 import { ExplorerPanel } from "@/components/ExplorerPanel";
 import { ThreadsSidebar } from "@/components/ThreadsSidebar";
 import { ModelBottomSheet } from "@/components/ModelBottomSheet";
-import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
+import { ExecutionTrace } from "@/components/ExecutionTrace";
+import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
@@ -50,7 +51,10 @@ export default function Home() {
   const [overnightReport, setOvernightReport] = useState<OvernightMorningReport | null>(null);
 
   // Model & telemetry state
-  const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
+  const skipThreadLoadRef = useRef<string | null>(null);
+  const { traces, updateTraces: handleTracesUpdate } = useLiveTraces(selectedThreadId, {
+    shouldSkipClear: (threadId) => skipThreadLoadRef.current === threadId,
+  });
   const agentMode: AgentMode = DEFAULT_AGENT_MODE;
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -144,7 +148,6 @@ export default function Home() {
     path: string;
     content: string;
   } | null>(null);
-  const skipThreadLoadRef = useRef<string | null>(null);
 
   const handlePreviewWorkspaceFile = async (filePath: string) => {
     try {
@@ -466,7 +469,6 @@ export default function Home() {
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
     if (!selectedThreadId) {
-      setTraces([]);
       return;
     }
 
@@ -474,8 +476,6 @@ export default function Home() {
       skipThreadLoadRef.current = null;
       return;
     }
-
-    setTraces([]);
 
     const loadSelectedThread = async () => {
       try {
@@ -769,10 +769,6 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to stop run:", err);
     }
-  };
-
-  const handleTracesUpdate = (newTraces: ExecutionTraceItem[]) => {
-    setTraces(newTraces);
   };
 
   const handleNavigate = (view: NavView) => {
