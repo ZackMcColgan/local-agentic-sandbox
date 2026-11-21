@@ -24,7 +24,12 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         enabled: true,
         ledger,
         commandRunner: async (file: string, args: string[]) => {
-          executedCommands.push([file, ...args].join(" "));
+          const fullCmd = [file, ...args].join(" ");
+          executedCommands.push(fullCmd);
+          if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+            // A real `ctr images ls name==<image>` listing names the image.
+            return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+          }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
         },
         healthChecker: async () => ({ status: 200, ok: true }),
@@ -104,6 +109,10 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         if (fullCmd.includes("rollout status")) {
           return { exitCode: 1, stdout: "", stderr: "error: deployment timed out\n" };
         }
+        if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+          // A real `ctr images ls name==<image>` listing names the image.
+          return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+        }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
       healthChecker: async () => ({ status: 200, ok: true }),
@@ -133,7 +142,12 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
     const pipeline = new SelfDeployPipeline({
       enabled: true,
       commandRunner: async (file: string, args: string[]) => {
-        executedCommands.push([file, ...args].join(" "));
+        const fullCmd = [file, ...args].join(" ");
+        executedCommands.push(fullCmd);
+        if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+          // A real `ctr images ls name==<image>` listing names the image.
+          return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+        }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
       healthChecker: async () => {
@@ -166,11 +180,14 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
 
     const pipeline = new SelfDeployPipeline({
       enabled: true,
-      commandRunner: async () => ({
-        exitCode: 0,
-        stdout: "ok\n",
-        stderr: "",
-      }),
+      commandRunner: async (file: string, args: string[]) => {
+        const fullCmd = [file, ...args].join(" ");
+        if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+          // A real `ctr images ls name==<image>` listing names the image.
+          return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+        }
+        return { exitCode: 0, stdout: "ok\n", stderr: "" };
+      },
       // Both initial check and rollback check fail
       healthChecker: async () => ({ status: 503, ok: false }),
     });
@@ -272,7 +289,14 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
 
     const pipeline = new SelfDeployPipeline({
       enabled: true,
-      commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      commandRunner: async (file: string, args: string[]) => {
+        const fullCmd = [file, ...args].join(" ");
+        if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+          // A real `ctr images ls name==<image>` listing names the image.
+          return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+        }
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
       healthChecker: async (url) => {
         probedUrl = url;
         return { status: 200, ok: true };
@@ -470,6 +494,48 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
         commands.some((c) => c.startsWith("kubectl") && c.includes("set image")),
         false,
         "kubectl set image must not run when ctr import fails"
+      );
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignored on Windows EBUSY
+      }
+    }
+  });
+
+  it("aborts when the imported image is not visible in node containerd after a successful import", async () => {
+    const { SelfDeployPipeline } = await import("../lib/deploy/selfDeploy.js");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "self-deploy-import-"));
+    try {
+      const commands: string[] = [];
+      const pipeline = new SelfDeployPipeline({
+        enabled: true,
+        repoRoot: tmpDir,
+        commandRunner: async (cmd, args) => {
+          const full = `${cmd} ${args.join(" ")}`;
+          commands.push(full);
+          if (full.includes("ctr -n k8s.io images ls")) {
+            // Header only: `ctr images ls` exits 0 even with zero matches.
+            return { exitCode: 0, stdout: "REF TYPE DIGEST SIZE PLATFORMS LABELS\n", stderr: "" };
+          }
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+      });
+
+      const result = await pipeline.executeSelfDeploy({
+        branchName: "feature/test",
+        previousSha: "1111111",
+        newSha: "2222222",
+        imageTag: "local-agentic-sandbox-web-ui:v-2222222",
+      });
+
+      assert.equal(result.status, "failed");
+      assert.match(result.errorMessage ?? "", /not found in node containerd/);
+      assert.equal(
+        commands.some((c) => c.startsWith("kubectl") && c.includes("set image")),
+        false,
+        "kubectl set image must not run when the image is not visible in the node"
       );
     } finally {
       try {

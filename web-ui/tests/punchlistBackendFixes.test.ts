@@ -407,6 +407,11 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
       enabled: true,
       commandRunner: async (file: string, args: string[]) => {
         executedCommands.push({ file, args });
+        const fullCmd = [file, ...args].join(" ");
+        if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+          // A real `ctr images ls name==<image>` listing names the image.
+          return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+        }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
       healthChecker: async () => ({ status: 200, ok: true }),

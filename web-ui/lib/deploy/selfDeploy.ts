@@ -332,7 +332,7 @@ export class SelfDeployPipeline {
     timeline[0].status = "completed";
 
     // Stage 1b: Save image and import into k8s node containerd
-    const k8sNode = process.env.K8S_NODE || "k3d-sandbox-server-0";
+    const k8sNode = process.env.K8S_NODE || "desktop-control-plane";
     const tarPath = path.join(this.repoRoot, `.self-deploy-${deployId}.tar`);
     const failImport = (detail: string): SelfDeployRecord => {
       timeline[0].status = "failed";
@@ -408,7 +408,10 @@ export class SelfDeployPipeline {
         "ls",
         `name==${newImage}`,
       ]);
-      if (verifyImportRes.exitCode !== 0) {
+      // `ctr images ls` exits 0 even with zero matches (header only), so the
+      // exit code alone cannot prove the image is visible. The listing must
+      // name the image, or the deploy aborts before set-image.
+      if (verifyImportRes.exitCode !== 0 || !(verifyImportRes.stdout || "").includes(newImage)) {
         return failImport(
           `Image ${newImage} not found in node containerd after import: ${verifyImportRes.stderr || verifyImportRes.stdout}`
         );
