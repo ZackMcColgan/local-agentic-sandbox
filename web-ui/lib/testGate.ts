@@ -75,7 +75,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/explorerFs.test.ts"],
   },
   {
-    match: (p) => p.includes("explorerPanel.spec.ts"),
+    match: (p) => p.includes("explorerPanel.spec.ts") || p.includes("ExplorerPanel.tsx"),
     tests: ["tests/e2e/explorerPanel.spec.ts"],
   },
   {
@@ -147,6 +147,7 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("uiuxAuditFixes.test.ts") ||
       p.includes("BoardView.tsx") ||
+      p.includes("SandboxGauge.tsx") ||
       p.includes("boardSeed.ts") ||
       p.includes("boardStore.ts"),
     tests: ["tests/uiuxAuditFixes.test.ts"],
@@ -1290,6 +1291,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("app/page.tsx") || p.includes("components/SettingsView"),
     tests: ["tests/p05StrayUi.test.ts"],
   },
+  {
+    match: (p) => p === "retryAfter.mjs" || p === "tests/retryAfter.test.mjs",
+    tests: ["../tests/retryAfter.test.mjs"],
+  },
 ];
 
 /**
@@ -1306,6 +1311,9 @@ function isIgnoredFile(normalizedPath: string): boolean {
     normalizedPath.endsWith(".ico") ||
     normalizedPath.endsWith(".gitignore") ||
     normalizedPath.endsWith(".dockerignore") ||
+    normalizedPath.endsWith(".editorconfig") ||
+    normalizedPath.endsWith(".prettierignore") ||
+    normalizedPath.endsWith(".prettierrc.json") ||
     normalizedPath.endsWith("package-lock.json") ||
     normalizedPath.includes("Dockerfile") ||
     normalizedPath.startsWith("docker-compose") ||
