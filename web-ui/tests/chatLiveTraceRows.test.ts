@@ -348,7 +348,7 @@ describe("AUD-13: trace duplication and live-trace scoping", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       }
-      if (url.includes("/api/threads?")) {
+      if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
         return new Response(JSON.stringify({ threads: [{ id: "t1", title: "Thread 1", updatedAt: new Date().toISOString() }] }), { status: 200 });
       }
       if (url.includes("/api/threads/t1")) {
@@ -419,7 +419,7 @@ describe("AUD-13: trace duplication and live-trace scoping", () => {
         });
         return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
       }
-      if (url.includes("/api/threads?")) {
+      if (url.endsWith("/api/threads") || url.includes("/api/threads?")) {
         return new Response(
           JSON.stringify({
             threads: [
@@ -469,13 +469,13 @@ describe("AUD-13: trace duplication and live-trace scoping", () => {
         });
       }
 
-      // Switch to Thread 2
-      const thread2Btn = Array.from(container.querySelectorAll("button")).find((b) =>
-        (b.textContent || "").includes("Thread 2")
-      );
-      assert.ok(thread2Btn, "Thread 2 button must exist");
+      // Switch to Thread 2 (or New Chat if sidebar thread list is collapsed)
+      const switchBtn = Array.from(container.querySelectorAll("button, [role='button'], div")).find((el) =>
+        (el.textContent || "").trim() === "Thread 2"
+      ) as HTMLElement | undefined;
+      assert.ok(switchBtn, "Thread switch button must exist");
       await act(async () => {
-        thread2Btn.click();
+        switchBtn.click();
       });
       await act(async () => {
         await new Promise((r) => setTimeout(r, 50));

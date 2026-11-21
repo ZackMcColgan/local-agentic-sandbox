@@ -575,7 +575,7 @@ export function LiveRunBlock({
       )}
 
       {/* Live tool-call trace rows during the turn (UI-003 / UI-011b) */}
-      {liveTraces && liveTraces.length > 0 && (
+      {isRunning && liveTraces && liveTraces.length > 0 && (
         <div className="mt-2.5 space-y-2 w-full" data-testid="live-trace-rows">
           {liveTraces.map((trace, tIdx) => (
             <button

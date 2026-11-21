@@ -465,12 +465,17 @@ export default function Home() {
 
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
-    if (!selectedThreadId) return;
+    if (!selectedThreadId) {
+      setTraces([]);
+      return;
+    }
 
     if (skipThreadLoadRef.current === selectedThreadId) {
       skipThreadLoadRef.current = null;
       return;
     }
+
+    setTraces([]);
 
     const loadSelectedThread = async () => {
       try {
@@ -752,7 +757,7 @@ export default function Home() {
   };
 
   const handleTracesUpdate = (newTraces: ExecutionTraceItem[]) => {
-    setTraces((prev) => [...newTraces, ...prev]);
+    setTraces(newTraces);
   };
 
   const handleNavigate = (view: NavView) => {
