@@ -1295,6 +1295,10 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p === "retryAfter.mjs" || p === "tests/retryAfter.test.mjs",
     tests: ["../tests/retryAfter.test.mjs"],
   },
+  {
+    match: (p) => p.includes("app/api/traces/route") || p.includes("tracesRoute.test.ts"),
+    tests: ["tests/tracesRoute.test.ts"],
+  },
 ];
 
 /**
