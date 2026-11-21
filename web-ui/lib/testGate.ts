@@ -796,6 +796,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatStreamMessages.test.ts", "tests/chatHistory.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("components/chat/messageRender") || p.includes("chatMessageRender.test.ts"),
+    tests: ["tests/chatMessageRender.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
     tests: ["tests/chatMcpClients.test.ts"],
   },
