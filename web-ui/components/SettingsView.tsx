@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ShieldAlert } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useTheme } from "../lib/hooks/useTheme";
 import { version as APP_VERSION } from "../package.json";
 import { LiveStatusStrip } from "./settings/LiveStatusStrip";
@@ -17,6 +17,9 @@ import { SelfDeployZone, type DeployHistoryItem } from "./settings/SelfDeployZon
 import { HostZone, type HostSettingsData } from "./settings/HostZone";
 import { NotificationsZone, type NotificationStatusData } from "./settings/NotificationsZone";
 import { MemoryZone } from "./settings/MemoryZone";
+import { AboutZone } from "./settings/AboutZone";
+import { TracesZone } from "./settings/TracesZone";
+import { DangerZone } from "./settings/DangerZone";
 
 export {
   getHostCardPresentation,
@@ -471,93 +474,22 @@ export function SettingsView({
           />
         </div>
 
-        {/* About: product identity + version (single source: web-ui package.json) */}
+        {/* About: product identity + version (single source: web-ui package.json); zone labels use text-zinc-100 */}
         <div id="settings-about" data-testid="settings-zone-about">
-          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
-            About
-          </h2>
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                Local Agentic Sandbox
-              </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                Local autonomous AI coding platform. Inference runs on this machine.
-              </p>
-            </div>
-            <div
-              className="text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 shrink-0"
-              data-testid="settings-app-version"
-            >
-              v{APP_VERSION}
-            </div>
-          </div>
+          <AboutZone appVersion={APP_VERSION} />
+        </div>
+
+        {/* Traces & Security Door (UI-080) */}
+        <div id="settings-traces-security" data-testid="settings-zone-traces">
+          <TracesZone />
         </div>
 
         {/* Danger Zone: destructive controls only, separated at the bottom */}
-        {/* Traces & Security Door (UI-080) */}
-        <div id="settings-traces-security" data-testid="settings-zone-traces">
-          <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
-            Traces &amp; Security
-          </h2>
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                OpenTelemetry Traces
-              </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                Inspect live spans and execution waterfalls in Jaeger.
-              </p>
-            </div>
-            <a
-              href="/jaeger/"
-              target="_blank"
-              rel="noreferrer"
-              className="min-h-[44px] inline-flex items-center px-3.5 py-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-colors shrink-0"
-            >
-              Open Jaeger UI →
-            </a>
-          </div>
-        </div>
-
         <div id="settings-danger-zone" data-testid="settings-zone-danger">
-          <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-400 mb-3 px-1">
-            Danger Zone
-          </h2>
-
-          <div className="bg-rose-50 dark:bg-rose-950/30 rounded-3xl p-5 shadow-sm border border-rose-300 dark:border-rose-900 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Enable self-deploy</span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  When OFF, self-deploy is completely disabled. Default is OFF.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={toggleSelfDeploy}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isSelfDeployActive
-                    ? "bg-emerald-600 dark:bg-emerald-500"
-                    : "bg-slate-300 dark:bg-zinc-700"
-                }`}
-                role="switch"
-                aria-checked={isSelfDeployActive}
-                data-testid="self-deploy-kill-switch-btn"
-                title="Toggle self-deploy kill switch"
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    isSelfDeployActive ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
+          <DangerZone
+            isSelfDeployActive={isSelfDeployActive}
+            onToggleSelfDeploy={toggleSelfDeploy}
+          />
         </div>
       </div>
     </div>

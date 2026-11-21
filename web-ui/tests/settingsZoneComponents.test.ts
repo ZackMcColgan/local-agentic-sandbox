@@ -11,6 +11,9 @@ import { SelfDeployZone } from "../components/settings/SelfDeployZone";
 import { HostZone } from "../components/settings/HostZone";
 import { NotificationsZone } from "../components/settings/NotificationsZone";
 import { MemoryZone } from "../components/settings/MemoryZone";
+import { AboutZone } from "../components/settings/AboutZone";
+import { TracesZone } from "../components/settings/TracesZone";
+import { DangerZone } from "../components/settings/DangerZone";
 import { getHostCardPresentation, formatEngineActionMessage } from "../components/settings/hostCard";
 
 describe("Settings zone components — Step 1 (Top zones)", () => {
@@ -220,5 +223,31 @@ describe("Settings zone components — Step 2 (Middle zones)", () => {
     assert.ok(html.includes("Saved."));
     assert.ok(html.includes("Stored on this machine only. Never committed to the repository."));
     assert.equal(formatEngineActionMessage("start", true, 200, {}), "Engine starting up...");
+  });
+});
+
+describe("Settings zone components — Step 3 (Bottom zones)", () => {
+  it("AboutZone renders app version", () => {
+    const html = renderToStaticMarkup(React.createElement(AboutZone, { appVersion: "1.2.3" }));
+    assert.ok(html.includes("Local Agentic Sandbox"));
+    assert.ok(html.includes("v1.2.3"));
+  });
+
+  it("TracesZone renders Jaeger link", () => {
+    const html = renderToStaticMarkup(React.createElement(TracesZone));
+    assert.ok(html.includes("OpenTelemetry Traces"));
+    assert.ok(html.includes('href="/jaeger/"'));
+  });
+
+  it("DangerZone renders Enable self-deploy switch with aria-checked", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(DangerZone, {
+        isSelfDeployActive: true,
+        onToggleSelfDeploy: () => {},
+      })
+    );
+    assert.ok(html.includes("Danger Zone"));
+    assert.ok(html.includes("Enable self-deploy"));
+    assert.ok(html.includes('aria-checked="true"'));
   });
 });
