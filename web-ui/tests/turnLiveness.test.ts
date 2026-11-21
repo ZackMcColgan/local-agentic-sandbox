@@ -6,11 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  ThreadStore,
-  activeExecutionSet,
-  markTurnActive,
-} from "../lib/threads/threadStore";
+import { ThreadStore, activeExecutionSet, markTurnActive } from "../lib/threads/threadStore";
 import { TURN_STALL_WINDOW_MS, computeTurnLiveness } from "../lib/threads/liveness";
 import { ThrottledStreamSnapshot, STREAM_SNAPSHOT_INTERVAL_MS } from "../lib/streamSnapshot";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
@@ -370,7 +366,11 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     try {
       const created = store.createThread({ id: "t-liveness-roundtrip", title: "liveness" });
       const loaded = await store.getThread(created.id);
-      assert.ok(loaded?.liveness === "alive" || loaded?.liveness === "stalled" || loaded?.liveness === "settled");
+      assert.ok(
+        loaded?.liveness === "alive" ||
+          loaded?.liveness === "stalled" ||
+          loaded?.liveness === "settled"
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

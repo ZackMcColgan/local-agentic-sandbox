@@ -269,10 +269,6 @@ describe("Read dedup (d): stub metadata contract", () => {
 
 describe("Read dedup (d): chat route wiring (source assertions)", () => {
   const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
-  const storeSrc = fs.readFileSync(
-    path.resolve(__dirname, "../lib/threads/threadStore.ts"),
-    "utf8"
-  );
 
   it("route imports lib/readDedup and consults the registry at the file-read result push site", () => {
     assert.match(routeSrc, /from "@\/lib\/readDedup"/, "route must import lib/readDedup");
@@ -302,16 +298,16 @@ describe("Read dedup (d): chat route wiring (source assertions)", () => {
         {
           path: "src/example.ts",
           contentHash: "deadbeef",
-          savedChars: 1200,
-          earlierRound: 1,
-          earlierTraceId: "trace-1",
+          round: 1,
+          traceIndex: 0,
+          originalChars: 1200,
         },
       ];
       store.upsertMessage(thread.id, {
         id: "msg-dedup",
         role: "assistant",
         content: "done",
-        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
         readDedups: dedups,
       });
       const loaded = await store.getThread(thread.id);

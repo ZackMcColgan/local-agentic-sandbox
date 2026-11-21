@@ -187,7 +187,7 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
         role: "assistant",
         content: "partial",
         status: "streaming",
-        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
       });
       const loaded = await store.getThread(thread.id);
       assert.equal(
