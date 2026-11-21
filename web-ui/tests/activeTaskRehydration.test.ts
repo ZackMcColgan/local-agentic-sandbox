@@ -101,4 +101,61 @@ test('Fix 4 — Active Task Rehydration & Refresh Durability Suite', async (t) =
     assert.strictEqual(activeTask.journal.length, 2);
     assert(activeTask.journal[1].message.includes('Working on milestone m2'));
   });
+
+  await t.test('POST /api/tasks releases activeWorkers slot when async execution settles', async () => {
+    const tmpWorkspace = path.join(testCheckpointDir, 'ws-settle');
+    fs.mkdirSync(tmpWorkspace, { recursive: true });
+    const prevEnv = {
+      AGENT_CHECKPOINT_DIR: process.env.AGENT_CHECKPOINT_DIR,
+      WORKSPACE_DIR: process.env.WORKSPACE_DIR,
+      FAST_GRAPH_TEST: process.env.FAST_GRAPH_TEST,
+      LLM_BASE_URL: process.env.LLM_BASE_URL,
+      OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+      LLM_ENGINE: process.env.LLM_ENGINE
+    };
+    process.env.AGENT_CHECKPOINT_DIR = testCheckpointDir;
+    process.env.WORKSPACE_DIR = tmpWorkspace;
+    process.env.FAST_GRAPH_TEST = '1';
+    process.env.LLM_ENGINE = 'ollama';
+    process.env.LLM_BASE_URL = 'http://127.0.0.1:1';
+    process.env.OLLAMA_BASE_URL = 'http://127.0.0.1:1';
+
+    try {
+      const tasksRoute = await import('../app/api/tasks/route');
+      const { activeExecutionSet } = await import('../lib/threads/threadStore');
+
+      const postReq = new Request('http://localhost:3000/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          goal: 'Write a tiny hello.txt file',
+          autoExecute: true
+        })
+      });
+      const postRes = await tasksRoute.POST(postReq);
+      assert.strictEqual(postRes.status, 201);
+      const created = await postRes.json();
+      const taskId: string = created.taskId;
+      assert.ok(taskId);
+
+      // Wait for background execution to settle (activeExecutionSet cleared)
+      const deadline = Date.now() + 10000;
+      while (activeExecutionSet.has(taskId) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.strictEqual(activeExecutionSet.has(taskId), false, 'Background execution should have settled');
+
+      const getReq = new Request(`http://localhost:3000/api/tasks?taskId=${encodeURIComponent(taskId)}`);
+      const getRes = await tasksRoute.GET(getReq);
+      assert.strictEqual(getRes.status, 200);
+      const data = await getRes.json();
+      assert.strictEqual(data.activeWorkers, 0, 'Settled task must report activeWorkers: 0');
+      assert.strictEqual(supervisor.getAbortController(taskId), undefined, 'Supervisor registry must also release abort controller');
+    } finally {
+      Object.entries(prevEnv).forEach(([k, v]) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      });
+    }
+  });
 });
