@@ -158,6 +158,7 @@ export async function POST(req: Request) {
           console.error(`[tasks] Task ${taskId} async execution error:`, err);
         } finally {
           activeExecutionSet.delete(taskId);
+          activeAbortControllers.delete(taskId);
         }
       })().catch((err) => {
         console.error(`[tasks] Background task execution failure:`, err);
