@@ -370,3 +370,77 @@ test("writes deep-link threadLink (/?thread=<id>) for failed, completed, chunk-c
   assert.equal(chunkItem.threadLink, "/?thread=t-chunk-2");
   assert.equal(inProgressItem.threadLink, "/?thread=t-prog");
 });
+
+test("rolled-back selfDeploy with needsAttention=true marks item needs-attention, never done", async () => {
+  const item = makeItem({
+    id: "deploy-rollback-1",
+    key: "#99",
+    title: "Deploy rollback test",
+  });
+
+  const orchestrator = new BoardOrchestrator({
+    items: [item],
+    stageFlags: { selfDeploy: true },
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    issueAndWait: async () => ({
+      status: "completed",
+      threadId: "t-deploy-rb",
+      merged: true,
+      mergeSha: "abc1234",
+      deployTag: "v-abc1234",
+    }),
+    selfDeploy: {
+      deps: {
+        readCurrentState: async () => ({
+          image: "local-agentic-sandbox-web-ui:v-prev",
+          podStatus: "Running",
+          podRestarts: 0,
+        }),
+        bankRollbackTarget: async (tag) => ({ banked: true, tag }),
+        buildAndImport: async () => ({
+          built: true,
+          imported: true,
+          imagePresentInNode: true,
+          detail: "ok",
+        }),
+        setImage: async () => ({ ok: true }),
+        verifyDeployment: async (tag) =>
+          tag === "local-agentic-sandbox-web-ui:v-prev"
+            ? {
+                ok: true,
+                rolloutSuccess: true,
+                podRunningZeroRestarts: true,
+                gatewayStatus: 200,
+                threadListLoads: true,
+                observedTag: tag,
+              }
+            : {
+                ok: false,
+                rolloutSuccess: true,
+                podRunningZeroRestarts: false,
+                gatewayStatus: 502,
+                threadListLoads: false,
+                observedTag: tag,
+                failedStep: "gateway_200",
+                observed: "gateway=502",
+              },
+      },
+    },
+  });
+
+  const prevSelfDeploy = process.env.SELF_DEPLOY_ENABLED;
+  process.env.SELF_DEPLOY_ENABLED = "true";
+  try {
+    const report = await orchestrator.drain();
+    assert.equal(item.status, "needs-attention");
+    assert.equal(report.completedCount, 0);
+    assert.equal(report.outcomes[0].outcome, "failed");
+    assert.match(report.outcomes[0].reason ?? "", /S4 verification failed|gateway_200/);
+  } finally {
+    if (prevSelfDeploy === undefined) delete process.env.SELF_DEPLOY_ENABLED;
+    else process.env.SELF_DEPLOY_ENABLED = prevSelfDeploy;
+  }
+});

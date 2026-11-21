@@ -40,6 +40,8 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: SCHEDULER_DAEMON_ENABLED
+              value: "true"
             - name: AGENT_CHECKPOINT_DIR
               value: "/workspace/.agent/checkpoints"
             - name: PORT

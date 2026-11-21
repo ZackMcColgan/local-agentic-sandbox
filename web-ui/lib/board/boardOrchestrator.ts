@@ -388,7 +388,8 @@ export class BoardOrchestrator {
     const deployInput: DeployInput = this.deps.selfDeploy?.getDeployInput
       ? this.deps.selfDeploy.getDeployInput(item, merge)
       : {
-          targetTag: merge.targetTag ?? `local-agentic-sandbox:${merge.mergeSha.slice(0, 7)}`,
+          targetTag:
+            merge.targetTag ?? `local-agentic-sandbox-web-ui:${merge.mergeSha.slice(0, 7)}`,
           developSha: merge.mergeSha,
         };
 
@@ -564,22 +565,40 @@ export class BoardOrchestrator {
           };
         }
 
-        this.updateItem(head, {
-          status: "done",
-          threadLink: `/?thread=${result.threadId}`,
-        });
-        completedCount += 1;
-        itemsProcessed += 1;
-        outcomes.push({
-          itemId: head.id,
-          key: head.key,
-          title: head.title,
-          outcome: "completed",
-          threadId: result.threadId,
-          reason: result.summary,
-          ...(shadowStages ? { shadowStages } : {}),
-          durationMs: Math.max(0, this.now() - itemStartMs),
-        });
+        if (shadowStages?.selfDeploy?.needsAttention) {
+          this.updateItem(head, {
+            status: "needs-attention",
+            threadLink: `/?thread=${result.threadId}`,
+          });
+          itemsProcessed += 1;
+          outcomes.push({
+            itemId: head.id,
+            key: head.key,
+            title: head.title,
+            outcome: "failed",
+            threadId: result.threadId,
+            reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
+            shadowStages,
+            durationMs: Math.max(0, this.now() - itemStartMs),
+          });
+        } else {
+          this.updateItem(head, {
+            status: "done",
+            threadLink: `/?thread=${result.threadId}`,
+          });
+          completedCount += 1;
+          itemsProcessed += 1;
+          outcomes.push({
+            itemId: head.id,
+            key: head.key,
+            title: head.title,
+            outcome: "completed",
+            threadId: result.threadId,
+            reason: result.summary,
+            ...(shadowStages ? { shadowStages } : {}),
+            durationMs: Math.max(0, this.now() - itemStartMs),
+          });
+        }
       } else if (result.status === "chunk-complete") {
         this.updateItem(head, {
           status: "queued",

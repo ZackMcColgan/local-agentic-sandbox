@@ -472,8 +472,9 @@ export function createProductionStageDeps(
 
     async buildAndImport(targetTag: string, dryRun: boolean): Promise<BuildImportResult> {
       if (dryRun) {
+        const currentState = await selfDeployDeps.readCurrentState();
         const plan = prepareSelfDeployPlan({
-          currentImage: "current",
+          currentImage: currentState.image,
           targetImage: formatImageRef(targetTag),
           healthUrl: "http://127.0.0.1:3001/api/sandbox-status",
           shadowMode: true,
@@ -489,13 +490,25 @@ export function createProductionStageDeps(
       try {
         const res = await runHostCommand("node scripts/deploy-cluster.js web-ui", 600);
         const ok = isCommandSuccess(res);
+        const stdout = typeof res.stdout === "string" ? res.stdout : "";
+        const tagMatch = stdout.match(/local-agentic-sandbox-web-ui:(v-[a-z0-9-]+)/i);
+        const builtTag = tagMatch?.[1];
+        if (ok && !builtTag) {
+          return {
+            built: false,
+            imported: false,
+            imagePresentInNode: false,
+            detail: "Could not determine built image tag from deploy-cluster.js output",
+          };
+        }
         const detail = ok
-          ? (res.stdout || `Built and imported ${targetTag}`).trim()
-          : (res.stderr || res.error || res.stdout || "deploy-cluster.js failed").trim();
+          ? (stdout || `Built and imported ${builtTag}`).trim()
+          : (res.stderr || res.error || stdout || "deploy-cluster.js failed").trim();
         return {
           built: ok,
           imported: ok,
           imagePresentInNode: ok,
+          ...(builtTag ? { builtTag: `local-agentic-sandbox-web-ui:${builtTag}` } : {}),
           detail,
         };
       } catch (err) {
