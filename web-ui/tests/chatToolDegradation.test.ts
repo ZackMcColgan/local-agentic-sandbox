@@ -6,7 +6,13 @@ import path from "path";
 describe("Phase 1 & 2: Chat Tool Registration Graceful Degradation & Model Default Suite", () => {
   it("chat route defines ADVERTISED_TOOLS including search_web and fetch_webpage_markdown", () => {
     const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-    const content = fs.readFileSync(routePath, "utf8");
+    const content =
+      fs.readFileSync(routePath, "utf8") +
+      "\n" +
+      fs.readFileSync(
+        path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+        "utf8"
+      );
 
     assert.ok(
       content.includes("const ADVERTISED_TOOLS = new Set(["),
@@ -21,7 +27,13 @@ describe("Phase 1 & 2: Chat Tool Registration Graceful Degradation & Model Defau
 
   it("chat route catches unmapped advertised tools and returns graceful tool status instead of throwing unregistered tool error", () => {
     const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-    const content = fs.readFileSync(routePath, "utf8");
+    const content =
+      fs.readFileSync(routePath, "utf8") +
+      "\n" +
+      fs.readFileSync(
+        path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+        "utf8"
+      );
 
     assert.ok(
       content.includes("if (ADVERTISED_TOOLS.has(toolName))"),
@@ -39,7 +51,13 @@ describe("Phase 1 & 2: Chat Tool Registration Graceful Degradation & Model Defau
 
   it("chat route defaults activeModel to configured MODEL_NAME when requestedModel is auto or legacy swift default", () => {
     const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-    const content = fs.readFileSync(routePath, "utf8");
+    const content =
+      fs.readFileSync(routePath, "utf8") +
+      "\n" +
+      fs.readFileSync(
+        path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+        "utf8"
+      );
 
     assert.ok(
       content.includes("activeModel = DEFAULT_MODEL;") || content.includes("DEFAULT_MODEL"),

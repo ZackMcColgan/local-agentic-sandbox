@@ -156,7 +156,13 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       )
         ? path.resolve(process.cwd(), "web-ui/app/api/chat/route.ts")
         : path.resolve(process.cwd(), "app/api/chat/route.ts");
-      const content = fs.readFileSync(chatRoutePath, "utf8");
+      const content =
+        fs.readFileSync(chatRoutePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(chatRoutePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       // Verify no triageComplexity call swapping model in auto mode
       assert.ok(

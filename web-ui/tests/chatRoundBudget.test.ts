@@ -273,7 +273,13 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
 
   describe("chat/route.ts wiring (static)", () => {
     const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-    const content = fs.readFileSync(routePath, "utf8");
+    const content =
+      fs.readFileSync(routePath, "utf8") +
+      "\n" +
+      fs.readFileSync(
+        path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+        "utf8"
+      );
 
     it("passes context headroom into canContinueToolLoop", () => {
       assert.ok(

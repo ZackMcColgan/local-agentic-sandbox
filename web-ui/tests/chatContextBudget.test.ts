@@ -194,7 +194,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
     it("verifies chat/route.ts applies clampToolOutput to tool results before pushing tool message", () => {
       const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(chatRoutePath, "utf8");
+      const content =
+        fs.readFileSync(chatRoutePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(chatRoutePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       assert.ok(
         content.includes("clampToolOutput") && content.includes('role: "tool"'),
@@ -411,7 +417,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
     it("verifies chat/route.ts forces synthesis from the budget decision and omits tools", () => {
       const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(chatRoutePath, "utf8");
+      const content =
+        fs.readFileSync(chatRoutePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(chatRoutePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       // CHAT-7 port: the final round is decided by headroom/backstop, not a round counter.
       assert.ok(
@@ -590,7 +602,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
     it("verifies web-ui/app/api/chat/route.ts has ZERO .push({ role: 'system' occurrences", () => {
       const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(chatRoutePath, "utf8");
+      const content =
+        fs.readFileSync(chatRoutePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(chatRoutePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       const matches = content.match(/\.push\(\s*\{\s*role:\s*["']system["']/g);
       assert.equal(
@@ -1052,7 +1070,10 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("route.ts invokes fitConversationToBudget BEFORE canContinueToolLoop and emits compaction event", () => {
-      const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+      const routeSrc =
+        fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+        "\n" +
+        fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
       assert.ok(
         routeSrc.includes("fitConversationToBudget"),
         "route.ts must import and call fitConversationToBudget"

@@ -148,7 +148,10 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
   });
 
   it("server wiring: /api/chat registers the thread live and snapshots both token loops", () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+    const src =
+      fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
     assert.match(
       src,
       /activeExecutionSet\.add\(activeThreadId\)/,

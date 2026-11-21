@@ -272,7 +272,10 @@ describe("Micro-elision (c): idempotence across rounds", () => {
 });
 
 describe("Micro-elision (c): chat route wiring (source assertions)", () => {
-  const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+  const routeSrc =
+    fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+    "\n" +
+    fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
 
   it("route imports the micro-elision module and applies it per round, independent of the fit trigger", () => {
     assert.match(routeSrc, /from "@\/lib\/microElision"/, "route must import lib/microElision");

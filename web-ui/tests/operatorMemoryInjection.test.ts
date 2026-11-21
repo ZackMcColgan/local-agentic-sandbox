@@ -47,7 +47,10 @@ describe("Settings Memory — system-prompt injection", () => {
   });
 
   it("chat route.ts wires assembleSystemPrompt and loadOperatorMemory into the system message", () => {
-    const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+    const routeSrc =
+      fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
     assert.ok(routeSrc.includes("loadOperatorMemory"), "route must load operator memory");
     assert.ok(routeSrc.includes("assembleSystemPrompt"), "route must assemble via helper");
     assert.ok(routeSrc.includes("formatMemoryForContext"), "route must format memory for context");

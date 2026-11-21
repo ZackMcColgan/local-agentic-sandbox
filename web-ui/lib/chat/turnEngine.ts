@@ -472,3 +472,5 @@ export async function runSynthesisPass(
   }
   return { content: passContent, thinking: passThinking };
 }
+
+export { runChatTurn, type RunChatTurnDeps } from "./roundLoop";

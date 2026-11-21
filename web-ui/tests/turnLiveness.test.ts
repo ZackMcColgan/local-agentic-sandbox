@@ -292,7 +292,10 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
   });
 
   it("server wiring: chat route persists traces at round boundaries and touches the heartbeat", async () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+    const src =
+      fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
     // Loose call-shape assertions: the call may wrap across lines, the traces
     // accumulator may be camelCased (accumulatedTraces / roundTraces), and the
     // options object may carry extra keys. Intent asserted unchanged:

@@ -92,7 +92,13 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
 
     it("statically verifies route.ts bans 'Executed <tools>.' canned string and transmits status in done event", () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(routePath, "utf8");
+      const content =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       // Verify the canned fallback is deleted
       assert.ok(
