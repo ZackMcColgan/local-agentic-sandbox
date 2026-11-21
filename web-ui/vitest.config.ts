@@ -9,12 +9,12 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       include: ["lib/**/*.ts", "app/api/**/*.ts"],
-      exclude: ["**/*.test.ts", "tests/**", "node_modules/**"]
-    }
+      exclude: ["**/*.test.ts", "tests/**", "node_modules/**"],
+    },
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./")
-    }
-  }
+      "@": path.resolve(__dirname, "./"),
+    },
+  },
 });

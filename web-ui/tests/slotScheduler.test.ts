@@ -1,10 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  PrioritySlotScheduler,
-  SlotPriority,
-  getSharedSlotScheduler,
-} from "../lib/slotScheduler";
+import { PrioritySlotScheduler, SlotPriority, getSharedSlotScheduler } from "../lib/slotScheduler";
 import { JobQueue } from "../lib/jobQueue";
 import { serializeTurn } from "../lib/chatTurnGate";
 import { WorkerPool } from "../lib/subagents/workerPool";
@@ -53,23 +49,41 @@ describe("PrioritySlotScheduler — single-slot arbiter", () => {
     const order: string[] = [];
 
     // Hold the slot initially so all subsequent requests queue up
-    const holder = await scheduler.acquire({ priority: SlotPriority.P1_BUILDER, label: "initial-holder" });
+    const holder = await scheduler.acquire({
+      priority: SlotPriority.P1_BUILDER,
+      label: "initial-holder",
+    });
 
-    const p3 = scheduler.runWithSlot({ priority: SlotPriority.P3_HOUSEKEEPING, label: "P3" }, async () => {
-      order.push("P3");
-    });
-    const p2 = scheduler.runWithSlot({ priority: SlotPriority.P2_ORCHESTRATOR, label: "P2" }, async () => {
-      order.push("P2");
-    });
-    const p1 = scheduler.runWithSlot({ priority: SlotPriority.P1_BUILDER, label: "P1" }, async () => {
-      order.push("P1");
-    });
-    const p0a = scheduler.runWithSlot({ priority: SlotPriority.P0_OWNER, label: "P0-a" }, async () => {
-      order.push("P0-a");
-    });
-    const p0b = scheduler.runWithSlot({ priority: SlotPriority.P0_OWNER, label: "P0-b" }, async () => {
-      order.push("P0-b");
-    });
+    const p3 = scheduler.runWithSlot(
+      { priority: SlotPriority.P3_HOUSEKEEPING, label: "P3" },
+      async () => {
+        order.push("P3");
+      }
+    );
+    const p2 = scheduler.runWithSlot(
+      { priority: SlotPriority.P2_ORCHESTRATOR, label: "P2" },
+      async () => {
+        order.push("P2");
+      }
+    );
+    const p1 = scheduler.runWithSlot(
+      { priority: SlotPriority.P1_BUILDER, label: "P1" },
+      async () => {
+        order.push("P1");
+      }
+    );
+    const p0a = scheduler.runWithSlot(
+      { priority: SlotPriority.P0_OWNER, label: "P0-a" },
+      async () => {
+        order.push("P0-a");
+      }
+    );
+    const p0b = scheduler.runWithSlot(
+      { priority: SlotPriority.P0_OWNER, label: "P0-b" },
+      async () => {
+        order.push("P0-b");
+      }
+    );
 
     holder.release();
     await Promise.all([p3, p2, p1, p0a, p0b]);
@@ -133,7 +147,11 @@ describe("PrioritySlotScheduler — single-slot arbiter", () => {
 
     await Promise.all([builderPromise, ownerPromise]);
 
-    assert.deepStrictEqual(completedRounds, [1, 2, 3], "Builder must complete all rounds without lost work");
+    assert.deepStrictEqual(
+      completedRounds,
+      [1, 2, 3],
+      "Builder must complete all rounds without lost work"
+    );
     const ownerIdx = events.indexOf("owner:run");
     const r1EndIdx = events.indexOf("builder:round-1:end");
     const r2StartIdx = events.indexOf("builder:round-2:start");
@@ -196,7 +214,10 @@ describe("PrioritySlotScheduler — single-slot arbiter", () => {
     const round2Idx = events.indexOf("builder:llm-round-2");
 
     assert.ok(p0Idx > ciStartIdx && p0Idx < ciEndIdx, "P0_OWNER must run during releaseForWait");
-    assert.ok(p2Idx > ciStartIdx && p2Idx < ciEndIdx, "P2_ORCHESTRATOR must run during releaseForWait");
+    assert.ok(
+      p2Idx > ciStartIdx && p2Idx < ciEndIdx,
+      "P2_ORCHESTRATOR must run during releaseForWait"
+    );
     assert.ok(round2Idx > ciEndIdx, "Builder round 2 must run after re-acquiring slot post-wait");
   });
 
@@ -233,6 +254,10 @@ describe("PrioritySlotScheduler — single-slot arbiter", () => {
 
     const [builderRes] = await Promise.all([builderJob, chatTurn.settled]);
     assert.strictEqual(builderRes, "builder-done");
-    assert.strictEqual(maxObserved, 1, "Chat turn and WorkerPool job must never execute concurrently");
+    assert.strictEqual(
+      maxObserved,
+      1,
+      "Chat turn and WorkerPool job must never execute concurrently"
+    );
   });
 });

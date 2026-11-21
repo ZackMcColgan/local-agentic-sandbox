@@ -47,7 +47,7 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
 
     let messages = [
       { id: "m1", role: "user" as const, content: "Initial user prompt" },
-      { id: "m2", role: "assistant" as const, content: "First assistant reply" }
+      { id: "m2", role: "assistant" as const, content: "First assistant reply" },
     ];
 
     const renderChat = (msgs: typeof messages) => {
@@ -59,7 +59,7 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
             onTracesUpdate: () => {},
             activeModel: "swift-27b-mtp",
             reasoningEffort: "medium",
-            threadId: "test-thread-scroll"
+            threadId: "test-thread-scroll",
           })
         );
       });
@@ -67,7 +67,9 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
 
     renderChat(messages);
 
-    const scrollContainer = container.querySelector('[data-scroll-container="true"]') as HTMLDivElement;
+    const scrollContainer = container.querySelector(
+      '[data-scroll-container="true"]'
+    ) as HTMLDivElement;
     assert.ok(scrollContainer, "ChatStream must render a data-scroll-container element");
 
     let mockScrollHeight = 1000;
@@ -76,16 +78,18 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
 
     Object.defineProperty(scrollContainer, "scrollHeight", {
       get: () => mockScrollHeight,
-      configurable: true
+      configurable: true,
     });
     Object.defineProperty(scrollContainer, "clientHeight", {
       get: () => mockClientHeight,
-      configurable: true
+      configurable: true,
     });
     Object.defineProperty(scrollContainer, "scrollTop", {
       get: () => mockScrollTop,
-      set: (v) => { mockScrollTop = v; },
-      configurable: true
+      set: (v) => {
+        mockScrollTop = v;
+      },
+      configurable: true,
     });
 
     // 1. At bottom: "Jump to bottom" button must NOT be present
@@ -111,7 +115,11 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     });
 
     jumpButton = container.querySelector('button[title="Jump to bottom"]');
-    assert.equal(jumpButton, null, "Jump to bottom button MUST disappear when user returns to bottom");
+    assert.equal(
+      jumpButton,
+      null,
+      "Jump to bottom button MUST disappear when user returns to bottom"
+    );
 
     // 4. Fix 3.2: Anti-flicker test during smooth scroll
     // Wait for programmatic scroll lock from returning to bottom to clear
@@ -129,7 +137,11 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
       (jumpButton as HTMLButtonElement).click();
     });
     // Immediately hidden
-    assert.equal(container.querySelector('button[title="Jump to bottom"]'), null, "Button disappears immediately upon click");
+    assert.equal(
+      container.querySelector('button[title="Jump to bottom"]'),
+      null,
+      "Button disappears immediately upon click"
+    );
 
     // Simulate mid-flight onScroll firing while distanceFromBottom > 90 before animation reaches bottom:
     act(() => {
@@ -149,12 +161,19 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     act(() => {
       scrollContainer.dispatchEvent(new win.Event("scroll") as any);
     });
-    assert.ok(container.querySelector('button[title="Jump to bottom"]'), "Scrolled up state re-engaged");
+    assert.ok(
+      container.querySelector('button[title="Jump to bottom"]'),
+      "Scrolled up state re-engaged"
+    );
 
     scrollIntoViewCalls = [];
     messages = [
       ...messages,
-      { id: "m3", role: "assistant" as const, content: "Incoming streamed token while scrolled up" }
+      {
+        id: "m3",
+        role: "assistant" as const,
+        content: "Incoming streamed token while scrolled up",
+      },
     ];
     renderChat(messages);
     assert.equal(
@@ -171,7 +190,7 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
     scrollIntoViewCalls = [];
     messages = [
       ...messages,
-      { id: "m4", role: "assistant" as const, content: "Incoming token at bottom" }
+      { id: "m4", role: "assistant" as const, content: "Incoming token at bottom" },
     ];
     renderChat(messages);
     assert.ok(
@@ -192,8 +211,8 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
         reasoningEffort: "medium" as const,
         messages: [],
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+        updatedAt: new Date().toISOString(),
+      },
     ];
 
     let navigatedView: string | null = null;
@@ -209,24 +228,38 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
           onNavigate: (view) => {
             navigatedView = view;
           },
-          onOpenDrawer: () => {}
+          onOpenDrawer: () => {},
         })
       );
     });
 
     const sessionsBtn = container.querySelector('button[title="Sessions"]') as HTMLButtonElement;
     assert.ok(sessionsBtn);
-    assert.equal(sessionsBtn.getAttribute("aria-current"), "page", "Active sessions button must have aria-current='page'");
+    assert.equal(
+      sessionsBtn.getAttribute("aria-current"),
+      "page",
+      "Active sessions button must have aria-current='page'"
+    );
 
-    const reportBtn = container.querySelector('button[title="Morning report"]') as HTMLButtonElement;
+    const reportBtn = container.querySelector(
+      'button[title="Morning report"]'
+    ) as HTMLButtonElement;
     assert.ok(reportBtn);
-    assert.equal(reportBtn.getAttribute("aria-current"), null, "Inactive report button must not have aria-current='page'");
+    assert.equal(
+      reportBtn.getAttribute("aria-current"),
+      null,
+      "Inactive report button must not have aria-current='page'"
+    );
 
     // Click report button
     act(() => {
       reportBtn.click();
     });
-    assert.equal(navigatedView, "morning-report", "Clicking nav button triggers onNavigate callback");
+    assert.equal(
+      navigatedView,
+      "morning-report",
+      "Clicking nav button triggers onNavigate callback"
+    );
   });
 
   it("NavigationDrawer renders mobile drawer with all navigation items and pending badge", () => {
@@ -240,7 +273,7 @@ describe("Sprint 12 Phase 6 — Sprint 2 UI Behavioral Test Suite (sprint2UiNavi
           activeView: "sessions",
           onNavigate: () => {},
           onNewSession: () => {},
-          pendingSkillsCount: 3
+          pendingSkillsCount: 3,
         })
       );
     });

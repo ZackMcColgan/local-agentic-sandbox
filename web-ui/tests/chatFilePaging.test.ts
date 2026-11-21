@@ -2,15 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  MAX_TOOL_OUTPUT_CHARS,
-  clampToolOutput,
-  runChatToolLoop
-} from "../lib/contextBudget";
-import {
-  DEFAULT_TOOL_SCHEMAS,
-  KNOWN_ONE_LINERS
-} from "../lib/progressiveTools";
+import { MAX_TOOL_OUTPUT_CHARS, clampToolOutput, runChatToolLoop } from "../lib/contextBudget";
+import { DEFAULT_TOOL_SCHEMAS, KNOWN_ONE_LINERS } from "../lib/progressiveTools";
 import { HOST_TOOLS_DEFINITIONS } from "../lib/hostMode";
 
 describe("Chat-2: File Reads & Pagination Parity Suite", () => {
@@ -70,7 +63,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       const wsSchema = DEFAULT_TOOL_SCHEMAS.workspace_read_file;
       assert.ok(wsSchema, "workspace_read_file schema must be defined in DEFAULT_TOOL_SCHEMAS");
 
-      const hostTool = HOST_TOOLS_DEFINITIONS.find((t: any) => t.function?.name === "host_read_file");
+      const hostTool = HOST_TOOLS_DEFINITIONS.find(
+        (t: any) => t.function?.name === "host_read_file"
+      );
       assert.ok(hostTool, "host_read_file must be defined in HOST_TOOLS_DEFINITIONS");
       const hostSchema = hostTool.function;
 
@@ -110,14 +105,22 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       args: { start_line?: number; end_line?: number; offset?: number; limit?: number }
     ) {
       const { start_line, end_line, offset, limit } = args;
-      const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
-      const end = end_line ? Math.min(allLinesCount, end_line) : (limit !== undefined ? Math.min(allLinesCount, start + limit - 1) : allLinesCount);
+      const start = start_line
+        ? Math.max(1, start_line)
+        : offset !== undefined
+          ? Math.max(1, offset === 0 ? 1 : offset)
+          : 1;
+      const end = end_line
+        ? Math.min(allLinesCount, end_line)
+        : limit !== undefined
+          ? Math.min(allLinesCount, start + limit - 1)
+          : allLinesCount;
       return {
         start,
         end,
         showing_lines: `${start}-${end}`,
         has_more: end < allLinesCount,
-        next_start_line: end < allLinesCount ? end + 1 : null
+        next_start_line: end < allLinesCount ? end + 1 : null,
       };
     }
 
@@ -184,7 +187,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         start_line: 12,
         offset: 50,
         end_line: 30,
-        limit: 5
+        limit: 5,
       });
       assert.equal(res.start, 12);
       assert.equal(res.end, 30);
@@ -193,7 +196,8 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
   });
 
   describe("Pin 1 Compliance: Uncapped File Reads & Large File (>200KB) Paging to EOF", () => {
-    const testDir = typeof __dirname !== "undefined" ? __dirname : path.resolve(process.cwd(), "web-ui/tests");
+    const testDir =
+      typeof __dirname !== "undefined" ? __dirname : path.resolve(process.cwd(), "web-ui/tests");
 
     it("statically verifies chat/route.ts and contextBudget.ts exempt workspace_read_file and host_read_file from clampToolOutput", () => {
       const routePath = path.resolve(testDir, "../app/api/chat/route.ts");
@@ -204,7 +208,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         "route.ts must identify file read tools (workspace_read_file and host_read_file)"
       );
       assert.ok(
-        routeCode.includes("content: isFileReadTool ? JSON.stringify(result) : clampToolOutput(JSON.stringify(result))"),
+        routeCode.includes(
+          "content: isFileReadTool ? JSON.stringify(result) : clampToolOutput(JSON.stringify(result))"
+        ),
         "route.ts must bypass clampToolOutput for file read tools"
       );
 
@@ -216,7 +222,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         "contextBudget.ts must identify file read tools (workspace_read_file and host_read_file)"
       );
       assert.ok(
-        contextCode.includes("content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))"),
+        contextCode.includes(
+          "content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))"
+        ),
         "contextBudget.ts must bypass clampToolOutput for file read tools"
       );
     });
@@ -224,7 +232,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
     it("runChatToolLoop exempts workspace_read_file and host_read_file from clampToolOutput while clamping other tools", async () => {
       const largePayload = {
         status: "SUCCESS",
-        content: "Z".repeat(70000)
+        content: "Z".repeat(70000),
       };
 
       // 1. workspace_read_file should NOT be clamped
@@ -239,24 +247,34 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
             yield {
               message: {
                 content: "",
-                tool_calls: [{
-                  id: "call_1",
-                  type: "function",
-                  function: { name: "workspace_read_file", arguments: '{"path":"large.txt"}' }
-                }]
-              }
+                tool_calls: [
+                  {
+                    id: "call_1",
+                    type: "function",
+                    function: { name: "workspace_read_file", arguments: '{"path":"large.txt"}' },
+                  },
+                ],
+              },
             };
           } else {
             yield { message: { content: "Done reading file" } };
           }
         },
-        executeTool: async () => largePayload
+        executeTool: async () => largePayload,
       });
 
-      const wsToolMsg = wsMessages.find((m) => m.role === "tool" && m.name === "workspace_read_file");
+      const wsToolMsg = wsMessages.find(
+        (m) => m.role === "tool" && m.name === "workspace_read_file"
+      );
       assert.ok(wsToolMsg, "Must have recorded workspace_read_file tool message");
-      assert.ok(wsToolMsg.content.length > 70000, "workspace_read_file output must NOT be clamped to 64000 chars");
-      assert.ok(!wsToolMsg.content.includes("[TRUNCATED:"), "workspace_read_file output must not have truncation notice");
+      assert.ok(
+        wsToolMsg.content.length > 70000,
+        "workspace_read_file output must NOT be clamped to 64000 chars"
+      );
+      assert.ok(
+        !wsToolMsg.content.includes("[TRUNCATED:"),
+        "workspace_read_file output must not have truncation notice"
+      );
 
       // 2. host_read_file should NOT be clamped
       const hostMessages: any[] = [{ role: "user", content: "read host file" }];
@@ -270,24 +288,34 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
             yield {
               message: {
                 content: "",
-                tool_calls: [{
-                  id: "call_2",
-                  type: "function",
-                  function: { name: "host_read_file", arguments: '{"path":"C:\\\\large.txt"}' }
-                }]
-              }
+                tool_calls: [
+                  {
+                    id: "call_2",
+                    type: "function",
+                    function: { name: "host_read_file", arguments: '{"path":"C:\\\\large.txt"}' },
+                  },
+                ],
+              },
             };
           } else {
             yield { message: { content: "Done reading host file" } };
           }
         },
-        executeTool: async () => largePayload
+        executeTool: async () => largePayload,
       });
 
-      const hostToolMsg = hostMessages.find((m) => m.role === "tool" && m.name === "host_read_file");
+      const hostToolMsg = hostMessages.find(
+        (m) => m.role === "tool" && m.name === "host_read_file"
+      );
       assert.ok(hostToolMsg, "Must have recorded host_read_file tool message");
-      assert.ok(hostToolMsg.content.length > 70000, "host_read_file output must NOT be clamped to 64000 chars");
-      assert.ok(!hostToolMsg.content.includes("[TRUNCATED:"), "host_read_file output must not have truncation notice");
+      assert.ok(
+        hostToolMsg.content.length > 70000,
+        "host_read_file output must NOT be clamped to 64000 chars"
+      );
+      assert.ok(
+        !hostToolMsg.content.includes("[TRUNCATED:"),
+        "host_read_file output must not have truncation notice"
+      );
 
       // 3. non-read tool (workspace_run_command) MUST be clamped
       const cmdMessages: any[] = [{ role: "user", content: "run command" }];
@@ -301,24 +329,38 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
             yield {
               message: {
                 content: "",
-                tool_calls: [{
-                  id: "call_3",
-                  type: "function",
-                  function: { name: "workspace_run_command", arguments: '{"command":"cat huge.log"}' }
-                }]
-              }
+                tool_calls: [
+                  {
+                    id: "call_3",
+                    type: "function",
+                    function: {
+                      name: "workspace_run_command",
+                      arguments: '{"command":"cat huge.log"}',
+                    },
+                  },
+                ],
+              },
             };
           } else {
             yield { message: { content: "Done running command" } };
           }
         },
-        executeTool: async () => largePayload
+        executeTool: async () => largePayload,
       });
 
-      const cmdToolMsg = cmdMessages.find((m) => m.role === "tool" && m.name === "workspace_run_command");
+      const cmdToolMsg = cmdMessages.find(
+        (m) => m.role === "tool" && m.name === "workspace_run_command"
+      );
       assert.ok(cmdToolMsg, "Must have recorded workspace_run_command tool message");
-      assert.equal(cmdToolMsg.content.length, 64000, "workspace_run_command output MUST be clamped to 64000 chars");
-      assert.ok(cmdToolMsg.content.includes("[TRUNCATED:"), "workspace_run_command output MUST have truncation notice");
+      assert.equal(
+        cmdToolMsg.content.length,
+        64000,
+        "workspace_run_command output MUST be clamped to 64000 chars"
+      );
+      assert.ok(
+        cmdToolMsg.content.includes("[TRUNCATED:"),
+        "workspace_run_command output MUST have truncation notice"
+      );
     });
 
     it("simulates a large file > 64,000 chars (~200KB, 2,500 lines / ~220,000 bytes) paging through the file to EOF in chunks", () => {
@@ -327,7 +369,9 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       const lines: string[] = [];
       for (let i = 1; i <= TOTAL_LINES; i++) {
         // ~88 characters per line
-        lines.push(`Line ${String(i).padStart(4, "0")}: export const CONFIG_KEY_${i} = "${"X".repeat(50)}";`);
+        lines.push(
+          `Line ${String(i).padStart(4, "0")}: export const CONFIG_KEY_${i} = "${"X".repeat(50)}";`
+        );
       }
       const fullContent = lines.join("\n");
       const totalBytes = Buffer.byteLength(fullContent, "utf8");
@@ -350,10 +394,14 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         const { start_line, end_line, offset, limit } = args;
         const start = start_line
           ? Math.max(1, start_line)
-          : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
+          : offset !== undefined
+            ? Math.max(1, offset === 0 ? 1 : offset)
+            : 1;
         const end = end_line
           ? Math.min(allLines.length, end_line)
-          : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
+          : limit !== undefined
+            ? Math.min(allLines.length, start + limit - 1)
+            : allLines.length;
 
         const slice = allLines.slice(start - 1, end);
         const formatted = slice.map((line, idx) => `${start + idx} | ${line}`).join("\n");
@@ -365,7 +413,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
           showing_lines: `${start}-${end}`,
           has_more: end < allLines.length,
           next_start_line: end < allLines.length ? end + 1 : null,
-          content: formatted
+          content: formatted,
         };
       }
 
@@ -380,7 +428,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         const page = simulateReadFile(lines, totalBytes, {
           start_line: currentStartLine,
-          end_line: currentStartLine + pageSize - 1
+          end_line: currentStartLine + pageSize - 1,
         });
 
         // Every page has consistent total_lines and total_bytes
@@ -396,11 +444,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         );
 
         if (pageNum < 5) {
-          assert.equal(
-            page.has_more,
-            true,
-            `Page ${pageNum} must have has_more === true`
-          );
+          assert.equal(page.has_more, true, `Page ${pageNum} must have has_more === true`);
           assert.equal(
             page.next_start_line,
             pageNum * pageSize + 1,
@@ -408,11 +452,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
           );
         } else {
           // Final page 5
-          assert.equal(
-            page.has_more,
-            false,
-            `Final page ${pageNum} must have has_more === false`
-          );
+          assert.equal(page.has_more, false, `Final page ${pageNum} must have has_more === false`);
           assert.equal(
             page.next_start_line,
             null,
@@ -458,7 +498,7 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
         showing_lines: "1-800",
         has_more: true,
         next_start_line: 801,
-        content: pageSliceFormatted
+        content: pageSliceFormatted,
       };
 
       const rawJson = JSON.stringify(pageResult);
@@ -474,8 +514,11 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
 
       // Verify Pin 1 compliance logic: file read tools are NOT clamped
       for (const readToolName of ["workspace_read_file", "host_read_file"]) {
-        const isFileReadTool = readToolName === "workspace_read_file" || readToolName === "host_read_file";
-        const messageContent = isFileReadTool ? JSON.stringify(pageResult) : clampToolOutput(JSON.stringify(pageResult));
+        const isFileReadTool =
+          readToolName === "workspace_read_file" || readToolName === "host_read_file";
+        const messageContent = isFileReadTool
+          ? JSON.stringify(pageResult)
+          : clampToolOutput(JSON.stringify(pageResult));
 
         assert.equal(
           messageContent.length,

@@ -9,7 +9,7 @@ import {
   saveOperatorMemory,
   formatMemoryForContext,
   OPERATOR_MEMORY_MAX_CHARS,
-  OWNER_MEMORY_HEADER
+  OWNER_MEMORY_HEADER,
 } from "../lib/memory/operatorMemory.js";
 
 describe("Settings Memory — operator-memory.json store", () => {
@@ -32,7 +32,10 @@ describe("Settings Memory — operator-memory.json store", () => {
     try {
       delete process.env.OPERATOR_MEMORY_PATH;
       const p = getOperatorMemoryPath();
-      assert.ok(p.includes(path.join(".agent", "settings")), `default path must live under .agent/settings: ${p}`);
+      assert.ok(
+        p.includes(path.join(".agent", "settings")),
+        `default path must live under .agent/settings: ${p}`
+      );
       assert.ok(p.endsWith("operator-memory.json"));
     } finally {
       if (original) process.env.OPERATOR_MEMORY_PATH = original;
@@ -154,10 +157,12 @@ describe("Settings Memory — API route GET/PUT", () => {
 
   it("PUT saves valid text and GET reflects it", async () => {
     const { PUT } = await import("../app/api/settings/memory/route.js");
-    const res = await PUT(new Request("http://localhost/api/settings/memory", {
-      method: "PUT",
-      body: JSON.stringify({ text: "zack's facts" })
-    }));
+    const res = await PUT(
+      new Request("http://localhost/api/settings/memory", {
+        method: "PUT",
+        body: JSON.stringify({ text: "zack's facts" }),
+      })
+    );
     assert.equal(res.status, 200);
     const json = await res.json();
     assert.equal(json.text, "zack's facts");
@@ -169,10 +174,12 @@ describe("Settings Memory — API route GET/PUT", () => {
 
   it("PUT with 2001 chars is rejected server-side with 400", async () => {
     const { PUT } = await import("../app/api/settings/memory/route.js");
-    const res = await PUT(new Request("http://localhost/api/settings/memory", {
-      method: "PUT",
-      body: JSON.stringify({ text: "x".repeat(OPERATOR_MEMORY_MAX_CHARS + 1) })
-    }));
+    const res = await PUT(
+      new Request("http://localhost/api/settings/memory", {
+        method: "PUT",
+        body: JSON.stringify({ text: "x".repeat(OPERATOR_MEMORY_MAX_CHARS + 1) }),
+      })
+    );
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.ok(json.error.includes(String(OPERATOR_MEMORY_MAX_CHARS)));
@@ -180,10 +187,12 @@ describe("Settings Memory — API route GET/PUT", () => {
 
   it("PUT with non-string text is rejected with 400", async () => {
     const { PUT } = await import("../app/api/settings/memory/route.js");
-    const res = await PUT(new Request("http://localhost/api/settings/memory", {
-      method: "PUT",
-      body: JSON.stringify({ text: 42 })
-    }));
+    const res = await PUT(
+      new Request("http://localhost/api/settings/memory", {
+        method: "PUT",
+        body: JSON.stringify({ text: 42 }),
+      })
+    );
     assert.equal(res.status, 400);
   });
 

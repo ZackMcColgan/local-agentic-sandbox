@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import http from "node:http";
-import {
-  getHostSettings,
-  setHostSettings,
-  getHostSettingsFilePath
-} from "../lib/hostSettings";
+import { getHostSettings, setHostSettings, getHostSettingsFilePath } from "../lib/hostSettings";
 
 describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
   let settingsFile: string;
@@ -62,31 +58,34 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
                     {
                       id: "call_1",
                       type: "function",
-                      function: { name: "workspace_read_file", arguments: { path: "package.json" } }
-                    }
-                  ]
-                }
+                      function: {
+                        name: "workspace_read_file",
+                        arguments: { path: "package.json" },
+                      },
+                    },
+                  ],
+                },
               }) + "\n"
             );
             res.write(
               JSON.stringify({
                 message: { role: "assistant", content: "" },
                 done: true,
-                eval_count: 10
+                eval_count: 10,
               }) + "\n"
             );
           } else {
             // Round 1+: complete normally
             res.write(
               JSON.stringify({
-                message: { role: "assistant", content: "Completed without chunking." }
+                message: { role: "assistant", content: "Completed without chunking." },
               }) + "\n"
             );
             res.write(
               JSON.stringify({
                 message: { role: "assistant", content: "" },
                 done: true,
-                eval_count: 10
+                eval_count: 10,
               }) + "\n"
             );
           }
@@ -113,7 +112,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
       LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
       MCP_SERVER_URL: process.env.MCP_SERVER_URL,
       BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
-      LLM_ENGINE: process.env.LLM_ENGINE
+      LLM_ENGINE: process.env.LLM_ENGINE,
     };
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
@@ -129,7 +128,14 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
     process.env.BROWSER_MCP_URL = `http://127.0.0.1:${port}/browser`;
 
     const threadId = `thread-chunk-gate-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const handoffPath = path.resolve(process.cwd(), "..", "docs", "internal", "handoffs", `${threadId}.md`);
+    const handoffPath = path.resolve(
+      process.cwd(),
+      "..",
+      "docs",
+      "internal",
+      "handoffs",
+      `${threadId}.md`
+    );
 
     try {
       const { ThreadStore } = await import("../lib/threads/threadStore");
@@ -137,7 +143,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
       store.createThread({
         id: threadId,
         title: "Chunk Gate Test Thread",
-        isTest: true
+        isTest: true,
       } as any);
 
       const { NextRequest } = await import("next/server");
@@ -150,8 +156,8 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
           userMessageId: "u-1",
           assistantMessageId: "a-1",
           messages: [{ role: "user", content: "Run a multi-round task.", id: "u-1" }],
-          model: "swift-15-27b-mtp"
-        })
+          model: "swift-15-27b-mtp",
+        }),
       });
       const res = await chatRouteModule.POST(req as any);
       const reader = res.body!.getReader();
@@ -179,7 +185,11 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
 
   it("(a) switch OFF + turn exceeding budget completes with NO chunk marker and NO handoff file", async () => {
     const { sseOutput, handoffExists } = await runChunkBudgetTurn(false);
-    assert.equal(handoffExists, false, "Handoff file must NOT be written when jobChunkingEnabled is false");
+    assert.equal(
+      handoffExists,
+      false,
+      "Handoff file must NOT be written when jobChunkingEnabled is false"
+    );
     assert.ok(
       !sseOutput.includes("[[CHUNK_COMPLETE]]"),
       "SSE output must NOT contain [[CHUNK_COMPLETE]] marker when jobChunkingEnabled is false"
@@ -219,12 +229,18 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
 
     try {
       execFileSync("git", ["init"], { cwd: tmpRepo, stdio: "ignore" });
-      execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["config", "user.email", "test@example.com"], {
+        cwd: tmpRepo,
+        stdio: "ignore",
+      });
       execFileSync("git", ["config", "user.name", "Test"], { cwd: tmpRepo, stdio: "ignore" });
       fs.writeFileSync(path.join(tmpRepo, "init.txt"), "init\n", "utf8");
       execFileSync("git", ["add", "init.txt"], { cwd: tmpRepo, stdio: "ignore" });
       execFileSync("git", ["commit", "-m", "init"], { cwd: tmpRepo, stdio: "ignore" });
-      const headSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmpRepo, encoding: "utf8" }).trim();
+      const headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: tmpRepo,
+        encoding: "utf8",
+      }).trim();
 
       const makeTask = (taskId: string) => ({
         taskId,
@@ -240,7 +256,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
             acceptanceCriteria: [{ id: "AC1", assertion: "ok" }],
             status: "pending" as const,
             builderIterations: 0,
-            criticRounds: 0
+            criticRounds: 0,
           },
           {
             id: "M2",
@@ -249,15 +265,15 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
             acceptanceCriteria: [{ id: "AC2", assertion: "ok" }],
             status: "pending" as const,
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         currentMilestoneIndex: 0,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
 
       const supervisor = new OvernightSupervisor({ checkpointDirectory: tmpCheckpoints });
@@ -267,9 +283,13 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
       const resOff = await supervisor.executeTaskWithRecovery(makeTask("task-chunk-off"), {
         repoRoot: tmpRepo,
         chunkBudget: { maxRounds: 1 },
-        stepExecutor: async () => ({ status: "completed", gitSha: headSha })
+        stepExecutor: async () => ({ status: "completed", gitSha: headSha }),
       });
-      assert.equal(resOff.status, "completed", "Supervisor job must complete when jobChunkingEnabled is false");
+      assert.equal(
+        resOff.status,
+        "completed",
+        "Supervisor job must complete when jobChunkingEnabled is false"
+      );
       assert.equal(resOff.milestones[0].status, "completed");
       assert.equal(resOff.milestones[1].status, "completed");
       assert.notEqual(resOff.parkedReason, "[[CHUNK_COMPLETE]]");
@@ -279,9 +299,13 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
       const resOn = await supervisor.executeTaskWithRecovery(makeTask("task-chunk-on"), {
         repoRoot: tmpRepo,
         chunkBudget: { maxRounds: 1 },
-        stepExecutor: async () => ({ status: "completed", gitSha: headSha })
+        stepExecutor: async () => ({ status: "completed", gitSha: headSha }),
       });
-      assert.equal(resOn.status, "paused", "Supervisor job must pause at chunk boundary when jobChunkingEnabled is true");
+      assert.equal(
+        resOn.status,
+        "paused",
+        "Supervisor job must pause at chunk boundary when jobChunkingEnabled is true"
+      );
       assert.equal(resOn.parkedReason, "[[CHUNK_COMPLETE]]");
       assert.equal(resOn.milestones[0].status, "completed");
       assert.equal(resOn.milestones[1].status, "pending");

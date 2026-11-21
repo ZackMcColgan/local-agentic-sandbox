@@ -14,7 +14,8 @@ describe("B2: Loading state + initial selection parity", () => {
       "page.tsx must not skip auto-selection on mobile"
     );
     assert.ok(
-      pageSrc.includes("data.threads[0]") || pageSrc.includes("pickMostRecentlyActiveThread(data.threads)"),
+      pageSrc.includes("data.threads[0]") ||
+        pageSrc.includes("pickMostRecentlyActiveThread(data.threads)"),
       "page.tsx must auto-select most recent thread"
     );
   });
@@ -22,12 +23,21 @@ describe("B2: Loading state + initial selection parity", () => {
   it("ThreadsSidebar.tsx renders loading placeholders when isLoadingThreads is true instead of No sessions yet", () => {
     const src = fs.readFileSync(path.join(webUiRoot, "components", "ThreadsSidebar.tsx"), "utf8");
     assert.ok(src.includes("isLoadingThreads"), "ThreadsSidebar.tsx must accept isLoadingThreads");
-    assert.ok(src.includes("animate-pulse"), "ThreadsSidebar.tsx must render loading skeleton placeholders");
+    assert.ok(
+      src.includes("animate-pulse"),
+      "ThreadsSidebar.tsx must render loading skeleton placeholders"
+    );
   });
 
   it("NavigationDrawer.tsx renders loading placeholders when isLoadingThreads is true instead of No sessions yet", () => {
     const src = fs.readFileSync(path.join(webUiRoot, "components", "NavigationDrawer.tsx"), "utf8");
-    assert.ok(src.includes("isLoadingThreads"), "NavigationDrawer.tsx must accept isLoadingThreads");
-    assert.ok(src.includes("animate-pulse"), "NavigationDrawer.tsx must render loading skeleton placeholders");
+    assert.ok(
+      src.includes("isLoadingThreads"),
+      "NavigationDrawer.tsx must accept isLoadingThreads"
+    );
+    assert.ok(
+      src.includes("animate-pulse"),
+      "NavigationDrawer.tsx must render loading skeleton placeholders"
+    );
   });
 });

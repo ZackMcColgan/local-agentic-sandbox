@@ -50,12 +50,18 @@ describe("parity PR4 — canvas pane chrome (board: bg-1 bar, muted mono filenam
     assert.ok(container.includes("rounded-[10px]"), "board tab container radius is 10px");
     const tabs = segment(canvas, "const tabButton", 1500);
     assert.ok(tabs.includes("dark:bg-[#27272a]"), "board active tab bg is #27272a (bg-3)");
-    assert.ok(tabs.includes("dark:text-zinc-100"), "board active tab text is near-white, not emerald");
+    assert.ok(
+      tabs.includes("dark:text-zinc-100"),
+      "board active tab text is near-white, not emerald"
+    );
   });
 
   it("mobile bottom tabs are individual bordered buttons with a brand-border active state", () => {
     const tabs = segment(canvas, "const tabButton", 2200);
-    assert.ok(tabs.includes("dark:border-emerald-500"), "board mobile active tab carries the brand border");
+    assert.ok(
+      tabs.includes("dark:border-emerald-500"),
+      "board mobile active tab carries the brand border"
+    );
     assert.ok(tabs.includes("rounded-[10px]"), "board mobile tabs are 10px-radius buttons");
   });
 
@@ -72,7 +78,10 @@ describe("parity PR4 — canvas pane chrome (board: bg-1 bar, muted mono filenam
   });
 
   it("the ArtifactCanvas file carries no zinc-900 dark surfaces left", () => {
-    assert.ok(!canvas.includes("dark:bg-zinc-900"), "canvas surfaces align to bg-1/bg-2 board tokens");
+    assert.ok(
+      !canvas.includes("dark:bg-zinc-900"),
+      "canvas surfaces align to bg-1/bg-2 board tokens"
+    );
   });
 });
 
@@ -82,15 +91,21 @@ describe("parity PR4 — canvas diff (board: single gutter, tinted rows, rail he
     assert.ok(rows.includes("w-[34px]"), "board gutter is a single 34px column");
     assert.ok(
       rows.includes('row.kind === "del" ? row.oldLine : row.newLine'),
-      "gutter shows the old number for deletions, the new number otherwise",
+      "gutter shows the old number for deletions, the new number otherwise"
     );
     assert.ok(!rows.includes("w-12"), "the old twin 48px gutters are gone");
   });
 
   it("diff rows keep near-white text on tinted add/del backgrounds with board type sizes", () => {
     const rows = segment(canvas, "function DiffRows", 2200);
-    assert.ok(rows.includes("bg-[rgba(16,185,129,0.13)]"), "board add-row tint rgba(16,185,129,.13)");
-    assert.ok(rows.includes("bg-[rgba(248,113,113,0.12)]"), "board del-row tint rgba(248,113,113,.12)");
+    assert.ok(
+      rows.includes("bg-[rgba(16,185,129,0.13)]"),
+      "board add-row tint rgba(16,185,129,.13)"
+    );
+    assert.ok(
+      rows.includes("bg-[rgba(248,113,113,0.12)]"),
+      "board del-row tint rgba(248,113,113,.12)"
+    );
     assert.ok(rows.includes("text-[#7dd3fc]"), "board hunk text is #7dd3fc");
     assert.ok(rows.includes("lg:text-[12.3px]"), "board desktop diff type is 12.3px");
     assert.ok(rows.includes("lg:leading-[1.75]"), "board desktop diff leading is 1.75");
@@ -106,7 +121,10 @@ describe("parity PR4 — canvas diff (board: single gutter, tinted rows, rail he
 
   it("the totals strip stays for mobile only (the rail header carries it on desktop)", () => {
     const strip = around(canvas, "unified · every line, nothing truncated", 600, 60);
-    assert.ok(strip.includes("lg:hidden"), "totals strip hides on desktop where the rail header shows");
+    assert.ok(
+      strip.includes("lg:hidden"),
+      "totals strip hides on desktop where the rail header shows"
+    );
   });
 
   it("mobile file chips take the board's pill form", () => {
@@ -128,7 +146,11 @@ describe("parity PR4 — canvas diff (board: single gutter, tinted rows, rail he
 
 describe("parity PR4 — chat-side canvas doors (board: bg-2 diff card, plain-text actions, pill badge)", () => {
   it("the diff card drops the icon tile for the board's bg-2 mono form", () => {
-    const card = between(canvas, "export function CanvasDiffCard", "export function CanvasFileOpenButton");
+    const card = between(
+      canvas,
+      "export function CanvasDiffCard",
+      "export function CanvasFileOpenButton"
+    );
     assert.ok(card.includes("dark:bg-[#18181b]"), "board diff card bg is #18181b (bg-2)");
     assert.ok(card.includes("font-mono"), "board diff card title is mono");
     assert.ok(card.includes("text-[12.5px]"), "board diff card title is 12.5px");
@@ -146,7 +168,10 @@ describe("parity PR4 — chat-side canvas doors (board: bg-2 diff card, plain-te
     const badge = around(renderers, 'data-testid="canvas-update-badge"', 100, 400);
     assert.ok(badge.includes("dark:text-[#34d399]"), "board badge text is brand-hi");
     assert.ok(badge.includes("text-[11px]"), "board badge text is 11px");
-    assert.ok(renderers.includes("↻ Updated · file changed"), "board badge carries the ↻ glyph text");
+    assert.ok(
+      renderers.includes("↻ Updated · file changed"),
+      "board badge carries the ↻ glyph text"
+    );
     assert.ok(!renderers.includes("bg-emerald-600 text-white"), "the solid emerald badge is gone");
   });
 });
@@ -157,15 +182,21 @@ describe("parity PR4 — Morning Report forms (board: verdict card + inline KPI 
     assert.ok(banner.includes("dark:bg-[#121215]"), "board verdict card bg is #121215 (bg-1)");
     assert.ok(!banner.includes("bg-rose-950"), "the tinted verdict wash is gone from the banner");
     assert.ok(!banner.includes("bg-amber-950"), "the tinted verdict wash is gone from the banner");
-    assert.ok(!banner.includes("bg-emerald-950"), "the tinted verdict wash is gone from the banner");
+    assert.ok(
+      !banner.includes("bg-emerald-950"),
+      "the tinted verdict wash is gone from the banner"
+    );
   });
 
   it("the KPI tiles become an inline strip inside the verdict card, with the board footnote", () => {
-    assert.ok(morningReport.includes('data-testid="kpi-strip"'), "verdict card carries the inline KPI strip");
+    assert.ok(
+      morningReport.includes('data-testid="kpi-strip"'),
+      "verdict card carries the inline KPI strip"
+    );
     assert.ok(morningReport.includes("Stats shown for the"), "board footnote follows the strip");
     assert.ok(
       !morningReport.includes("grid grid-cols-2 sm:grid-cols-4 gap-3"),
-      "the four tinted KPI tiles are gone",
+      "the four tinted KPI tiles are gone"
     );
     const strip = segment(morningReport, 'data-testid="kpi-strip"', 2200);
     assert.ok(strip.includes("Total Tasks"), "strip names the task total");
@@ -179,7 +210,10 @@ describe("parity PR4 — Morning Report forms (board: verdict card + inline KPI 
 
   it("attention items go neutral with a 3px accent bar and a solid emerald session action", () => {
     const items = segment(morningReport, "overnight.attentionItems.map", 2800);
-    assert.ok(items.includes("inset_3px_0_0"), "board attention cards carry the 3px left accent bar");
+    assert.ok(
+      items.includes("inset_3px_0_0"),
+      "board attention cards carry the 3px left accent bar"
+    );
     assert.ok(items.includes("bg-emerald-500"), "board primary action is solid emerald");
     assert.ok(!morningReport.includes("dark:bg-amber-950/30"), "the tinted attention wash is gone");
     assert.ok(!morningReport.includes("dark:bg-rose-950/30"), "the tinted attention wash is gone");
@@ -205,7 +239,10 @@ describe("parity PR4 — UI-021 remainder (completed-turn trace surfaces to the 
     assert.ok(payload.includes("dark:text-zinc-300"), "section labels lift to zinc-300");
     const empty = around(executionTrace, "No Tool Executions Yet", 500, 200);
     assert.ok(empty.includes("dark:text-zinc-100"), "empty-state title renders near-white");
-    assert.ok(empty.includes("dark:text-zinc-400"), "empty-state icon lifts to zinc-400 (UI-050 text floor)");
+    assert.ok(
+      empty.includes("dark:text-zinc-400"),
+      "empty-state icon lifts to zinc-400 (UI-050 text floor)"
+    );
   });
 
   it("TraceWaterfall panels sit on bg-1 with lifted stat labels", () => {

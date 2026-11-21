@@ -1,7 +1,24 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Check, AlertTriangle, ShieldCheck, ShieldAlert, History, Cpu, Play, Square, RotateCw, Bell, Send, GitBranch, Terminal } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Check,
+  AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
+  History,
+  Cpu,
+  Play,
+  Square,
+  RotateCw,
+  Bell,
+  Send,
+  GitBranch,
+  Terminal,
+} from "lucide-react";
 import { useTheme, Theme } from "../lib/hooks/useTheme";
 import { formatModelDisplayLabel, formatMessageTimestamp } from "../lib/chatUtils";
 import { EngineStatusPill } from "./EngineStatusPill";
@@ -42,7 +59,8 @@ export function getHostCardPresentation(settings: {
       badgeLabel: "Disabled",
       reasonText: "Host access is disabled. New chat threads will not offer host tools.",
       dotClass: "bg-slate-400 dark:bg-zinc-600",
-      badgeClass: "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400",
+      badgeClass:
+        "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400",
     };
   }
   if (settings.runnerState === "MISMATCH") {
@@ -53,24 +71,29 @@ export function getHostCardPresentation(settings: {
         settings.runnerReason ||
         "Host runner responded but does not match the expected build. Update the host runner to restore access.",
       dotClass: "bg-amber-500",
-      badgeClass: "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300",
+      badgeClass:
+        "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300",
     };
   }
   if (settings.runnerState === "READY" || settings.runnerAvailable) {
     return {
       stripLabel: "Connected",
       badgeLabel: "Active",
-      reasonText: "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
+      reasonText:
+        "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
       dotClass: "bg-emerald-500",
-      badgeClass: "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
+      badgeClass:
+        "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
     };
   }
   return {
     stripLabel: "Runner offline",
     badgeLabel: "Runner Offline",
-    reasonText: "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
+    reasonText:
+      "Host tools (read, write, bash/powershell) are enabled across chat threads. Default is ON.",
     dotClass: "bg-zinc-500",
-    badgeClass: "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400",
+    badgeClass:
+      "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400",
   };
 }
 
@@ -129,11 +152,13 @@ export function SettingsView({
   onThemeChange: propsOnThemeChange,
   selfDeployEnabled: propsSelfDeployEnabled,
   onToggleSelfDeploy: propsOnToggleSelfDeploy,
-  deployHistory = []
+  deployHistory = [],
 }: SettingsViewProps) {
   const { theme, setTheme } = useTheme(propsTheme);
   const themeMode = theme;
-  const [localSelfDeployEnabled, setLocalSelfDeployEnabled] = useState(propsSelfDeployEnabled ?? false);
+  const [localSelfDeployEnabled, setLocalSelfDeployEnabled] = useState(
+    propsSelfDeployEnabled ?? false
+  );
   const [engineData, setEngineData] = useState<{
     status: string;
     reachable: boolean;
@@ -149,7 +174,7 @@ export function SettingsView({
     engine: null,
     backend: null,
     model: null,
-    vram_mb: null
+    vram_mb: null,
   });
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineMessage, setEngineMessage] = useState<string | null>(null);
@@ -166,7 +191,7 @@ export function SettingsView({
     };
   }>({
     configured: false,
-    enabled: true
+    enabled: true,
   });
   const [notifTesting, setNotifTesting] = useState(false);
   const [notifTestMessage, setNotifTestMessage] = useState<string | null>(null);
@@ -200,7 +225,7 @@ export function SettingsView({
     allowUnattendedHostGit: false,
     jobChunkingEnabled: true,
     runnerAvailable: false,
-    recentActivity: []
+    recentActivity: [],
   });
 
   const fetchHostSettings = async () => {
@@ -225,7 +250,9 @@ export function SettingsView({
 
   const handleSaveMemory = async () => {
     if (memoryText.length > 2000) {
-      setMemoryMessage(`Memory text exceeds the 2000-character cap (${memoryText.length} characters). Shorten it before saving.`);
+      setMemoryMessage(
+        `Memory text exceeds the 2000-character cap (${memoryText.length} characters). Shorten it before saving.`
+      );
       return;
     }
     setMemorySaving(true);
@@ -234,7 +261,7 @@ export function SettingsView({
       const res = await fetch("/api/settings/memory", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: memoryText })
+        body: JSON.stringify({ text: memoryText }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -256,7 +283,7 @@ export function SettingsView({
       const res = await fetch("/api/settings/host", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostAccessEnabled: nextState })
+        body: JSON.stringify({ hostAccessEnabled: nextState }),
       });
       if (res.ok) {
         const json = await res.json();
@@ -274,7 +301,7 @@ export function SettingsView({
       const res = await fetch("/api/settings/host", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobChunkingEnabled: nextState })
+        body: JSON.stringify({ jobChunkingEnabled: nextState }),
       });
       if (res.ok) {
         const json = await res.json();
@@ -292,11 +319,14 @@ export function SettingsView({
       const res = await fetch("/api/settings/host", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allowUnattendedHostGit: nextState })
+        body: JSON.stringify({ allowUnattendedHostGit: nextState }),
       });
       if (res.ok) {
         const json = await res.json();
-        setHostSettingsState((prev) => ({ ...prev, allowUnattendedHostGit: json.allowUnattendedHostGit }));
+        setHostSettingsState((prev) => ({
+          ...prev,
+          allowUnattendedHostGit: json.allowUnattendedHostGit,
+        }));
       }
     } catch {
       fetchHostSettings();
@@ -318,13 +348,13 @@ export function SettingsView({
     setNotifStatus((prev) => ({
       ...prev,
       enabled: nextState,
-      reason: !prev.configured ? "missing_credentials" : (!nextState ? "disabled" : undefined)
+      reason: !prev.configured ? "missing_credentials" : !nextState ? "disabled" : undefined,
     }));
     try {
       const res = await fetch("/api/settings/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggle", enabled: nextState })
+        body: JSON.stringify({ action: "toggle", enabled: nextState }),
       });
       if (res.ok) {
         const json = await res.json();
@@ -342,7 +372,7 @@ export function SettingsView({
       const res = await fetch("/api/settings/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "test" })
+        body: JSON.stringify({ action: "test" }),
       });
       const data = await res.json().catch(() => ({}));
       if (data.lastResult) {
@@ -395,7 +425,7 @@ export function SettingsView({
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action }),
       });
       const json = await res.json().catch(() => ({}));
       setEngineMessage(formatEngineActionMessage(action, res.ok, res.status, json));
@@ -408,18 +438,38 @@ export function SettingsView({
   };
 
   const activeModel = defaultModel || selectedModel;
-  const engineStatusLabel = engineData.status === "running" ? "Running" : engineData.status === "starting" ? "Starting" : "Stopped";
-  const engineDotClass = engineData.status === "running" ? "bg-emerald-500" : engineData.status === "starting" ? "bg-zinc-500 animate-pulse" : "bg-slate-400 dark:bg-zinc-600";
+  const engineStatusLabel =
+    engineData.status === "running"
+      ? "Running"
+      : engineData.status === "starting"
+        ? "Starting"
+        : "Stopped";
+  const engineDotClass =
+    engineData.status === "running"
+      ? "bg-emerald-500"
+      : engineData.status === "starting"
+        ? "bg-zinc-500 animate-pulse"
+        : "bg-slate-400 dark:bg-zinc-600";
   const hostPresentation = getHostCardPresentation(hostSettings);
   const hostStatusLabel = hostPresentation.stripLabel;
   const hostDotClass = hostPresentation.dotClass;
   const stripModel = engineData.model || activeModel;
-  const latestDeploy = deployHistory.length > 0 ? [...deployHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] : undefined;
-  const latestDeployLabel = latestDeploy ? `${latestDeploy.newSha.slice(0, 7)} · ${latestDeploy.status === "rolled_back" || latestDeploy.rollbackStatus === "rolled_back" ? "Rolled back" : latestDeploy.status === "failed" ? "Failed" : "Deployed"}` : "No deploys yet";
+  const latestDeploy =
+    deployHistory.length > 0
+      ? [...deployHistory].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        )[0]
+      : undefined;
+  const latestDeployLabel = latestDeploy
+    ? `${latestDeploy.newSha.slice(0, 7)} · ${latestDeploy.status === "rolled_back" || latestDeploy.rollbackStatus === "rolled_back" ? "Rolled back" : latestDeploy.status === "failed" ? "Failed" : "Deployed"}`
+    : "No deploys yet";
   const visibleDeployHistory = deployHistoryExpanded ? deployHistory : deployHistory.slice(0, 2);
   const gitActivityNewestFirst = [...(hostSettings.recentActivity || [])].slice(-8).reverse();
-  const visibleGitActivity = gitActivityExpanded ? gitActivityNewestFirst : gitActivityNewestFirst.slice(0, 2);
-  const isSelfDeployActive = propsSelfDeployEnabled !== undefined ? propsSelfDeployEnabled : localSelfDeployEnabled;
+  const visibleGitActivity = gitActivityExpanded
+    ? gitActivityNewestFirst
+    : gitActivityNewestFirst.slice(0, 2);
+  const isSelfDeployActive =
+    propsSelfDeployEnabled !== undefined ? propsSelfDeployEnabled : localSelfDeployEnabled;
   const handleClose = onBack || onClose || (() => {});
 
   const handleThemeChange = (mode: "light" | "dark" | "system") => {
@@ -454,7 +504,6 @@ export function SettingsView({
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        
         {/* Top Header Card */}
         <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center gap-3">
           <button
@@ -482,28 +531,42 @@ export function SettingsView({
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Engine</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+                Engine
+              </div>
               <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
                 <span className={`h-2 w-2 rounded-full ${engineDotClass}`} />
                 <span>{engineStatusLabel}</span>
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Host</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+                Host
+              </div>
               <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
                 <span className={`h-2 w-2 rounded-full ${hostDotClass}`} />
                 <span>{hostStatusLabel}</span>
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Model</div>
-              <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={stripModel}>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+                Model
+              </div>
+              <div
+                className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate"
+                title={stripModel}
+              >
                 {stripModel}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">Last deploy</div>
-              <div className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate" title={latestDeployLabel}>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+                Last deploy
+              </div>
+              <div
+                className="mt-0.5 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 truncate"
+                title={latestDeployLabel}
+              >
                 {latestDeployLabel}
               </div>
             </div>
@@ -580,7 +643,10 @@ export function SettingsView({
               <div>
                 <div className="text-base font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{engineData.engine || (engineData.reachable ? "Inference Engine" : "Inference Engine")}</span>
+                  <span>
+                    {engineData.engine ||
+                      (engineData.reachable ? "Inference Engine" : "Inference Engine")}
+                  </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                   {engineData.backend
@@ -689,21 +755,21 @@ export function SettingsView({
               Models
             </h3>
 
-          <div
-            onClick={onOpenModelSheet}
-            className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-slate-50/80 dark:hover:bg-zinc-850/80 transition-colors"
-          >
-            <div className="space-y-1">
-              <div className="text-base font-semibold text-slate-900 dark:text-zinc-100">
-                Default model
+            <div
+              onClick={onOpenModelSheet}
+              className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-slate-50/80 dark:hover:bg-zinc-850/80 transition-colors"
+            >
+              <div className="space-y-1">
+                <div className="text-base font-semibold text-slate-900 dark:text-zinc-100">
+                  Default model
+                </div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400">
+                  {getShortModelName(activeModel)} · {getReasoningLabel(reasoningEffort)}
+                </div>
               </div>
-              <div className="text-xs text-slate-500 dark:text-zinc-400">
-                {getShortModelName(activeModel)} · {getReasoningLabel(reasoningEffort)}
-              </div>
-            </div>
 
-            <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-400" />
-          </div>
+              <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-400" />
+            </div>
           </div>
         </div>
         {/* Section 4: Self-Deploy Pipeline (Sprint 12 Phase 10) */}
@@ -723,7 +789,10 @@ export function SettingsView({
                   {isSelfDeployActive ? (
                     <>
                       Self-deploy is ON. Its kill switch lives in the{" "}
-                      <a href="#settings-danger-zone" className="underline hover:text-emerald-600 dark:hover:text-emerald-400">
+                      <a
+                        href="#settings-danger-zone"
+                        className="underline hover:text-emerald-600 dark:hover:text-emerald-400"
+                      >
                         Danger Zone
                       </a>
                       .
@@ -731,7 +800,10 @@ export function SettingsView({
                   ) : (
                     <>
                       Self-deploy is OFF (kill switch engaged). Its kill switch lives in the{" "}
-                      <a href="#settings-danger-zone" className="underline hover:text-emerald-600 dark:hover:text-emerald-400">
+                      <a
+                        href="#settings-danger-zone"
+                        className="underline hover:text-emerald-600 dark:hover:text-emerald-400"
+                      >
                         Danger Zone
                       </a>
                       .
@@ -739,8 +811,12 @@ export function SettingsView({
                   )}
                 </p>
               </div>
-              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${isSelfDeployActive ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"}`}>
-                <span className={`h-2 w-2 rounded-full ${isSelfDeployActive ? "bg-emerald-500" : "bg-slate-400 dark:bg-zinc-600"}`} />
+              <div
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${isSelfDeployActive ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"}`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${isSelfDeployActive ? "bg-emerald-500" : "bg-slate-400 dark:bg-zinc-600"}`}
+                />
                 <span>{isSelfDeployActive ? "ON" : "OFF"}</span>
               </div>
             </div>
@@ -753,9 +829,16 @@ export function SettingsView({
                   <span>Recent Self-Deploy History</span>
                 </div>
 
-                <div className={deployHistoryExpanded ? "space-y-2 max-h-[220px] overflow-y-auto pr-1" : "space-y-2"}>
+                <div
+                  className={
+                    deployHistoryExpanded
+                      ? "space-y-2 max-h-[220px] overflow-y-auto pr-1"
+                      : "space-y-2"
+                  }
+                >
                   {visibleDeployHistory.map((item) => {
-                    const isRolledBack = item.status === "rolled_back" || item.rollbackStatus === "rolled_back";
+                    const isRolledBack =
+                      item.status === "rolled_back" || item.rollbackStatus === "rolled_back";
                     return (
                       <div
                         key={item.deployId}
@@ -800,8 +883,12 @@ export function SettingsView({
                     onClick={() => setDeployHistoryExpanded(!deployHistoryExpanded)}
                     className="flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
                   >
-                    <span>{deployHistoryExpanded ? "Show less" : `Show all ${deployHistory.length}`}</span>
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${deployHistoryExpanded ? "rotate-180" : ""}`} />
+                    <span>
+                      {deployHistoryExpanded ? "Show less" : `Show all ${deployHistory.length}`}
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${deployHistoryExpanded ? "rotate-180" : ""}`}
+                    />
                   </button>
                 )}
               </div>
@@ -924,8 +1011,8 @@ export function SettingsView({
                   hostSettings.allowUnattendedHostGit && hostSettings.runnerAvailable
                     ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                     : hostSettings.allowUnattendedHostGit && !hostSettings.runnerAvailable
-                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400"
-                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
+                      ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400"
+                      : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
                 }`}
               >
                 <span
@@ -933,8 +1020,8 @@ export function SettingsView({
                     hostSettings.allowUnattendedHostGit && hostSettings.runnerAvailable
                       ? "bg-emerald-500"
                       : hostSettings.allowUnattendedHostGit && !hostSettings.runnerAvailable
-                      ? "bg-zinc-500"
-                      : "bg-slate-400 dark:bg-zinc-600"
+                        ? "bg-zinc-500"
+                        : "bg-slate-400 dark:bg-zinc-600"
                   }`}
                 />
                 <span>
@@ -981,7 +1068,9 @@ export function SettingsView({
                   <span>Recent Unattended Git Activity</span>
                 </div>
                 <span className="text-[11px] text-slate-400 dark:text-zinc-400 font-normal">
-                  {hostSettings.runnerAvailable ? "Audit log" : "Historical log (runner currently offline)"}
+                  {hostSettings.runnerAvailable
+                    ? "Audit log"
+                    : "Historical log (runner currently offline)"}
                 </span>
               </div>
 
@@ -1017,7 +1106,12 @@ export function SettingsView({
                         {item.timestamp && (
                           <>
                             <span>·</span>
-                            <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            <span>
+                              {new Date(item.timestamp).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
                           </>
                         )}
                       </div>
@@ -1055,8 +1149,14 @@ export function SettingsView({
                   onClick={() => setGitActivityExpanded(!gitActivityExpanded)}
                   className="flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
                 >
-                  <span>{gitActivityExpanded ? "Show less" : `Show all ${gitActivityNewestFirst.length}`}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${gitActivityExpanded ? "rotate-180" : ""}`} />
+                  <span>
+                    {gitActivityExpanded
+                      ? "Show less"
+                      : `Show all ${gitActivityNewestFirst.length}`}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${gitActivityExpanded ? "rotate-180" : ""}`}
+                  />
                 </button>
               )}
             </div>
@@ -1083,8 +1183,8 @@ export function SettingsView({
                   {!notifStatus.configured
                     ? "Missing Telegram credentials (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)."
                     : !notifStatus.enabled
-                    ? "Outbound Telegram notifications are currently disabled."
-                    : "Outbound Telegram notifications active for completed/failed runs, morning reports, and host approvals."}
+                      ? "Outbound Telegram notifications are currently disabled."
+                      : "Outbound Telegram notifications active for completed/failed runs, morning reports, and host approvals."}
                 </p>
               </div>
 
@@ -1095,8 +1195,8 @@ export function SettingsView({
                   notifStatus.configured && notifStatus.enabled
                     ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                     : notifStatus.configured && !notifStatus.enabled
-                    ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400"
-                    : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
+                      ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400"
+                      : "border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400"
                 }`}
               >
                 <span
@@ -1104,16 +1204,16 @@ export function SettingsView({
                     notifStatus.configured && notifStatus.enabled
                       ? "bg-emerald-500"
                       : notifStatus.configured && !notifStatus.enabled
-                      ? "bg-zinc-500"
-                      : "bg-slate-400 dark:bg-zinc-600"
+                        ? "bg-zinc-500"
+                        : "bg-slate-400 dark:bg-zinc-600"
                   }`}
                 />
                 <span>
                   {notifStatus.configured && notifStatus.enabled
                     ? "Connected"
                     : notifStatus.configured && !notifStatus.enabled
-                    ? "Disabled"
-                    : "Not configured"}
+                      ? "Disabled"
+                      : "Not configured"}
                 </span>
               </div>
             </div>
@@ -1175,51 +1275,49 @@ export function SettingsView({
                     (typeof window !== "undefined"
                       ? window.localStorage?.getItem("telegram_last_error_dismissed_v1")
                       : null)) && (
-                <div
-                  data-testid="notifications-last-result"
-                  className="flex items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
-                >
-                  <div>
-                    <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                      {notifStatus.lastResult.ok
-                        ? "Sent"
-                        : "Last notification failed"}
-                    </span>{" "}
-                    · {formatMessageTimestamp(notifStatus.lastResult.at)}
-                    {notifStatus.lastResult.messageId !== undefined && (
-                      <span> (msg #{notifStatus.lastResult.messageId})</span>
-                    )}
-                    {!notifStatus.lastResult.ok && notifStatus.lastResult.errorSummary && (
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-[11px] text-zinc-400 hover:text-zinc-200">
-                          Details
-                        </summary>
-                        <div className="mt-1 font-mono text-[10.5px] text-zinc-400 break-all">
-                          {notifStatus.lastResult.event}: {notifStatus.lastResult.errorSummary}
-                        </div>
-                      </details>
+                  <div
+                    data-testid="notifications-last-result"
+                    className="flex items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                        {notifStatus.lastResult.ok ? "Sent" : "Last notification failed"}
+                      </span>{" "}
+                      · {formatMessageTimestamp(notifStatus.lastResult.at)}
+                      {notifStatus.lastResult.messageId !== undefined && (
+                        <span> (msg #{notifStatus.lastResult.messageId})</span>
+                      )}
+                      {!notifStatus.lastResult.ok && notifStatus.lastResult.errorSummary && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[11px] text-zinc-400 hover:text-zinc-200">
+                            Details
+                          </summary>
+                          <div className="mt-1 font-mono text-[10.5px] text-zinc-400 break-all">
+                            {notifStatus.lastResult.event}: {notifStatus.lastResult.errorSummary}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                    {!notifStatus.lastResult.ok && (
+                      <button
+                        type="button"
+                        data-testid="dismiss-telegram-error-btn"
+                        onClick={() => {
+                          const key = `${notifStatus.lastResult!.at}|${notifStatus.lastResult!.errorSummary || ""}`;
+                          try {
+                            window.localStorage?.setItem("telegram_last_error_dismissed_v1", key);
+                          } catch {
+                            // ignore storage errors
+                          }
+                          setNotifStatus((prev) => (prev ? { ...prev } : prev));
+                        }}
+                        className="shrink-0 min-h-[44px] px-3 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        Dismiss
+                      </button>
                     )}
                   </div>
-                  {!notifStatus.lastResult.ok && (
-                    <button
-                      type="button"
-                      data-testid="dismiss-telegram-error-btn"
-                      onClick={() => {
-                        const key = `${notifStatus.lastResult!.at}|${notifStatus.lastResult!.errorSummary || ""}`;
-                        try {
-                          window.localStorage?.setItem("telegram_last_error_dismissed_v1", key);
-                        } catch {
-                          // ignore storage errors
-                        }
-                        setNotifStatus((prev) => (prev ? { ...prev } : prev));
-                      }}
-                      className="shrink-0 min-h-[44px] px-3 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
-                    >
-                      Dismiss
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
             </div>
           </div>
         </div>
@@ -1254,7 +1352,11 @@ export function SettingsView({
             <div className="flex items-center justify-between">
               <div
                 data-testid="settings-memory-counter"
-                className={memoryText.length > 2000 ? "text-xs font-mono text-rose-600 dark:text-rose-400" : "text-xs font-mono text-slate-500 dark:text-zinc-400"}
+                className={
+                  memoryText.length > 2000
+                    ? "text-xs font-mono text-rose-600 dark:text-rose-400"
+                    : "text-xs font-mono text-slate-500 dark:text-zinc-400"
+                }
               >
                 {memoryText.length} / 2000
               </div>
@@ -1269,7 +1371,10 @@ export function SettingsView({
             </div>
 
             {memoryMessage && (
-              <div data-testid="settings-memory-message" className="text-xs text-slate-600 dark:text-zinc-400">
+              <div
+                data-testid="settings-memory-message"
+                className="text-xs text-slate-600 dark:text-zinc-400"
+              >
                 {memoryMessage}
               </div>
             )}
@@ -1290,7 +1395,10 @@ export function SettingsView({
                 Local autonomous AI coding platform. Inference runs on this machine.
               </p>
             </div>
-            <div className="text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 shrink-0" data-testid="settings-app-version">
+            <div
+              className="text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-200 shrink-0"
+              data-testid="settings-app-version"
+            >
               v{APP_VERSION}
             </div>
           </div>
@@ -1343,7 +1451,9 @@ export function SettingsView({
                 type="button"
                 onClick={toggleSelfDeploy}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isSelfDeployActive ? "bg-emerald-600 dark:bg-emerald-500" : "bg-slate-300 dark:bg-zinc-700"
+                  isSelfDeployActive
+                    ? "bg-emerald-600 dark:bg-emerald-500"
+                    : "bg-slate-300 dark:bg-zinc-700"
                 }`}
                 role="switch"
                 aria-checked={isSelfDeployActive}
@@ -1359,7 +1469,6 @@ export function SettingsView({
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

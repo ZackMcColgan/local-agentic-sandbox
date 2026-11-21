@@ -6,7 +6,7 @@ import {
   LiveRunBlock,
   deriveRunCardStatus,
   computeRunElapsedSeconds,
-  formatRunTimerLabel
+  formatRunTimerLabel,
 } from "../components/LiveRunBlock";
 import { TaskManifest } from "../lib/subagents/types";
 
@@ -23,7 +23,7 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
     ambiguityFlags: [],
     journal: [],
     startedAt: "2026-11-20T00:00:00.000Z",
-    updatedAt: "2026-11-20T00:12:30.000Z"
+    updatedAt: "2026-11-20T00:12:30.000Z",
   };
 
   it("1. Missing status does NOT default to active/running", () => {
@@ -33,13 +33,19 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
   });
 
   it("2. Parked status and paused-with-parkedReason are classified as parked, not running or failed", () => {
-    const explicitParked = deriveRunCardStatus({ status: "parked", parkedReason: "Chunk budget reached" });
+    const explicitParked = deriveRunCardStatus({
+      status: "parked",
+      parkedReason: "Chunk budget reached",
+    });
     assert.strictEqual(explicitParked.isRunning, false);
     assert.strictEqual(explicitParked.isParked, true);
     assert.strictEqual(explicitParked.isFailed, false);
     assert.strictEqual(explicitParked.headerLabel, "Run parked");
 
-    const supervisorParked = deriveRunCardStatus({ status: "paused", parkedReason: "Chunk boundary" });
+    const supervisorParked = deriveRunCardStatus({
+      status: "paused",
+      parkedReason: "Chunk boundary",
+    });
     assert.strictEqual(supervisorParked.isRunning, false);
     assert.strictEqual(supervisorParked.isParked, true);
     assert.strictEqual(supervisorParked.isFailed, false);
@@ -52,15 +58,19 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
     const parkedTask: TaskManifest = {
       ...baseTask,
       status: "parked",
-      parkedReason: "Max iterations"
+      parkedReason: "Max iterations",
     };
     const elapsed = computeRunElapsedSeconds(parkedTask, sevenHoursLater);
-    assert.strictEqual(elapsed, 750, "Parked duration must freeze at updatedAt - startedAt (12m 30s = 750s)");
+    assert.strictEqual(
+      elapsed,
+      750,
+      "Parked duration must freeze at updatedAt - startedAt (12m 30s = 750s)"
+    );
 
     const parkedWithoutEnd: TaskManifest = {
       ...baseTask,
       status: "parked",
-      updatedAt: ""
+      updatedAt: "",
     };
     assert.strictEqual(
       computeRunElapsedSeconds(parkedWithoutEnd, sevenHoursLater),
@@ -73,10 +83,21 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
   });
 
   it("4. Timer label never says 'Running for' for parked, failed, paused, stopped, or completed runs", () => {
-    for (const status of ["parked", "failed", "paused", "stopped", "cancelled", "completed", "crashed"] as const) {
+    for (const status of [
+      "parked",
+      "failed",
+      "paused",
+      "stopped",
+      "cancelled",
+      "completed",
+      "crashed",
+    ] as const) {
       const info = deriveRunCardStatus({ status: status as any });
       const label = formatRunTimerLabel(info, 750);
-      assert.ok(!label.startsWith("Running for"), `Status '${status}' must not render 'Running for', got: ${label}`);
+      assert.ok(
+        !label.startsWith("Running for"),
+        `Status '${status}' must not render 'Running for', got: ${label}`
+      );
     }
     const runningInfo = deriveRunCardStatus({ status: "active" });
     assert.ok(formatRunTimerLabel(runningInfo, 750).startsWith("Running for"));
@@ -86,11 +107,16 @@ describe("LiveRunBlock — Honest Status & Frozen Settled Timers", () => {
     const parkedTask: TaskManifest = {
       ...baseTask,
       status: "parked",
-      parkedReason: "Waiting on user input"
+      parkedReason: "Waiting on user input",
     };
-    const html = ReactDOMServer.renderToString(React.createElement(LiveRunBlock, { task: parkedTask }));
+    const html = ReactDOMServer.renderToString(
+      React.createElement(LiveRunBlock, { task: parkedTask })
+    );
     assert.ok(html.includes("Run parked"), "Header must say 'Run parked'");
-    assert.ok(!html.includes('data-testid="running-pill"'), "Parked card must not render RUNNING pill");
+    assert.ok(
+      !html.includes('data-testid="running-pill"'),
+      "Parked card must not render RUNNING pill"
+    );
     assert.ok(!html.includes("Running for"), "Parked card must not render 'Running for'");
     assert.ok(html.includes("Parked after 12m 30s"), "Parked card must render frozen duration");
   });

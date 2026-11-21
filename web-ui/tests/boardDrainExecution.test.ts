@@ -318,4 +318,3 @@ test("(c) extractJobOutcomeMetadata parses PR, headSha, mergeSha, and deployTag 
   const empty = extractJobOutcomeMetadata("Completed refactoring with no PR.");
   assert.deepEqual(empty, {});
 });
-

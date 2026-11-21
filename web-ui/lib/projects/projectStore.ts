@@ -34,7 +34,7 @@ const FORBIDDEN_SYSTEM_PATHS = [
   "/bin",
   "/sbin",
   "/lib",
-  "/lib64"
+  "/lib64",
 ];
 
 function isRootPath(p: string): boolean {
@@ -65,12 +65,16 @@ function isSystemPath(p: string): boolean {
     return true;
   }
 
-  const progFiles = (process.env["ProgramFiles"] || "C:/Program Files").replace(/\\/g, "/").toLowerCase();
+  const progFiles = (process.env["ProgramFiles"] || "C:/Program Files")
+    .replace(/\\/g, "/")
+    .toLowerCase();
   if (lower === progFiles || lower.startsWith(progFiles + "/")) {
     return true;
   }
 
-  const progFilesX86 = (process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)").replace(/\\/g, "/").toLowerCase();
+  const progFilesX86 = (process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)")
+    .replace(/\\/g, "/")
+    .toLowerCase();
   if (lower === progFilesX86 || lower.startsWith(progFilesX86 + "/")) {
     return true;
   }
@@ -78,7 +82,11 @@ function isSystemPath(p: string): boolean {
   return false;
 }
 
-export function validateProjectPath(rawPath: string): { valid: boolean; canonicalPath?: string; error?: string } {
+export function validateProjectPath(rawPath: string): {
+  valid: boolean;
+  canonicalPath?: string;
+  error?: string;
+} {
   if (!rawPath || typeof rawPath !== "string" || !rawPath.trim()) {
     return { valid: false, error: "Project path cannot be empty" };
   }
@@ -184,7 +192,8 @@ export function registerProject(input: RegisterProjectInput, dbOverride?: any): 
   const canonicalPath = validation.canonicalPath;
 
   // Check for existing path
-  const existing = db.prepare("SELECT * FROM projects WHERE root_path = ?").get(canonicalPath) as ProjectRecord | undefined;
+  const existing = db.prepare("SELECT * FROM projects WHERE root_path = ?").get(canonicalPath) as
+    ProjectRecord | undefined;
   if (existing) {
     throw new Error(`Project root path is already registered: ${canonicalPath}`);
   }
@@ -195,18 +204,21 @@ export function registerProject(input: RegisterProjectInput, dbOverride?: any): 
   const baseBranch = (input.baseBranch || "develop").trim();
   const toolchain = (input.toolchain || "node:22").trim();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO projects (
       project_id, name, root_path, base_branch, toolchain, allowlisted, active_task_id, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?)
-  `).run(projectId, name, canonicalPath, baseBranch, toolchain, now, now);
+  `
+  ).run(projectId, name, canonicalPath, baseBranch, toolchain, now, now);
 
   return getProject(projectId, db)!;
 }
 
 export function getProject(projectId: string, dbOverride?: any): ProjectRecord | null {
   const db = getDb(dbOverride);
-  const row = db.prepare("SELECT * FROM projects WHERE project_id = ?").get(projectId) as ProjectRecord | undefined;
+  const row = db.prepare("SELECT * FROM projects WHERE project_id = ?").get(projectId) as
+    ProjectRecord | undefined;
   return row || null;
 }
 
@@ -214,34 +226,50 @@ export function getProjectByPath(rootPath: string, dbOverride?: any): ProjectRec
   const validation = validateProjectPath(rootPath);
   const targetPath = validation.canonicalPath || path.resolve(rootPath);
   const db = getDb(dbOverride);
-  const row = db.prepare("SELECT * FROM projects WHERE root_path = ?").get(targetPath) as ProjectRecord | undefined;
+  const row = db.prepare("SELECT * FROM projects WHERE root_path = ?").get(targetPath) as
+    ProjectRecord | undefined;
   return row || null;
 }
 
 export function listProjects(dbOverride?: any): ProjectRecord[] {
   const db = getDb(dbOverride);
-  const rows = db.prepare("SELECT * FROM projects ORDER BY created_at DESC").all() as ProjectRecord[];
+  const rows = db
+    .prepare("SELECT * FROM projects ORDER BY created_at DESC")
+    .all() as ProjectRecord[];
   return rows;
 }
 
-export function toggleAllowlist(projectId: string, allowlisted?: boolean, dbOverride?: any): ProjectRecord {
+export function toggleAllowlist(
+  projectId: string,
+  allowlisted?: boolean,
+  dbOverride?: any
+): ProjectRecord {
   const db = getDb(dbOverride);
   const current = getProject(projectId, db);
   if (!current) {
     throw new Error(`Project not found: ${projectId}`);
   }
 
-  const newValue = allowlisted === undefined ? (current.allowlisted === 1 ? 0 : 1) : (allowlisted ? 1 : 0);
+  const newValue =
+    allowlisted === undefined ? (current.allowlisted === 1 ? 0 : 1) : allowlisted ? 1 : 0;
   const now = new Date().toISOString();
 
-  db.prepare("UPDATE projects SET allowlisted = ?, updated_at = ? WHERE project_id = ?").run(newValue, now, projectId);
+  db.prepare("UPDATE projects SET allowlisted = ?, updated_at = ? WHERE project_id = ?").run(
+    newValue,
+    now,
+    projectId
+  );
   return getProject(projectId, db)!;
 }
 
 export function setActiveTaskId(projectId: string, taskId: string | null, dbOverride?: any): void {
   const db = getDb(dbOverride);
   const now = new Date().toISOString();
-  db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(taskId, now, projectId);
+  db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(
+    taskId,
+    now,
+    projectId
+  );
 }
 
 export function deleteProject(projectId: string, dbOverride?: any): boolean {
@@ -263,7 +291,11 @@ export function deleteProject(projectId: string, dbOverride?: any): boolean {
   }
 }
 
-export function updateProject(projectId: string, updates: Partial<ProjectRecord>, dbOverride?: any): ProjectRecord {
+export function updateProject(
+  projectId: string,
+  updates: Partial<ProjectRecord>,
+  dbOverride?: any
+): ProjectRecord {
   const db = getDb(dbOverride);
   const current = getProject(projectId, db);
   if (!current) {
@@ -274,14 +306,17 @@ export function updateProject(projectId: string, updates: Partial<ProjectRecord>
   const baseBranch = updates.base_branch !== undefined ? updates.base_branch : current.base_branch;
   const toolchain = updates.toolchain !== undefined ? updates.toolchain : current.toolchain;
   const allowlisted = updates.allowlisted !== undefined ? updates.allowlisted : current.allowlisted;
-  const activeTaskId = updates.active_task_id !== undefined ? updates.active_task_id : current.active_task_id;
+  const activeTaskId =
+    updates.active_task_id !== undefined ? updates.active_task_id : current.active_task_id;
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE projects SET
       name = ?, base_branch = ?, toolchain = ?, allowlisted = ?, active_task_id = ?, updated_at = ?
     WHERE project_id = ?
-  `).run(name, baseBranch, toolchain, allowlisted, activeTaskId, now, projectId);
+  `
+  ).run(name, baseBranch, toolchain, allowlisted, activeTaskId, now, projectId);
 
   return getProject(projectId, db)!;
 }
@@ -315,7 +350,9 @@ export function createProjectTask(
   }
 
   const existingActive = db
-    .prepare("SELECT * FROM project_tasks WHERE project_id = ? AND status IN ('running', 'in_progress')")
+    .prepare(
+      "SELECT * FROM project_tasks WHERE project_id = ? AND status IN ('running', 'in_progress')"
+    )
     .get(input.projectId) as ProjectTaskRecord | undefined;
   if (existingActive) {
     throw new Error(`Project already has an active task running: ${existingActive.task_id}`);
@@ -324,30 +361,52 @@ export function createProjectTask(
   const taskId = `task_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO project_tasks (
       task_id, project_id, prompt, status, base_sha, head_sha, branch, thread_id, created_at, updated_at, completed_at
     ) VALUES (?, ?, ?, 'running', ?, NULL, ?, ?, ?, ?, NULL)
-  `).run(taskId, input.projectId, input.prompt.trim(), input.baseSha, input.branch, input.threadId || null, now, now);
+  `
+  ).run(
+    taskId,
+    input.projectId,
+    input.prompt.trim(),
+    input.baseSha,
+    input.branch,
+    input.threadId || null,
+    now,
+    now
+  );
 
-  db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(taskId, now, input.projectId);
+  db.prepare("UPDATE projects SET active_task_id = ?, updated_at = ? WHERE project_id = ?").run(
+    taskId,
+    now,
+    input.projectId
+  );
 
   return getProjectTask(taskId, db)!;
 }
 
 export function getProjectTask(taskId: string, dbOverride?: any): ProjectTaskRecord | null {
   const db = getDb(dbOverride);
-  const row = db.prepare("SELECT * FROM project_tasks WHERE task_id = ?").get(taskId) as ProjectTaskRecord | undefined;
+  const row = db.prepare("SELECT * FROM project_tasks WHERE task_id = ?").get(taskId) as
+    ProjectTaskRecord | undefined;
   return row || null;
 }
 
 export function listProjectTasks(projectId: string, dbOverride?: any): ProjectTaskRecord[] {
   const db = getDb(dbOverride);
-  const rows = db.prepare("SELECT * FROM project_tasks WHERE project_id = ? ORDER BY created_at DESC").all(projectId) as ProjectTaskRecord[];
+  const rows = db
+    .prepare("SELECT * FROM project_tasks WHERE project_id = ? ORDER BY created_at DESC")
+    .all(projectId) as ProjectTaskRecord[];
   return rows;
 }
 
-export function updateProjectTask(taskId: string, updates: Partial<ProjectTaskRecord>, dbOverride?: any): ProjectTaskRecord {
+export function updateProjectTask(
+  taskId: string,
+  updates: Partial<ProjectTaskRecord>,
+  dbOverride?: any
+): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
   if (!current) {
@@ -356,19 +415,26 @@ export function updateProjectTask(taskId: string, updates: Partial<ProjectTaskRe
 
   const status = updates.status !== undefined ? updates.status : current.status;
   const headSha = updates.head_sha !== undefined ? updates.head_sha : current.head_sha;
-  const completedAt = updates.completed_at !== undefined ? updates.completed_at : current.completed_at;
+  const completedAt =
+    updates.completed_at !== undefined ? updates.completed_at : current.completed_at;
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE project_tasks SET
       status = ?, head_sha = ?, completed_at = ?, updated_at = ?
     WHERE task_id = ?
-  `).run(status, headSha, completedAt, now, taskId);
+  `
+  ).run(status, headSha, completedAt, now, taskId);
 
   return getProjectTask(taskId, db)!;
 }
 
-export function completeProjectTask(taskId: string, headSha: string, dbOverride?: any): ProjectTaskRecord {
+export function completeProjectTask(
+  taskId: string,
+  headSha: string,
+  dbOverride?: any
+): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
   if (!current) {
@@ -376,23 +442,22 @@ export function completeProjectTask(taskId: string, headSha: string, dbOverride?
   }
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE project_tasks SET status = 'completed', head_sha = ?, completed_at = ?, updated_at = ? WHERE task_id = ?").run(
-    headSha,
-    now,
-    now,
-    taskId
-  );
+  db.prepare(
+    "UPDATE project_tasks SET status = 'completed', head_sha = ?, completed_at = ?, updated_at = ? WHERE task_id = ?"
+  ).run(headSha, now, now, taskId);
 
-  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
-    now,
-    current.project_id,
-    taskId
-  );
+  db.prepare(
+    "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?"
+  ).run(now, current.project_id, taskId);
 
   return getProjectTask(taskId, db)!;
 }
 
-export function parkProjectTask(taskId: string, reason?: string, dbOverride?: any): ProjectTaskRecord {
+export function parkProjectTask(
+  taskId: string,
+  reason?: string,
+  dbOverride?: any
+): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
   if (!current) {
@@ -400,18 +465,23 @@ export function parkProjectTask(taskId: string, reason?: string, dbOverride?: an
   }
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE project_tasks SET status = 'parked', updated_at = ? WHERE task_id = ?").run(now, taskId);
-
-  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
+  db.prepare("UPDATE project_tasks SET status = 'parked', updated_at = ? WHERE task_id = ?").run(
     now,
-    current.project_id,
     taskId
   );
+
+  db.prepare(
+    "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?"
+  ).run(now, current.project_id, taskId);
 
   return getProjectTask(taskId, db)!;
 }
 
-export function cancelProjectTask(taskId: string, reason?: string, dbOverride?: any): ProjectTaskRecord {
+export function cancelProjectTask(
+  taskId: string,
+  reason?: string,
+  dbOverride?: any
+): ProjectTaskRecord {
   const db = getDb(dbOverride);
   const current = getProjectTask(taskId, db);
   if (!current) {
@@ -419,13 +489,14 @@ export function cancelProjectTask(taskId: string, reason?: string, dbOverride?: 
   }
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE project_tasks SET status = 'cancelled', updated_at = ? WHERE task_id = ?").run(now, taskId);
-
-  db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?").run(
+  db.prepare("UPDATE project_tasks SET status = 'cancelled', updated_at = ? WHERE task_id = ?").run(
     now,
-    current.project_id,
     taskId
   );
+
+  db.prepare(
+    "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?"
+  ).run(now, current.project_id, taskId);
 
   return getProjectTask(taskId, db)!;
 }
@@ -440,7 +511,9 @@ export interface ProjectFileReviewRecord {
 
 export function getFileReviews(taskId: string, dbOverride?: any): ProjectFileReviewRecord[] {
   const db = getDb(dbOverride);
-  const rows = db.prepare("SELECT * FROM project_file_reviews WHERE task_id = ?").all(taskId) as ProjectFileReviewRecord[];
+  const rows = db
+    .prepare("SELECT * FROM project_file_reviews WHERE task_id = ?")
+    .all(taskId) as ProjectFileReviewRecord[];
   return rows;
 }
 
@@ -459,14 +532,24 @@ export function setFileReviewStatus(
   const now = new Date().toISOString();
 
   if (existing) {
-    db.prepare("UPDATE project_file_reviews SET status = ?, reviewed_at = ? WHERE id = ?").run(status, now, existing.id);
-    return db.prepare("SELECT * FROM project_file_reviews WHERE id = ?").get(existing.id) as ProjectFileReviewRecord;
+    db.prepare("UPDATE project_file_reviews SET status = ?, reviewed_at = ? WHERE id = ?").run(
+      status,
+      now,
+      existing.id
+    );
+    return db
+      .prepare("SELECT * FROM project_file_reviews WHERE id = ?")
+      .get(existing.id) as ProjectFileReviewRecord;
   } else {
     const id = `rev_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO project_file_reviews (id, task_id, file_path, status, reviewed_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, taskId, normalizedPath, status, now);
-    return db.prepare("SELECT * FROM project_file_reviews WHERE id = ?").get(id) as ProjectFileReviewRecord;
+    `
+    ).run(id, taskId, normalizedPath, status, now);
+    return db
+      .prepare("SELECT * FROM project_file_reviews WHERE id = ?")
+      .get(id) as ProjectFileReviewRecord;
   }
 }

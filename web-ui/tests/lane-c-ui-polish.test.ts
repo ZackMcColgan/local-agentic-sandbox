@@ -16,15 +16,27 @@ describe("Lane C UI Polish", () => {
     assert.ok(railLabelMatch, ".rail-label rule must exist in design-tokens.css");
     const railLabelBody = railLabelMatch[1];
 
-    assert.match(railLabelBody, /white-space:\s*normal/, ".rail-label must use white-space: normal");
+    assert.match(
+      railLabelBody,
+      /white-space:\s*normal/,
+      ".rail-label must use white-space: normal"
+    );
     assert.match(railLabelBody, /max-width:\s*64px/, ".rail-label must constrain max-width: 64px");
-    assert.match(railLabelBody, /overflow-wrap:\s*break-word/, ".rail-label must set overflow-wrap: break-word");
+    assert.match(
+      railLabelBody,
+      /overflow-wrap:\s*break-word/,
+      ".rail-label must set overflow-wrap: break-word"
+    );
     assert.match(railLabelBody, /text-align:\s*center/, ".rail-label must center text");
 
     const railBtnMatch = tokensCss.match(/\.rail-btn\s*\{([^}]*)\}/);
     assert.ok(railBtnMatch, ".rail-btn rule must exist in design-tokens.css");
     const railBtnBody = railBtnMatch[1];
-    assert.match(railBtnBody, /padding:\s*\d+px\s+(?:[6-9]|\d{2,})px/, ".rail-btn must have >= 6px horizontal padding");
+    assert.match(
+      railBtnBody,
+      /padding:\s*\d+px\s+(?:[6-9]|\d{2,})px/,
+      ".rail-btn must have >= 6px horizontal padding"
+    );
   });
 
   it("C2 (UI-046 + UI-047): all 4 desktop pane headers share h-12 top bar with border-b and no duplicate Hide buttons", () => {
@@ -34,29 +46,65 @@ describe("Lane C UI Polish", () => {
     const pageTsx = readWebUiFile("app/page.tsx");
 
     // All 4 pane headers use h-12 and border-b
-    assert.match(threadsSidebar, /className="[^"]*\bh-12\b[^"]*\bborder-b\b/, "ThreadsSidebar header must use h-12 and border-b");
-    assert.match(chatStream, /<header className="[^"]*(?:\bh-12\b|min-h-\[56px\])[^"]*\bborder-b\b/, "ChatStream header must use h-12 or min-h-[56px] and border-b");
-    assert.match(artifactCanvas, /className="flex items-center gap-2 h-12[^"]*\bborder-b\b/, "ArtifactCanvas header must use h-12 and border-b");
-    assert.match(pageTsx, /className="inspector-header h-12[^"]*\bborder-b\b/, "Workspace inspector header must use h-12 and border-b");
+    assert.match(
+      threadsSidebar,
+      /className="[^"]*\bh-12\b[^"]*\bborder-b\b/,
+      "ThreadsSidebar header must use h-12 and border-b"
+    );
+    assert.match(
+      chatStream,
+      /<header className="[^"]*(?:\bh-12\b|min-h-\[56px\])[^"]*\bborder-b\b/,
+      "ChatStream header must use h-12 or min-h-[56px] and border-b"
+    );
+    assert.match(
+      artifactCanvas,
+      /className="flex items-center gap-2 h-12[^"]*\bborder-b\b/,
+      "ArtifactCanvas header must use h-12 and border-b"
+    );
+    assert.match(
+      pageTsx,
+      /className="inspector-header h-12[^"]*\bborder-b\b/,
+      "Workspace inspector header must use h-12 and border-b"
+    );
 
     // Duplicate Hide buttons removed
-    assert.doesNotMatch(threadsSidebar, /« Hide/, "ThreadsSidebar must not render duplicate « Hide button");
+    assert.doesNotMatch(
+      threadsSidebar,
+      /« Hide/,
+      "ThreadsSidebar must not render duplicate « Hide button"
+    );
     assert.doesNotMatch(pageTsx, /Hide »/, "page.tsx must not render duplicate Hide » button");
 
     // Mobile back button remains functional in page.tsx
-    assert.match(pageTsx, /aria-label="Back to chat"/, "Mobile Back to chat button must remain in page.tsx");
+    assert.match(
+      pageTsx,
+      /aria-label="Back to chat"/,
+      "Mobile Back to chat button must remain in page.tsx"
+    );
   });
 
   it("C3 (UI-048): model pill renders full label without truncation, supports Form A/B toggle (default A), and meter denominator uses readable contrast", () => {
     const chatStream = readWebUiFile("components/ChatStream.tsx");
 
     // Meter denominator contrast
-    assert.match(chatStream, /text-slate-500 dark:text-zinc-400/, "Token meter denominator must use text-slate-500 dark:text-zinc-400");
+    assert.match(
+      chatStream,
+      /text-slate-500 dark:text-zinc-400/,
+      "Token meter denominator must use text-slate-500 dark:text-zinc-400"
+    );
 
     // Model pill Form A is hard-coded; Form A/B toggle is removed (UI-068)
-    assert.doesNotMatch(chatStream, /data-testid="model-pill-form-toggle"/, "Prototype A/B toggle must be removed (UI-068)");
+    assert.doesNotMatch(
+      chatStream,
+      /data-testid="model-pill-form-toggle"/,
+      "Prototype A/B toggle must be removed (UI-068)"
+    );
     assert.match(chatStream, /#f4f4f5/, "Form A must include #f4f4f5 semibold label");
-    assert.doesNotMatch(chatStream, /max-w-\[88px\] xl:max-w-\[110px\] truncate/, "Model pill label must not truncate on desktop");
+    assert.doesNotMatch(
+      chatStream,
+      /max-w-\[88px\] xl:max-w-\[110px\] truncate/,
+      "Model pill label must not truncate on desktop"
+    );
   });
 
   it("C4 (UI-029 part 1): chat column declares @container/chat, header uses container queries, and split canvas pane is capped at min(760px,50%)", () => {
@@ -64,26 +112,62 @@ describe("Lane C UI Polish", () => {
     const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");
 
     assert.match(chatStream, /@container\/chat/, "Chat column must declare @container/chat");
-    assert.match(chatStream, /@lg\/chat:w-\[240px\]/, "Context meter track must use @lg/chat:w-[240px] container query");
-    assert.match(artifactCanvas, /lg:w-\[min\(760px,50%\)\]/, "ArtifactCanvas split pane must be capped at lg:w-[min(760px,50%)]");
-    assert.doesNotMatch(artifactCanvas, /lg:w-\[min\(880px,58%\)\]/, "Old 880px/58% split canvas width must be replaced");
+    assert.match(
+      chatStream,
+      /@lg\/chat:w-\[240px\]/,
+      "Context meter track must use @lg/chat:w-[240px] container query"
+    );
+    assert.match(
+      artifactCanvas,
+      /lg:w-\[min\(760px,50%\)\]/,
+      "ArtifactCanvas split pane must be capped at lg:w-[min(760px,50%)]"
+    );
+    assert.doesNotMatch(
+      artifactCanvas,
+      /lg:w-\[min\(880px,58%\)\]/,
+      "Old 880px/58% split canvas width must be replaced"
+    );
   });
 
   it("C5 (UI-029 part 2): SvgViewer supports embeddedInCanvas prop and ArtifactCanvas passes embeddedInCanvas={true}", () => {
     const svgViewer = readWebUiFile("components/SvgViewer.tsx");
     const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");
 
-    assert.match(svgViewer, /embeddedInCanvas\?:\s*boolean/, "SvgViewerProps must declare embeddedInCanvas?: boolean");
-    assert.match(svgViewer, /embeddedInCanvas\s*=\s*false/, "SvgViewer must default embeddedInCanvas = false");
-    assert.match(svgViewer, /!embeddedInCanvas/, "SvgViewer must conditionally suppress inner header/footer when embeddedInCanvas is true");
-    assert.match(artifactCanvas, /embeddedInCanvas=\{true\}/, "ArtifactCanvas must pass embeddedInCanvas={true} to SvgViewer");
+    assert.match(
+      svgViewer,
+      /embeddedInCanvas\?:\s*boolean/,
+      "SvgViewerProps must declare embeddedInCanvas?: boolean"
+    );
+    assert.match(
+      svgViewer,
+      /embeddedInCanvas\s*=\s*false/,
+      "SvgViewer must default embeddedInCanvas = false"
+    );
+    assert.match(
+      svgViewer,
+      /!embeddedInCanvas/,
+      "SvgViewer must conditionally suppress inner header/footer when embeddedInCanvas is true"
+    );
+    assert.match(
+      artifactCanvas,
+      /embeddedInCanvas=\{true\}/,
+      "ArtifactCanvas must pass embeddedInCanvas={true} to SvgViewer"
+    );
   });
 
   it("C6 (UI-031): .chat-track has pb-16 sm:pb-20 clearance and autoscroll triggers on tail assistant content / isLoading", () => {
     const chatStream = readWebUiFile("components/ChatStream.tsx");
 
-    assert.match(chatStream, /className="chat-track[^"]*\bpb-16 sm:pb-20\b/, ".chat-track must have pb-16 sm:pb-20 bottom clearance");
-    assert.match(chatStream, /lastMsg\?\.content/, "Autoscroll effect must depend on tail message content");
+    assert.match(
+      chatStream,
+      /className="chat-track[^"]*\bpb-16 sm:pb-20\b/,
+      ".chat-track must have pb-16 sm:pb-20 bottom clearance"
+    );
+    assert.match(
+      chatStream,
+      /lastMsg\?\.content/,
+      "Autoscroll effect must depend on tail message content"
+    );
     assert.match(chatStream, /!isUserScrolledUp/, "Autoscroll must respect !isUserScrolledUp");
   });
 });

@@ -38,7 +38,7 @@ describe("P0.3 — Data-loss fixes", () => {
         timestamp: new Date().toISOString(),
         roundPromptTokens: 1234,
         outputTokens: 567,
-        phaseTimings: { thinkingMs: 100, generationMs: 200 }
+        phaseTimings: { thinkingMs: 100, generationMs: 200 },
       } as any);
 
       // Client completion upserts with undefined token/timing fields
@@ -49,7 +49,7 @@ describe("P0.3 — Data-loss fixes", () => {
         timestamp: new Date().toISOString(),
         roundPromptTokens: undefined,
         outputTokens: undefined,
-        phaseTimings: undefined
+        phaseTimings: undefined,
       } as any);
 
       const updated = await store.getThread(t.id);

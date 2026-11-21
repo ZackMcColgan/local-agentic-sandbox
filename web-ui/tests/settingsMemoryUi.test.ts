@@ -25,11 +25,25 @@ describe("Settings Memory — SettingsView Memory card", () => {
       if (String(url).includes("/api/settings/memory")) {
         if (init && init.method === "PUT") {
           savedBodies.push(init.body);
-          return { ok: true, json: async () => ({ success: true, text: JSON.parse(init.body).text }) };
+          return {
+            ok: true,
+            json: async () => ({ success: true, text: JSON.parse(init.body).text }),
+          };
         }
-        return { ok: true, json: async () => ({ text: "existing stored fact", updatedAt: new Date().toISOString() }) };
+        return {
+          ok: true,
+          json: async () => ({ text: "existing stored fact", updatedAt: new Date().toISOString() }),
+        };
       }
-      return { ok: true, json: async () => ({ hostAccessEnabled: true, allowUnattendedHostGit: false, runnerAvailable: false, recentActivity: [] }) };
+      return {
+        ok: true,
+        json: async () => ({
+          hostAccessEnabled: true,
+          allowUnattendedHostGit: false,
+          runnerAvailable: false,
+          recentActivity: [],
+        }),
+      };
     };
 
     const div = win.document.createElement("div");
@@ -47,12 +61,17 @@ describe("Settings Memory — SettingsView Memory card", () => {
     await act(async () => {
       root!.render(React.createElement(SettingsView, { onBack: () => {} }));
     });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const html = container.innerHTML;
     assert.ok(html.includes("Memory"), "renders Memory heading");
     assert.ok(html.includes("What the assistant should always know"), "renders Memory subheading");
-    assert.ok(html.includes("Stored on this machine only. Never committed to the repository."), "renders privacy note");
+    assert.ok(
+      html.includes("Stored on this machine only. Never committed to the repository."),
+      "renders privacy note"
+    );
     assert.ok(html.includes("/ 2000"), "renders live character counter against 2000 cap");
 
     const textarea = container.querySelector('[data-testid="settings-memory-textarea"]') as any;
@@ -68,7 +87,9 @@ describe("Settings Memory — SettingsView Memory card", () => {
     await act(async () => {
       root!.render(React.createElement(SettingsView, { onBack: () => {} }));
     });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const textarea = container.querySelector('[data-testid="settings-memory-textarea"]') as any;
     await act(async () => {
@@ -90,7 +111,9 @@ describe("Settings Memory — SettingsView Memory card", () => {
     await act(async () => {
       root!.render(React.createElement(SettingsView, { onBack: () => {} }));
     });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const textarea = container.querySelector('[data-testid="settings-memory-textarea"]') as any;
     await act(async () => {
@@ -111,13 +134,23 @@ describe("Settings Memory — SettingsView Memory card", () => {
       if (String(url).includes("/api/settings/memory")) {
         return { ok: true, json: async () => ({ text: "", updatedAt: new Date().toISOString() }) };
       }
-      return { ok: true, json: async () => ({ hostAccessEnabled: true, allowUnattendedHostGit: false, runnerAvailable: false, recentActivity: [] }) };
+      return {
+        ok: true,
+        json: async () => ({
+          hostAccessEnabled: true,
+          allowUnattendedHostGit: false,
+          runnerAvailable: false,
+          recentActivity: [],
+        }),
+      };
     };
     root = createRoot(container);
     await act(async () => {
       root!.render(React.createElement(SettingsView, { onBack: () => {} }));
     });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const textarea = container.querySelector('[data-testid="settings-memory-textarea"]') as any;
     assert.equal(textarea.value, "", "empty memory renders as empty textarea");

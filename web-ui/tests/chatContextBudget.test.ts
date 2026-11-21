@@ -14,7 +14,7 @@ import {
   resolveRoundModelOptions,
   canContinueToolLoop,
   fitConversationToBudget,
-  HIGH_WATER_BANKING_DIRECTIVE
+  HIGH_WATER_BANKING_DIRECTIVE,
 } from "../lib/contextBudget.js";
 
 describe("Chat Context-Budget Enforcement Suite", () => {
@@ -22,11 +22,12 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     it("preserves system prompt and latest user query verbatim while capping at 6000 tokens", () => {
       const systemMessage = {
         role: "system",
-        content: "You are an intelligent autonomous AI engineering platform running on local hardware."
+        content:
+          "You are an intelligent autonomous AI engineering platform running on local hardware.",
       };
       const userMessage = {
         role: "user",
-        content: "Please analyze the entire workspace architecture and run all verification tests."
+        content: "Please analyze the entire workspace architecture and run all verification tests.",
       };
 
       // 7 large tool outputs (~5,400 tokens / 21,600 chars each) -> ~38,000 tokens total
@@ -36,15 +37,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         content: JSON.stringify({
           status: "SUCCESS",
           match_count: 500,
-          details: "x".repeat(21600)
-        })
+          details: "x".repeat(21600),
+        }),
       }));
 
-      const conversationMessages = [
-        systemMessage,
-        userMessage,
-        ...largeToolOutputs
-      ];
+      const conversationMessages = [systemMessage, userMessage, ...largeToolOutputs];
 
       const initialTokens = estimateTokens(conversationMessages);
       assert.ok(
@@ -95,7 +92,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         { role: "tool", name: "tool_beta", content: `Beta: ${"B".repeat(8000)}` },
         { role: "tool", name: "tool_gamma", content: `Gamma: ${"C".repeat(8000)}` },
         { role: "tool", name: "tool_delta", content: `Delta: ${"D".repeat(8000)}` },
-        { role: "tool", name: "tool_epsilon", content: `Epsilon: ${"E".repeat(8000)}` }
+        { role: "tool", name: "tool_epsilon", content: `Epsilon: ${"E".repeat(8000)}` },
       ];
 
       const messages = [systemMessage, userMessage, ...toolOutputs];
@@ -141,11 +138,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     it("pathological case: truncates longest remaining content if only protected messages remain and still over budget", () => {
       const hugeSystem = {
         role: "system",
-        content: "System prompt header. " + "S".repeat(16000)
+        content: "System prompt header. " + "S".repeat(16000),
       };
       const hugeUser = {
         role: "user",
-        content: "User prompt query. " + "U".repeat(24000)
+        content: "User prompt query. " + "U".repeat(24000),
       };
 
       const messages = [hugeSystem, hugeUser];
@@ -153,7 +150,10 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       assert.ok(fitted.length === 2, "Both protected messages must remain in array");
       const tokens = estimateTokens(fitted);
-      assert.ok(tokens <= 6000, `Even pathological protected messages must be capped <= 6000, got ${tokens}`);
+      assert.ok(
+        tokens <= 6000,
+        `Even pathological protected messages must be capped <= 6000, got ${tokens}`
+      );
       // The longer message (user) was truncated
       const fittedUser = fitted.find((m) => m.role === "user");
       assert.ok(fittedUser.content.includes("...[truncated]"));
@@ -189,8 +189,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const content = fs.readFileSync(chatRoutePath, "utf8");
 
       assert.ok(
-        content.includes("clampToolOutput") &&
-        content.includes("role: \"tool\""),
+        content.includes("clampToolOutput") && content.includes('role: "tool"'),
         "chat/route.ts must clamp tool outputs using clampToolOutput before pushing role: 'tool' message"
       );
     });
@@ -201,13 +200,15 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       // fetch_webpage_markdown ceiling: 4000
       assert.ok(
-        content.includes("markdown.length > 4000") && content.includes("markdown.substring(0, 4000)"),
+        content.includes("markdown.length > 4000") &&
+          content.includes("markdown.substring(0, 4000)"),
         "browser-mcp fetch_webpage_markdown ceiling must be lowered to 4,000 chars"
       );
 
       // search_web ceiling: 3000
       assert.ok(
-        content.includes("bestCandidate.markdown.length > 3000") && content.includes("bestCandidate.markdown.substring(0, 3000)"),
+        content.includes("bestCandidate.markdown.length > 3000") &&
+          content.includes("bestCandidate.markdown.substring(0, 3000)"),
         "browser-mcp search_web top_result_content ceiling must be lowered to 3,000 chars"
       );
 
@@ -228,7 +229,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const capturedPayloads: any[] = [];
       const messages: any[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
-        { role: "user", content: "Perform deep research across 3 search rounds." }
+        { role: "user", content: "Perform deep research across 3 search rounds." },
       ];
 
       let callCount = 0;
@@ -244,18 +245,19 @@ describe("Chat Context-Budget Enforcement Suite", () => {
                 {
                   function: {
                     name: "workspace_grep",
-                    arguments: JSON.stringify({ query: `search_round_${callCount}` })
-                  }
-                }
-              ]
-            }
+                    arguments: JSON.stringify({ query: `search_round_${callCount}` }),
+                  },
+                },
+              ],
+            },
           };
         } else {
           // Model concludes with final text answer
           yield {
             message: {
-              content: "Here is the comprehensive synthesized research summary across all 3 rounds."
-            }
+              content:
+                "Here is the comprehensive synthesized research summary across all 3 rounds.",
+            },
           };
         }
       };
@@ -265,7 +267,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         return {
           status: "SUCCESS",
           tool: toolCall.function?.name,
-          data: "D".repeat(2000)
+          data: "D".repeat(2000),
         };
       };
 
@@ -275,11 +277,18 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         llmTools: [{ type: "function", function: { name: "workspace_grep" } }],
         maxToolRounds: 5,
         streamLlmChat: mockStreamChat,
-        executeTool: mockExecuteTool
+        executeTool: mockExecuteTool,
       });
 
-      assert.equal(capturedPayloads.length, 3, "Should have executed exactly 3 tool/synthesis rounds");
-      assert.ok(result.finalContent.includes("comprehensive synthesized research"), "Turn must conclude with text answer");
+      assert.equal(
+        capturedPayloads.length,
+        3,
+        "Should have executed exactly 3 tool/synthesis rounds"
+      );
+      assert.ok(
+        result.finalContent.includes("comprehensive synthesized research"),
+        "Turn must conclude with text answer"
+      );
 
       // Verify EVERY round payload was <= 6000 tokens
       capturedPayloads.forEach((payload, idx) => {
@@ -301,7 +310,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const capturedPayloads: any[] = [];
       const messages: any[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
-        { role: "user", content: "Keep gathering data endlessly." }
+        { role: "user", content: "Keep gathering data endlessly." },
       ];
 
       const MAX_ROUNDS = 4;
@@ -320,18 +329,18 @@ describe("Chat Context-Budget Enforcement Suite", () => {
                 {
                   function: {
                     name: "search_web",
-                    arguments: JSON.stringify({ query: `query_${callCount}` })
-                  }
-                }
-              ]
-            }
+                    arguments: JSON.stringify({ query: `query_${callCount}` }),
+                  },
+                },
+              ],
+            },
           };
         } else {
           // On final round without tools, model produces text synthesis
           yield {
             message: {
-              content: "Synthesized final answer from gathered data."
-            }
+              content: "Synthesized final answer from gathered data.",
+            },
           };
         }
       };
@@ -345,12 +354,19 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         llmTools: [{ type: "function", function: { name: "search_web" } }],
         maxToolRounds: MAX_ROUNDS,
         streamLlmChat: mockStreamChat,
-        executeTool: mockExecuteTool
+        executeTool: mockExecuteTool,
       });
 
-      assert.equal(capturedPayloads.length, MAX_ROUNDS, `Should have run to MAX_ROUNDS (${MAX_ROUNDS})`);
+      assert.equal(
+        capturedPayloads.length,
+        MAX_ROUNDS,
+        `Should have run to MAX_ROUNDS (${MAX_ROUNDS})`
+      );
       assert.equal(result.roundsCompleted, MAX_ROUNDS);
-      assert.ok(result.finalContent.includes("Synthesized final answer"), "Turn must end with text answer");
+      assert.ok(
+        result.finalContent.includes("Synthesized final answer"),
+        "Turn must end with text answer"
+      );
 
       // Rounds 0, 1, 2 must include tools
       for (let i = 0; i < MAX_ROUNDS - 1; i++) {
@@ -376,8 +392,14 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         `Final round payload must include the synthesis directive in system message`
       );
       // Invariant: zero system messages at index > 0
-      const midSystem = finalPayload.messages.filter((m: any, idx: number) => idx > 0 && m.role === "system");
-      assert.equal(midSystem.length, 0, "Final round payload must have zero system messages at index > 0");
+      const midSystem = finalPayload.messages.filter(
+        (m: any, idx: number) => idx > 0 && m.role === "system"
+      );
+      assert.equal(
+        midSystem.length,
+        0,
+        "Final round payload must have zero system messages at index > 0"
+      );
     });
 
     it("verifies chat/route.ts forces synthesis from the budget decision and omits tools", () => {
@@ -396,8 +418,10 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       assert.ok(
         content.includes("FINAL_ROUND_SYNTHESIS_DIRECTIVE") ||
-        content.includes("buildSynthesisDirective") ||
-        content.includes("You have gathered enough information. Synthesize your final answer now"),
+          content.includes("buildSynthesisDirective") ||
+          content.includes(
+            "You have gathered enough information. Synthesize your final answer now"
+          ),
         "chat/route.ts must handle final round synthesis directive"
       );
 
@@ -410,13 +434,17 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
   describe("Task 3: Jinja 500 Elimination & System Message Invariant", () => {
     it("mergeSystemDirective never places a system message at index > 0", async () => {
-      const { mergeSystemDirective, WEB_BUDGET_EXHAUSTED_DIRECTIVE } = await import("../lib/contextBudget.js") as any;
-      assert.ok(typeof mergeSystemDirective === "function", "mergeSystemDirective must be exported");
+      const { mergeSystemDirective, WEB_BUDGET_EXHAUSTED_DIRECTIVE } =
+        (await import("../lib/contextBudget.js")) as any;
+      assert.ok(
+        typeof mergeSystemDirective === "function",
+        "mergeSystemDirective must be exported"
+      );
 
       const messages = [
         { role: "system", content: "Base system instructions." },
         { role: "user", content: "What is the weather?" },
-        { role: "tool", content: "Sunny 75F" }
+        { role: "tool", content: "Sunny 75F" },
       ];
 
       mergeSystemDirective(messages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
@@ -430,11 +458,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("mergeSystemDirective inserts at index 0 when no leading system message exists", async () => {
-      const { mergeSystemDirective } = await import("../lib/contextBudget.js") as any;
+      const { mergeSystemDirective } = (await import("../lib/contextBudget.js")) as any;
 
-      const messages = [
-        { role: "user", content: "Hello" }
-      ];
+      const messages = [{ role: "user", content: "Hello" }];
 
       mergeSystemDirective(messages, "Directive A");
 
@@ -445,11 +471,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("mergeSystemDirective does not duplicate directive when called multiple times with same text", async () => {
-      const { mergeSystemDirective } = await import("../lib/contextBudget.js") as any;
+      const { mergeSystemDirective } = (await import("../lib/contextBudget.js")) as any;
 
-      const messages = [
-        { role: "system", content: "Initial prompt" }
-      ];
+      const messages = [{ role: "system", content: "Initial prompt" }];
 
       mergeSystemDirective(messages, "Unique Directive");
       mergeSystemDirective(messages, "Unique Directive");
@@ -465,7 +489,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         { role: "assistant", content: "Working..." },
         { role: "system", content: "Mid-array directive 1" },
         { role: "tool", content: "Tool output" },
-        { role: "system", content: "Mid-array directive 2" }
+        { role: "system", content: "Mid-array directive 2" },
       ];
 
       const fitted = fitContextWindow(strayMessages);
@@ -476,7 +500,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.ok(fitted[0].content.includes("Mid-array directive 2"));
 
       const nonIndex0System = fitted.filter((m, idx) => idx > 0 && m.role === "system");
-      assert.equal(nonIndex0System.length, 0, "fitContextWindow must eliminate all system messages at index > 0");
+      assert.equal(
+        nonIndex0System.length,
+        0,
+        "fitContextWindow must eliminate all system messages at index > 0"
+      );
     });
 
     it("fitContextWindow reserves tool schema token budget when tools option is provided", () => {
@@ -491,18 +519,18 @@ describe("Chat Context-Budget Enforcement Suite", () => {
             properties: {
               param1: { type: "string", description: "First parameter description" },
               param2: { type: "number", description: "Second parameter description" },
-              param3: { type: "boolean", description: "Third parameter description" }
+              param3: { type: "boolean", description: "Third parameter description" },
             },
-            required: ["param1"]
-          }
-        }
+            required: ["param1"],
+          },
+        },
       }));
 
       // Generate messages that fit within 6,000 tokens without tools
       const messages = [
         { role: "system", content: "System header" },
         { role: "user", content: "User question" },
-        { role: "tool", name: "tool_1", content: "x".repeat(18000) } // ~4,500 tokens
+        { role: "tool", name: "tool_1", content: "x".repeat(18000) }, // ~4,500 tokens
       ];
 
       // Without tools: 4,500 tokens fits in default 6,000 maxContentTokens
@@ -511,7 +539,10 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.ok(!toolMsgWithout?.content.includes(EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER));
 
       // With tools: tools schema takes ~1,500-2,000 tokens, so available message budget must shrink
-      const fittedWithTools = fitContextWindow(messages, { maxContentTokens: 6000, tools: mockTools } as any);
+      const fittedWithTools = fitContextWindow(messages, {
+        maxContentTokens: 6000,
+        tools: mockTools,
+      } as any);
       const totalFittedTokens = estimateTokens(fittedWithTools);
       const toolSchemaTokens = estimateTokens(JSON.stringify(mockTools));
 
@@ -524,7 +555,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     it("estimateTokens includes tool_calls on assistant messages", () => {
       const msgWithoutCalls = {
         role: "assistant",
-        content: "Here is the call:"
+        content: "Here is the call:",
       };
       const msgWithCalls = {
         role: "assistant",
@@ -535,16 +566,19 @@ describe("Chat Context-Budget Enforcement Suite", () => {
             type: "function",
             function: {
               name: "workspace_write_file",
-              arguments: JSON.stringify({ path: "test.ts", content: "const x = 1;" })
-            }
-          }
-        ]
+              arguments: JSON.stringify({ path: "test.ts", content: "const x = 1;" }),
+            },
+          },
+        ],
       };
 
       const tokensWithout = estimateTokens(msgWithoutCalls);
       const tokensWith = estimateTokens(msgWithCalls);
 
-      assert.ok(tokensWith > tokensWithout + 20, "estimateTokens must account for assistant tool_calls JSON");
+      assert.ok(
+        tokensWith > tokensWithout + 20,
+        "estimateTokens must account for assistant tool_calls JSON"
+      );
     });
 
     it("verifies web-ui/app/api/chat/route.ts has ZERO .push({ role: 'system' occurrences", () => {
@@ -562,7 +596,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
   describe("Task 4 (WS-B): Artifact Output Headroom Reservation & Fast Synthesis Reasoning", () => {
     it("reserves >= 3,000 tokens of output headroom in an 8,192-token context window on artifact turns", async () => {
-      const { ARTIFACT_OUTPUT_HEADROOM_TOKENS } = await import("../lib/contextBudget.js") as any;
+      const { ARTIFACT_OUTPUT_HEADROOM_TOKENS } = (await import("../lib/contextBudget.js")) as any;
       assert.equal(ARTIFACT_OUTPUT_HEADROOM_TOKENS, 3000);
 
       const mockTools = Array.from({ length: 8 }, (_, i) => ({
@@ -570,8 +604,8 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         function: {
           name: `tool_${i}`,
           description: "x".repeat(600),
-          parameters: { type: "object", properties: { q: { type: "string" } } }
-        }
+          parameters: { type: "object", properties: { q: { type: "string" } } },
+        },
       }));
       const toolTokens = estimateTokens(JSON.stringify(mockTools));
 
@@ -579,13 +613,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         { role: "system", content: "You are an autonomous assistant. " + "S".repeat(1200) },
         { role: "user", content: "Create an SVG architecture diagram of the cluster" },
         { role: "tool", name: "tool_0", content: "A".repeat(12000) },
-        { role: "tool", name: "tool_1", content: "B".repeat(12000) }
+        { role: "tool", name: "tool_1", content: "B".repeat(12000) },
       ];
 
       const fitted = fitContextWindow(messages, {
         maxContentTokens: 8192,
         isArtifactTurn: true,
-        tools: mockTools
+        tools: mockTools,
       } as any);
 
       const inputTokens = estimateTokens(fitted);
@@ -599,7 +633,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     });
 
     it("resolveRoundModelOptions drops effort to 'low' and defaults num_predict to 16384 on artifact synthesis/post-tool rounds", async () => {
-      const { resolveRoundModelOptions } = await import("../lib/contextBudget.js") as any;
+      const { resolveRoundModelOptions } = (await import("../lib/contextBudget.js")) as any;
       assert.equal(typeof resolveRoundModelOptions, "function");
 
       // Round 0 (before tool calls) for artifact requests
@@ -608,10 +642,18 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         requestedEffort: "medium",
         userPrompt: "Create a svg of the weather in Spanish Fort AL",
         isSynthesisOrFinalRound: false,
-        hasCompletedToolCalls: false
+        hasCompletedToolCalls: false,
       });
-      assert.equal(round0Opts.reasoning_effort, "low", "Artifact turn must use low reasoning effort on round 0 to avoid runaway pre-tool thinking");
-      assert.equal(round0Opts.temperature, 0.2, "Artifact turn must use temperature 0.2 on round 0");
+      assert.equal(
+        round0Opts.reasoning_effort,
+        "low",
+        "Artifact turn must use low reasoning effort on round 0 to avoid runaway pre-tool thinking"
+      );
+      assert.equal(
+        round0Opts.temperature,
+        0.2,
+        "Artifact turn must use temperature 0.2 on round 0"
+      );
       assert.equal(round0Opts.num_predict, 16384, "Round 0 must cap generation at default 16384");
 
       // Synthesis / post-tool rounds
@@ -620,12 +662,24 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         requestedEffort: "xhigh",
         userPrompt: "Create a svg of the weather in Spanish Fort AL",
         isSynthesisOrFinalRound: false,
-        hasCompletedToolCalls: true
+        hasCompletedToolCalls: true,
       });
 
-      assert.equal(opts.reasoning_effort, "low", "Should drop to low effort on post-tool artifact rounds");
-      assert.equal(opts.temperature, 0.2, "Should drop to low effort (temperature 0.2) after tool calls on artifact turn");
-      assert.equal(opts.num_predict, 16384, "Must default num_predict to 16384 to prevent uncapped runaway rounds");
+      assert.equal(
+        opts.reasoning_effort,
+        "low",
+        "Should drop to low effort on post-tool artifact rounds"
+      );
+      assert.equal(
+        opts.temperature,
+        0.2,
+        "Should drop to low effort (temperature 0.2) after tool calls on artifact turn"
+      );
+      assert.equal(
+        opts.num_predict,
+        16384,
+        "Must default num_predict to 16384 to prevent uncapped runaway rounds"
+      );
     });
 
     it("constrained-context artifact completion regression: delivers complete untruncated <svg>...</svg> when tool outputs exceed 10,000 chars", async () => {
@@ -634,7 +688,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
 
       const conversationMessages: any[] = [
         { role: "system", content: "System instructions for artifact creation." },
-        { role: "user", content: "Create an SVG weather card for Spanish Fort AL" }
+        { role: "user", content: "Create an SVG weather card for Spanish Fort AL" },
       ];
 
       const capturedPayloads: any[] = [];
@@ -652,11 +706,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
                 {
                   function: {
                     name: "search_web",
-                    arguments: JSON.stringify({ query: "Spanish Fort AL weather" })
-                  }
-                }
-              ]
-            }
+                    arguments: JSON.stringify({ query: "Spanish Fort AL weather" }),
+                  },
+                },
+              ],
+            },
           };
         } else if (roundIdx === 2) {
           yield {
@@ -666,29 +720,34 @@ describe("Chat Context-Budget Enforcement Suite", () => {
                 {
                   function: {
                     name: "workspace_write_file",
-                    arguments: JSON.stringify({ path: "spanish-fort-weather.svg", content: completeSvg })
-                  }
-                }
-              ]
-            }
+                    arguments: JSON.stringify({
+                      path: "spanish-fort-weather.svg",
+                      content: completeSvg,
+                    }),
+                  },
+                },
+              ],
+            },
           };
         } else {
           yield {
             message: {
-              content: "Saved the complete Spanish Fort AL weather SVG diagram."
-            }
+              content: "Saved the complete Spanish Fort AL weather SVG diagram.",
+            },
           };
         }
       };
 
       const mockExecuteTool = async (toolCall: any) => {
         const name = toolCall.function?.name;
-        const args = typeof toolCall.function?.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function?.arguments;
-        const result = name === "search_web"
-          ? { status: "SUCCESS", raw_markdown: "W".repeat(12000) }
-          : { status: "SUCCESS", path: args.path };
+        const args =
+          typeof toolCall.function?.arguments === "string"
+            ? JSON.parse(toolCall.function.arguments)
+            : toolCall.function?.arguments;
+        const result =
+          name === "search_web"
+            ? { status: "SUCCESS", raw_markdown: "W".repeat(12000) }
+            : { status: "SUCCESS", path: args.path };
         traces.push({ tool: name, args, result });
         return result;
       };
@@ -700,11 +759,11 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         effectiveReasoningEffort: "xhigh",
         llmTools: [
           { type: "function", function: { name: "search_web" } },
-          { type: "function", function: { name: "workspace_write_file" } }
+          { type: "function", function: { name: "workspace_write_file" } },
         ],
         maxToolRounds: 5,
         streamLlmChat: mockStreamChat,
-        executeTool: mockExecuteTool
+        executeTool: mockExecuteTool,
       });
 
       // Verify output headroom was preserved on every round
@@ -724,10 +783,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const extracted = extractSvgsFromMessage({
         id: "msg-1",
         content: loopRes.finalContent,
-        traces
+        traces,
       });
       assert.equal(extracted.length, 1, "Must extract exactly 1 complete SVG artifact");
-      assert.ok(extracted[0].code?.startsWith("<svg") && extracted[0].code?.endsWith("</svg>"), "SVG must be complete and untruncated");
+      assert.ok(
+        extracted[0].code?.startsWith("<svg") && extracted[0].code?.endsWith("</svg>"),
+        "SVG must be complete and untruncated"
+      );
       assert.ok(extracted[0].code?.includes("Spanish Fort, AL — 78°F Sunny"));
     });
 
@@ -736,7 +798,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const opts = resolveRoundModelOptions({
         round: 1,
         model: "swift-15-27b-mtp",
-        isArtifactTurn: false
+        isArtifactTurn: false,
       } as any);
       assert.equal(opts.num_ctx, 131072, "num_ctx must equal 131072");
     });
@@ -744,47 +806,64 @@ describe("Chat Context-Budget Enforcement Suite", () => {
     it("fitContextWindow with isArtifactTurn: true and no maxContentTokens override uses full 100,000 budget and preserves a 50,000-token conversation without truncation or eviction", () => {
       const systemMessage = {
         role: "system",
-        content: "You are an autonomous engineering assistant. " + "S".repeat(4000)
+        content: "You are an autonomous engineering assistant. " + "S".repeat(4000),
       };
       const messages: any[] = [systemMessage];
       for (let i = 0; i < 5; i++) {
         messages.push({
           role: "user",
-          content: `Turn ${i + 1} user request: ` + "U".repeat(19950)
+          content: `Turn ${i + 1} user request: ` + "U".repeat(19950),
         });
         messages.push({
           role: "assistant",
-          content: `Turn ${i + 1} assistant response: ` + "A".repeat(19950)
+          content: `Turn ${i + 1} assistant response: ` + "A".repeat(19950),
         });
       }
       messages.push({
         role: "user",
-        content: "Create a full multi-module deployment artifact and SVG diagram."
+        content: "Create a full multi-module deployment artifact and SVG diagram.",
       });
 
       const initialTokens = estimateTokens(messages);
-      assert.ok(initialTokens >= 48000, `Initial conversation tokens should be >= 48,000, got ${initialTokens}`);
+      assert.ok(
+        initialTokens >= 48000,
+        `Initial conversation tokens should be >= 48,000, got ${initialTokens}`
+      );
 
       const result = fitContextWindow(messages, {
         isArtifactTurn: true,
         outputHeadroomTokens: 3000,
-        toolSchemaTokens: 1000
+        toolSchemaTokens: 1000,
       } as any);
 
-      assert.equal((result as any).evictedCount, 0, "No messages should be evicted under the 100,000 budget");
-      assert.ok((result as any).estimatedTokens >= 48000, `Expected estimatedTokens >= 48000, got ${(result as any).estimatedTokens}`);
+      assert.equal(
+        (result as any).evictedCount,
+        0,
+        "No messages should be evicted under the 100,000 budget"
+      );
+      assert.ok(
+        (result as any).estimatedTokens >= 48000,
+        `Expected estimatedTokens >= 48000, got ${(result as any).estimatedTokens}`
+      );
       assert.ok(
         (result as any).estimatedTokens <= CHAT_CONTEXT_BUDGET_TOKENS - 4000,
         `Expected estimatedTokens <= ${CHAT_CONTEXT_BUDGET_TOKENS - 4000}, got ${(result as any).estimatedTokens}`
       );
-      assert.equal(result.length, messages.length, "All messages must be preserved without truncation or eviction");
+      assert.equal(
+        result.length,
+        messages.length,
+        "All messages must be preserved without truncation or eviction"
+      );
     });
   });
 
   describe("Part 2 — fitConversationToBudget Ladder & Downloads-Shape Loop Continuity", () => {
     it("downloads-shape regression (<85K jumping >100K continues instead of budget stop)", () => {
       // Setup a conversation that was ~80K tokens (<85K compaction threshold)
-      const systemMsg = { role: "system", content: "You are an autonomous engineering assistant. " + "S".repeat(2000) };
+      const systemMsg = {
+        role: "system",
+        content: "You are an autonomous engineering assistant. " + "S".repeat(2000),
+      };
       const messages: any[] = [systemMsg];
       for (let i = 0; i < 4; i++) {
         messages.push({ role: "user", content: `Query ${i + 1}: ` + "U".repeat(38000) });
@@ -795,11 +874,14 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       messages.push({
         role: "tool",
         name: "host_read_file",
-        content: JSON.stringify({ status: "SUCCESS", data: "D".repeat(100000) })
+        content: JSON.stringify({ status: "SUCCESS", data: "D".repeat(100000) }),
       });
 
       const unfittedTokens = estimateTokens(messages);
-      assert.ok(unfittedTokens > 100000, `Unfitted tokens should exceed 100,000 budget, got ${unfittedTokens}`);
+      assert.ok(
+        unfittedTokens > 100000,
+        `Unfitted tokens should exceed 100,000 budget, got ${unfittedTokens}`
+      );
 
       // With old behavior (checking before fitting), canContinueToolLoop would fail with budget stop
       const naiveDecision = canContinueToolLoop({
@@ -807,7 +889,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         contextTokens: unfittedTokens,
         budgetTokens: 100000,
         lastRoundTools: ["host_read_file"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(naiveDecision.canContinue, false, "Naive pre-fit check wrongly stops the loop");
       assert.equal(naiveDecision.stopReason, "budget");
@@ -815,8 +897,15 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       // With fitConversationToBudget, the ladder fits messages back within budget
       const fitResult = fitConversationToBudget(messages, { budgetTokens: 100000 });
       assert.equal(fitResult.compacted, true, "fitConversationToBudget must compact/fit messages");
-      assert.ok(fitResult.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${fitResult.tokensAfter}`);
-      assert.equal(fitResult.messages[0].role, "system", "System message must be preserved at index 0");
+      assert.ok(
+        fitResult.tokensAfter <= 100000,
+        `Fitted tokens must be <= 100000, got ${fitResult.tokensAfter}`
+      );
+      assert.equal(
+        fitResult.messages[0].role,
+        "system",
+        "System message must be preserved at index 0"
+      );
 
       // And checking canContinueToolLoop with the fitted tokens succeeds!
       const fittedDecision = canContinueToolLoop({
@@ -824,9 +913,13 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         contextTokens: fitResult.tokensAfter,
         budgetTokens: 100000,
         lastRoundTools: ["host_read_file"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
-      assert.equal(fittedDecision.canContinue, true, "Fitted conversation must allow loop to continue");
+      assert.equal(
+        fittedDecision.canContinue,
+        true,
+        "Fitted conversation must allow loop to continue"
+      );
     });
 
     it("ladder rung (a): compaction alone fits conversation when intermediate turns can be summarized", () => {
@@ -838,11 +931,14 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         { role: "assistant", content: "Turn 2 response: " + "B".repeat(60000) },
         { role: "user", content: "Turn 3: " + "3".repeat(60000) },
         { role: "assistant", content: "Turn 3 response: " + "C".repeat(60000) },
-        { role: "user", content: "Latest user goal" }
+        { role: "user", content: "Latest user goal" },
       ];
 
       const tokensBefore = estimateTokens(messages);
-      assert.ok(tokensBefore > 85000, `Initial tokens should exceed 85K threshold, got ${tokensBefore}`);
+      assert.ok(
+        tokensBefore > 85000,
+        `Initial tokens should exceed 85K threshold, got ${tokensBefore}`
+      );
 
       const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
       assert.equal(res.compacted, true);
@@ -855,19 +951,34 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const messages: any[] = [
         { role: "system", content: "System instructions" },
         { role: "user", content: "Analyze logs" },
-        { role: "assistant", content: "Running scan", tool_calls: [{ function: { name: "scan_1" } }] },
+        {
+          role: "assistant",
+          content: "Running scan",
+          tool_calls: [{ function: { name: "scan_1" } }],
+        },
         { role: "tool", name: "scan_1", content: "OLD_TOOL_1: " + "T".repeat(120000) },
-        { role: "assistant", content: "Running scan 2", tool_calls: [{ function: { name: "scan_2" } }] },
+        {
+          role: "assistant",
+          content: "Running scan 2",
+          tool_calls: [{ function: { name: "scan_2" } }],
+        },
         { role: "tool", name: "scan_2", content: "OLD_TOOL_2: " + "T".repeat(300000) },
-        { role: "assistant", content: "Running scan 3", tool_calls: [{ function: { name: "scan_3" } }] },
-        { role: "tool", name: "scan_3", content: "RECENT_TOOL: " + "R".repeat(160000) }
+        {
+          role: "assistant",
+          content: "Running scan 3",
+          tool_calls: [{ function: { name: "scan_3" } }],
+        },
+        { role: "tool", name: "scan_3", content: "RECENT_TOOL: " + "R".repeat(160000) },
       ];
 
       const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
       assert.equal(res.compacted, true);
       assert.ok(res.actions.includes("elide_tool_outputs"), "Must engage elide_tool_outputs rung");
       assert.equal(res.highWater, true, "Must flag highWater when older tool outputs are elided");
-      assert.ok(res.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${res.tokensAfter}`);
+      assert.ok(
+        res.tokensAfter <= 100000,
+        `Fitted tokens must be <= 100000, got ${res.tokensAfter}`
+      );
       assert.equal(res.messages[0].role, "system");
     });
 
@@ -879,16 +990,23 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         { role: "assistant", content: "Gigantic assistant reply 1: " + "A".repeat(150000) },
         { role: "user", content: "Gigantic user request 2: " + "U".repeat(150000) },
         { role: "assistant", content: "Gigantic assistant reply 2: " + "A".repeat(150000) },
-        { role: "user", content: "Current active goal" }
+        { role: "user", content: "Current active goal" },
       ];
 
       const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
       assert.equal(res.compacted, true);
       assert.ok(res.actions.includes("drop_old_turns"), "Must engage drop_old_turns rung");
       assert.equal(res.highWater, true, "Must flag highWater when old turns are dropped");
-      assert.ok(res.tokensAfter <= 100000, `Fitted tokens must be <= 100000, got ${res.tokensAfter}`);
+      assert.ok(
+        res.tokensAfter <= 100000,
+        `Fitted tokens must be <= 100000, got ${res.tokensAfter}`
+      );
       assert.equal(res.messages[0].role, "system", "System message must survive");
-      assert.equal(res.messages[res.messages.length - 1].content, "Current active goal", "Latest user query must survive");
+      assert.equal(
+        res.messages[res.messages.length - 1].content,
+        "Current active goal",
+        "Latest user query must survive"
+      );
     });
 
     it("ladder rung (d) & adversarial payload guarantee: 64K-char output + many medium outputs always fitted <= budget and system prompt preserved", () => {
@@ -896,49 +1014,73 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       const messages: any[] = [
         { role: "system", content: "System prompt verbatim" },
         { role: "user", content: "Adversarial stress test" },
-        { role: "assistant", content: "Working..." }
+        { role: "assistant", content: "Working..." },
       ];
 
       for (let i = 0; i < 10; i++) {
         messages.push({
           role: "tool",
           name: `tool_${i}`,
-          content: `Data_${i}: ` + "X".repeat(64000) // 10 x 16,000 tokens = 160,000 tokens
+          content: `Data_${i}: ` + "X".repeat(64000), // 10 x 16,000 tokens = 160,000 tokens
         });
       }
 
       const res = fitConversationToBudget(messages, { budgetTokens: 100000 });
       assert.equal(res.compacted, true);
-      assert.ok(res.tokensAfter <= 100000, `Adversarial payload must fit <= 100,000 tokens, got ${res.tokensAfter}`);
+      assert.ok(
+        res.tokensAfter <= 100000,
+        `Adversarial payload must fit <= 100,000 tokens, got ${res.tokensAfter}`
+      );
       assert.equal(res.messages[0].role, "system");
       assert.equal(res.messages[0].content, "System prompt verbatim");
     });
 
     it("high-water banking directive is defined and guides banking via workspace_write_file", () => {
       assert.ok(typeof HIGH_WATER_BANKING_DIRECTIVE === "string");
-      assert.ok(HIGH_WATER_BANKING_DIRECTIVE.includes("workspace_write_file") || HIGH_WATER_BANKING_DIRECTIVE.includes("Bank"));
+      assert.ok(
+        HIGH_WATER_BANKING_DIRECTIVE.includes("workspace_write_file") ||
+          HIGH_WATER_BANKING_DIRECTIVE.includes("Bank")
+      );
     });
 
     it("route.ts invokes fitConversationToBudget BEFORE canContinueToolLoop and emits compaction event", () => {
       const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
-      assert.ok(routeSrc.includes("fitConversationToBudget"), "route.ts must import and call fitConversationToBudget");
-      assert.ok(routeSrc.includes('type: "compaction"'), "route.ts must emit streamed compaction event");
+      assert.ok(
+        routeSrc.includes("fitConversationToBudget"),
+        "route.ts must import and call fitConversationToBudget"
+      );
+      assert.ok(
+        routeSrc.includes('type: "compaction"'),
+        "route.ts must emit streamed compaction event"
+      );
 
       const fitIdx = routeSrc.indexOf("fitConversationToBudget(conversationMessages");
       const canContinueIdx = routeSrc.indexOf("canContinueToolLoop({");
       assert.ok(fitIdx !== -1, "fitConversationToBudget must be called in route.ts");
       assert.ok(canContinueIdx !== -1, "canContinueToolLoop must be called in route.ts");
-      assert.ok(fitIdx < canContinueIdx, "fitConversationToBudget MUST execute before canContinueToolLoop in route while loop");
+      assert.ok(
+        fitIdx < canContinueIdx,
+        "fitConversationToBudget MUST execute before canContinueToolLoop in route while loop"
+      );
     });
 
     it("ChatStream handles streamed compaction events and renders persistent in-thread marker", () => {
-      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
-      assert.ok(chatStreamSrc.includes('event.type === "compaction"'), "ChatStream must handle event.type === 'compaction'");
-      assert.ok(chatStreamSrc.includes("compaction-turn-note"), "ChatStream must render compaction-turn-note");
-      assert.ok(chatStreamSrc.includes("compactedThisTurn"), "ChatStream must support compactedThisTurn property");
+      const chatStreamSrc = fs.readFileSync(
+        path.resolve(__dirname, "../components/ChatStream.tsx"),
+        "utf8"
+      );
+      assert.ok(
+        chatStreamSrc.includes('event.type === "compaction"'),
+        "ChatStream must handle event.type === 'compaction'"
+      );
+      assert.ok(
+        chatStreamSrc.includes("compaction-turn-note"),
+        "ChatStream must render compaction-turn-note"
+      );
+      assert.ok(
+        chatStreamSrc.includes("compactedThisTurn"),
+        "ChatStream must support compactedThisTurn property"
+      );
     });
   });
 });
-
-
-

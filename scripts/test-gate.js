@@ -35,7 +35,7 @@ if (process.env.npm_config_all && !args.includes("--all")) {
 
 const result = spawnSync(process.execPath, [tsxCli, script, ...args], {
   cwd: repoRoot,
-  stdio: "inherit"
+  stdio: "inherit",
 });
 
 process.exit(result.status ?? (result.error ? 1 : 0));

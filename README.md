@@ -4,8 +4,8 @@
 
 ![Desktop operator UI showing a completed session, tool trace proofs, and source-cited explanation](docs/images/ui-desktop.png)
 
-| Mobile chat | Live turn | Navigation | Work board |
-| :---: | :---: | :---: | :---: |
+|                                           Mobile chat                                            |                                                 Live turn                                                  |                                                            Navigation                                                            |                                             Work board                                             |
+| :----------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------: |
 | ![Mobile chat view with completed tool steps and file citations](docs/images/ui-mobile-chat.png) | ![Live agent turn on mobile streaming reasoning and active tool execution](docs/images/ui-mobile-live.png) | ![Mobile navigation drawer showing sessions, board, file explorer, skills, and morning report](docs/images/ui-mobile-drawer.png) | ![Mobile work board showing completed and deployed pull requests](docs/images/ui-mobile-board.png) |
 
 ![Desktop work board across Queued, Working, PR Open, Parked, and Done columns](docs/images/ui-desktop-board.png)
@@ -54,21 +54,21 @@
 
 ### Key Engineering Proofs (Code Map)
 
-| System Subsystem | Implementation Proof | Key Capabilities |
-| :--- | :--- | :--- |
-| **Fail-Closed Supervisor** | [`web-ui/lib/subagents/supervisor.ts`](./web-ui/lib/subagents/supervisor.ts) | LangGraph checkpoint engine, crash recovery, crash-to-disk sync, and multi-subagent orchestration |
-| **Pre-Validation & Gates** | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts) | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback |
-| **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts) | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser |
-| **Durable Run Ledger** | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts) | SQLite-backed task state, pause/resume lifecycle, and restart lineage |
-| **Thread Store** | [`web-ui/lib/threads/threadStore.ts`](./web-ui/lib/threads/threadStore.ts) | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads |
-| **Safe Git Operations** | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts) | Argv-safe git commands, branch isolation, and commit validation immune to shell injection |
-| **Self-Deploy Pipeline** | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts) | Automated Docker build, local save/import, Kubernetes `set image` rollout wait, and rollback on failure |
-| **Host Bridge** | [`host-bridge/`](./host-bridge/) | Sole external boundary (host process): host tools, git/GitHub, internet access behind an approval classifier; credentials live only in the host OS keyring |
-| **Zero-Trust MCP Toolchain** | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary in a read-only, capability-dropped pod; path traversal guards and ReDoS-safe workspace inspection |
-| **Browser MCP** | [`browser-mcp/`](./browser-mcp/) | Isolated web-fetch pod with SSRF guards (RFC 1918 blocked) |
-| **Observability** | [`deploy/k8s/observability.yaml`](./deploy/k8s/observability.yaml) | OpenTelemetry collector + Jaeger; every turn, tool call, and model round is a span |
-| **Eval Pack** | [`eval/`](./eval/) | Graded task suite used as the end-to-end regression for chunked job execution |
-| **Enterprise AI Governance** | [`docs/AI_GOVERNANCE.md`](./docs/AI_GOVERNANCE.md) | Deterministic runtime enforcement, NIST AI RMF 1.0 mapping, and OWASP Agentic Top 10 controls |
+| System Subsystem              | Implementation Proof                                                                 | Key Capabilities                                                                                                                                           |
+| :---------------------------- | :----------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fail-Closed Supervisor**    | [`web-ui/lib/subagents/supervisor.ts`](./web-ui/lib/subagents/supervisor.ts)         | LangGraph checkpoint engine, crash recovery, crash-to-disk sync, and multi-subagent orchestration                                                          |
+| **Pre-Validation & Gates**    | [`web-ui/lib/subagents/workerPool.ts`](./web-ui/lib/subagents/workerPool.ts)         | AST pre-validation, stuck detection, zero-change gate, and test-regression rollback                                                                        |
+| **Context & Thinking Stream** | [`web-ui/lib/subagents/llmClient.ts`](./web-ui/lib/subagents/llmClient.ts)           | Scope-aware context scaling (`PROJECT` 8192 vs `SCRIPT`/`SNIPPET` 4096) and real-time `<think>` parser                                                     |
+| **Durable Run Ledger**        | [`web-ui/lib/ledger/runLedger.ts`](./web-ui/lib/ledger/runLedger.ts)                 | SQLite-backed task state, pause/resume lifecycle, and restart lineage                                                                                      |
+| **Thread Store**              | [`web-ui/lib/threads/threadStore.ts`](./web-ui/lib/threads/threadStore.ts)           | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads                                                          |
+| **Safe Git Operations**       | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts)                 | Argv-safe git commands, branch isolation, and commit validation immune to shell injection                                                                  |
+| **Self-Deploy Pipeline**      | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts)               | Automated Docker build, local save/import, Kubernetes `set image` rollout wait, and rollback on failure                                                    |
+| **Host Bridge**               | [`host-bridge/`](./host-bridge/)                                                     | Sole external boundary (host process): host tools, git/GitHub, internet access behind an approval classifier; credentials live only in the host OS keyring |
+| **Zero-Trust MCP Toolchain**  | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary in a read-only, capability-dropped pod; path traversal guards and ReDoS-safe workspace inspection                              |
+| **Browser MCP**               | [`browser-mcp/`](./browser-mcp/)                                                     | Isolated web-fetch pod with SSRF guards (RFC 1918 blocked)                                                                                                 |
+| **Observability**             | [`deploy/k8s/observability.yaml`](./deploy/k8s/observability.yaml)                   | OpenTelemetry collector + Jaeger; every turn, tool call, and model round is a span                                                                         |
+| **Eval Pack**                 | [`eval/`](./eval/)                                                                   | Graded task suite used as the end-to-end regression for chunked job execution                                                                              |
+| **Enterprise AI Governance**  | [`docs/AI_GOVERNANCE.md`](./docs/AI_GOVERNANCE.md)                                   | Deterministic runtime enforcement, NIST AI RMF 1.0 mapping, and OWASP Agentic Top 10 controls                                                              |
 
 ### Security boundary
 
@@ -145,14 +145,14 @@ Every pull request runs seven checks: typecheck, unit tests, coverage, container
 
 ## Project layout
 
-| Path | Contents |
-| :--- | :--- |
-| `web-ui/` | Next.js operator UI + orchestration engine |
-| `host-bridge/` | Host-side tool bridge (the external boundary) |
-| `mcp-server/`, `browser-mcp/` | Sandboxed tool servers |
-| `deploy/` | Kubernetes manifests + Helm chart |
-| `eval/` | Graded evaluation tasks |
-| `docs/` | Architecture source, ADRs, governance, deployment notes |
+| Path                          | Contents                                                |
+| :---------------------------- | :------------------------------------------------------ |
+| `web-ui/`                     | Next.js operator UI + orchestration engine              |
+| `host-bridge/`                | Host-side tool bridge (the external boundary)           |
+| `mcp-server/`, `browser-mcp/` | Sandboxed tool servers                                  |
+| `deploy/`                     | Kubernetes manifests + Helm chart                       |
+| `eval/`                       | Graded evaluation tasks                                 |
+| `docs/`                       | Architecture source, ADRs, governance, deployment notes |
 
 ## Status
 

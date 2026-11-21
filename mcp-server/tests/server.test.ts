@@ -23,8 +23,8 @@ describe("MCP Server Express Endpoints", () => {
           user: "10001:10001",
           network_egress: "BLOCKED",
           rootfs: "READ_ONLY",
-          capabilities: "DROPPED_ALL"
-        }
+          capabilities: "DROPPED_ALL",
+        },
       });
     });
 
@@ -51,7 +51,11 @@ describe("MCP Server Express Endpoints", () => {
     const path = (await import("path")).default;
 
     const testSvgPath = path.join(WORKSPACE_DIR, "test_diagram.svg");
-    await fs.writeFile(testSvgPath, '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>', "utf8");
+    await fs.writeFile(
+      testSvgPath,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+      "utf8"
+    );
 
     const app = express();
     app.use(cors());
@@ -124,13 +128,17 @@ describe("MCP Server Express Endpoints", () => {
       { ext: ".json", mime: "application/json; charset=utf-8" },
       { ext: ".html", mime: "text/html; charset=utf-8" },
       { ext: ".csv", mime: "text/csv; charset=utf-8" },
-      { ext: ".log", mime: "text/plain; charset=utf-8" }
+      { ext: ".log", mime: "text/plain; charset=utf-8" },
     ];
 
     for (const { ext, mime } of validCases) {
       const fileName = `sample${ext}`;
       assert.equal(isAllowedFileArtifact(fileName), true, `Expected ${fileName} to be allowed`);
-      assert.equal(getArtifactMimeType(fileName), mime, `Expected ${fileName} to have mime ${mime}`);
+      assert.equal(
+        getArtifactMimeType(fileName),
+        mime,
+        `Expected ${fileName} to have mime ${mime}`
+      );
     }
 
     // Also verify new code extensions
@@ -158,7 +166,7 @@ describe("MCP Server Express Endpoints", () => {
       { name: "test_page.html", content: "<h1>Hi</h1>", expectedMime: "text/html" },
       { name: "test_table.csv", content: "a,b\n1,2", expectedMime: "text/csv" },
       { name: "test_output.log", content: "log output", expectedMime: "text/plain" },
-      { name: "test_code.py", content: "print('hi')", expectedMime: "text/plain" }
+      { name: "test_code.py", content: "print('hi')", expectedMime: "text/plain" },
     ];
 
     for (const tf of testFiles) {
@@ -179,7 +187,10 @@ describe("MCP Server Express Endpoints", () => {
         const res = await fetch(`http://127.0.0.1:${port}/files?path=${tf.name}`);
         assert.equal(res.status, 200, `Expected 200 for ${tf.name}`);
         const ctype = res.headers.get("content-type") || "";
-        assert.ok(ctype.includes(tf.expectedMime), `Expected ${tf.expectedMime} in ${ctype} for ${tf.name}`);
+        assert.ok(
+          ctype.includes(tf.expectedMime),
+          `Expected ${tf.expectedMime} in ${ctype} for ${tf.name}`
+        );
         const body = await res.text();
         assert.equal(body, tf.content);
       }
@@ -197,4 +208,3 @@ describe("MCP Server Express Endpoints", () => {
     }
   });
 });
-

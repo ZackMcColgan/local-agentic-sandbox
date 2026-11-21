@@ -11,18 +11,47 @@ const META_CHALLENGE_RE =
 
 export function isMetaChallenge(prompt: string): boolean {
   if (!prompt || typeof prompt !== "string") return false;
-  return META_CHALLENGE_RE.test(prompt) || /\b(you\s+made\s+(that|this|it)\s+up|are\s+you\s+sure|is\s+that\s+(real|accurate|true))\b/i.test(prompt);
+  return (
+    META_CHALLENGE_RE.test(prompt) ||
+    /\b(you\s+made\s+(that|this|it)\s+up|are\s+you\s+sure|is\s+that\s+(real|accurate|true))\b/i.test(
+      prompt
+    )
+  );
 }
 
 const DENYLIST_PHRASES = [
   // challenge phrasing
-  "did you", "have you", "are you", "do you", "were you", "was you",
+  "did you",
+  "have you",
+  "are you",
+  "do you",
+  "were you",
+  "was you",
   // instruction verbs
-  "create", "make", "generate", "draw", "build", "render", "produce", "design", "show me", "give me", "write me",
+  "create",
+  "make",
+  "generate",
+  "draw",
+  "build",
+  "render",
+  "produce",
+  "design",
+  "show me",
+  "give me",
+  "write me",
   // format nouns
-  "svg", "chart", "graph", "table", "infographic",
+  "svg",
+  "chart",
+  "graph",
+  "table",
+  "infographic",
   // politeness & conversational meta
-  "please", "can you", "could you", "would you", "will you", "where is"
+  "please",
+  "can you",
+  "could you",
+  "would you",
+  "will you",
+  "where is",
 ];
 
 function normalizeForValidation(s: string): string {
@@ -76,13 +105,14 @@ export function evaluateSearchQueryAttempt(
       return {
         action: "nudge",
         countAttempt: false,
-        message: "You called search_web without a query. Formulate one (information need only) and retry."
+        message:
+          "You called search_web without a query. Formulate one (information need only) and retry.",
       };
     }
     return {
       action: "block",
       countAttempt: true,
-      message: "You called search_web without a query after being nudged. Web research blocked."
+      message: "You called search_web without a query after being nudged. Web research blocked.",
     };
   }
 
@@ -91,24 +121,26 @@ export function evaluateSearchQueryAttempt(
       return {
         action: "nudge",
         countAttempt: false,
-        message: "That looks like the user's request, not a search query. Formulate a concise query (information need only) and retry."
+        message:
+          "That looks like the user's request, not a search query. Formulate a concise query (information need only) and retry.",
       };
     }
     return {
       action: "block",
       countAttempt: true,
-      message: "Search query validation failed after being nudged. Web research blocked."
+      message: "Search query validation failed after being nudged. Web research blocked.",
     };
   }
 
   return {
     action: "proceed",
-    countAttempt: false
+    countAttempt: false,
   };
 }
 
 const WEB_TOOLS = new Set(["search_web", "fetch_webpage_markdown"]);
-const NO_RESULTS_RE = /\b(no\s+(results|matches|search\s+results)(\s+found)?|0\s+results|nothing\s+found|did\s+not\s+match\s+any)\b/i;
+const NO_RESULTS_RE =
+  /\b(no\s+(results|matches|search\s+results)(\s+found)?|0\s+results|nothing\s+found|did\s+not\s+match\s+any)\b/i;
 export const SUBSTANTIVE_MIN_CHARS = 200;
 
 function extractText(result: any): string {
@@ -116,7 +148,10 @@ function extractText(result: any): string {
   if (typeof result === "string") return result;
   if (Array.isArray(result)) return result.map(extractText).join("\n");
   if (typeof result === "object") {
-    if (Array.isArray(result.content)) return result.content.map((c: any) => (typeof c?.text === "string" ? c.text : extractText(c))).join("\n");
+    if (Array.isArray(result.content))
+      return result.content
+        .map((c: any) => (typeof c?.text === "string" ? c.text : extractText(c)))
+        .join("\n");
     if (Array.isArray(result.results)) return result.results.map(extractText).join("\n");
     const parts: string[] = [];
     for (const [k, v] of Object.entries(result)) {
@@ -158,6 +193,8 @@ export function shouldInjectHonestAbort(input: {
 }): boolean {
   const live =
     isLiveRealTimeIntent(input.userPrompt) ||
-    (isMetaChallenge(input.userPrompt) && !!input.priorUserPrompt && isLiveRealTimeIntent(input.priorUserPrompt));
+    (isMetaChallenge(input.userPrompt) &&
+      !!input.priorUserPrompt &&
+      isLiveRealTimeIntent(input.priorUserPrompt));
   return live && input.webResearchCalls > 0 && !hasSubstantiveWebResults(input.traces);
 }

@@ -13,7 +13,7 @@ describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
     // scripts/test-ui-render.js retired per Work Order #3 in favor of Playwright e2e suite
     "scripts/verify-fix3-behavioral.js",
     "scripts/verify-lan-copy.js",
-    "scripts/verify-phase-d.js"
+    "scripts/verify-phase-d.js",
   ];
 
   it("required verification scripts exist in scripts/", () => {
@@ -71,7 +71,8 @@ describe("E2E Verification Scripts Timeout & Deadline Enforcer Suite", () => {
     // Verify all 5 core scripts were actually evaluated
     for (const reqFile of requiredScriptFiles) {
       assert.ok(
-        checkedWithFetch.includes(reqFile.replace(/\//g, path.sep)) || checkedWithFetch.includes(reqFile),
+        checkedWithFetch.includes(reqFile.replace(/\//g, path.sep)) ||
+          checkedWithFetch.includes(reqFile),
         `Core script ${reqFile} must be among files with fetch() checks`
       );
     }

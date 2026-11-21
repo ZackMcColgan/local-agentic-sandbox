@@ -11,7 +11,7 @@ import {
   activeExecutionSet,
   markTurnActive,
   TURN_STALL_WINDOW_MS,
-  computeTurnLiveness
+  computeTurnLiveness,
 } from "../lib/threads/threadStore";
 import { ThrottledStreamSnapshot, STREAM_SNAPSHOT_INTERVAL_MS } from "../lib/streamSnapshot";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
@@ -51,16 +51,34 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "",
       status: "streaming",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     let fakeNow = Date.now();
-    const snap = new ThrottledStreamSnapshot(store, thread.id, "msg-a", STREAM_SNAPSHOT_INTERVAL_MS, () => fakeNow);
+    const snap = new ThrottledStreamSnapshot(
+      store,
+      thread.id,
+      "msg-a",
+      STREAM_SNAPSHOT_INTERVAL_MS,
+      () => fakeNow
+    );
 
     // Round 1: model streamed a little text, then executed two tools.
     snap.maybeWrite("Planning the fix. ", undefined, [
-      { tool: "workspace_read_file", args: { path: "lib/a.ts" }, result: "ok", durationMs: 12, timestamp: new Date().toISOString() },
-      { tool: "workspace_write_file", args: { path: "lib/b.ts" }, result: "written", durationMs: 30, timestamp: new Date().toISOString() }
+      {
+        tool: "workspace_read_file",
+        args: { path: "lib/a.ts" },
+        result: "ok",
+        durationMs: 12,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        tool: "workspace_write_file",
+        args: { path: "lib/b.ts" },
+        result: "written",
+        durationMs: 30,
+        timestamp: new Date().toISOString(),
+      },
     ]);
 
     // Round boundary write must land even inside the throttle window: rounds are
@@ -70,9 +88,27 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       "Planning the fix. Patch applied to lib/b.ts. ",
       undefined,
       [
-        { tool: "workspace_read_file", args: { path: "lib/a.ts" }, result: "ok", durationMs: 12, timestamp: new Date().toISOString() },
-        { tool: "workspace_write_file", args: { path: "lib/b.ts" }, result: "written", durationMs: 30, timestamp: new Date().toISOString() },
-        { tool: "workspace_run_command", args: { command: "npm run test:gate" }, result: "green", durationMs: 4000, timestamp: new Date().toISOString() }
+        {
+          tool: "workspace_read_file",
+          args: { path: "lib/a.ts" },
+          result: "ok",
+          durationMs: 12,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          tool: "workspace_write_file",
+          args: { path: "lib/b.ts" },
+          result: "written",
+          durationMs: 30,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          tool: "workspace_run_command",
+          args: { command: "npm run test:gate" },
+          result: "green",
+          durationMs: 4000,
+          timestamp: new Date().toISOString(),
+        },
       ],
       { force: true }
     );
@@ -86,7 +122,10 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     assert.equal(last.role, "assistant");
     assert.equal(last.status, "streaming", "in-flight message must still read streaming");
     assert.ok(last.content.length > 0, "mid-turn read must show non-zero content");
-    assert.ok(Array.isArray(last.traces) && last.traces!.length === 3, "mid-turn read must show accumulated traces");
+    assert.ok(
+      Array.isArray(last.traces) && last.traces!.length === 3,
+      "mid-turn read must show accumulated traces"
+    );
     assert.equal(mid.status, "active", "live turn must read active, not stopped");
 
     fs.rmSync(dir, { recursive: true, force: true });
@@ -102,13 +141,17 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "working...",
       status: "streaming",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const reader = new ThreadStore(dir);
     const t = await reader.getThread(thread.id);
     assert.ok(t);
-    assert.equal(t.liveness, "alive", "fresh streaming turn must carry liveness=alive on the record");
+    assert.equal(
+      t.liveness,
+      "alive",
+      "fresh streaming turn must carry liveness=alive on the record"
+    );
     assert.equal(computeTurnLiveness(t, Date.now()), "alive");
 
     fs.rmSync(dir, { recursive: true, force: true });
@@ -125,7 +168,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "partial work",
       status: "streaming",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Rewind updatedAt past the stale window while the turn is still registered live.
@@ -137,7 +180,11 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     const reader = new ThreadStore(dir);
     const t = await reader.getThread(thread.id);
     assert.ok(t);
-    assert.equal(t.status, "active", "a live-but-stale turn must stay active (not reconciled to stopped/completed)");
+    assert.equal(
+      t.status,
+      "active",
+      "a live-but-stale turn must stay active (not reconciled to stopped/completed)"
+    );
     assert.equal(t.liveness, "stalled", "stale streaming turn must carry liveness=stalled");
     assert.equal(computeTurnLiveness(t, Date.now()), "stalled");
 
@@ -148,7 +195,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "final",
       status: "completed",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     const tDone = await reader.getThread(done.id);
     assert.equal(tDone!.liveness, "settled", "completed turn must read settled");
@@ -167,7 +214,15 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       content: "accumulated work text",
       status: "streaming",
       timestamp: new Date().toISOString(),
-      traces: [{ tool: "workspace_write_file", args: { path: "x.ts" }, result: "ok", durationMs: 5, timestamp: new Date().toISOString() }]
+      traces: [
+        {
+          tool: "workspace_write_file",
+          args: { path: "x.ts" },
+          result: "ok",
+          durationMs: 5,
+          timestamp: new Date().toISOString(),
+        },
+      ],
     });
 
     const stalled = store.createThread({ id: "t-ui-stalled", title: "stalled session" });
@@ -177,7 +232,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "older work",
       status: "streaming",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     const stalledFile = store.getFilePath(stalled.id);
     const raw = JSON.parse(fs.readFileSync(stalledFile, "utf8"));
@@ -190,7 +245,7 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       role: "assistant",
       content: "finished",
       status: "completed",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Exactly the payload shape GET /api/threads returns (listThreads reconciles + stamps liveness).
@@ -201,18 +256,42 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
         selectedThreadId: null,
         onSelectThread: () => {},
         onNewThread: () => {},
-        onDeleteThread: () => {}
+        onDeleteThread: () => {},
       })
     );
 
-    assert.match(html, /data-testid="thread-liveness-t-ui-alive"[^>]*>.*Alive/, "alive streaming row must render an Alive badge");
-    assert.match(html, /data-testid="thread-liveness-t-ui-stalled"[^>]*>.*Stalled/, "stale streaming row must render a Stalled badge");
-    assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*19 chars/, "alive row must render real in-flight char count");
-    assert.match(html, /data-testid="thread-progress-t-ui-alive"[^>]*>.*1 total traces/, "alive row must render real trace count");
-    assert.doesNotMatch(html, /thread-liveness-t-ui-done/, "settled rows must not carry a liveness badge");
+    assert.match(
+      html,
+      /data-testid="thread-liveness-t-ui-alive"[^>]*>.*Alive/,
+      "alive streaming row must render an Alive badge"
+    );
+    assert.match(
+      html,
+      /data-testid="thread-liveness-t-ui-stalled"[^>]*>.*Stalled/,
+      "stale streaming row must render a Stalled badge"
+    );
+    assert.match(
+      html,
+      /data-testid="thread-progress-t-ui-alive"[^>]*>.*19 chars/,
+      "alive row must render real in-flight char count"
+    );
+    assert.match(
+      html,
+      /data-testid="thread-progress-t-ui-alive"[^>]*>.*1 total traces/,
+      "alive row must render real trace count"
+    );
+    assert.doesNotMatch(
+      html,
+      /thread-liveness-t-ui-done/,
+      "settled rows must not carry a liveness badge"
+    );
     // Board parity (PR #94): completed rows carry the FINAL-DESIGN DONE chip
     // instead of the old plain-text "Completed" label.
-    assert.match(html, /DONE/, "completed row still reads DONE (stalled must not conflate with completed)");
+    assert.match(
+      html,
+      /DONE/,
+      "completed row still reads DONE (stalled must not conflate with completed)"
+    );
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -233,8 +312,15 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       /touchActiveTurn\s*\(\s*activeThreadId\s*\)/,
       "round boundary must refresh the turn heartbeat"
     );
-    const storeSrc = fs.readFileSync(path.resolve(__dirname, "../lib/threads/threadStore.ts"), "utf8");
-    assert.match(storeSrc, /export\s+const\s+TURN_STALL_WINDOW_MS\b/, "store must export the stale window constant");
+    const storeSrc = fs.readFileSync(
+      path.resolve(__dirname, "../lib/threads/threadStore.ts"),
+      "utf8"
+    );
+    assert.match(
+      storeSrc,
+      /export\s+const\s+TURN_STALL_WINDOW_MS\b/,
+      "store must export the stale window constant"
+    );
     // Accepts either export form (function declaration or arrow const).
     assert.match(
       storeSrc,
@@ -245,6 +331,10 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
     // be expressed inline or via a named type alias, so the members are matched
     // across the file rather than against one exact literal layout.
     assert.match(storeSrc, /\bliveness\?\s*:/, "Thread record must carry a liveness field");
-    assert.match(storeSrc, /"alive"[\s\S]*"stalled"[\s\S]*"settled"/, "liveness must be the alive/stalled/settled union");
+    assert.match(
+      storeSrc,
+      /"alive"[\s\S]*"stalled"[\s\S]*"settled"/,
+      "liveness must be the alive/stalled/settled union"
+    );
   });
 });

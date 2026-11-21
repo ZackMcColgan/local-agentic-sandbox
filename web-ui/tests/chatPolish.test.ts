@@ -9,7 +9,7 @@ import {
   resolveTurnStatusPhase,
   TURN_PHASE_PREPARING,
   TURN_PHASE_REASONING,
-  TURN_PHASE_WRITING
+  TURN_PHASE_WRITING,
 } from "../lib/chatStatus";
 import { getServedByNote, extractFileWriteDiffsFromTraces } from "../lib/chatUtils";
 import fs from "fs";
@@ -20,7 +20,7 @@ import {
   collectTurnModifiedFileDiffs,
   computeUnifiedFileDiff,
   MAX_DIFF_LINES_CAP,
-  TurnFileDiff
+  TurnFileDiff,
 } from "../lib/chatDiffs";
 
 describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
@@ -33,8 +33,8 @@ describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
         {
           id: "m-1",
           role: "assistant" as const,
-          content: "This is a response testing reading pane typography standards."
-        }
+          content: "This is a response testing reading pane typography standards.",
+        },
       ];
 
       const html = renderToString(
@@ -42,15 +42,12 @@ describe("Epic 1 — Sprint 2: Reading, theme, navigation (S5-S7)", () => {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
       // Verify 15px, leading 1.6, max 72ch
-      assert.ok(
-        html.includes("text-[15px]"),
-        "Assistant message must render with 15px font"
-      );
+      assert.ok(html.includes("text-[15px]"), "Assistant message must render with 15px font");
       assert.ok(
         html.includes("leading-[1.6]"),
         "Assistant message must render with line-height 1.6"
@@ -82,8 +79,8 @@ Use \`run_command\` for shell actions.
         {
           id: "m-dense",
           role: "assistant" as const,
-          content: denseMarkdown
-        }
+          content: denseMarkdown,
+        },
       ];
 
       const html = renderToString(
@@ -91,7 +88,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
@@ -119,8 +116,8 @@ Use \`run_command\` for shell actions.
         {
           id: "m-code",
           role: "assistant" as const,
-          content: codeMarkdown
-        }
+          content: codeMarkdown,
+        },
       ];
 
       const html = renderToString(
@@ -128,14 +125,21 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
       assert.ok(html.includes("<pre"), "Must render <pre> tag for code block");
-      assert.ok(html.includes("const agent = &#x27;sandbox&#x27;;") || html.includes("const agent = 'sandbox';"), "Must render code snippet content");
+      assert.ok(
+        html.includes("const agent = &#x27;sandbox&#x27;;") ||
+          html.includes("const agent = 'sandbox';"),
+        "Must render code snippet content"
+      );
       assert.ok(html.includes("Copy"), "Must render copy button for code block");
-      assert.ok(html.includes("bg-[#f4eff4]") || html.includes("bg-surface-variant"), "Code block must have distinct surface-variant background");
+      assert.ok(
+        html.includes("bg-[#f4eff4]") || html.includes("bg-surface-variant"),
+        "Code block must have distinct surface-variant background"
+      );
     });
   });
 
@@ -149,13 +153,17 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: []
+          messages: [],
         })
       );
 
       // Verify theme toggle or overflow option exists
       assert.ok(
-        html.includes("theme") || html.includes("Theme") || html.includes("Dark") || html.includes("Light") || html.includes("More options"),
+        html.includes("theme") ||
+          html.includes("Theme") ||
+          html.includes("Dark") ||
+          html.includes("Light") ||
+          html.includes("More options"),
         "UI must provide theme accessibility and controls"
       );
     });
@@ -167,10 +175,26 @@ Use \`run_command\` for shell actions.
         return systemPrefersDark ? "dark" : "light";
       };
 
-      assert.equal(simulateThemeResolution(null, true), "dark", "System default must select dark when OS is dark");
-      assert.equal(simulateThemeResolution(null, false), "light", "System default must select light when OS is light");
-      assert.equal(simulateThemeResolution("dark", false), "dark", "Manual dark overrides system light");
-      assert.equal(simulateThemeResolution("light", true), "light", "Manual light overrides system dark");
+      assert.equal(
+        simulateThemeResolution(null, true),
+        "dark",
+        "System default must select dark when OS is dark"
+      );
+      assert.equal(
+        simulateThemeResolution(null, false),
+        "light",
+        "System default must select light when OS is light"
+      );
+      assert.equal(
+        simulateThemeResolution("dark", false),
+        "dark",
+        "Manual dark overrides system light"
+      );
+      assert.equal(
+        simulateThemeResolution("light", true),
+        "light",
+        "Manual light overrides system dark"
+      );
     });
   });
 
@@ -189,20 +213,26 @@ Use \`run_command\` for shell actions.
           onBackToList: () => {
             backCalled = true;
           },
-          messages: []
+          messages: [],
         })
       );
 
       // Must have Back to threads / sessions button
       assert.ok(html.includes("Back to"), "Top bar must render Back button");
       // Must NOT be hidden on desktop with sm:hidden
-      assert.ok(!html.includes("sm:hidden p-1.5 -ml-1 rounded-full text-slate-600"), "Back button must NOT be suppressed on desktop");
+      assert.ok(
+        !html.includes("sm:hidden p-1.5 -ml-1 rounded-full text-slate-600"),
+        "Back button must NOT be suppressed on desktop"
+      );
     });
 
     it("handles popstate and back navigation without trapping the user", () => {
       // Simulate state machine transitions between thread view and thread list
       let activeThread: string | null = "thread-123";
-      const historyStack: Array<{ threadId: string | null }> = [{ threadId: null }, { threadId: "thread-123" }];
+      const historyStack: Array<{ threadId: string | null }> = [
+        { threadId: null },
+        { threadId: "thread-123" },
+      ];
 
       const onPopState = (state: { threadId: string | null } | null) => {
         activeThread = state?.threadId || null;
@@ -212,7 +242,11 @@ Use \`run_command\` for shell actions.
       const previousState = historyStack[0];
       onPopState(previousState);
 
-      assert.equal(activeThread, null, "Navigating back returns to sessions list (activeThread = null)");
+      assert.equal(
+        activeThread,
+        null,
+        "Navigating back returns to sessions list (activeThread = null)"
+      );
     });
   });
 
@@ -225,7 +259,7 @@ Use \`run_command\` for shell actions.
         {
           id: "m-user-1",
           role: "user" as const,
-          content: "Summarize status"
+          content: "Summarize status",
         },
         {
           id: "m-asst-1",
@@ -233,8 +267,8 @@ Use \`run_command\` for shell actions.
           content: "Here is the summary after compaction.",
           compactedThisTurn: true,
           tokensBeforeCompaction: 88400,
-          tokensAfterCompaction: 14200
-        }
+          tokensAfterCompaction: 14200,
+        },
       ];
 
       const html = renderToString(
@@ -242,7 +276,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: messagesWithCompaction
+          messages: messagesWithCompaction,
         })
       );
 
@@ -252,7 +286,7 @@ Use \`run_command\` for shell actions.
       );
       assert.ok(
         html.includes("History compacted: 88,400 → 14,200 tokens") ||
-        (html.includes("88,400") && html.includes("14,200")),
+          (html.includes("88,400") && html.includes("14,200")),
         "Compacted badge must display formatted tokens before and after"
       );
     });
@@ -263,8 +297,8 @@ Use \`run_command\` for shell actions.
           id: "m-asst-2",
           role: "assistant" as const,
           content: "Standard assistant reply without compaction.",
-          compactedThisTurn: false
-        }
+          compactedThisTurn: false,
+        },
       ];
 
       const html = renderToString(
@@ -272,7 +306,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: messagesWithoutCompaction
+          messages: messagesWithoutCompaction,
         })
       );
 
@@ -291,8 +325,8 @@ Use \`run_command\` for shell actions.
           compactedThisTurn: true,
           tokensBeforeCompaction: 88400,
           tokensAfterCompaction: 14200,
-          compactionActions: ["elide_tool_outputs", "drop_old_turns", "truncate_oversize"]
-        }
+          compactionActions: ["elide_tool_outputs", "drop_old_turns", "truncate_oversize"],
+        },
       ];
 
       const html = renderToString(
@@ -300,7 +334,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: messagesWithActions
+          messages: messagesWithActions,
         })
       );
 
@@ -310,7 +344,10 @@ Use \`run_command\` for shell actions.
         "Compaction pill must still render when actions are present"
       );
       assert.ok(
-        html.includes("History compacted") && html.includes("88,400") && html.includes("14,200") && html.includes("tokens"),
+        html.includes("History compacted") &&
+          html.includes("88,400") &&
+          html.includes("14,200") &&
+          html.includes("tokens"),
         "Pill must keep the existing 'History compacted: X -> Y tokens' line"
       );
 
@@ -338,9 +375,9 @@ Use \`run_command\` for shell actions.
             "drop_old_turns",
             "truncate_oversize",
             "elide_tool_outputs",
-            "drop_old_turns"
-          ]
-        }
+            "drop_old_turns",
+          ],
+        },
       ];
 
       const html = renderToString(
@@ -348,7 +385,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: messagesOverflow
+          messages: messagesOverflow,
         })
       );
 
@@ -369,8 +406,8 @@ Use \`run_command\` for shell actions.
           compactedThisTurn: true,
           tokensBeforeCompaction: 88400,
           tokensAfterCompaction: 14200,
-          compactionActions: undefined
-        }
+          compactionActions: undefined,
+        },
       ];
 
       const html = renderToString(
@@ -378,7 +415,7 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages: messagesNoActions
+          messages: messagesNoActions,
         })
       );
 
@@ -387,7 +424,10 @@ Use \`run_command\` for shell actions.
         "Pill must render for compaction without actions"
       );
       assert.ok(
-        html.includes("History compacted") && html.includes("88,400") && html.includes("14,200") && html.includes("tokens"),
+        html.includes("History compacted") &&
+          html.includes("88,400") &&
+          html.includes("14,200") &&
+          html.includes("tokens"),
         "Pill line must be unchanged when there are no actions"
       );
       assert.ok(
@@ -416,11 +456,19 @@ Use \`run_command\` for shell actions.
 
       // Phase 3: Active Tool (via activeTool or streamStatus)
       assert.equal(
-        resolveTurnStatusPhase({ isStreaming: true, activeTool: "workspace_read_file", hasThought: true }),
+        resolveTurnStatusPhase({
+          isStreaming: true,
+          activeTool: "workspace_read_file",
+          hasThought: true,
+        }),
         "Running workspace_read_file"
       );
       assert.equal(
-        resolveTurnStatusPhase({ isStreaming: true, streamStatus: "Running search_web...", hasThought: true }),
+        resolveTurnStatusPhase({
+          isStreaming: true,
+          streamStatus: "Running search_web...",
+          hasThought: true,
+        }),
         "Running search_web"
       );
 
@@ -442,7 +490,7 @@ Use \`run_command\` for shell actions.
         React.createElement(ThinkingPanel, {
           isStreaming: true,
           rawThought: "Checking files...",
-          streamStatus: "Running workspace_grep"
+          streamStatus: "Running workspace_grep",
         })
       );
 
@@ -460,7 +508,10 @@ Use \`run_command\` for shell actions.
 
       // At most 1 animate-spin in the rendered HTML
       const spinMatches = html.match(/animate-spin/g);
-      assert.ok((spinMatches?.length || 0) <= 1, `Expected at most 1 animate-spin, found ${spinMatches?.length || 0}`);
+      assert.ok(
+        (spinMatches?.length || 0) <= 1,
+        `Expected at most 1 animate-spin, found ${spinMatches?.length || 0}`
+      );
     });
   });
 
@@ -470,22 +521,13 @@ Use \`run_command\` for shell actions.
   describe("F7.2 — Truthful 'Served by ...' Note", () => {
     it("getServedByNote correctly normalizes aliases and suppresses redundant notes", () => {
       // Same canonical model (Swift 1.5 aliases)
-      assert.equal(
-        getServedByNote("Swift-1.5-Qwen3.8-27B-IQ3_XS", "swift-15-27b-mtp"),
-        null
-      );
+      assert.equal(getServedByNote("Swift-1.5-Qwen3.8-27B-IQ3_XS", "swift-15-27b-mtp"), null);
 
       // Same canonical model (Flash-Next aliases)
-      assert.equal(
-        getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "Flash-Next"),
-        null
-      );
+      assert.equal(getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "Flash-Next"), null);
 
       // Selected auto -> null
-      assert.equal(
-        getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "auto"),
-        null
-      );
+      assert.equal(getServedByNote("qwen3.8-flash-next-gyro-gyro-s", "auto"), null);
 
       // Legitimate fallback / divergence
       assert.equal(
@@ -506,12 +548,15 @@ Use \`run_command\` for shell actions.
               id: "m-match",
               role: "assistant" as const,
               content: "Hello",
-              modelUsed: "qwen3.8-flash-next-gyro-gyro-s"
-            }
-          ]
+              modelUsed: "qwen3.8-flash-next-gyro-gyro-s",
+            },
+          ],
         })
       );
-      assert.ok(!htmlMatching.includes("Served by"), "Must NOT render Served by when served model matches selected");
+      assert.ok(
+        !htmlMatching.includes("Served by"),
+        "Must NOT render Served by when served model matches selected"
+      );
 
       // Divergent model -> renders truthful note
       const htmlDiverged = renderToString(
@@ -525,9 +570,9 @@ Use \`run_command\` for shell actions.
               role: "assistant" as const,
               content: "Fallback reply",
               modelUsed: "gemma4:e4b",
-              selectedModel: "qwen3.8-flash-next-gyro-gyro-s"
-            }
-          ]
+              selectedModel: "qwen3.8-flash-next-gyro-gyro-s",
+            },
+          ],
         })
       );
       assert.ok(
@@ -547,12 +592,18 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8-flash-next-gyro-gyro-s",
           reasoningEffort: "medium" as const,
-          messages: []
+          messages: [],
         })
       );
 
-      assert.ok(html.includes('data-testid="context-meter-pill"'), "Must render context-meter-pill");
-      assert.ok(!html.includes("hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full"), "Must NOT have hidden sm:flex hiding pill on mobile");
+      assert.ok(
+        html.includes('data-testid="context-meter-pill"'),
+        "Must render context-meter-pill"
+      );
+      assert.ok(
+        !html.includes("hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full"),
+        "Must NOT have hidden sm:flex hiding pill on mobile"
+      );
     });
   });
 
@@ -566,29 +617,30 @@ Use \`run_command\` for shell actions.
           tool: "workspace_write_file",
           args: {
             path: "src/utils/math.ts",
-            content: "export const add = (a: number, b: number) => a + b;\nexport const sub = (a: number, b: number) => a - b;"
-          }
+            content:
+              "export const add = (a: number, b: number) => a + b;\nexport const sub = (a: number, b: number) => a - b;",
+          },
         },
         {
           tool: "workspace_patch_file",
           args: {
             path: "src/index.ts",
             search: "const oldVal = 1;",
-            replace: "const newVal = 2;\nconst extra = 3;"
-          }
+            replace: "const newVal = 2;\nconst extra = 3;",
+          },
         },
         {
           tool: "workspace_read_file",
           args: {
-            path: "src/secret.ts"
-          }
+            path: "src/secret.ts",
+          },
         },
         {
           name: "host_read_file",
           args: {
-            filePath: "C:/system/log.txt"
-          }
-        }
+            filePath: "C:/system/log.txt",
+          },
+        },
       ];
 
       const diffs = extractFileWriteDiffsFromTraces(traces);
@@ -600,18 +652,27 @@ Use \`run_command\` for shell actions.
       assert.equal(writeItem.tool, "workspace_write_file");
       assert.equal(writeItem.addedLines, 2);
       assert.equal(writeItem.removedLines, 0);
-      assert.ok(writeItem.diffPreview.includes("+ export const add"), "diffPreview must contain '+ export const add'");
+      assert.ok(
+        writeItem.diffPreview.includes("+ export const add"),
+        "diffPreview must contain '+ export const add'"
+      );
 
       // Check patch item
       const patchItem = diffs.find((d: any) => d.path === "src/index.ts");
       assert.ok(patchItem, "Must extract workspace_patch_file item");
       assert.equal(patchItem.addedLines, 2);
       assert.equal(patchItem.removedLines, 1);
-      assert.ok(patchItem.diffPreview.includes("- const oldVal = 1;"), "diffPreview must contain '- const oldVal = 1;'");
-      assert.ok(patchItem.diffPreview.includes("+ const newVal = 2;"), "diffPreview must contain '+ const newVal = 2;'");
+      assert.ok(
+        patchItem.diffPreview.includes("- const oldVal = 1;"),
+        "diffPreview must contain '- const oldVal = 1;'"
+      );
+      assert.ok(
+        patchItem.diffPreview.includes("+ const newVal = 2;"),
+        "diffPreview must contain '+ const newVal = 2;'"
+      );
     });
 
-    it("ChatStream renders data-testid=\"chat-diff-card\" with +added/-removed badges and Copy path button on assistant file-write turns", () => {
+    it('ChatStream renders data-testid="chat-diff-card" with +added/-removed badges and Copy path button on assistant file-write turns', () => {
       const messages: any[] = [
         {
           id: "m-write-1",
@@ -622,11 +683,11 @@ Use \`run_command\` for shell actions.
               tool: "workspace_write_file",
               args: {
                 path: "web-ui/lib/newHelper.ts",
-                content: "export const x = 1;\nexport const y = 2;\n"
-              }
-            }
-          ]
-        }
+                content: "export const x = 1;\nexport const y = 2;\n",
+              },
+            },
+          ],
+        },
       ];
 
       const html = renderToString(
@@ -634,12 +695,15 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
-      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
+      assert.ok(
+        html.includes('data-testid="canvas-diff-open"'),
+        "Must render canvas-diff-open button"
+      );
     });
   });
   // -------------------------------------------------------------
@@ -694,7 +758,11 @@ Use \`run_command\` for shell actions.
         fs.writeFileSync(newFileAbs, "new content\n", "utf8");
 
         const diffs = collectTurnModifiedFileDiffs(preImages, tempDir);
-        assert.equal(diffs.length, 0, "Modified files only — brand-new file must produce zero TurnFileDiffs");
+        assert.equal(
+          diffs.length,
+          0,
+          "Modified files only — brand-new file must produce zero TurnFileDiffs"
+        );
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
@@ -721,18 +789,22 @@ Use \`run_command\` for shell actions.
         assert.equal(d.truncated, true);
         assert.ok((d.totalDiffLines ?? 0) > MAX_DIFF_LINES_CAP, "totalDiffLines must exceed cap");
         assert.equal(d.omittedLines, (d.totalDiffLines ?? 0) - MAX_DIFF_LINES_CAP);
-        assert.ok(d.diff.includes(`# ... truncated (${d.omittedLines} of ${d.totalDiffLines} diff lines omitted)`));
+        assert.ok(
+          d.diff.includes(
+            `# ... truncated (${d.omittedLines} of ${d.totalDiffLines} diff lines omitted)`
+          )
+        );
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
 
-    it("ChatStream renders DiffViewer inside data-testid=\"chat-diff-card\" and persists diffs", () => {
+    it('ChatStream renders DiffViewer inside data-testid="chat-diff-card" and persists diffs', () => {
       const persistedDiff: TurnFileDiff = {
         path: "web-ui/lib/persistedHelper.ts",
         diff: "--- a/web-ui/lib/persistedHelper.ts\n+++ b/web-ui/lib/persistedHelper.ts\n@@ -1,2 +1,2 @@\n-const a = 1;\n+const a = 2;\n",
         addedLines: 1,
-        removedLines: 1
+        removedLines: 1,
       };
 
       const messages: any[] = [
@@ -740,8 +812,8 @@ Use \`run_command\` for shell actions.
           id: "m-persisted-1",
           role: "assistant",
           content: "Modified persisted file.",
-          diffs: [persistedDiff]
-        }
+          diffs: [persistedDiff],
+        },
       ];
 
       const html = renderToString(
@@ -749,17 +821,18 @@ Use \`run_command\` for shell actions.
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
       assert.ok(html.includes('data-testid="canvas-diff-card"'), "Must render canvas-diff-card");
-      assert.ok(html.includes('data-testid="canvas-diff-open"'), "Must render canvas-diff-open button");
+      assert.ok(
+        html.includes('data-testid="canvas-diff-open"'),
+        "Must render canvas-diff-open button"
+      );
       const text = html.replace(/<!--[\s\S]*?-->/g, "");
       assert.ok(text.includes("+1"), "Must render +1 added-lines count");
       assert.ok(text.includes("−1"), "Must render −1 removed-lines count");
-
-
     });
   });
 });

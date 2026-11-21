@@ -19,11 +19,15 @@ export interface SacrificialTargetResult {
  * and never touches or points to the production host runner port (8765)
  * or production configuration directory (C:\AI\ai-control).
  */
-export function assertSacrificialTarget(options: SacrificialTargetOptions): SacrificialTargetResult {
+export function assertSacrificialTarget(
+  options: SacrificialTargetOptions
+): SacrificialTargetResult {
   const { port, configDir } = options;
 
   if (typeof port !== "number" || isNaN(port) || port <= 1024 || port > 65535) {
-    throw new Error(`Invalid port: ${port}. Must be a valid non-privileged port between 1025 and 65535.`);
+    throw new Error(
+      `Invalid port: ${port}. Must be a valid non-privileged port between 1025 and 65535.`
+    );
   }
 
   if (port === PROD_HOST_RUNNER_PORT) {
@@ -46,6 +50,6 @@ export function assertSacrificialTarget(options: SacrificialTargetOptions): Sacr
   return {
     safe: true,
     port,
-    configDir
+    configDir,
   };
 }

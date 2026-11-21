@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { GitCommit, GitBranch, FileCode, ChevronDown, ChevronRight, Copy, Check, Eye, PanelRightOpen } from "lucide-react";
+import {
+  GitCommit,
+  GitBranch,
+  FileCode,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+  Eye,
+  PanelRightOpen,
+} from "lucide-react";
 import { copyText } from "@/lib/clipboard";
 import { useCanvas } from "./CanvasContext";
 import { displayRepoPath } from "../lib/chatUtils";
@@ -26,7 +36,7 @@ export function DiffViewer({
   modifiedFiles = [],
   diagramSvg,
   className = "",
-  defaultOpen = true
+  defaultOpen = true,
 }: DiffViewerProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [showDiagram, setShowDiagram] = useState(false);
@@ -47,7 +57,9 @@ export function DiffViewer({
   const deletions = lines.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
 
   return (
-    <div className={`max-w-full min-w-0 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}>
+    <div
+      className={`max-w-full min-w-0 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden ${className}`}
+    >
       {/* Header Bar */}
       <div className="px-3.5 py-2.5 flex items-center justify-between gap-2 min-w-0 bg-slate-50/80 dark:bg-black/60 border-b border-slate-200 dark:border-zinc-800">
         <button

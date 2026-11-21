@@ -31,13 +31,13 @@ function makeTask(overrides: Partial<TaskManifest> = {}): TaskManifest {
         builderIterations: 0,
         criticRounds: 0,
         plannedFiles: ["artifact.txt"],
-        acceptanceCriteria: []
-      }
+        acceptanceCriteria: [],
+      },
     ],
     currentMilestoneIndex: 0,
     journal: [],
     updatedAt: now,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -53,9 +53,9 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
         gitOps: {
           createAndSwitchBranch: async () => {
             throw new Error("Bootstrap failed: dirty working tree in workspace");
-          }
+          },
         } as any,
-        stepExecutor: async () => ({ status: "completed", summary: "should not run" })
+        stepExecutor: async () => ({ status: "completed", summary: "should not run" }),
       });
 
       assert.equal(result.status, "failed");
@@ -80,7 +80,7 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
     try {
       const result = await supervisor.executeTaskWithRecovery(task, {
         repoRoot: tmpDir,
-        stepExecutor: async () => ({ status: "completed", summary: "should not run" })
+        stepExecutor: async () => ({ status: "completed", summary: "should not run" }),
       });
 
       assert.equal(result.status, "failed");
@@ -112,15 +112,15 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
           builderIterations: 1,
           criticRounds: 1,
           plannedFiles: ["missing-artifact.js"],
-          acceptanceCriteria: []
-        }
-      ]
+          acceptanceCriteria: [],
+        },
+      ],
     });
 
     try {
       const result = await supervisor.executeTaskWithRecovery(task, {
         repoRoot: tmpDir,
-        stepExecutor: async () => ({ status: "completed", summary: "done" })
+        stepExecutor: async () => ({ status: "completed", summary: "done" }),
       });
 
       assert.equal(result.status, "failed");
@@ -147,7 +147,8 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
       "threads/[id]/route.ts must propagate result.errorSummary into thread failure reason"
     );
     assert.ok(
-      src.includes("currentThread.status =") && src.includes("getThreadStore().saveThread(currentThread)"),
+      src.includes("currentThread.status =") &&
+        src.includes("getThreadStore().saveThread(currentThread)"),
       "threads/[id]/route.ts must persist terminal status and reason onto thread"
     );
   });
@@ -169,22 +170,22 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
       await supervisor.executeTaskWithRecovery(task, {
         repoRoot: tmpDir,
         gitOps: {
-          createAndSwitchBranch: async () => {}
+          createAndSwitchBranch: async () => {},
         } as any,
         stepExecutor: async () => ({
           status: "completed",
           summary: "done",
-          modifiedFiles: ["artifact.txt"]
+          modifiedFiles: ["artifact.txt"],
         }),
         completionClaims: {
           commits: [],
           files: ["artifact.txt"],
-          gatePassed: true
+          gatePassed: true,
         },
         verificationAdapters: {
           checkFileExists: () => true,
-          checkCommitExists: () => true
-        } as any
+          checkCommitExists: () => true,
+        } as any,
       } as any);
 
       const prefix = `[task:${task.taskId}] phase=`;
@@ -208,7 +209,7 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
         if (url.endsWith("/api/threads")) {
           return {
             ok: true,
-            json: async () => ({ thread: { id: "t-obs-1", status: "running", messages: [] } })
+            json: async () => ({ thread: { id: "t-obs-1", status: "running", messages: [] } }),
           };
         }
         pollCount++;
@@ -218,9 +219,9 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
             thread: {
               id: "t-obs-1",
               status: badStatus,
-              messages: [{ role: "assistant", content: "Task failed: some error" }]
-            }
-          })
+              messages: [{ role: "assistant", content: "Task failed: some error" }],
+            },
+          }),
         };
       };
 
@@ -232,7 +233,7 @@ describe("ITEM-1: Task-Path Observability & Lossless Failure Propagation", () =>
             chunkRounds: 2,
             pollIntervalMs: 1,
             timeoutMs: 5000,
-            fetchImpl: mockFetch as any
+            fetchImpl: mockFetch as any,
           }),
         (err: any) => {
           assert.ok(err instanceof Error);

@@ -5,8 +5,17 @@ import { OvernightSupervisor } from "../subagents/supervisor";
 import { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../contextBudget";
 import { COMPACTION_THRESHOLD_RATIO } from "../modelLimits";
-import { summarizeTurnHistory, runHybridCompaction, resolveCompactionStrategy } from "../conversationCompaction";
-import type { CompactionStrategy, HybridFallbackReason, SummarizeRequest, SummarizeResult } from "../conversationCompaction";
+import {
+  summarizeTurnHistory,
+  runHybridCompaction,
+  resolveCompactionStrategy,
+} from "../conversationCompaction";
+import type {
+  CompactionStrategy,
+  HybridFallbackReason,
+  SummarizeRequest,
+  SummarizeResult,
+} from "../conversationCompaction";
 import { TurnFileDiff } from "../chatDiffs";
 import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
 import type { ElisionMeta } from "../microElision";
@@ -16,7 +25,9 @@ import { superviseStalledThread, STALL_WINDOW_MS } from "./inAppSupervisor";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 
-export const COMPACTION_TRIGGER_TOKENS = Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO);
+export const COMPACTION_TRIGGER_TOKENS = Math.floor(
+  CHAT_CONTEXT_BUDGET_TOKENS * COMPACTION_THRESHOLD_RATIO
+);
 
 /** Max characters for a derived thread-list title (UI-008). */
 export const THREAD_TITLE_MAX_CHARS = 80;
@@ -43,7 +54,10 @@ export function deriveStoredThreadTitle(raw: string | undefined): string {
   return firstLine || "New thread";
 }
 
-export function deriveThreadTitle(raw: string | undefined, maxChars: number = THREAD_TITLE_MAX_CHARS): string {
+export function deriveThreadTitle(
+  raw: string | undefined,
+  maxChars: number = THREAD_TITLE_MAX_CHARS
+): string {
   const firstLine = deriveStoredThreadTitle(raw);
   if (firstLine === "New thread") return firstLine;
   if (firstLine.length <= maxChars) return firstLine;
@@ -287,17 +301,13 @@ export function resolveThreadsDir(): string {
   let resolvedDir = process.env.THREADS_DIR;
   if (!resolvedDir) {
     const candidates = [
-      process.env.WORKSPACE_DIR
-        ? path.resolve(process.env.WORKSPACE_DIR, ".agent/threads")
-        : null,
-      fs.existsSync("/workspace")
-        ? path.resolve("/workspace/.agent/threads")
-        : null,
+      process.env.WORKSPACE_DIR ? path.resolve(process.env.WORKSPACE_DIR, ".agent/threads") : null,
+      fs.existsSync("/workspace") ? path.resolve("/workspace/.agent/threads") : null,
       fs.existsSync(path.resolve(process.cwd(), "../workspace"))
         ? path.resolve(process.cwd(), "../workspace/.agent/threads")
         : null,
       path.resolve(process.cwd(), ".agent/threads"),
-      path.resolve("/tmp/.agent/threads")
+      path.resolve("/tmp/.agent/threads"),
     ].filter(Boolean) as string[];
 
     for (const dir of candidates) {
@@ -336,11 +346,14 @@ export interface ActiveTurnInfo {
 }
 
 const activeTurnRegistry: Map<string, ActiveTurnInfo> =
-  g.__sandboxActiveTurnRegistry || (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
+  g.__sandboxActiveTurnRegistry ||
+  (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
 const activeTurnAbortControllers: Map<string, AbortController> =
-  g.__sandboxActiveTurnAbortControllers || (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
+  g.__sandboxActiveTurnAbortControllers ||
+  (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
 const activeRoundAbortControllers: Map<string, AbortController> =
-  g.__sandboxActiveRoundAbortControllers || (g.__sandboxActiveRoundAbortControllers = new Map<string, AbortController>());
+  g.__sandboxActiveRoundAbortControllers ||
+  (g.__sandboxActiveRoundAbortControllers = new Map<string, AbortController>());
 const deletedThreadIds: Set<string> =
   g.__sandboxDeletedThreadIds || (g.__sandboxDeletedThreadIds = new Set<string>());
 
@@ -391,7 +404,7 @@ export function markTurnActive(threadId: string, startedAtIso?: string): void {
     activeTurnRegistry.set(threadId, {
       threadId,
       startedAt: startedAtIso ?? new Date().toISOString(),
-      status: "streaming"
+      status: "streaming",
     });
   }
 }
@@ -416,8 +429,12 @@ export class ThreadStore {
         fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
     }
-    try { fs.chmodSync(path.dirname(this.threadsDir), 0o770); } catch {}
-    try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
+    try {
+      fs.chmodSync(path.dirname(this.threadsDir), 0o770);
+    } catch {}
+    try {
+      fs.chmodSync(this.threadsDir, 0o770);
+    } catch {}
     this.startSupervisorSweep();
   }
 
@@ -443,7 +460,10 @@ export class ThreadStore {
     } catch {}
     pending.push(trimmed);
     try {
-      fs.writeFileSync(steerFile, JSON.stringify(pending, null, 2), { encoding: "utf8", mode: 0o660 });
+      fs.writeFileSync(steerFile, JSON.stringify(pending, null, 2), {
+        encoding: "utf8",
+        mode: 0o660,
+      });
     } catch {}
     return pending.length;
   }
@@ -491,7 +511,9 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
-      try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
+      try {
+        fs.chmodSync(this.threadsDir, 0o770);
+      } catch {}
     }
 
     const files = fs.readdirSync(this.threadsDir).filter((f) => f.endsWith(".json"));
@@ -521,7 +543,7 @@ export class ThreadStore {
           criticRounds: 1,
           testsPassed: 4,
           testsFailed: 0,
-          diffSummary: "Tokens refactored to M3 design tokens"
+          diffSummary: "Tokens refactored to M3 design tokens",
         },
         {
           id: "m2",
@@ -533,7 +555,7 @@ export class ThreadStore {
           criticRounds: 1,
           testsPassed: 6,
           testsFailed: 0,
-          diffSummary: "Updated components with Material You styling"
+          diffSummary: "Updated components with Material You styling",
         },
         {
           id: "m3",
@@ -542,28 +564,28 @@ export class ThreadStore {
           acceptanceCriteria: [{ id: "ac3", assertion: "Contrast and layout pass accessibility" }],
           status: "pending",
           builderIterations: 0,
-          criticRounds: 0
-        }
+          criticRounds: 0,
+        },
       ],
       journal: [
         {
           timestamp: new Date(now - 1000 * 60 * 15).toISOString(),
           role: "builder",
-          message: "Analyzing config dependencies... ✨"
+          message: "Analyzing config dependencies... ✨",
         },
         {
           timestamp: new Date(now - 1000 * 60 * 10).toISOString(),
           role: "builder",
-          message: "Validating theme tokens... ✨"
+          message: "Validating theme tokens... ✨",
         },
         {
           timestamp: new Date(now - 1000 * 60 * 2).toISOString(),
           role: "builder",
-          message: "Reconciling M3 color scheme... ✨"
-        }
+          message: "Reconciling M3 color scheme... ✨",
+        },
       ],
       checkpoints: [],
-      ambiguityFlags: []
+      ambiguityFlags: [],
     };
 
     try {
@@ -587,10 +609,11 @@ export class ThreadStore {
         {
           id: "msg-1",
           role: "user",
-          content: "Let's rebuild the settings experience using Material 3. Keep it clean, add the migration checklist and a way to stop the run.",
-          timestamp: "Today · 10:42 AM"
-        }
-      ]
+          content:
+            "Let's rebuild the settings experience using Material 3. Keep it clean, add the migration checklist and a way to stop the run.",
+          timestamp: "Today · 10:42 AM",
+        },
+      ],
     };
 
     const thread2: Thread = {
@@ -607,13 +630,15 @@ export class ThreadStore {
           id: "msg-c1",
           role: "user",
           content: "How does the critic decide to approve?",
-          timestamp: "Today · 8:42 AM"
+          timestamp: "Today · 8:42 AM",
         },
         {
           id: "msg-c2",
           role: "assistant",
-          thought: "Checking critic diff acceptance criteria and synthetic marker checks in workerPool.ts...",
-          content: "The critic checks the diff against each acceptance criterion, then verifies no synthetic markers exist. If the model is unreachable it abstains instead of approving.",
+          thought:
+            "Checking critic diff acceptance criteria and synthetic marker checks in workerPool.ts...",
+          content:
+            "The critic checks the diff against each acceptance criterion, then verifies no synthetic markers exist. If the model is unreachable it abstains instead of approving.",
           timestamp: "Today · 8:43 AM",
           traces: [
             {
@@ -621,11 +646,11 @@ export class ThreadStore {
               args: { path: "workerPool.ts:342" },
               result: "Diff verified against acceptance criteria; no synthetic markers found",
               durationMs: 45,
-              timestamp: new Date(now - 1000 * 60 * 60 * 2).toISOString()
-            }
-          ]
-        }
-      ]
+              timestamp: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
+            },
+          ],
+        },
+      ],
     };
 
     const thread3: Thread = {
@@ -642,16 +667,16 @@ export class ThreadStore {
           id: "msg-q1",
           role: "user",
           content: "Run vector recall evaluation against Qdrant collection",
-          timestamp: "Yesterday"
+          timestamp: "Yesterday",
         },
         {
           id: "msg-q2",
           role: "assistant",
           content: "Evaluation run stopped after 14 iterations.",
           isStopped: true,
-          timestamp: "Yesterday"
-        }
-      ]
+          timestamp: "Yesterday",
+        },
+      ],
     };
 
     this.saveThread(thread1);
@@ -796,7 +821,11 @@ export class ThreadStore {
       changed = true;
       if (thread.messages && thread.messages.length > 0) {
         const lastMsg = thread.messages[thread.messages.length - 1];
-        if (lastMsg.role === "assistant" && !lastMsg.content.includes("Stopped") && !lastMsg.content.includes("Paused")) {
+        if (
+          lastMsg.role === "assistant" &&
+          !lastMsg.content.includes("Stopped") &&
+          !lastMsg.content.includes("Paused")
+        ) {
           lastMsg.isStopped = !isTaskPaused;
         }
       }
@@ -916,17 +945,22 @@ export class ThreadStore {
                 id: `msg-${Date.now()}-user`,
                 role: "user",
                 content: task.goal,
-                timestamp: task.startedAt || new Date().toISOString()
+                timestamp: task.startedAt || new Date().toISOString(),
               },
               {
                 id: `msg-${Date.now()}-assistant`,
                 role: "assistant",
-                content: honestStatus === "completed" ? "Task completed successfully." : (honestStatus === "stopped" ? "Task stopped." : "Task in progress."),
+                content:
+                  honestStatus === "completed"
+                    ? "Task completed successfully."
+                    : honestStatus === "stopped"
+                      ? "Task stopped."
+                      : "Task in progress.",
                 timestamp: task.updatedAt || new Date().toISOString(),
                 taskId: task.taskId,
-                isStopped: honestStatus === "stopped"
-              }
-            ]
+                isStopped: honestStatus === "stopped",
+              },
+            ],
           };
           threads.push(newThread);
           this.saveThread(newThread);
@@ -936,12 +970,16 @@ export class ThreadStore {
 
     // Sort descending by updatedAt
     return threads.sort(
-      (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt).getTime() -
+        new Date(a.updatedAt || a.createdAt).getTime()
     );
   }
 
   private get summaryCache(): Map<string, { mtimeMs: number; summary: ThreadSummary }> {
-    const g = globalThis as unknown as { __lasSummaryCache?: Map<string, Map<string, { mtimeMs: number; summary: ThreadSummary }>> };
+    const g = globalThis as unknown as {
+      __lasSummaryCache?: Map<string, Map<string, { mtimeMs: number; summary: ThreadSummary }>>;
+    };
     if (!g.__lasSummaryCache) {
       g.__lasSummaryCache = new Map();
     }
@@ -1028,7 +1066,11 @@ export class ThreadStore {
       await this.ensureSeeded();
       await this.loadSummaryIndex();
       const files = (await fs.promises.readdir(this.threadsDir)).filter(
-        (f) => f.endsWith(".json") && !f.startsWith(".") && f !== ".summaries-index.json" && !f.endsWith(".steer.json")
+        (f) =>
+          f.endsWith(".json") &&
+          !f.startsWith(".") &&
+          f !== ".summaries-index.json" &&
+          !f.endsWith(".steer.json")
       );
       const summaries: ThreadSummary[] = [];
       const seen = new Set<string>();
@@ -1043,7 +1085,11 @@ export class ThreadStore {
           continue;
         }
         const cached = this.summaryCache.get(file);
-        if (cached && cached.mtimeMs === stat.mtimeMs && typeof cached.summary.hasStreamingMessage === "boolean") {
+        if (
+          cached &&
+          cached.mtimeMs === stat.mtimeMs &&
+          typeof cached.summary.hasStreamingMessage === "boolean"
+        ) {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
         }
@@ -1053,9 +1099,12 @@ export class ThreadStore {
           const msgs = Array.isArray(t.messages) ? t.messages : [];
           const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
           const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
-          const lastMessagePreview = rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
+          const lastMessagePreview =
+            rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
           const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
-          const hasStreamingMessage = msgs.some((m) => m.role === "assistant" && m.status === "streaming");
+          const hasStreamingMessage = msgs.some(
+            (m) => m.role === "assistant" && m.status === "streaming"
+          );
           const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
           const title =
             t.title && t.title !== "New session"
@@ -1072,8 +1121,12 @@ export class ThreadStore {
             ...(t.model !== undefined ? { model: t.model } : {}),
             ...(t.reasoningEffort !== undefined ? { reasoningEffort: t.reasoningEffort } : {}),
             ...(t.taskId !== undefined ? { taskId: t.taskId } : {}),
-            ...((t as { error?: string }).error !== undefined ? { error: (t as { error?: string }).error } : {}),
-            ...((t as { parkedReason?: string }).parkedReason !== undefined ? { parkedReason: (t as { parkedReason?: string }).parkedReason } : {}),
+            ...((t as { error?: string }).error !== undefined
+              ? { error: (t as { error?: string }).error }
+              : {}),
+            ...((t as { parkedReason?: string }).parkedReason !== undefined
+              ? { parkedReason: (t as { parkedReason?: string }).parkedReason }
+              : {}),
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,
@@ -1232,7 +1285,9 @@ export class ThreadStore {
       try {
         fs.mkdirSync(this.threadsDir, { recursive: true, mode: 0o770 });
       } catch {}
-      try { fs.chmodSync(this.threadsDir, 0o770); } catch {}
+      try {
+        fs.chmodSync(this.threadsDir, 0o770);
+      } catch {}
     }
     thread.updatedAt = new Date().toISOString();
     // TOKEN ECONOMICS (a): the per-job rollup rides on the thread record so the
@@ -1240,19 +1295,36 @@ export class ThreadStore {
     // save from the per-turn rollups recorded on assistant messages.
     thread.tokenEconomics = computeThreadTokenEconomics(thread);
     const targetFile = this.getFilePath(thread.id);
-    const tempFile = path.join(this.threadsDir, `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
+    const tempFile = path.join(
+      this.threadsDir,
+      `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
     try {
-      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
-      try { fs.chmodSync(tempFile, 0o660); } catch {}
+      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), {
+        encoding: "utf8",
+        mode: 0o660,
+      });
+      try {
+        fs.chmodSync(tempFile, 0o660);
+      } catch {}
       fs.renameSync(tempFile, targetFile);
-      try { fs.chmodSync(targetFile, 0o660); } catch {}
+      try {
+        fs.chmodSync(targetFile, 0o660);
+      } catch {}
     } catch (err) {
       if (fs.existsSync(tempFile)) {
-        try { fs.unlinkSync(tempFile); } catch {}
+        try {
+          fs.unlinkSync(tempFile);
+        } catch {}
       }
       // Fallback to direct write if rename fails across partitions
-      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), { encoding: "utf8", mode: 0o660 });
-      try { fs.chmodSync(targetFile, 0o660); } catch {}
+      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), {
+        encoding: "utf8",
+        mode: 0o660,
+      });
+      try {
+        fs.chmodSync(targetFile, 0o660);
+      } catch {}
     }
   }
 
@@ -1264,29 +1336,30 @@ export class ThreadStore {
     initialPrompt?: string;
     attachments?: ThreadAttachment[];
     taskId?: string;
-  error?: string;
-  parkedReason?: string;
+    error?: string;
+    parkedReason?: string;
     scope?: TaskScope;
     isTest?: boolean;
-  isSubagent?: boolean;
-  isScheduled?: boolean;
-  /** In-app supervisor: reason the turn was honestly ended after stalling. */
-  stalledReason?: string;
-  /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
-  needsAttention?: boolean;
-  /** In-app supervisor: number of auto-resumes issued for this thread/job. */
-  autoResumeCount?: number;
-  /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
-  resumedFromThreadId?: string;
-  /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
-  resumedToThreadId?: string;
+    isSubagent?: boolean;
+    isScheduled?: boolean;
+    /** In-app supervisor: reason the turn was honestly ended after stalling. */
+    stalledReason?: string;
+    /** In-app supervisor: true when auto-resume cap is reached or no banked state exists. */
+    needsAttention?: boolean;
+    /** In-app supervisor: number of auto-resumes issued for this thread/job. */
+    autoResumeCount?: number;
+    /** In-app supervisor: source thread ID when this thread was created by auto-resume. */
+    resumedFromThreadId?: string;
+    /** In-app supervisor: fresh thread ID created when this stalled thread was auto-resumed. */
+    resumedToThreadId?: string;
     hostAccess?: boolean;
     chunkBudget?: ChunkBudgetConfig | null;
   }): Thread {
     const threadId = params.id || `thread-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     deletedThreadIds.delete(threadId);
     const title = params.title || deriveThreadTitle(params.initialPrompt);
-    const hostAccess = params.hostAccess !== undefined ? params.hostAccess : getHostSettings().hostAccessEnabled;
+    const hostAccess =
+      params.hostAccess !== undefined ? params.hostAccess : getHostSettings().hostAccessEnabled;
     const thread: Thread = {
       id: threadId,
       title,
@@ -1309,10 +1382,10 @@ export class ThreadStore {
               role: "user",
               content: params.initialPrompt,
               attachments: params.attachments,
-              timestamp: new Date().toISOString()
-            }
+              timestamp: new Date().toISOString(),
+            },
           ]
-        : []
+        : [],
     };
 
     this.saveThread(thread);
@@ -1340,7 +1413,7 @@ export class ThreadStore {
       ) as Partial<ThreadMessage>;
       thread.messages[existingIdx] = {
         ...thread.messages[existingIdx],
-        ...cleanMessage
+        ...cleanMessage,
       };
     } else if (
       message.role === "assistant" &&
@@ -1461,7 +1534,7 @@ export class ThreadStore {
             task.journal.push({
               timestamp: new Date().toISOString(),
               role: "supervisor",
-              message: "Run cancelled upon thread deletion."
+              message: "Run cancelled upon thread deletion.",
             });
             this.supervisor.saveCheckpoint(task);
           }
@@ -1502,7 +1575,7 @@ export class ThreadStore {
     const sidecarDirs = Array.from(
       new Set([
         this.threadsDir,
-        path.dirname(this.supervisor.getCheckpointFilePath(taskId || threadId))
+        path.dirname(this.supervisor.getCheckpointFilePath(taskId || threadId)),
       ])
     );
     const sidecarIds = Array.from(new Set([threadId, ...(taskId ? [taskId] : [])]));
@@ -1527,14 +1600,16 @@ export class ThreadStore {
     return deletedAny || isGhostTaskThread || Boolean(thread);
   }
 
-  buildModelMessages(thread: Thread): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  buildModelMessages(
+    thread: Thread
+  ): Array<{ role: "system" | "user" | "assistant"; content: string }> {
     const rawMessages = (thread.messages || []).filter(
       (m) => !(m.role === "assistant" && m.status === "streaming" && !m.content)
     );
     if (!thread.compaction || !thread.compaction.throughMessageId) {
       return rawMessages.map((m) => ({
         role: m.role,
-        content: m.content
+        content: m.content,
       }));
     }
 
@@ -1544,7 +1619,7 @@ export class ThreadStore {
       // If boundary message id is not found, fallback to all messages
       return rawMessages.map((m) => ({
         role: m.role,
-        content: m.content
+        content: m.content,
       }));
     }
 
@@ -1559,13 +1634,13 @@ export class ThreadStore {
 
     result.push({
       role: "assistant",
-      content: summary
+      content: summary,
     });
 
     for (const m of after) {
       result.push({
         role: m.role,
-        content: m.content
+        content: m.content,
       });
     }
 
@@ -1584,7 +1659,7 @@ export class ThreadStore {
       summary,
       compactedAt: new Date().toISOString(),
       tokensBefore,
-      tokensAfter
+      tokensAfter,
     };
     this.saveThread(thread);
     return thread;
@@ -1615,7 +1690,7 @@ export class ThreadStore {
         reason: "insufficient_messages",
         tokensBefore,
         tokensAfter: tokensBefore,
-        thread
+        thread,
       };
     }
 
@@ -1625,7 +1700,8 @@ export class ThreadStore {
       ? messages.findIndex((m) => m.id === thread.compaction!.throughMessageId)
       : -1;
 
-    const uncompactedStartIdx = prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
+    const uncompactedStartIdx =
+      prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
     const endIdx = Math.max(baseStartIdx, messages.length - 4);
 
     if (endIdx <= uncompactedStartIdx) {
@@ -1636,7 +1712,7 @@ export class ThreadStore {
         tokensAfter: tokensBefore,
         summary: thread.compaction?.summary,
         throughMessageId: thread.compaction?.throughMessageId,
-        thread
+        thread,
       };
     }
 
@@ -1649,7 +1725,7 @@ export class ThreadStore {
         tokensAfter: tokensBefore,
         summary: thread.compaction?.summary,
         throughMessageId: thread.compaction?.throughMessageId,
-        thread
+        thread,
       };
     }
 
@@ -1664,7 +1740,7 @@ export class ThreadStore {
     const candidateModelMessages = [
       ...(hasSystem ? [{ role: "system" as const, content: messages[0].content }] : []),
       { role: "assistant" as const, content: summary },
-      ...messages.slice(endIdx).map((m) => ({ role: m.role, content: m.content }))
+      ...messages.slice(endIdx).map((m) => ({ role: m.role, content: m.content })),
     ];
 
     const candidateTokensAfter = estimateTokens(candidateModelMessages);
@@ -1677,7 +1753,7 @@ export class ThreadStore {
         tokensAfter: tokensBefore,
         summary: thread.compaction?.summary,
         throughMessageId: thread.compaction?.throughMessageId,
-        thread
+        thread,
       };
     }
 
@@ -1695,13 +1771,17 @@ export class ThreadStore {
       tokensAfter: candidateTokensAfter,
       summary,
       throughMessageId: throughMessage.id,
-      thread
+      thread,
     };
   }
 
   async compactThreadIncrementalHybrid(
     thread: Thread,
-    opts: { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>; inactivityMs?: number; totalDeadlineMs?: number }
+    opts: {
+      summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+      inactivityMs?: number;
+      totalDeadlineMs?: number;
+    }
   ): Promise<{
     noop: boolean;
     reason?: string;
@@ -1716,17 +1796,32 @@ export class ThreadStore {
     const messages = thread.messages || [];
     const tokensBefore = estimateTokens(this.buildModelMessages(thread));
     if (messages.length <= 4) {
-      return { noop: true, reason: "insufficient_messages", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+      return {
+        noop: true,
+        reason: "insufficient_messages",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        modelSummaryUsed: false,
+        thread,
+      };
     }
     const hasSystem = messages[0]?.role === "system";
     const baseStartIdx = hasSystem ? 1 : 0;
     const prevBoundaryIdx = thread.compaction?.throughMessageId
       ? messages.findIndex((m) => m.id === thread.compaction?.throughMessageId)
       : -1;
-    const uncompactedStartIdx = prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
+    const uncompactedStartIdx =
+      prevBoundaryIdx >= baseStartIdx ? prevBoundaryIdx + 1 : baseStartIdx;
     const endIdx = Math.max(baseStartIdx, messages.length - 4);
     if (endIdx <= uncompactedStartIdx) {
-      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+      return {
+        noop: true,
+        reason: "already_compacted",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        modelSummaryUsed: false,
+        thread,
+      };
     }
     const result = await runHybridCompaction(messages, {
       strategy: "hybrid",
@@ -1735,7 +1830,14 @@ export class ThreadStore {
       totalDeadlineMs: opts.totalDeadlineMs,
     });
     if (!result.compacted) {
-      return { noop: true, reason: "already_compacted", tokensBefore, tokensAfter: tokensBefore, modelSummaryUsed: false, thread };
+      return {
+        noop: true,
+        reason: "already_compacted",
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        modelSummaryUsed: false,
+        thread,
+      };
     }
     const throughMessage = messages[endIdx - 1];
     this.applyCompactionBoundary(
@@ -1775,7 +1877,9 @@ export class ThreadStore {
     thread: Thread | null,
     clientMessages: any[],
     maxBudgetTokens: number,
-    opts: TurnStartCompactionOptions & { summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string> }
+    opts: TurnStartCompactionOptions & {
+      summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
+    }
   ): Promise<TurnConversationPreparation>;
   prepareTurnConversationMessages(
     thread: Thread | null,
@@ -1802,7 +1906,7 @@ export class ThreadStore {
             id: lastClientUser.id || `msg-${Date.now()}-u`,
             role: "user",
             content: lastClientUser.content,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           };
           thread.messages.push(newMsg);
           this.saveThread(thread);
@@ -1835,7 +1939,7 @@ export class ThreadStore {
           return this.compactThreadIncrementalHybrid(thread, {
             summarize,
             inactivityMs: opts.inactivityMs,
-            totalDeadlineMs: opts.totalDeadlineMs
+            totalDeadlineMs: opts.totalDeadlineMs,
           }).then((hybridResult) => {
             if (!hybridResult.noop) {
               return {
@@ -1844,7 +1948,7 @@ export class ThreadStore {
                 tokensBeforeCompaction: hybridResult.tokensBefore,
                 tokensAfterCompaction: hybridResult.tokensAfter,
                 modelSummaryUsed: hybridResult.modelSummaryUsed,
-                fallbackReason: hybridResult.fallbackReason
+                fallbackReason: hybridResult.fallbackReason,
               };
             }
             return { messages: this.buildModelMessages(thread), compactedThisTurn: false };
@@ -1857,20 +1961,20 @@ export class ThreadStore {
             messages: modelView,
             compactedThisTurn: true,
             tokensBeforeCompaction: compResult.tokensBefore,
-            tokensAfterCompaction: compResult.tokensAfter
+            tokensAfterCompaction: compResult.tokensAfter,
           };
         }
       }
 
       return {
         messages: modelView,
-        compactedThisTurn: false
+        compactedThisTurn: false,
       };
     }
 
     return {
       messages: [...(clientMessages || [])],
-      compactedThisTurn: false
+      compactedThisTurn: false,
     };
   }
 

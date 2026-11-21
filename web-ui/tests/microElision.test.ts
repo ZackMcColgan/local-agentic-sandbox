@@ -7,7 +7,7 @@ import {
   MICRO_ELISION_MIN_RESULT_CHARS,
   applyMicroElision,
   buildToolResultStub,
-  type ElisionMeta
+  type ElisionMeta,
 } from "../lib/microElision";
 import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "../lib/contextBudget";
 
@@ -38,7 +38,7 @@ function filler(chars: number): string {
 function buildToolConversation(count: number, size: number): any[] {
   const messages: any[] = [
     { role: "system", content: "You are a test agent." },
-    { role: "user", content: "Read a bunch of files and summarize." }
+    { role: "user", content: "Read a bunch of files and summarize." },
   ];
   for (let i = 0; i < count; i++) {
     messages.push({
@@ -54,16 +54,16 @@ function buildToolConversation(count: number, size: number): any[] {
               i % 2 === 0
                 ? { path: `src/module-${i}.ts` }
                 : { command: `npm run test:gate -- --since=round-${i}` }
-            )
-          }
-        }
-      ]
+            ),
+          },
+        },
+      ],
     });
     messages.push({
       role: "tool",
       name: i % 2 === 0 ? "workspace_read_file" : "workspace_run_command",
       tool_call_id: `call_${i}`,
-      content: JSON.stringify({ success: true, output: filler(size) })
+      content: JSON.stringify({ success: true, output: filler(size) }),
     });
   }
   return messages;
@@ -83,15 +83,25 @@ describe("Micro-elision (c): stubbing superseded results below the fit trigger",
   it("an old tool result is stubbed while the turn is still small (well under the 85K fit trigger)", () => {
     const messages = buildToolConversation(8, 6000);
     const tokens = estimateTokens(messages);
-    assert.ok(tokens < FIT_TRIGGER_TOKENS, `fixture must sit far below the 85K trigger (got ${tokens})`);
+    assert.ok(
+      tokens < FIT_TRIGGER_TOKENS,
+      `fixture must sit far below the 85K trigger (got ${tokens})`
+    );
 
     const { stubbed } = applyMicroElision(messages, 7);
     assert.ok(stubbed > 0, "superseded results must be stubbed even with no fit trigger fired");
 
     const toolMsgs = messages.filter((m) => m.role === "tool");
-    assert.equal(stubbed, toolMsgs.length - MICRO_ELISION_RECENT_WINDOW, "only results past the recent window are stubbed");
+    assert.equal(
+      stubbed,
+      toolMsgs.length - MICRO_ELISION_RECENT_WINDOW,
+      "only results past the recent window are stubbed"
+    );
     assert.ok(toolMsgs[0].elided === true, "the oldest result must be marked elided");
-    assert.ok(toolMsgs[0].content.startsWith("[Micro-elision:"), "the stub must be self-describing");
+    assert.ok(
+      toolMsgs[0].content.startsWith("[Micro-elision:"),
+      "the stub must be self-describing"
+    );
   });
 
   it("results inside the recent window are byte-identical to the un-elided content", () => {
@@ -132,8 +142,14 @@ describe("Micro-elision (c): stub metadata", () => {
     assert.equal(oldest.elidedFrom.tool, "workspace_read_file");
     assert.equal(oldest.elidedFrom.target, "src/module-0.ts");
     assert.equal(oldest.elidedFrom.targetKind, "path");
-    assert.equal(oldest.elidedFrom.originalChars, oldest.elidedFrom.originalContent?.length ?? oldest.elidedFrom.originalChars);
-    assert.ok(oldest.elidedFrom.originalChars > MICRO_ELISION_MIN_RESULT_CHARS, "recorded size must be the real original size");
+    assert.equal(
+      oldest.elidedFrom.originalChars,
+      oldest.elidedFrom.originalContent?.length ?? oldest.elidedFrom.originalChars
+    );
+    assert.ok(
+      oldest.elidedFrom.originalChars > MICRO_ELISION_MIN_RESULT_CHARS,
+      "recorded size must be the real original size"
+    );
     assert.ok(typeof oldest.elidedFrom.round === "number");
   });
 
@@ -158,7 +174,7 @@ describe("Micro-elision (c): stub metadata", () => {
       round: 4,
       target: "docs/queue-steer-runlog.md",
       targetKind: "path",
-      originalChars: 83235
+      originalChars: 83235,
     };
     const stub = buildToolResultStub(meta);
     assert.match(stub, /^\[Micro-elision:/);
@@ -166,7 +182,11 @@ describe("Micro-elision (c): stub metadata", () => {
     assert.match(stub, /round=4/);
     assert.match(stub, /target=docs\/queue-steer-runlog\.md/);
     assert.match(stub, /originalChars=83235/);
-    assert.match(stub, /thread trace record/, "stub must point at the audit copy in the thread record");
+    assert.match(
+      stub,
+      /thread trace record/,
+      "stub must point at the audit copy in the thread record"
+    );
   });
 });
 
@@ -183,19 +203,31 @@ describe("Micro-elision (c): idempotence across rounds", () => {
     messages.push({
       role: "assistant",
       content: "",
-      tool_calls: [{ id: "call_8", type: "function", function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/module-8.ts" }) } }]
+      tool_calls: [
+        {
+          id: "call_8",
+          type: "function",
+          function: {
+            name: "workspace_read_file",
+            arguments: JSON.stringify({ path: "src/module-8.ts" }),
+          },
+        },
+      ],
     });
     messages.push({
       role: "tool",
       name: "workspace_read_file",
       tool_call_id: "call_8",
-      content: JSON.stringify({ success: true, output: filler(6000) })
+      content: JSON.stringify({ success: true, output: filler(6000) }),
     });
     applyMicroElision(messages, 8);
 
     for (const stub of stubContents) {
       const found = messages.find((m) => m.role === "tool" && m.content === stub);
-      assert.ok(found, "an existing stub must survive later rounds unchanged (never restored to full size)");
+      assert.ok(
+        found,
+        "an existing stub must survive later rounds unchanged (never restored to full size)"
+      );
       assert.ok(found.elided === true);
     }
   });
@@ -217,25 +249,33 @@ describe("Micro-elision (c): idempotence across rounds", () => {
     const { stubbed } = applyMicroElision(messages, 7);
     assert.ok(stubbed > 0);
     assert.ok(oldest.elided === true, "the changed result must be re-stubbed");
-    assert.ok(oldest.content.startsWith("[Micro-elision:"), "the changed result must never be emitted full-size");
+    assert.ok(
+      oldest.content.startsWith("[Micro-elision:"),
+      "the changed result must never be emitted full-size"
+    );
     assert.match(oldest.content, /originalChars=9\d{3}/, "fresh stub must carry the NEW size");
   });
 });
 
 describe("Micro-elision (c): chat route wiring (source assertions)", () => {
-  const routeSrc = fs.readFileSync(
-    path.resolve(__dirname, "../app/api/chat/route.ts"),
-    "utf8"
-  );
+  const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
 
   it("route imports the micro-elision module and applies it per round, independent of the fit trigger", () => {
     assert.match(routeSrc, /from "@\/lib\/microElision"/, "route must import lib/microElision");
-    assert.match(routeSrc, /applyMicroElision\(conversationMessages/, "route must elide the conversation before dispatch");
+    assert.match(
+      routeSrc,
+      /applyMicroElision\(conversationMessages/,
+      "route must elide the conversation before dispatch"
+    );
     // The elision call must NOT be gated on the compaction/fit branch: it runs
     // unconditionally at the round boundary.
     const elisionIdx = routeSrc.indexOf("applyMicroElision(conversationMessages");
     assert.ok(elisionIdx > 0);
     const window = routeSrc.slice(Math.max(0, elisionIdx - 400), elisionIdx + 200);
-    assert.doesNotMatch(window, /if\s*\(\s*compaction\.compacted\s*\)/, "elision must not wait for the fit trigger");
+    assert.doesNotMatch(
+      window,
+      /if\s*\(\s*compaction\.compacted\s*\)/,
+      "elision must not wait for the fit trigger"
+    );
   });
 });

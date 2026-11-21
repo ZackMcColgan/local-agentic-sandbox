@@ -12,7 +12,7 @@ import {
   fetchLoadedModels,
   enforceResidency,
   keepAliveFor,
-  unloadAllModelsWithResult
+  unloadAllModelsWithResult,
 } from "../lib/subagents/residency";
 import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
@@ -20,15 +20,12 @@ import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 import {
   BuilderWorker,
   createBuilderWorker,
-  type BuilderResult
+  type BuilderResult,
 } from "../lib/subagents/workerPool";
 import type { Milestone } from "../lib/subagents/types";
 
 // 3. LLM Client thinking budget
-import {
-  createOllamaGenerate,
-  getThinkingBudget
-} from "../lib/subagents/llmClient";
+import { createOllamaGenerate, getThinkingBudget } from "../lib/subagents/llmClient";
 
 describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite", () => {
   const savedEnv = { ...process.env };
@@ -43,7 +40,11 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
 
   describe("Task 1: VRAM Residency & Non-Eviction Policy (Override 2)", () => {
     it("PINNED_KEEP_ALIVE prefers -1 for indefinite VRAM residency", () => {
-      assert.equal(PINNED_KEEP_ALIVE, -1, "PINNED_KEEP_ALIVE must prefer -1 (indefinite residency)");
+      assert.equal(
+        PINNED_KEEP_ALIVE,
+        -1,
+        "PINNED_KEEP_ALIVE must prefer -1 (indefinite residency)"
+      );
     });
 
     it("fetchModelSizes normalizes model names stripping :latest and indexes by both", async () => {
@@ -52,8 +53,8 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
           JSON.stringify({
             models: [
               { name: "swift-15-27b-mtp:latest", size: 18_000_000_000 },
-              { name: "gemma4:e4b", size: 4_000_000_000 }
-            ]
+              { name: "gemma4:e4b", size: 4_000_000_000 },
+            ],
           }),
           { status: 200 }
         );
@@ -69,23 +70,25 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       const mockFetch: typeof fetch = async (url) => {
         return new Response(
           JSON.stringify({
-            models: [
-              { name: "swift-15-27b-mtp:latest", size_vram: 18_000_000_000 }
-            ]
+            models: [{ name: "swift-15-27b-mtp:latest", size_vram: 18_000_000_000 }],
           }),
           { status: 200 }
         );
       };
 
       const loaded = await fetchLoadedModels("http://mock-ollama", mockFetch);
-      assert.ok(loaded.some((m) => m.name === "swift-15-27b-mtp" || (m as any).baseName === "swift-15-27b-mtp"));
+      assert.ok(
+        loaded.some(
+          (m) => m.name === "swift-15-27b-mtp" || (m as any).baseName === "swift-15-27b-mtp"
+        )
+      );
     });
 
     it("planResidency always pins DEFAULT_PRIMARY_MODEL even if sizes lookup was skipped or unknown", () => {
       const plan = planResidency({
         roster: { builder: DEFAULT_PRIMARY_MODEL },
         modelSizes: {}, // Empty sizes map (lookup skipped or unindexed)
-        vramBudgetBytes: 24 * 1024 ** 3
+        vramBudgetBytes: 24 * 1024 ** 3,
       });
 
       assert.ok(
@@ -96,7 +99,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
 
     it("Behavioral assertion: swift-15-27b-mtp is not evicted across consecutive prompts in /api/ps", async () => {
       let residentModels: { name: string; size_vram: number }[] = [
-        { name: "swift-15-27b-mtp", size_vram: 18_000_000_000 }
+        { name: "swift-15-27b-mtp", size_vram: 18_000_000_000 },
       ];
 
       const mockFetch: typeof fetch = async (url, init) => {
@@ -115,7 +118,9 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
               residentModels = [{ name: body.model, size_vram: 4_000_000_000 }];
             }
           }
-          return new Response(JSON.stringify({ response: "ok", message: { content: "ok" } }), { status: 200 });
+          return new Response(JSON.stringify({ response: "ok", message: { content: "ok" } }), {
+            status: 200,
+          });
         }
         return new Response("{}", { status: 200 });
       };
@@ -128,29 +133,37 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       const plan = planResidency({
         roster: { builder: "swift-15-27b-mtp" },
         modelSizes: { "swift-15-27b-mtp": 18_000_000_000 },
-        vramBudgetBytes: 24 * 1024 ** 3
+        vramBudgetBytes: 24 * 1024 ** 3,
       });
       await enforceResidency(plan, "http://mock-ollama", mockFetch);
 
       // Verify still resident
       const afterPrompt1 = await fetchLoadedModels("http://mock-ollama", mockFetch);
-      assert.ok(afterPrompt1.some((m) => m.name.includes("swift-15-27b-mtp")), "Must be resident after prompt 1");
+      assert.ok(
+        afterPrompt1.some((m) => m.name.includes("swift-15-27b-mtp")),
+        "Must be resident after prompt 1"
+      );
 
       // Consecutive prompt
       await enforceResidency(plan, "http://mock-ollama", mockFetch);
       const afterPrompt2 = await fetchLoadedModels("http://mock-ollama", mockFetch);
-      assert.ok(afterPrompt2.some((m) => m.name.includes("swift-15-27b-mtp")), "Must remain resident after prompt 2");
+      assert.ok(
+        afterPrompt2.some((m) => m.name.includes("swift-15-27b-mtp")),
+        "Must remain resident after prompt 2"
+      );
     });
 
     it("chat/route.ts routes auto mode to DEFAULT_PRIMARY_MODEL directly without gemma4:e4b triage swap", () => {
-      const chatRoutePath = fs.existsSync(path.resolve(process.cwd(), "web-ui/app/api/chat/route.ts"))
+      const chatRoutePath = fs.existsSync(
+        path.resolve(process.cwd(), "web-ui/app/api/chat/route.ts")
+      )
         ? path.resolve(process.cwd(), "web-ui/app/api/chat/route.ts")
         : path.resolve(process.cwd(), "app/api/chat/route.ts");
       const content = fs.readFileSync(chatRoutePath, "utf8");
 
       // Verify no triageComplexity call swapping model in auto mode
       assert.ok(
-        !content.includes('triageComplexityResult = await triageComplexity'),
+        !content.includes("triageComplexityResult = await triageComplexity"),
         "chat/route.ts must not call triageComplexity in auto mode (swaps gemma4:e4b into VRAM)"
       );
 
@@ -227,7 +240,11 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       );
 
       const builder = createBuilderWorker();
-      assert.equal(typeof (builder as any).patchFile, "function", "BuilderWorker must have patchFile method");
+      assert.equal(
+        typeof (builder as any).patchFile,
+        "function",
+        "BuilderWorker must have patchFile method"
+      );
 
       const patchResult = await (builder as any).patchFile(
         filePath,
@@ -248,16 +265,13 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
       fs.writeFileSync(fullPath, `const x = 1;\n`, "utf8");
 
       const builder = createBuilderWorker();
-      await assert.rejects(
-        async () => {
-          await (builder as any).patchFile(
-            filePath,
-            [{ search: 'const nonexistent = 99;', replace: 'const y = 2;' }],
-            { repoRoot: tmpDir }
-          );
-        },
-        /Target text not found|Patch search target not found/
-      );
+      await assert.rejects(async () => {
+        await (builder as any).patchFile(
+          filePath,
+          [{ search: "const nonexistent = 99;", replace: "const y = 2;" }],
+          { repoRoot: tmpDir }
+        );
+      }, /Target text not found|Patch search target not found/);
     });
   });
 
@@ -284,7 +298,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         model: "swift-15-27b-mtp",
         prompt: "write code",
         options: { num_predict: 2048 },
-        reasoningEffort: "fast"
+        reasoningEffort: "fast",
       } as any);
 
       assert.ok(sentOptions, "Ollama request options must be sent");
@@ -303,7 +317,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         return {
           text: "export const x = 1;",
           model: req.model,
-          loadDurationMs: 0
+          loadDurationMs: 0,
         };
       };
 
@@ -318,7 +332,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
           plannedFiles: ["widget.ts"],
           acceptanceCriteria: [],
           builderIterations: 0,
-          criticRounds: 0
+          criticRounds: 0,
         };
 
         await builder.executeMilestoneWork(m, { repoRoot: tmpDir });
@@ -354,10 +368,14 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         plannedFiles: ["lib/a.ts", "lib/b.ts", "lib/c.ts"],
         acceptanceCriteria: [],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
-      assert.equal(typeof (builder as any).resolveTargets, "function", "BuilderWorker must expose resolveTargets");
+      assert.equal(
+        typeof (builder as any).resolveTargets,
+        "function",
+        "BuilderWorker must expose resolveTargets"
+      );
       const targets = (builder as any).resolveTargets(m);
       assert.deepEqual(targets, ["lib/a.ts", "lib/b.ts", "lib/c.ts"]);
     });
@@ -371,7 +389,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         return {
           text: `// Content for ${file}\nexport const name = "${file}";`,
           model: req.model,
-          loadDurationMs: 0
+          loadDurationMs: 0,
         };
       };
 
@@ -384,11 +402,14 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
         plannedFiles: ["lib/core.ts", "lib/utils.ts"],
         acceptanceCriteria: [],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
       const result = await builder.executeMilestoneWork(m, { repoRoot: tmpDir });
-      assert.ok(Array.isArray((result as any).modifiedFiles), "Result must include modifiedFiles array");
+      assert.ok(
+        Array.isArray((result as any).modifiedFiles),
+        "Result must include modifiedFiles array"
+      );
       assert.deepEqual((result as any).modifiedFiles, ["lib/core.ts", "lib/utils.ts"]);
 
       assert.ok(fs.existsSync(path.join(tmpDir, "lib/core.ts")));

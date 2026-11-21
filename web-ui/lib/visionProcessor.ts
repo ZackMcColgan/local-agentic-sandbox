@@ -43,7 +43,9 @@ import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
 export async function extractArchitectureSpec(
   diagram: DiagramInput,
-  llmBaseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  llmBaseUrl: string = process.env.LLM_BASE_URL ||
+    process.env.OLLAMA_BASE_URL ||
+    "http://127.0.0.1:11434",
   visionModel: string = DEFAULT_PRIMARY_MODEL
 ): Promise<ExtractedArchitectureSpec> {
   const startTime = Date.now();
@@ -55,18 +57,18 @@ export async function extractArchitectureSpec(
       messages: [
         {
           role: "system",
-          content: VISION_SYSTEM_PROMPT
+          content: VISION_SYSTEM_PROMPT,
         },
         {
           role: "user",
           content: `Analyze this architecture diagram / draw.io export named '${diagram.name}' and generate the standardized Markdown architecture specification.`,
-          images: [diagram.base64]
-        }
+          images: [diagram.base64],
+        },
       ],
       options: {
         temperature: 0.2,
-        num_ctx: 8192
-      }
+        num_ctx: 8192,
+      },
     });
 
     const markdownSpec = data.message?.content || "[No spec extracted from diagram]";
@@ -79,7 +81,7 @@ export async function extractArchitectureSpec(
       diagramName: diagram.name,
       markdownSpec,
       extractedAt: new Date().toISOString(),
-      modelUsed: visionModel
+      modelUsed: visionModel,
     };
   } catch (err: any) {
     console.warn(`[VisionProcessor] Vision extraction error on '${diagram.name}':`, err.message);
@@ -87,7 +89,7 @@ export async function extractArchitectureSpec(
       diagramName: diagram.name,
       markdownSpec: `### Architecture Diagram: ${diagram.name}\n\n*Note: Automated multimodal diagram ingestion encountered an issue (${err.message}). Proceeding with file metadata.*`,
       extractedAt: new Date().toISOString(),
-      modelUsed: visionModel
+      modelUsed: visionModel,
     };
   }
 }

@@ -12,7 +12,10 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
   let originalThreadsDir: string | undefined;
 
   beforeEach(() => {
-    tmpThreadsDir = path.join(os.tmpdir(), `test-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    tmpThreadsDir = path.join(
+      os.tmpdir(),
+      `test-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    );
     fs.mkdirSync(tmpThreadsDir, { recursive: true, mode: 0o770 });
     originalThreadsDir = process.env.THREADS_DIR;
     process.env.THREADS_DIR = tmpThreadsDir;
@@ -39,7 +42,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         id: "msg-user-1",
         role: "user",
         content: "What is the capital of France?",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
       store.addMessage(thread.id, userMsg);
 
@@ -56,7 +59,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         content: "The capital of",
         thought: "Thinking about France...",
         timestamp: new Date().toISOString(),
-        status: "incomplete"
+        status: "incomplete",
       };
       store.addMessage(thread.id, assistantMsgPartial);
 
@@ -75,7 +78,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         timestamp: new Date().toISOString(),
         status: "completed",
         durationMs: 340,
-        modelUsed: "swift-15-27b-mtp"
+        modelUsed: "swift-15-27b-mtp",
       };
       store.upsertMessage(thread.id, assistantMsgCompleted);
 
@@ -84,7 +87,11 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       assert.equal(data.messages[1].id, "msg-asst-1");
       assert.equal(data.messages[1].content, "The capital of France is Paris.");
       assert.equal(data.messages[1].status, "completed");
-      assert.equal(data.messages[1].thought, "Thinking about France...", "Existing thought should be retained if not overwritten");
+      assert.equal(
+        data.messages[1].thought,
+        "Thinking about France...",
+        "Existing thought should be retained if not overwritten"
+      );
       assert.equal(data.messages[1].durationMs, 340);
       assert.equal(data.messages[1].modelUsed, "swift-15-27b-mtp");
 
@@ -103,21 +110,21 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         role: "assistant",
         content: "Turn completed successfully.",
         timestamp: new Date().toISOString(),
-        status: "completed"
+        status: "completed",
       };
       const msg2: ThreadMessage = {
         id: "msg-incomplete",
         role: "assistant",
         content: "⚠️ [Turn incomplete: Stream aborted or disconnected.]",
         timestamp: new Date().toISOString(),
-        status: "incomplete"
+        status: "incomplete",
       };
       const msg3: ThreadMessage = {
         id: "msg-error",
         role: "assistant",
         content: "⚠️ [Turn error: LLM engine is stopped]",
         timestamp: new Date().toISOString(),
-        status: "error"
+        status: "error",
       };
 
       store.addMessage(thread.id, msg1);
@@ -146,16 +153,31 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       assert.ok(stat.isFile());
 
       // Statically inspect threadStore.ts and route.ts for banned 0777 or 0o777
-      const threadStoreSource = fs.readFileSync(path.resolve(__dirname, "../lib/threads/threadStore.ts"), "utf8");
-      const routeSource = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+      const threadStoreSource = fs.readFileSync(
+        path.resolve(__dirname, "../lib/threads/threadStore.ts"),
+        "utf8"
+      );
+      const routeSource = fs.readFileSync(
+        path.resolve(__dirname, "../app/api/chat/route.ts"),
+        "utf8"
+      );
 
-      assert.ok(!threadStoreSource.includes("0777"), "threadStore.ts must never contain 0777 permissions");
-      assert.ok(!threadStoreSource.includes("0o777"), "threadStore.ts must never contain 0o777 permissions");
+      assert.ok(
+        !threadStoreSource.includes("0777"),
+        "threadStore.ts must never contain 0777 permissions"
+      );
+      assert.ok(
+        !threadStoreSource.includes("0o777"),
+        "threadStore.ts must never contain 0o777 permissions"
+      );
       assert.ok(!routeSource.includes("0777"), "route.ts must never contain 0777 permissions");
       assert.ok(!routeSource.includes("0o777"), "route.ts must never contain 0o777 permissions");
 
       // Verify that 0o770 and 0o660 are used
-      assert.ok(threadStoreSource.includes("0o770"), "threadStore.ts must use 0o770 for directories");
+      assert.ok(
+        threadStoreSource.includes("0o770"),
+        "threadStore.ts must use 0o770 for directories"
+      );
       assert.ok(threadStoreSource.includes("0o660"), "threadStore.ts must use 0o660 for files");
       assert.ok(routeSource.includes("0o770"), "route.ts must use 0o770 for directories");
     });
@@ -179,10 +201,14 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
             userMessageId: "custom-user-msg-id-123",
             assistantMessageId: "custom-asst-msg-id-456",
             messages: [
-              { role: "user", content: "Build a new React dashboard component", id: "custom-user-msg-id-123" }
+              {
+                role: "user",
+                content: "Build a new React dashboard component",
+                id: "custom-user-msg-id-123",
+              },
             ],
-            model: "swift-15-27b-mtp"
-          })
+            model: "swift-15-27b-mtp",
+          }),
         });
 
         // Call route handler
@@ -207,7 +233,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         assert.equal(userMsg.role, "user");
         assert.equal(userMsg.content, "Build a new React dashboard component");
       } finally {
-        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl; else delete process.env.LLM_BASE_URL;
+        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl;
+        else delete process.env.LLM_BASE_URL;
       }
     });
 
@@ -229,10 +256,10 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
             userMessageId: "user-err-turn",
             assistantMessageId: "asst-err-turn",
             messages: [
-              { role: "user", content: "Analyze this system architecture", id: "user-err-turn" }
+              { role: "user", content: "Analyze this system architecture", id: "user-err-turn" },
             ],
-            model: "swift-15-27b-mtp"
-          })
+            model: "swift-15-27b-mtp",
+          }),
         });
 
         const res = await POST(req as any);
@@ -254,7 +281,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         assert.equal(asstMsg.status, "error");
         assert.ok(asstMsg.content.includes("⚠️ [Turn error:"));
       } finally {
-        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl; else delete process.env.LLM_BASE_URL;
+        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl;
+        else delete process.env.LLM_BASE_URL;
       }
     });
 
@@ -278,11 +306,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           return;
         }
         sRes.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        sRes.write(JSON.stringify({
-          message: {
-            content: "Partial streaming content before abort..."
-          }
-        }) + "\n");
+        sRes.write(
+          JSON.stringify({
+            message: {
+              content: "Partial streaming content before abort...",
+            },
+          }) + "\n"
+        );
         activeRes = sRes;
       });
       await new Promise<void>((r) => abortMockServer.listen(0, "127.0.0.1", () => r()));
@@ -301,11 +331,11 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
             userMessageId: "user-abort-turn",
             assistantMessageId: "asst-abort-turn",
             messages: [
-              { role: "user", content: "Stream this long response", id: "user-abort-turn" }
+              { role: "user", content: "Stream this long response", id: "user-abort-turn" },
             ],
             model: "swift-15-27b-mtp",
-            enableTools: false
-          })
+            enableTools: false,
+          }),
         });
 
         const res = await POST(req as any);
@@ -333,11 +363,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         const stopReq = new Request(`http://localhost:3000/api/threads/${threadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "stop" })
+          body: JSON.stringify({ action: "stop" }),
         });
         await THREAD_POST(stopReq as any, { params: Promise.resolve({ id: threadId }) });
         if (activeRes) {
-          try { activeRes.end(); } catch {}
+          try {
+            activeRes.end();
+          } catch {}
         }
         await drainPromise;
 
@@ -355,14 +387,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         assert.ok(asstMsg, "Assistant message must be saved to ThreadStore on abort");
         assert.equal(asstMsg.role, "assistant");
         assert.equal(asstMsg.status, "incomplete");
-        assert.ok(
-          asstMsg.content.includes("*[Stopped by user]*"),
-          "Must contain stopped marker"
-        );
+        assert.ok(asstMsg.content.includes("*[Stopped by user]*"), "Must contain stopped marker");
       } finally {
         abortMockServer.close();
-        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl; else delete process.env.LLM_BASE_URL;
-        if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl; else delete process.env.OLLAMA_BASE_URL;
+        if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl;
+        else delete process.env.LLM_BASE_URL;
+        if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl;
+        else delete process.env.OLLAMA_BASE_URL;
       }
     });
   });
@@ -392,7 +423,9 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         req.on("data", (c) => (body += c));
         req.on("end", () => {
           let parsed: any = {};
-          try { parsed = JSON.parse(body); } catch {}
+          try {
+            parsed = JSON.parse(body);
+          } catch {}
           roundHandler(parsed, res, req);
         });
       });
@@ -406,8 +439,10 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
 
     after(() => {
       fakeServer.close();
-      if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl; else delete process.env.LLM_BASE_URL;
-      if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl; else delete process.env.OLLAMA_BASE_URL;
+      if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl;
+      else delete process.env.LLM_BASE_URL;
+      if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl;
+      else delete process.env.OLLAMA_BASE_URL;
     });
 
     it("1. Client disconnect mid-turn allows turn to complete detached server-side with FULL answer and consumes steer", async () => {
@@ -429,24 +464,30 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (roundCount === 1) {
           // Send thinking and first tool call
-          res.write(JSON.stringify({
-            message: {
-              thinking: "Investigating weather...",
-              content: "Checking forecast...",
-              tool_calls: [{
-                id: "tc-1",
-                type: "function",
-                function: { name: "workspace_read_file", arguments: '{"path":"weather.txt"}' }
-              }]
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                thinking: "Investigating weather...",
+                content: "Checking forecast...",
+                tool_calls: [
+                  {
+                    id: "tc-1",
+                    type: "function",
+                    function: { name: "workspace_read_file", arguments: '{"path":"weather.txt"}' },
+                  },
+                ],
+              },
+            }) + "\n"
+          );
         } else {
           // Final synthesized answer
-          res.write(JSON.stringify({
-            message: {
-              content: "Here is the complete forecast for today and tomorrow in Spanish Fort."
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "Here is the complete forecast for today and tomorrow in Spanish Fort.",
+              },
+            }) + "\n"
+          );
         }
         res.write(JSON.stringify({ message: {}, done: true }) + "\n");
         res.end();
@@ -463,8 +504,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           assistantMessageId: "a-decouple-1",
           messages: [{ role: "user", content: "What is the weather?", id: "u-decouple-1" }],
           model: "swift-15-27b-mtp",
-          enableTools: true
-        })
+          enableTools: true,
+        }),
       });
 
       const res = await POST(req as any);
@@ -492,7 +533,11 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       assert.ok(asst, "Assistant message must exist in thread");
       assert.equal(asst.status, "completed");
       assert.ok(asst.content.includes("complete forecast for today and tomorrow"));
-      assert.equal(asst.content.includes("⚠️ [Turn incomplete:"), false, "Must not contain incomplete warning banner");
+      assert.equal(
+        asst.content.includes("⚠️ [Turn incomplete:"),
+        false,
+        "Must not contain incomplete warning banner"
+      );
 
       // Steer should be persisted in transcript
       const steerMsg = finalThread.messages.find((m) => m.content.includes("Add tomorrow too"));
@@ -516,11 +561,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
 
       roundHandler = (_parsed, res) => {
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        res.write(JSON.stringify({
-          message: {
-            content: "Starting long process..."
-          }
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            message: {
+              content: "Starting long process...",
+            },
+          }) + "\n"
+        );
         activeRes = res;
         if (stopTriggeredPromiseResolve) stopTriggeredPromiseResolve();
       };
@@ -535,8 +582,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
             assistantMessageId: "a-stop-1",
             messages: [{ role: "user", content: "Do a long task", id: "u-stop-1" }],
             model: "swift-15-27b-mtp",
-            enableTools: false
-          })
+            enableTools: false,
+          }),
         });
 
         const res = await POST(req as any);
@@ -557,10 +604,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           } catch {}
         })();
 
-        await Promise.race([
-          stopTriggeredPromise,
-          new Promise((r) => setTimeout(r, 12000))
-        ]);
+        await Promise.race([stopTriggeredPromise, new Promise((r) => setTimeout(r, 12000))]);
         for (let i = 0; i < 40; i++) {
           if (receivedFirstToken) break;
           await new Promise((r) => setTimeout(r, 50));
@@ -571,11 +615,13 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         const stopReq = new Request(`http://localhost:3000/api/threads/${threadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "stop" })
+          body: JSON.stringify({ action: "stop" }),
         });
         await THREAD_POST(stopReq as any, { params: Promise.resolve({ id: threadId }) });
         if (activeRes) {
-          try { activeRes.end(); } catch {}
+          try {
+            activeRes.end();
+          } catch {}
         }
         await readLoop;
 
@@ -583,11 +629,19 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         assert.ok(finalThread);
         const asst = finalThread.messages.find((m) => m.id === "a-stop-1");
         assert.ok(asst);
-        assert.equal(asst.status, "incomplete", `Expected incomplete, got ${asst.status} with content: ${JSON.stringify(asst.content)}`);
+        assert.equal(
+          asst.status,
+          "incomplete",
+          `Expected incomplete, got ${asst.status} with content: ${JSON.stringify(asst.content)}`
+        );
         assert.ok(asst.content.includes("*[Stopped by user]*"));
-        assert.ok(asst.content.includes("Starting long process..."), "Partial streamed tokens must be preserved on Stop");
+        assert.ok(
+          asst.content.includes("Starting long process..."),
+          "Partial streamed tokens must be preserved on Stop"
+        );
       } finally {
-        if (prevEngine !== undefined) process.env.LLM_ENGINE = prevEngine; else delete process.env.LLM_ENGINE;
+        if (prevEngine !== undefined) process.env.LLM_ENGINE = prevEngine;
+        else delete process.env.LLM_ENGINE;
       }
     });
 
@@ -615,8 +669,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           userMessageId: "u-hole-1",
           assistantMessageId: "a-hole-1",
           messages: [{ role: "user", content: "Tell me a story", id: "u-hole-1" }],
-          model: "swift-15-27b-mtp"
-        })
+          model: "swift-15-27b-mtp",
+        }),
       });
 
       await POST(req as any);
@@ -625,9 +679,12 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
 
       // Immediately call GET /api/threads/[id] while turn is running
       const { GET: THREAD_GET } = await import("../app/api/threads/[id]/route");
-      const getRes = await THREAD_GET(new Request(`http://localhost:3000/api/threads/${threadId}`) as any, {
-        params: Promise.resolve({ id: threadId })
-      });
+      const getRes = await THREAD_GET(
+        new Request(`http://localhost:3000/api/threads/${threadId}`) as any,
+        {
+          params: Promise.resolve({ id: threadId }),
+        }
+      );
       const data = await getRes.json();
       assert.ok(data.thread);
       assert.equal(data.activeTurn?.status, "streaming");
@@ -668,8 +725,8 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
           userMessageId: "u-bad-model",
           assistantMessageId: "a-bad-model",
           messages: [{ role: "user", content: "Say hi", id: "u-bad-model" }],
-          model: "totally-nonexistent-model-xyz-999"
-        })
+          model: "totally-nonexistent-model-xyz-999",
+        }),
       });
 
       const res = await POST(req as any);
@@ -681,14 +738,19 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         }
       }
 
-      assert.equal(llmCalled, false, "LLM backend must not be invoked with an unregistered/nonexistent model name");
+      assert.equal(
+        llmCalled,
+        false,
+        "LLM backend must not be invoked with an unregistered/nonexistent model name"
+      );
       const thread = await store.getThread(threadId);
       assert.ok(thread);
       const asst = thread.messages.find((m) => m.id === "a-bad-model");
       assert.ok(asst, "Assistant error message must be persisted");
       assert.equal(asst.status, "error");
       assert.ok(
-        asst.content.includes("⚠️ [Turn error:") && asst.content.includes("totally-nonexistent-model-xyz-999"),
+        asst.content.includes("⚠️ [Turn error:") &&
+          asst.content.includes("totally-nonexistent-model-xyz-999"),
         `Expected honest model error in content, got: ${asst.content}`
       );
     });
@@ -703,14 +765,14 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         id: "u-turn-1",
         role: "user",
         content: "First turn",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       store.addMessage(threadId, {
         id: "a-turn-1",
         role: "assistant",
         content: "First answer",
         status: "completed",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       // Now simulate Turn 2 starting and writing a streaming snapshot (as ThrottledStreamSnapshot does)
@@ -718,26 +780,38 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         id: "u-turn-2",
         role: "user",
         content: "Second turn before pod restart",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       const duringStream = store.addMessage(threadId, {
         id: "a-turn-2",
         role: "assistant",
         content: "Partial output before server restart...",
         status: "streaming",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       assert.ok(duringStream);
-      assert.equal(duringStream.status, "active", "thread.status must remain 'active' when a 'streaming' assistant message is added");
+      assert.equal(
+        duringStream.status,
+        "active",
+        "thread.status must remain 'active' when a 'streaming' assistant message is added"
+      );
 
       // Now simulate server restart: activeExecutionSet and activeTurnRegistry do NOT contain threadId
       // When getThread is called after restart, reconcileThread must mark the orphaned streaming message as incomplete
       const reconciled = await store.getThread(threadId);
       assert.ok(reconciled);
-      assert.equal(reconciled.status, "stopped", "Orphaned active thread must reconcile to 'stopped'");
+      assert.equal(
+        reconciled.status,
+        "stopped",
+        "Orphaned active thread must reconcile to 'stopped'"
+      );
       const asst2 = reconciled.messages.find((m) => m.id === "a-turn-2");
       assert.ok(asst2);
-      assert.equal(asst2.status, "incomplete", "Orphaned streaming message must reconcile to 'incomplete' (not stay 'streaming' forever)");
+      assert.equal(
+        asst2.status,
+        "incomplete",
+        "Orphaned streaming message must reconcile to 'incomplete' (not stay 'streaming' forever)"
+      );
       assert.equal(asst2.isStopped, true);
       assert.ok(
         asst2.content.includes("⚠️ [Turn incomplete:"),
@@ -760,20 +834,20 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
       // Verify request payload contains both IDs
       assert.ok(
         chatStreamSource.includes("userMessageId: userMsgId") ||
-        chatStreamSource.includes("userMessageId"),
+          chatStreamSource.includes("userMessageId"),
         "ChatStream must pass userMessageId in /api/chat payload"
       );
       assert.ok(
         chatStreamSource.includes("assistantMessageId: assistantMsgId") ||
-        chatStreamSource.includes("assistantMessageId"),
+          chatStreamSource.includes("assistantMessageId"),
         "ChatStream must pass assistantMessageId in /api/chat payload"
       );
 
       // Verify readStreamResponse receives or uses assistantMsgId
       assert.ok(
         chatStreamSource.includes("readStreamResponse") &&
-        (chatStreamSource.includes("providedAssistantMsgId") ||
-         chatStreamSource.includes("assistantMsgId")),
+          (chatStreamSource.includes("providedAssistantMsgId") ||
+            chatStreamSource.includes("assistantMsgId")),
         "readStreamResponse must wire matching assistantMsgId"
       );
     });
@@ -786,12 +860,12 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
 
       assert.ok(
         routeSource.includes("userMessageId: requestedUserMessageId") ||
-        routeSource.includes("userMessageId"),
+          routeSource.includes("userMessageId"),
         "route.ts must extract userMessageId"
       );
       assert.ok(
         routeSource.includes("assistantMessageId: requestedAssistantMessageId") ||
-        routeSource.includes("assistantMessageId"),
+          routeSource.includes("assistantMessageId"),
         "route.ts must extract assistantMessageId"
       );
       assert.ok(

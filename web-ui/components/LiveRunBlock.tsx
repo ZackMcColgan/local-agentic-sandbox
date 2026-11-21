@@ -17,7 +17,7 @@ import {
   Clock,
   Loader2,
   Pause,
-  Play
+  Play,
 } from "lucide-react";
 import { TaskManifest, Milestone } from "../lib/subagents/types";
 import { formatElapsedDuration, formatThinkingDisplay } from "../lib/chatUtils";
@@ -118,7 +118,7 @@ export function deriveRunCardStatus(
     isStopped,
     isCompleted,
     isFailed,
-    headerLabel
+    headerLabel,
   };
 }
 
@@ -142,10 +142,7 @@ export function computeRunElapsedSeconds(
   return Math.max(0, Math.floor((end - start) / 1000));
 }
 
-export function formatRunTimerLabel(
-  statusInfo: RunCardStatusInfo,
-  elapsedSeconds: number
-): string {
+export function formatRunTimerLabel(statusInfo: RunCardStatusInfo, elapsedSeconds: number): string {
   const formatted = formatElapsedDuration(elapsedSeconds);
   if (statusInfo.isRunning) return `Running for ${formatted}`;
   if (statusInfo.isCompleted) return `Completed in ${formatted}`;
@@ -166,7 +163,7 @@ export function LiveRunBlock({
   onDeployRun,
   selfDeployEnabled,
   isStopping,
-  liveTraces
+  liveTraces,
 }: LiveRunBlockProps) {
   const [showAllThinking, setShowAllThinking] = useState(false);
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
@@ -200,7 +197,7 @@ export function LiveRunBlock({
     isCrashed,
     isStopped,
     isCompleted,
-    isFailed
+    isFailed,
   } = statusInfo;
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(() =>
@@ -210,7 +207,8 @@ export function LiveRunBlock({
   const deliverableFile = isCompleted ? resolveDeliverableFile(task) : undefined;
   const isDeliverableSvg = deliverableFile ? deliverableFile.toLowerCase().endsWith(".svg") : false;
   const isDeliverableHtml = deliverableFile
-    ? deliverableFile.toLowerCase().endsWith(".html") || deliverableFile.toLowerCase().endsWith(".htm")
+    ? deliverableFile.toLowerCase().endsWith(".html") ||
+      deliverableFile.toLowerCase().endsWith(".htm")
     : false;
 
   useEffect(() => {
@@ -303,9 +301,15 @@ export function LiveRunBlock({
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
-            isRunning ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black" : isFailed || isCrashed ? "bg-rose-600 text-white" : "bg-stone-700 text-stone-200"
-          }`}>
+          <div
+            className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
+              isRunning
+                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black"
+                : isFailed || isCrashed
+                  ? "bg-rose-600 text-white"
+                  : "bg-stone-700 text-stone-200"
+            }`}
+          >
             <RotateCcw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -352,8 +356,8 @@ export function LiveRunBlock({
                 • Crashed
               </span>
             )}
-            {isCompleted && (
-              task.completionStamp ? (
+            {isCompleted &&
+              (task.completionStamp ? (
                 <CompletionVerificationBadge
                   stamp={task.completionStamp}
                   gaps={task.verificationGaps}
@@ -362,8 +366,7 @@ export function LiveRunBlock({
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                   • Completed
                 </span>
-              )
-            )}
+              ))}
             {task.parentRunId && (
               <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
                 Parent: {task.parentRunId}
@@ -382,7 +385,9 @@ export function LiveRunBlock({
       {/* Task Initiation Context Card */}
       <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-850/70 border border-slate-100 dark:border-zinc-800 text-xs text-slate-700 dark:text-zinc-300 flex items-center justify-between gap-2">
         <span className="truncate">
-          <strong className="font-semibold text-slate-900 dark:text-zinc-100">Started:</strong> {task.goal} ({task.milestones?.length || 1} milestone{task.milestones?.length === 1 ? "" : "s"})
+          <strong className="font-semibold text-slate-900 dark:text-zinc-100">Started:</strong>{" "}
+          {task.goal} ({task.milestones?.length || 1} milestone
+          {task.milestones?.length === 1 ? "" : "s"})
         </span>
         {isRunning && (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">
@@ -401,7 +406,11 @@ export function LiveRunBlock({
         <div className="space-y-3">
           {task.milestones?.map((m: Milestone, idx: number) => {
             const isMilestoneCompleted = (m.status as string) === "completed";
-            const isMilestoneActive = isRunning && ((m.status as string) === "in_progress" || (m.status as string) === "active" || idx === activeIndex);
+            const isMilestoneActive =
+              isRunning &&
+              ((m.status as string) === "in_progress" ||
+                (m.status as string) === "active" ||
+                idx === activeIndex);
             const isMilestonePending = !isMilestoneCompleted && !isMilestoneActive;
 
             return (
@@ -425,8 +434,8 @@ export function LiveRunBlock({
                         isMilestoneCompleted
                           ? "font-medium text-slate-800 dark:text-zinc-200"
                           : isMilestoneActive
-                          ? "font-semibold text-slate-900 dark:text-zinc-100"
-                          : "text-slate-600 dark:text-zinc-400"
+                            ? "font-semibold text-slate-900 dark:text-zinc-100"
+                            : "text-slate-600 dark:text-zinc-400"
                       }`}
                     >
                       {m.title}
@@ -467,9 +476,13 @@ export function LiveRunBlock({
 
       {/* Critic Verdict Block matching Mockup 4 */}
       {(() => {
-        const critiquedMilestone = task.milestones?.find((m) => m.criticVerdict || m.criticScore !== undefined);
+        const critiquedMilestone = task.milestones?.find(
+          (m) => m.criticVerdict || m.criticScore !== undefined
+        );
         if (!critiquedMilestone) return null;
-        const isPass = critiquedMilestone.criticVerdict === "PASS" || (critiquedMilestone.criticScore ?? 0) >= 80;
+        const isPass =
+          critiquedMilestone.criticVerdict === "PASS" ||
+          (critiquedMilestone.criticScore ?? 0) >= 80;
         return (
           <div className="p-3.5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-[#fbfbfe] dark:bg-zinc-850/80 space-y-2">
             <div className="flex items-center justify-between">
@@ -477,12 +490,18 @@ export function LiveRunBlock({
                 <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Critic Verdict: {critiquedMilestone.title}</span>
               </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                isPass
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-              }`}>
-                {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")}{critiquedMilestone.criticScore !== undefined && critiquedMilestone.criticScore !== null ? ` · Score ${critiquedMilestone.criticScore}/100` : ""}
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  isPass
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                }`}
+              >
+                {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")}
+                {critiquedMilestone.criticScore !== undefined &&
+                critiquedMilestone.criticScore !== null
+                  ? ` · Score ${critiquedMilestone.criticScore}/100`
+                  : ""}
               </span>
             </div>
             {critiquedMilestone.criticCritique && (
@@ -495,72 +514,70 @@ export function LiveRunBlock({
       })()}
 
       {/* Deliverable Badge & Inline Graphic/Code Preview when Completed */}
-      {isCompleted && deliverableFile && (() => {
-        const isSvg = isDeliverableSvg;
-        const isHtml = isDeliverableHtml;
-        const deliverableUrl = buildDeliverableFileUrl(deliverableFile);
-        return (
-          <div className="space-y-3 pt-1">
-            <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
-                  Deliverable Generated: {deliverableFile}
+      {isCompleted &&
+        deliverableFile &&
+        (() => {
+          const isSvg = isDeliverableSvg;
+          const isHtml = isDeliverableHtml;
+          const deliverableUrl = buildDeliverableFileUrl(deliverableFile);
+          return (
+            <div className="space-y-3 pt-1">
+              <div className="p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/40 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileCode className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                    Deliverable Generated: {deliverableFile}
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                  Committed
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                Committed
-              </span>
-            </div>
 
-            {isSvg ? (
-              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                <SvgViewer
-                  url={deliverableUrl}
-                  title={deliverableFile}
-                  initialTab="preview"
-                />
-              </div>
-            ) : isHtml ? (
-              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm bg-white dark:bg-zinc-900">
-                <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
-                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{deliverableFile}</span>
-                  <a
-                    href={deliverableUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px]"
-                    title="Open HTML in new tab"
-                  >
-                    <span>Open</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-                <div className="p-2 bg-white dark:bg-black min-h-[220px]">
-                  <iframe
-                    src={deliverableUrl}
-                    sandbox="allow-scripts"
-                    className="w-full h-64 border-0 rounded-xl bg-white"
-                    title={deliverableFile}
-                  />
-                </div>
-              </div>
-            ) : (() => {
-              const codeSnippet = resolveCodePreviewContent(deliverableFile, deliverableCode);
-              const ext = deliverableFile.split(".").pop() || "typescript";
-              return (
+              {isSvg ? (
                 <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                  <CodeBlock
-                    language={ext}
-                    code={codeSnippet}
-                    filename={deliverableFile}
-                  />
+                  <SvgViewer url={deliverableUrl} title={deliverableFile} initialTab="preview" />
                 </div>
-              );
-            })()}
-          </div>
-        );
-      })()}
+              ) : isHtml ? (
+                <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm bg-white dark:bg-zinc-900">
+                  <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
+                    <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                      {deliverableFile}
+                    </span>
+                    <a
+                      href={deliverableUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px]"
+                      title="Open HTML in new tab"
+                    >
+                      <span>Open</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div className="p-2 bg-white dark:bg-black min-h-[220px]">
+                    <iframe
+                      src={deliverableUrl}
+                      sandbox="allow-scripts"
+                      className="w-full h-64 border-0 rounded-xl bg-white"
+                      title={deliverableFile}
+                    />
+                  </div>
+                </div>
+              ) : (
+                (() => {
+                  const codeSnippet = resolveCodePreviewContent(deliverableFile, deliverableCode);
+                  const ext = deliverableFile.split(".").pop() || "typescript";
+                  return (
+                    <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                      <CodeBlock language={ext} code={codeSnippet} filename={deliverableFile} />
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          );
+        })()}
 
       {/* Deployed Ephemeral Build Link (Phase 5) */}
       {task.deploymentUrl && (
@@ -585,13 +602,15 @@ export function LiveRunBlock({
 
       {/* CI Status Badge & Link (Phase 9) */}
       {task.ciStatus && (
-        <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${
-          task.ciStatus.state === "passed"
-            ? "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40"
-            : task.ciStatus.state === "failed"
-            ? "border-rose-200 dark:border-rose-900/70 bg-rose-50/70 dark:bg-rose-950/40"
-            : "border-sky-200 dark:border-sky-900/60 bg-sky-50/70 dark:bg-sky-950/40"
-        }`}>
+        <div
+          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${
+            task.ciStatus.state === "passed"
+              ? "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40"
+              : task.ciStatus.state === "failed"
+                ? "border-rose-200 dark:border-rose-900/70 bg-rose-50/70 dark:bg-rose-950/40"
+                : "border-sky-200 dark:border-sky-900/60 bg-sky-50/70 dark:bg-sky-950/40"
+          }`}
+        >
           <div className="flex items-center gap-2 min-w-0">
             {task.ciStatus.state === "passed" ? (
               <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[3]" />
@@ -601,14 +620,21 @@ export function LiveRunBlock({
               <Loader2 className="h-4 w-4 text-sky-600 dark:text-sky-400 animate-spin shrink-0" />
             )}
             <div className="min-w-0">
-              <span className={`text-xs font-semibold block truncate ${
-                task.ciStatus.state === "passed"
-                  ? "text-emerald-900 dark:text-emerald-100"
+              <span
+                className={`text-xs font-semibold block truncate ${
+                  task.ciStatus.state === "passed"
+                    ? "text-emerald-900 dark:text-emerald-100"
+                    : task.ciStatus.state === "failed"
+                      ? "text-rose-900 dark:text-rose-100"
+                      : "text-sky-900 dark:text-sky-100"
+                }`}
+              >
+                CI Check:{" "}
+                {task.ciStatus.state === "passed"
+                  ? "Passed"
                   : task.ciStatus.state === "failed"
-                  ? "text-rose-900 dark:text-rose-100"
-                  : "text-sky-900 dark:text-sky-100"
-              }`}>
-                CI Check: {task.ciStatus.state === "passed" ? "Passed" : task.ciStatus.state === "failed" ? "Failed" : "Running"}
+                    ? "Failed"
+                    : "Running"}
               </span>
               {task.ciStatus.failingStep && (
                 <span className="text-[11px] text-rose-700 dark:text-rose-300 font-mono block truncate">
@@ -649,7 +675,8 @@ export function LiveRunBlock({
           <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
             <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
-              Task failed: {task.parkedReason || task.errorSummary || "Planning or execution failure"}
+              Task failed:{" "}
+              {task.parkedReason || task.errorSummary || "Planning or execution failure"}
             </p>
           </div>
         </div>
@@ -705,7 +732,9 @@ export function LiveRunBlock({
               className="w-full px-3.5 py-2 flex items-center justify-between text-left rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-xs font-mono"
             >
               <span className="truncate text-slate-700 dark:text-zinc-100">{trace.tool}</span>
-              <span className="text-[10px] text-slate-400 dark:text-zinc-400">{new Date(trace.timestamp).toLocaleTimeString()}</span>
+              <span className="text-[10px] text-slate-400 dark:text-zinc-400">
+                {new Date(trace.timestamp).toLocaleTimeString()}
+              </span>
             </button>
           ))}
         </div>

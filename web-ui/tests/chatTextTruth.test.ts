@@ -12,10 +12,10 @@ function renderAssistantContent(content: string): string {
           id: "a-1",
           role: "assistant",
           content,
-          createdAt: new Date().toISOString()
-        }
+          createdAt: new Date().toISOString(),
+        },
       ],
-      isLoading: false
+      isLoading: false,
     } as any)
   );
 }
@@ -53,10 +53,10 @@ describe("Lane A Item 3: User message bubble line breaks", () => {
             id: "u-1",
             role: "user",
             content: "First line\nSecond line\nThird line",
-            createdAt: new Date().toISOString()
-          }
+            createdAt: new Date().toISOString(),
+          },
         ],
-        isLoading: false
+        isLoading: false,
       } as any)
     );
     assert.ok(
@@ -69,4 +69,3 @@ describe("Lane A Item 3: User message bubble line breaks", () => {
     );
   });
 });
-

@@ -10,10 +10,8 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
     const dbPath = path.join(tmpDir, "runs.db");
 
     try {
-      const {
-        FlywheelSkillsStore,
-        extractSkillsFromCompletedTask
-      } = await import("../lib/flywheel/skillsStore.js");
+      const { FlywheelSkillsStore, extractSkillsFromCompletedTask } =
+        await import("../lib/flywheel/skillsStore.js");
 
       const store = new FlywheelSkillsStore(dbPath);
 
@@ -33,19 +31,22 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
             criticRounds: 1,
             plannedFiles: ["weather.svg"],
             diffSummary: `+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n+<rect width="800" height="600" rx="24" fill="#0f172a"/>\n+</svg>`,
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         currentMilestoneIndex: 1,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const extractedSkills = extractSkillsFromCompletedTask(completedTask);
-      assert.ok(extractedSkills.length > 0, "Must extract at least 1 pattern from completed SVG task");
+      assert.ok(
+        extractedSkills.length > 0,
+        "Must extract at least 1 pattern from completed SVG task"
+      );
       assert.equal(extractedSkills[0].domain, "svg");
 
       store.saveSkills(extractedSkills);
@@ -74,11 +75,11 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
           name: "SVG Card Layout",
           description: "Structured SVG canvas with viewBox and rounded corner background",
           domain: "svg",
-          patternTemplate: "<svg viewBox=\"0 0 800 600\">\n  <rect rx=\"24\" />\n</svg>",
+          patternTemplate: '<svg viewBox="0 0 800 600">\n  <rect rx="24" />\n</svg>',
           sourceTaskId: "task-prior-1",
           confidenceScore: 0.95,
           createdAt: new Date().toISOString(),
-          useCount: 0
+          useCount: 0,
         },
         {
           skillId: "skill-k8s-nodeport",
@@ -89,18 +90,31 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
           sourceTaskId: "task-prior-2",
           confidenceScore: 0.9,
           createdAt: new Date().toISOString(),
-          useCount: 0
-        }
+          useCount: 0,
+        },
       ]);
 
       // Query for an SVG task
-      const svgMatches = store.retrieveRelevantSkills("Design an SVG architecture diagram for cloud gateway");
-      assert.ok(svgMatches.some((s) => s.skillId === "skill-svg-card"), "Must retrieve SVG pattern for SVG goal");
-      assert.ok(!svgMatches.some((s) => s.skillId === "skill-k8s-nodeport"), "Must not retrieve K8s pattern for purely SVG goal");
+      const svgMatches = store.retrieveRelevantSkills(
+        "Design an SVG architecture diagram for cloud gateway"
+      );
+      assert.ok(
+        svgMatches.some((s) => s.skillId === "skill-svg-card"),
+        "Must retrieve SVG pattern for SVG goal"
+      );
+      assert.ok(
+        !svgMatches.some((s) => s.skillId === "skill-k8s-nodeport"),
+        "Must not retrieve K8s pattern for purely SVG goal"
+      );
 
       // Query for K8s task
-      const k8sMatches = store.retrieveRelevantSkills("Deploy ephemeral cluster service in isolated namespace");
-      assert.ok(k8sMatches.some((s) => s.skillId === "skill-k8s-nodeport"), "Must retrieve K8s pattern for deployment goal");
+      const k8sMatches = store.retrieveRelevantSkills(
+        "Deploy ephemeral cluster service in isolated namespace"
+      );
+      assert.ok(
+        k8sMatches.some((s) => s.skillId === "skill-k8s-nodeport"),
+        "Must retrieve K8s pattern for deployment goal"
+      );
 
       store.close();
     } finally {
@@ -117,12 +131,13 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
         name: "Standard Next.js Route Handler",
         description: "Export GET and POST with NextResponse.json",
         domain: "nextjs",
-        patternTemplate: "export async function GET(req: Request) { return NextResponse.json({ ok: true }); }",
+        patternTemplate:
+          "export async function GET(req: Request) { return NextResponse.json({ ok: true }); }",
         sourceTaskId: "task-prev",
         confidenceScore: 0.92,
         createdAt: new Date().toISOString(),
-        useCount: 1
-      }
+        useCount: 1,
+      },
     ]);
 
     assert.ok(formatted.includes("[REUSABLE PATTERNS FROM PAST SUCCESSFUL RUNS]"));
@@ -143,7 +158,7 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
       const { FlywheelSkillsStore } = await import("../lib/flywheel/skillsStore.js");
 
       const supervisor = new OvernightSupervisor({
-        checkpointDirectory: tmpDir
+        checkpointDirectory: tmpDir,
       });
 
       const completedTask = {
@@ -162,15 +177,15 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
             criticRounds: 1,
             plannedFiles: ["weather.svg"],
             diffSummary: `+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n+<rect width="800" height="600" rx="24" fill="#0f172a"/>\n+</svg>`,
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         currentMilestoneIndex: 1,
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       supervisor.saveCheckpoint(completedTask as any);
@@ -178,7 +193,10 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
       const store = new FlywheelSkillsStore(dbPath);
       try {
         const skills = store.listSkills();
-        assert.ok(skills.length > 0, "Skills must be automatically saved when supervisor checkpoints a completed task");
+        assert.ok(
+          skills.length > 0,
+          "Skills must be automatically saved when supervisor checkpoints a completed task"
+        );
         assert.equal(skills[0].sourceTaskId, "task-auto-persist-svg-1");
       } finally {
         store.close();
@@ -208,12 +226,12 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
             name: "Weather SVG Vector Badge",
             description: "Responsive SVG card layout with viewBox coordinates",
             domain: "svg",
-            patternTemplate: "<svg viewBox=\"0 0 800 600\"><rect rx=\"16\" /></svg>",
+            patternTemplate: '<svg viewBox="0 0 800 600"><rect rx="16" /></svg>',
             sourceTaskId: "task-prev-run",
             confidenceScore: 0.95,
             createdAt: new Date().toISOString(),
-            useCount: 1
-          }
+            useCount: 1,
+          },
         ]);
       } finally {
         store.close();
@@ -231,17 +249,17 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
                 title: "Create weather SVG icon",
                 description: "SVG milestone",
                 plannedFiles: ["weather.svg"],
-                acceptanceCriteria: [{ assertion: "weather.svg exists" }]
-              }
-            ]
-          })
+                acceptanceCriteria: [{ assertion: "weather.svg exists" }],
+              },
+            ],
+          }),
         };
       };
 
       const plan = await generatePlanSpec({
         goal: "Create a modern weather SVG card with temperature indicator",
         scope: "SCRIPT",
-        generate: mockGenerate as any
+        generate: mockGenerate as any,
       } as any);
 
       assert.ok(plan.milestones.length > 0);

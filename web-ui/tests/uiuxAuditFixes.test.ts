@@ -72,11 +72,15 @@ function readComp(rel: string): string {
 // 2. UI-070 & UI-008: Path and title helpers
 {
   assert.equal(
-    displayRepoPath("C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox\\web-ui\\lib\\chatUtils.ts"),
+    displayRepoPath(
+      "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox\\web-ui\\lib\\chatUtils.ts"
+    ),
     "web-ui/lib/chatUtils.ts"
   );
   assert.equal(displayBasename("web-ui/lib/chatUtils.ts"), "chatUtils.ts");
-  const short = deriveThreadDisplayTitle("You are working on a PR-sized coding task. Fix the board scroll.");
+  const short = deriveThreadDisplayTitle(
+    "You are working on a PR-sized coding task. Fix the board scroll."
+  );
   assert.equal(short, "Fix the board scroll.");
 }
 
@@ -84,24 +88,36 @@ function readComp(rel: string): string {
 {
   const boardView = readComp("components/BoardView.tsx");
   assert.ok(!boardView.includes("0.0K / 100K"), "UI-059: BoardView must not render meterLabel");
-  assert.ok(boardView.includes("min-h-[44px] min-w-[44px]"), "UI-065: BoardView hamburger must be >=44px");
+  assert.ok(
+    boardView.includes("min-h-[44px] min-w-[44px]"),
+    "UI-065: BoardView hamburger must be >=44px"
+  );
 
   const chatStream = readComp("components/ChatStream.tsx");
   assert.ok(!chatStream.includes("model-pill-form-toggle"), "UI-068: A/B toggle must be removed");
   assert.ok(chatStream.includes("pt-[16px]"), "UI-061: ChatStream top padding must be pt-[16px]");
 
   const page = readComp("app/page.tsx");
-  assert.ok(page.includes("setDraftComposerPrompt(draftPrompt)"), "UI-073: onAskAssistant must pass draftPrompt");
+  assert.ok(
+    page.includes("setDraftComposerPrompt(draftPrompt)"),
+    "UI-073: onAskAssistant must pass draftPrompt"
+  );
   assert.ok(
     page.includes("setIsSidebarOpen(false)") && !page.includes("setIsSidebarOpen(true)"),
     "UI-082: mobile Sessions nav must dismiss sidebar overlay"
   );
 
   const sidebar = readComp("components/ThreadsSidebar.tsx");
-  assert.ok(sidebar.includes("/api/threads?q="), "UI-040: ThreadsSidebar must query /api/threads?q=");
+  assert.ok(
+    sidebar.includes("/api/threads?q="),
+    "UI-040: ThreadsSidebar must query /api/threads?q="
+  );
 
   const builds = readComp("components/BuildsView.tsx");
-  assert.ok(builds.includes("Array.isArray(data.items)"), "UI-051: BuildsView fallback must consume data.items");
+  assert.ok(
+    builds.includes("Array.isArray(data.items)"),
+    "UI-051: BuildsView fallback must consume data.items"
+  );
 
   const purgedFiles = [
     "components/NavigationDrawer.tsx",

@@ -10,7 +10,11 @@ describe("UI-009: fresh load opens the most recently active thread", () => {
   it("picks the thread with the latest updatedAt regardless of array order", () => {
     const threads = [
       { id: "t-old", updatedAt: "2026-11-14T10:00:00.000Z", createdAt: "2026-11-14T09:00:00.000Z" },
-      { id: "t-newest", updatedAt: "2026-11-15T12:30:00.000Z", createdAt: "2026-11-14T08:00:00.000Z" },
+      {
+        id: "t-newest",
+        updatedAt: "2026-11-15T12:30:00.000Z",
+        createdAt: "2026-11-14T08:00:00.000Z",
+      },
       { id: "t-mid", updatedAt: "2026-11-15T08:00:00.000Z", createdAt: "2026-11-15T07:00:00.000Z" },
     ];
     const picked = pickMostRecentlyActiveThread(threads);

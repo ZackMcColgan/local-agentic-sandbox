@@ -45,8 +45,8 @@ export const CACHE_MAX_AGE_DAYS = 7;
 export const TOOLCHAIN_IMAGES: Record<ToolchainType, string> = {
   "node:22": "builder-node:22",
   "python:3.12": "builder-python:3.12",
-  "go": "builder-go:latest",
-  "rust": "builder-rust:latest"
+  go: "builder-go:latest",
+  rust: "builder-rust:latest",
 };
 
 /**
@@ -55,7 +55,9 @@ export const TOOLCHAIN_IMAGES: Record<ToolchainType, string> = {
 export function resolveToolchainImage(toolchain: ToolchainType): string {
   const image = TOOLCHAIN_IMAGES[toolchain];
   if (!image) {
-    throw new Error(`Unsupported toolchain: ${toolchain}. Must be one of: node:22, python:3.12, go, rust`);
+    throw new Error(
+      `Unsupported toolchain: ${toolchain}. Must be one of: node:22, python:3.12, go, rust`
+    );
   }
   return image;
 }
@@ -73,7 +75,7 @@ const ALLOWED_REGISTRY_DOMAINS = [
   "static.crates.io",
   "proxy.golang.org",
   "sum.golang.org",
-  "github.com"
+  "github.com",
 ];
 
 /**
@@ -86,7 +88,8 @@ export function validateSandboxEgress(
   if (tier === "exec") {
     return {
       allowed: false,
-      reason: "Security Policy: Exec tier enforces air-gapped zero internet egress (internal: true)."
+      reason:
+        "Security Policy: Exec tier enforces air-gapped zero internet egress (internal: true).",
     };
   }
 
@@ -101,12 +104,12 @@ export function validateSandboxEgress(
     }
     return {
       allowed: false,
-      reason: `Security Policy: Egress to ${parsed.hostname} is not in allowlist. Build tier only allows package registries.`
+      reason: `Security Policy: Egress to ${parsed.hostname} is not in allowlist. Build tier only allows package registries.`,
     };
   } catch {
     return {
       allowed: false,
-      reason: `Invalid target URL: ${targetUrl}`
+      reason: `Invalid target URL: ${targetUrl}`,
     };
   }
 }
@@ -128,7 +131,7 @@ const FORBIDDEN_EXEC_COMMAND_PREFIXES = [
   "go get",
   "apt",
   "apt-get",
-  "apk"
+  "apk",
 ];
 
 /**
@@ -147,13 +150,15 @@ export async function executeInSandboxTier(
     droppedCapabilities: ["ALL"],
     uid: 10001,
     gid: 10001,
-    buildCacheMounted: tier === "build"
+    buildCacheMounted: tier === "build",
   };
 
   // Enforcement: Exec tier denies package manager operations and package installation
   if (tier === "exec") {
     const trimmed = command.trim().toLowerCase();
-    const isForbidden = FORBIDDEN_EXEC_COMMAND_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+    const isForbidden = FORBIDDEN_EXEC_COMMAND_PREFIXES.some((prefix) =>
+      trimmed.startsWith(prefix)
+    );
     if (isForbidden) {
       return {
         status: "SECURITY_DENIED",
@@ -162,7 +167,7 @@ export async function executeInSandboxTier(
         stderr: "Permission denied: Exec tier is read-only and air-gapped.",
         error: `Exec tier denies package manager operations (${command}). Use build tier for builds and dependency installation.`,
         executionTimeMs: Math.round(performance.now() - startTime),
-        securityBoundary
+        securityBoundary,
       };
     }
   }
@@ -177,7 +182,7 @@ export async function executeInSandboxTier(
       cwd: workspaceDir,
       env,
       timeout: timeoutSeconds * 1000,
-      maxBuffer: 4 * 1024 * 1024
+      maxBuffer: 4 * 1024 * 1024,
     });
 
     return {
@@ -186,7 +191,7 @@ export async function executeInSandboxTier(
       stdout: stdout.trim(),
       stderr: stderr.trim(),
       executionTimeMs: Math.round(performance.now() - startTime),
-      securityBoundary
+      securityBoundary,
     };
   } catch (err: any) {
     return {
@@ -196,7 +201,7 @@ export async function executeInSandboxTier(
       stderr: err.stderr ? err.stderr.trim() : err.message,
       error: err.message,
       executionTimeMs: Math.round(performance.now() - startTime),
-      securityBoundary
+      securityBoundary,
     };
   }
 }

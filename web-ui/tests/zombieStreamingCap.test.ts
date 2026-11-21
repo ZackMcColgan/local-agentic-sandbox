@@ -12,7 +12,7 @@ import {
   getActiveTurn,
   isZombiePresence,
   ZOMBIE_TURN_AGE_CAP_MS,
-  TURN_STALL_WINDOW_MS
+  TURN_STALL_WINDOW_MS,
 } from "../lib/threads/threadStore";
 import type { Thread } from "../lib/threads/threadStore";
 
@@ -35,7 +35,7 @@ function seedStreamingThread(store: ThreadStore, id: string): Thread {
     role: "assistant",
     content: "partial work",
     status: "streaming",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
   return thread;
 }
@@ -56,22 +56,38 @@ describe("qa-6 — zombie streaming cap (UI-001/UI-002)", () => {
 
   it("isZombiePresence: ancient presence + stale record is a zombie", () => {
     const now = Date.now();
-    const thread = { updatedAt: new Date(now - TURN_STALL_WINDOW_MS - 60000).toISOString() } as Thread;
-    const presence = { threadId: "t", startedAt: new Date(now - ZOMBIE_TURN_AGE_CAP_MS - 60000).toISOString(), status: "streaming" as const };
+    const thread = {
+      updatedAt: new Date(now - TURN_STALL_WINDOW_MS - 60000).toISOString(),
+    } as Thread;
+    const presence = {
+      threadId: "t",
+      startedAt: new Date(now - ZOMBIE_TURN_AGE_CAP_MS - 60000).toISOString(),
+      status: "streaming" as const,
+    };
     assert.equal(isZombiePresence(presence, thread, now), true);
   });
 
   it("isZombiePresence: ancient presence + fresh record is NOT a zombie (live long turn)", () => {
     const now = Date.now();
     const thread = { updatedAt: new Date(now - 30000).toISOString() } as Thread;
-    const presence = { threadId: "t", startedAt: new Date(now - ZOMBIE_TURN_AGE_CAP_MS - 60000).toISOString(), status: "streaming" as const };
+    const presence = {
+      threadId: "t",
+      startedAt: new Date(now - ZOMBIE_TURN_AGE_CAP_MS - 60000).toISOString(),
+      status: "streaming" as const,
+    };
     assert.equal(isZombiePresence(presence, thread, now), false);
   });
 
   it("isZombiePresence: young presence + stale record is NOT a zombie", () => {
     const now = Date.now();
-    const thread = { updatedAt: new Date(now - TURN_STALL_WINDOW_MS - 60000).toISOString() } as Thread;
-    const presence = { threadId: "t", startedAt: new Date(now - 60000).toISOString(), status: "streaming" as const };
+    const thread = {
+      updatedAt: new Date(now - TURN_STALL_WINDOW_MS - 60000).toISOString(),
+    } as Thread;
+    const presence = {
+      threadId: "t",
+      startedAt: new Date(now - 60000).toISOString(),
+      status: "streaming" as const,
+    };
     assert.equal(isZombiePresence(presence, thread, now), false);
   });
 
@@ -79,7 +95,10 @@ describe("qa-6 — zombie streaming cap (UI-001/UI-002)", () => {
     const { store, dir } = makeStore();
     const thread = seedStreamingThread(store, "t-zombie");
     // Leaked presence registered 7h ago; record untouched for 7h.
-    markTurnActive(thread.id, new Date(Date.now() - ZOMBIE_TURN_AGE_CAP_MS - 3600000).toISOString());
+    markTurnActive(
+      thread.id,
+      new Date(Date.now() - ZOMBIE_TURN_AGE_CAP_MS - 3600000).toISOString()
+    );
     rewindUpdatedAt(dir, thread.id, ZOMBIE_TURN_AGE_CAP_MS + 3600000);
 
     const after = await store.getThread(thread.id);
@@ -95,7 +114,10 @@ describe("qa-6 — zombie streaming cap (UI-001/UI-002)", () => {
   it("reconcile keeps a live long turn: ancient presence but fresh record", async () => {
     const { store } = makeStore();
     const thread = seedStreamingThread(store, "t-longlive");
-    markTurnActive(thread.id, new Date(Date.now() - ZOMBIE_TURN_AGE_CAP_MS - 3600000).toISOString());
+    markTurnActive(
+      thread.id,
+      new Date(Date.now() - ZOMBIE_TURN_AGE_CAP_MS - 3600000).toISOString()
+    );
     // record stays fresh (heartbeat) — no rewind.
 
     const after = await store.getThread(thread.id);

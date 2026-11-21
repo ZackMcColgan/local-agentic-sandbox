@@ -142,8 +142,20 @@ test.describe("BoardOrchestrator drain & control gating", () => {
           surfacedCount: 0,
           itemsProcessed: 2,
           outcomes: [
-            { itemId: "item-1", key: "#101", title: "Head eligible task", outcome: "completed", durationMs: 120 },
-            { itemId: "item-2", key: "#102", title: "Dependent task", outcome: "completed", durationMs: 140 },
+            {
+              itemId: "item-1",
+              key: "#101",
+              title: "Head eligible task",
+              outcome: "completed",
+              durationMs: 120,
+            },
+            {
+              itemId: "item-2",
+              key: "#102",
+              title: "Dependent task",
+              outcome: "completed",
+              durationMs: 140,
+            },
           ],
           surfacedIssues: [],
           slotUtilization: {

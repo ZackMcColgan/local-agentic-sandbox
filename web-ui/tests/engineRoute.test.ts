@@ -32,7 +32,7 @@ describe("Engine Control Route (/api/engine)", () => {
             pid: 12345,
             uptime_s: 360,
             model: "swift-15-27b-mtp",
-            vram_mb: 16384
+            vram_mb: 16384,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -75,7 +75,7 @@ describe("Engine Control Route (/api/engine)", () => {
         if (url.endsWith("/health")) {
           return new Response(JSON.stringify({ loaded: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
           });
         }
         return new Response("Not Found", { status: 404 });
@@ -97,7 +97,7 @@ describe("Engine Control Route (/api/engine)", () => {
       const req = new NextRequest("http://localhost:3000/api/engine", {
         method: "POST",
         body: JSON.stringify({ action: "destroy_everything" }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
 
       const res = await POST(req);
@@ -113,16 +113,16 @@ describe("Engine Control Route (/api/engine)", () => {
       globalThis.fetch = (async (input: any, init?: any) => {
         interceptedUrl = String(input);
         interceptedHeaders = init?.headers || {};
-        return new Response(
-          JSON.stringify({ status: "stopped" }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ status: "stopped" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }) as any;
 
       const req = new NextRequest("http://localhost:3000/api/engine", {
         method: "POST",
         body: JSON.stringify({ action: "stop" }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
 
       const res = await POST(req);
@@ -143,16 +143,16 @@ describe("Engine Control Route (/api/engine)", () => {
       globalThis.fetch = (async (input: any, init?: any) => {
         interceptedUrl = String(input);
         interceptedHeaders = init?.headers || {};
-        return new Response(
-          JSON.stringify({ status: "starting" }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ status: "starting" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }) as any;
 
       const req = new NextRequest("http://localhost:3000/api/engine", {
         method: "POST",
         body: JSON.stringify({ action: "start" }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
 
       const res = await POST(req);
@@ -171,16 +171,16 @@ describe("Engine Control Route (/api/engine)", () => {
 
       globalThis.fetch = (async (input: any) => {
         calls.push(String(input));
-        return new Response(
-          JSON.stringify({ status: "ok" }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }) as any;
 
       const req = new NextRequest("http://localhost:3000/api/engine", {
         method: "POST",
         body: JSON.stringify({ action: "restart" }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
 
       const res = await POST(req);

@@ -19,12 +19,12 @@ export function parseRetryAfter(headerValue, nowMs = Date.now()) {
     return null;
   }
 
-  if (typeof headerValue !== 'string') {
+  if (typeof headerValue !== "string") {
     return null;
   }
 
   const trimmed = headerValue.trim();
-  if (trimmed === '') {
+  if (trimmed === "") {
     return null;
   }
 

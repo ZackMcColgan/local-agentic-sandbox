@@ -64,7 +64,10 @@ test("drain report counts completed, failed, and in-progress accurately with slo
     items: board,
     now: () => clock,
     getControlState: () => makeControl("running"),
-    getLiveJobState: () => ({ isRunning: liveRunning, runningJobId: liveRunning ? "t-23" : undefined }),
+    getLiveJobState: () => ({
+      isRunning: liveRunning,
+      runningJobId: liveRunning ? "t-23" : undefined,
+    }),
     getOwnerState: () => ({ isMidTurn: false }),
     getSlotMetrics: () => makeSlotMetrics(),
     issueAndWait: async ({ item }): Promise<JobExecutionOutcome> => {

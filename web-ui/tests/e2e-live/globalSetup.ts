@@ -55,12 +55,16 @@ export default async function globalSetup() {
     const slots = await res.json();
     const busySlot = slots.find((s: any) => s.is_processing);
     if (busySlot) {
-      console.warn(`⚠️ [Preflight Notice] Strata slot ${busySlot.id} is currently busy at startup. Attempting recovery...`);
+      console.warn(
+        `⚠️ [Preflight Notice] Strata slot ${busySlot.id} is currently busy at startup. Attempting recovery...`
+      );
     } else {
       console.log("✔ [Preflight] Strata LLM engine is reachable and slot 0 is IDLE");
     }
   } catch (err: any) {
-    console.error(`\n❌ [Preflight FAILED] Strata LLM engine (http://127.0.0.1:8080) is unreachable: ${err.message}`);
+    console.error(
+      `\n❌ [Preflight FAILED] Strata LLM engine (http://127.0.0.1:8080) is unreachable: ${err.message}`
+    );
     console.error("LLM engine is down. Aborting test:e2e:live run.\n");
     process.exit(1);
   }
@@ -71,7 +75,9 @@ export default async function globalSetup() {
     if (res.ok) {
       const data = await res.json();
       if (data.status === "ok") {
-        console.log(`✔ [Preflight] Host runner daemon is healthy (PID ${data.pid}, SHA ${data.bridgeSourceSha256?.slice(0, 8)})`);
+        console.log(
+          `✔ [Preflight] Host runner daemon is healthy (PID ${data.pid}, SHA ${data.bridgeSourceSha256?.slice(0, 8)})`
+        );
       } else {
         console.warn(`⚠️ [Preflight] Host runner status not ok: ${JSON.stringify(data)}`);
       }

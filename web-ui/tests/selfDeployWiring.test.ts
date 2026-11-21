@@ -11,7 +11,7 @@ function findRepoRoot(): string {
   const candidates = [
     process.cwd(),
     path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../..")
+    path.resolve(process.cwd(), "../.."),
   ];
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, "package.json")) && fs.existsSync(path.join(dir, "web-ui"))) {
@@ -27,7 +27,9 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
     const content = fs.readFileSync(pageFile, "utf8");
 
     // Extract handleDeployRun function block
-    const handleDeployRunMatch = content.match(/const\s+handleDeployRun\s*=\s*async\s*\([\s\S]*?\n\s*\};/);
+    const handleDeployRunMatch = content.match(
+      /const\s+handleDeployRun\s*=\s*async\s*\([\s\S]*?\n\s*\};/
+    );
     assert.ok(handleDeployRunMatch, "handleDeployRun function must be present in page.tsx");
     const funcBody = handleDeployRunMatch[0];
 
@@ -83,15 +85,15 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
           status: "completed",
           builderIterations: 1,
           criticRounds: 1,
-          acceptanceCriteria: []
-        }
+          acceptanceCriteria: [],
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
     };
 
     let deployRunCalledWith = "";
@@ -102,14 +104,17 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
         onSelectThread: () => {},
         onDeployRun: (taskId: string) => {
           deployRunCalledWith = taskId;
-        }
+        },
       })
     );
 
     const window = new Window();
     window.document.body.innerHTML = html;
     const rolloutBtn = window.document.querySelector('[data-testid="merge-rollout-btn"]');
-    assert.ok(rolloutBtn, "LiveRunBlock inside BuildsView must render data-testid='merge-rollout-btn' when onDeployRun is passed");
+    assert.ok(
+      rolloutBtn,
+      "LiveRunBlock inside BuildsView must render data-testid='merge-rollout-btn' when onDeployRun is passed"
+    );
     assert.match(rolloutBtn.textContent || "", /Merge to develop & Rollout/);
   });
 
@@ -145,7 +150,7 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     const html = renderToString(
@@ -153,7 +158,7 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
         onOpenDrawer: () => {},
         activeTask: sampleTask,
         onSelectThread: () => {},
-        onDeployRun: () => {}
+        onDeployRun: () => {},
       })
     );
 
@@ -181,41 +186,49 @@ describe("UI-P1-1 Self-Deploy Wiring & BuildsView Polish", () => {
           status: "completed",
           builderIterations: 1,
           criticRounds: 1,
-          acceptanceCriteria: []
-        }
+          acceptanceCriteria: [],
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
     };
 
     const htmlOff = renderToString(
       React.createElement(LiveRunBlock, {
         task: sampleTask,
         onDeployRun: () => {},
-        selfDeployEnabled: false
+        selfDeployEnabled: false,
       })
     );
     const winOff = new Window();
     winOff.document.body.innerHTML = htmlOff;
-    const btnOff = winOff.document.querySelector('[data-testid="merge-rollout-btn"]') as HTMLButtonElement | null;
+    const btnOff = winOff.document.querySelector(
+      '[data-testid="merge-rollout-btn"]'
+    ) as HTMLButtonElement | null;
     assert.ok(btnOff, "Must render merge-rollout-btn when self-deploy is off");
-    assert.equal(btnOff.disabled, true, "merge-rollout-btn must be disabled when self-deploy is off");
+    assert.equal(
+      btnOff.disabled,
+      true,
+      "merge-rollout-btn must be disabled when self-deploy is off"
+    );
     assert.match(btnOff.textContent || "", /Merge to develop & Rollout/);
 
     const htmlOn = renderToString(
       React.createElement(LiveRunBlock, {
         task: sampleTask,
         onDeployRun: () => {},
-        selfDeployEnabled: true
+        selfDeployEnabled: true,
       })
     );
     const winOn = new Window();
     winOn.document.body.innerHTML = htmlOn;
-    const btnOn = winOn.document.querySelector('[data-testid="merge-rollout-btn"]') as HTMLButtonElement | null;
+    const btnOn = winOn.document.querySelector(
+      '[data-testid="merge-rollout-btn"]'
+    ) as HTMLButtonElement | null;
     assert.ok(btnOn, "Must render merge-rollout-btn when self-deploy is on");
     assert.equal(btnOn.disabled, false, "merge-rollout-btn must be enabled when self-deploy is on");
     assert.match(btnOn.textContent || "", /Merge to develop & Rollout/);

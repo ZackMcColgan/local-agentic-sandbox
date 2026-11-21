@@ -4,8 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WEB_UI_ROOT = path.resolve(__dirname, "..");
-const chatStreamSrc = fs.readFileSync(path.join(WEB_UI_ROOT, "components", "ChatStream.tsx"), "utf8");
-const drawerSrc = fs.readFileSync(path.join(WEB_UI_ROOT, "components", "NavigationDrawer.tsx"), "utf8");
+const chatStreamSrc = fs.readFileSync(
+  path.join(WEB_UI_ROOT, "components", "ChatStream.tsx"),
+  "utf8"
+);
+const drawerSrc = fs.readFileSync(
+  path.join(WEB_UI_ROOT, "components", "NavigationDrawer.tsx"),
+  "utf8"
+);
 
 interface DeckControlParityRow {
   control: string;
@@ -32,16 +38,8 @@ test("Phase A2 — Queue deck vs Steer deck parity table", () => {
     const hasQueue = row.queuePattern.test(chatStreamSrc);
     const hasSteer = row.steerPattern.test(chatStreamSrc);
     if (row.excuse) continue;
-    assert.equal(
-      hasQueue,
-      true,
-      `Queue deck missing control "${row.control}"`
-    );
-    assert.equal(
-      hasSteer,
-      true,
-      `Steer deck missing control "${row.control}"`
-    );
+    assert.equal(hasQueue, true, `Queue deck missing control "${row.control}"`);
+    assert.equal(hasSteer, true, `Steer deck missing control "${row.control}"`);
   }
 });
 

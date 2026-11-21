@@ -63,9 +63,7 @@ function recomputeLedger(
   const agreementRate = totalPrs > 0 ? agreements / totalPrs : 0;
 
   const escapes: AgreementEscapeCase[] = audited
-    .filter(
-      (entry) => entry.reviewerVerdict === "PASS" && entry.driverVerdict === "FAIL"
-    )
+    .filter((entry) => entry.reviewerVerdict === "PASS" && entry.driverVerdict === "FAIL")
     .map((entry) => ({
       prNumber: entry.prNumber,
       headSha: entry.headSha,
@@ -75,8 +73,7 @@ function recomputeLedger(
       recordedAt: entry.updatedAt,
     }));
 
-  const stage3Eligible =
-    totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
+  const stage3Eligible = totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
 
   return {
     entries,
@@ -129,18 +126,12 @@ export class AgreementLedgerStore {
           reviewerVerdict: entry.reviewerVerdict,
           driverVerdict: entry.driverVerdict,
           agreed:
-            entry.driverVerdict === null
-              ? null
-              : entry.reviewerVerdict === entry.driverVerdict,
+            entry.driverVerdict === null ? null : entry.reviewerVerdict === entry.driverVerdict,
           ...(typeof entry.reason === "string" ? { reason: entry.reason } : {}),
           recordedAt:
-            typeof entry.recordedAt === "string"
-              ? entry.recordedAt
-              : new Date(0).toISOString(),
+            typeof entry.recordedAt === "string" ? entry.recordedAt : new Date(0).toISOString(),
           updatedAt:
-            typeof entry.updatedAt === "string"
-              ? entry.updatedAt
-              : new Date(0).toISOString(),
+            typeof entry.updatedAt === "string" ? entry.updatedAt : new Date(0).toISOString(),
         }));
       return recomputeLedger(
         entries,

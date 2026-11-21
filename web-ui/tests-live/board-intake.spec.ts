@@ -146,7 +146,9 @@ test.describe("Monster-prompt single-call intake on mobile viewport", () => {
     await page.getByTestId("intake-preview-btn").click();
     await expect(page.getByTestId("intake-preview-stack")).toBeVisible();
     await expect(page.getByTestId("intake-staged-item-0")).toContainText("Add intake validator");
-    await expect(page.getByTestId("intake-staged-item-1")).toContainText("Wire mobile confirm sheet");
+    await expect(page.getByTestId("intake-staged-item-1")).toContainText(
+      "Wire mobile confirm sheet"
+    );
 
     await page.getByTestId("intake-discard-btn").click();
     await expect(page.getByTestId("intake-preview-stack")).toHaveCount(0);

@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useRef,
-  useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import {
   artifactVersion,
   availableViews,
@@ -68,9 +62,7 @@ export function CanvasProvider({
       openArtifactRef.current = artifact;
       setOpenArtifact(artifact);
       const views = availableViews(artifact);
-      setViewState(
-        viewOverride && views.includes(viewOverride) ? viewOverride : views[0]
-      );
+      setViewState(viewOverride && views.includes(viewOverride) ? viewOverride : views[0]);
       markSeen(artifact);
     },
     [enabled, scrollElRef, markSeen]

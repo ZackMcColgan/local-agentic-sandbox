@@ -58,7 +58,9 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     mockFetchWithError(oldAt, "ETIMEDOUT");
 
     await act(async () => {
-      root.render(React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any));
+      root.render(
+        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+      );
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 100));
@@ -75,7 +77,11 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
       dismissBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
     });
 
-    assert.equal(container.querySelector("[data-testid='notifications-last-result']"), null, "Error card should hide after dismiss");
+    assert.equal(
+      container.querySelector("[data-testid='notifications-last-result']"),
+      null,
+      "Error card should hide after dismiss"
+    );
 
     // Simulate reload: unmount and remount with same error
     act(() => {
@@ -83,12 +89,18 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     });
     root = createRoot(container);
     await act(async () => {
-      root.render(React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any));
+      root.render(
+        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+      );
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 100));
     });
-    assert.equal(container.querySelector("[data-testid='notifications-last-result']"), null, "Dismissed error should stay hidden across reload");
+    assert.equal(
+      container.querySelector("[data-testid='notifications-last-result']"),
+      null,
+      "Dismissed error should stay hidden across reload"
+    );
 
     // New, different error occurs -> re-shows
     const newAt = new Date(2026, 10, 13, 9, 0, 0).toISOString();
@@ -98,7 +110,9 @@ describe("UI-043: Settings Telegram stale error date & persistent dismiss", () =
     });
     root = createRoot(container);
     await act(async () => {
-      root.render(React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any));
+      root.render(
+        React.createElement(SettingsView, { activeModel: "test", onSelectModel: () => {} } as any)
+      );
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 100));

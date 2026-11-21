@@ -16,7 +16,7 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
         acceptanceCriteria: [{ id: "c1", assertion: "parseCsv function handles quoted commas" }],
         status: "pending",
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       },
       {
         id: "M2",
@@ -26,8 +26,8 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
         acceptanceCriteria: [{ id: "c2", assertion: "createCsvStream processes chunks" }],
         status: "pending",
         builderIterations: 0,
-        criticRounds: 0
-      }
+        criticRounds: 0,
+      },
     ];
 
     const manifest: TaskManifest = {
@@ -42,7 +42,7 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -57,25 +57,36 @@ describe("Task Completion — End-to-End Autonomous Lifecycle", () => {
         diff,
         builderIterations: 1,
         criticRounds: 1,
-        builderModel: "swift-27b-mtp"
+        builderModel: "swift-27b-mtp",
       };
     };
 
-    const completedTask = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: mockStepExecutor });
+    const completedTask = await supervisor.executeTaskWithRecovery(manifest, {
+      stepExecutor: mockStepExecutor,
+    });
 
     // 1. Assert task status transitions to completed
     assert.equal(completedTask.status, "completed", "Task status must transition to 'completed'");
 
     // 2. Assert completedAt timestamp is set
     assert.ok(completedTask.completedAt, "completedAt timestamp must be defined");
-    assert.ok(!isNaN(Date.parse(completedTask.completedAt)), "completedAt must be a valid ISO date string");
+    assert.ok(
+      !isNaN(Date.parse(completedTask.completedAt)),
+      "completedAt must be a valid ISO date string"
+    );
 
     // 3. Assert all milestones are completed with valid commits and diffs
     assert.equal(completedTask.milestones.length, 2);
     for (const m of completedTask.milestones) {
       assert.equal(m.status, "completed");
-      assert.ok(m.commitSha && m.commitSha.startsWith(`sha-${m.id}`), `Milestone ${m.id} commit SHA missing`);
-      assert.ok(m.diffSummary && m.diffSummary.includes(`export function ${m.id}`), `Milestone ${m.id} diff missing`);
+      assert.ok(
+        m.commitSha && m.commitSha.startsWith(`sha-${m.id}`),
+        `Milestone ${m.id} commit SHA missing`
+      );
+      assert.ok(
+        m.diffSummary && m.diffSummary.includes(`export function ${m.id}`),
+        `Milestone ${m.id} diff missing`
+      );
       assert.ok(m.completedAt, `Milestone ${m.id} completedAt missing`);
     }
 

@@ -8,14 +8,17 @@ export async function GET(req: NextRequest) {
   if (sessionId) {
     const session = getTraceSession(sessionId);
     if (!session) {
-      return NextResponse.json({
-        error: "Trace session not found",
-        sessionId
-      }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: "Trace session not found",
+          sessionId,
+        },
+        { status: 404 }
+      );
     }
     return NextResponse.json({
       success: true,
-      session
+      session,
     });
   }
 
@@ -26,6 +29,6 @@ export async function GET(req: NextRequest) {
     success: true,
     total_sessions: allSessions.length,
     latest_session: latest,
-    sessions: allSessions.slice(0, 10)
+    sessions: allSessions.slice(0, 10),
   });
 }

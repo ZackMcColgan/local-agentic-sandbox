@@ -1,8 +1,19 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { ThreadStore, activeExecutionSet, getActiveTurn, clearTurnActive, abortActiveTurn, resolveThreadsDir } from "@/lib/threads/threadStore";
-import { OvernightSupervisor, createProductionStepExecutor, cancelTask } from "@/lib/subagents/supervisor";
+import {
+  ThreadStore,
+  activeExecutionSet,
+  getActiveTurn,
+  clearTurnActive,
+  abortActiveTurn,
+  resolveThreadsDir,
+} from "@/lib/threads/threadStore";
+import {
+  OvernightSupervisor,
+  createProductionStepExecutor,
+  cancelTask,
+} from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest } from "@/lib/subagents/types";
 import { unloadAllModels } from "@/lib/subagents/residency";
@@ -37,14 +48,18 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
         builder: effectiveModel,
         critic: effectiveModel,
         explorer: effectiveModel,
-        recorder: effectiveModel
-      }
+        recorder: effectiveModel,
+      },
     }),
     model: effectiveModel,
     scope,
     signal: controller.signal,
     onThinkingChunk: (_chunk: string, totalThinking: string) => {
-      if (!activeExecutionSet.has(taskId) || supervisor.isPaused(taskId) || manifest.status !== "active") {
+      if (
+        !activeExecutionSet.has(taskId) ||
+        supervisor.isPaused(taskId) ||
+        manifest.status !== "active"
+      ) {
         return;
       }
       const now = Date.now();
@@ -57,14 +72,18 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
 
         const journal = manifest.journal || [];
         const lastEntry = journal[journal.length - 1];
-        if (lastEntry && lastEntry.role === "builder" && lastEntry.message.startsWith("Analyzing:")) {
+        if (
+          lastEntry &&
+          lastEntry.role === "builder" &&
+          lastEntry.message.startsWith("Analyzing:")
+        ) {
           lastEntry.message = message;
           lastEntry.timestamp = new Date().toISOString();
         } else {
           journal.push({
             timestamp: new Date().toISOString(),
             role: "builder",
-            message
+            message,
           });
         }
         manifest.journal = journal;
@@ -77,13 +96,16 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
           console.warn(`[threads/[id]] Failed to write in-flight thinking checkpoint:`, saveErr);
         }
       }
-    }
+    },
   });
 
   (async () => {
     try {
       console.log(`[threads/[id]] executing task ${taskId} with recovery`);
-      const result = await supervisor.executeTaskWithRecovery(manifest, { stepExecutor: executor, signal: controller.signal });
+      const result = await supervisor.executeTaskWithRecovery(manifest, {
+        stepExecutor: executor,
+        signal: controller.signal,
+      });
       console.log(`[threads/[id]] task ${taskId} finished with status: ${result.status}`);
 
       if (result.status === "completed") {
@@ -99,7 +121,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
               process.env.WORKSPACE_DIR,
               "/workspace",
               process.cwd(),
-              path.resolve(process.cwd(), "..")
+              path.resolve(process.cwd(), ".."),
             ].filter(Boolean) as string[];
 
             for (const dir of repoCandidates) {
@@ -133,7 +155,9 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             taskId,
             timestamp: new Date().toISOString(),
             ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
-            ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+            ...(Array.isArray(result.verificationGaps)
+              ? { verificationGaps: result.verificationGaps }
+              : {}),
           } as any);
           getThreadStore().saveThread(currentThread);
         }
@@ -148,7 +172,10 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
                 : "stopped";
           const lastJournalReason =
             Array.isArray(result.journal) && result.journal.length > 0
-              ? [...result.journal].reverse().find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)?.message
+              ? [...result.journal]
+                  .reverse()
+                  .find((j: any) => typeof j?.message === "string" && j.message.trim().length > 0)
+                  ?.message
               : undefined;
           const reason =
             result.errorSummary ||
@@ -163,7 +190,9 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             taskId,
             timestamp: new Date().toISOString(),
             ...(result.completionStamp ? { completionStamp: result.completionStamp } : {}),
-            ...(Array.isArray(result.verificationGaps) ? { verificationGaps: result.verificationGaps } : {})
+            ...(Array.isArray(result.verificationGaps)
+              ? { verificationGaps: result.verificationGaps }
+              : {}),
           } as any);
           getThreadStore().saveThread(currentThread);
         }
@@ -183,7 +212,7 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
             role: "assistant",
             content: `Task failed: ${errReason}`,
             taskId,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
           getThreadStore().saveThread(currentThread);
         }
@@ -267,7 +296,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
               ? `${existingContent.trimEnd()}\n\n*[Stopped by user]*`
               : "*[Stopped by user]*";
           }
-          if (!updatedThread.messages[i].status || updatedThread.messages[i].status === "streaming") {
+          if (
+            !updatedThread.messages[i].status ||
+            updatedThread.messages[i].status === "streaming"
+          ) {
             updatedThread.messages[i].status = "incomplete";
           }
           break;
@@ -304,7 +336,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
-            message: "Resumed run from last saved checkpoint. Completed milestones preserved."
+            message: "Resumed run from last saved checkpoint. Completed milestones preserved.",
           });
           supervisor.saveCheckpoint(task);
           supervisor.resumeTask(task.taskId);

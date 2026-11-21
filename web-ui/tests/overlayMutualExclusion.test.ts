@@ -30,7 +30,8 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
   });
 
   it("renders full untruncated session title, visible scrim, and closes when another overlay opens", () => {
-    const longTitle = "Very Long Session Title That Should Never Be Truncated In The Action Sheet Header";
+    const longTitle =
+      "Very Long Session Title That Should Never Be Truncated In The Action Sheet Header";
     act(() => {
       root.render(
         React.createElement(NavigationDrawer as any, {
@@ -56,8 +57,14 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
     });
 
     // Open the action sheet via the thread's "..." button
-    const moreBtn = container.querySelector("button[aria-label='Session options'], button[title='Session options'], button[data-testid='thread-more-t-1']")
-      ?? Array.from(container.querySelectorAll("button")).find((b) => b.querySelector("svg") && b.getAttribute("aria-label")?.toLowerCase().includes("option"));
+    const moreBtn =
+      container.querySelector(
+        "button[aria-label='Session options'], button[title='Session options'], button[data-testid='thread-more-t-1']"
+      ) ??
+      Array.from(container.querySelectorAll("button")).find(
+        (b) =>
+          b.querySelector("svg") && b.getAttribute("aria-label")?.toLowerCase().includes("option")
+      );
     assert.ok(moreBtn, "Thread action sheet trigger button should exist");
 
     act(() => {
@@ -69,7 +76,9 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
 
     // Visible scrim check
     assert.ok(
-      sheet!.className.includes("bg-black/60") || sheet!.className.includes("bg-black/65") || sheet!.className.includes("bg-black/70"),
+      sheet!.className.includes("bg-black/60") ||
+        sheet!.className.includes("bg-black/65") ||
+        sheet!.className.includes("bg-black/70"),
       `Action sheet scrim should be visible (>= bg-black/60), got: ${sheet!.className}`
     );
 
@@ -84,7 +93,9 @@ describe("UI-038: Overlay mutual exclusion & session action sheet scrim/title", 
 
     // Mutual exclusion: another overlay opens -> action sheet closes
     act(() => {
-      win.dispatchEvent(new win.CustomEvent("ui:overlay-open", { detail: { source: "header-overflow" } }) as any);
+      win.dispatchEvent(
+        new win.CustomEvent("ui:overlay-open", { detail: { source: "header-overflow" } }) as any
+      );
     });
 
     const sheetAfter = container.querySelector("[data-testid='thread-action-sheet']");

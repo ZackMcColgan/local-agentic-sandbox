@@ -11,7 +11,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-mcp-server",
-      version: "2.0.0"
+      version: "2.0.0",
     });
     registerWorkspaceTools(mcp);
   });
@@ -24,13 +24,7 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
     // @ts-ignore
     const grepHandler = mcp._registeredTools["workspace_grep"].handler;
 
-    const dangerousPatterns = [
-      "(a+)+$",
-      "(a|aa)+$",
-      "([a-zA-Z]+)*$",
-      "([0-9]+)+",
-      "(.*a){10}"
-    ];
+    const dangerousPatterns = ["(a+)+$", "(a|aa)+$", "([a-zA-Z]+)*$", "([0-9]+)+", "(.*a){10}"];
 
     for (const pattern of dangerousPatterns) {
       const res = await grepHandler({ pattern });
@@ -77,13 +71,17 @@ describe("workspace_grep ReDoS & Regex Security Suite", () => {
       "sample_test",
       "def\\s+test_",
       "import.*node:test",
-      "^const\\s+[a-zA-Z0-9_]+"
+      "^const\\s+[a-zA-Z0-9_]+",
     ];
 
     for (const pattern of validPatterns) {
       const res = await grepHandler({ pattern });
       const data = JSON.parse(res.content[0].text);
-      assert.equal(data.status, "SUCCESS", `Valid pattern '${pattern}' should execute successfully`);
+      assert.equal(
+        data.status,
+        "SUCCESS",
+        `Valid pattern '${pattern}' should execute successfully`
+      );
       assert.equal(typeof data.match_count, "number");
     }
   });

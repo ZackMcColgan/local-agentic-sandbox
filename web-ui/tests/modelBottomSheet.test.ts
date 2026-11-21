@@ -61,9 +61,12 @@ describe("E4: ModelBottomSheet Escape & safe engine Turn Off (UI-037)", () => {
     globalThis.fetch = (async (_url: any, init?: any) => {
       if (init?.method === "POST") {
         postCount++;
-        return new Response(JSON.stringify({ success: false, error: "Engine stop not supported" }), {
-          status: 502,
-        });
+        return new Response(
+          JSON.stringify({ success: false, error: "Engine stop not supported" }),
+          {
+            status: 502,
+          }
+        );
       }
       return new Response(JSON.stringify({ status: "running" }), { status: 200 });
     }) as any;

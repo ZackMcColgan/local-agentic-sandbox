@@ -1,10 +1,16 @@
 import fs from "fs";
 import path from "path";
-import { searchSemanticMemory, getQdrantCollectionInfo, DEFAULT_QDRANT_COLLECTION } from "../web-ui/lib/memory/semanticMemory.ts";
+import {
+  searchSemanticMemory,
+  getQdrantCollectionInfo,
+  DEFAULT_QDRANT_COLLECTION,
+} from "../web-ui/lib/memory/semanticMemory.ts";
 
 async function runMemoryEval() {
   const isControlEmpty = process.argv.includes("--control-empty");
-  const collectionName = isControlEmpty ? "test-control-empty" : (process.env.QDRANT_COLLECTION || DEFAULT_QDRANT_COLLECTION);
+  const collectionName = isControlEmpty
+    ? "test-control-empty"
+    : process.env.QDRANT_COLLECTION || DEFAULT_QDRANT_COLLECTION;
   const goldenSetPath = path.resolve("eval/memory-golden-set.json");
 
   if (!fs.existsSync(goldenSetPath)) {
@@ -26,7 +32,9 @@ async function runMemoryEval() {
   for (const item of goldenSet.questions) {
     const res = await searchSemanticMemory(item.question, { collectionName });
     const hasCitations = res.citations.length > 0;
-    const matchedExpectedFile = res.citations.some((c) => c.toLowerCase().includes(item.expectedFile.toLowerCase()));
+    const matchedExpectedFile = res.citations.some((c) =>
+      c.toLowerCase().includes(item.expectedFile.toLowerCase())
+    );
 
     let points = 0;
     if (!isControlEmpty && matchedExpectedFile) {
@@ -39,7 +47,7 @@ async function runMemoryEval() {
       question: item.question,
       expected: item.expectedFile,
       citations: res.citations,
-      passed: points === 1
+      passed: points === 1,
     });
 
     console.log(`[Q: ${item.id}] ${points === 1 ? "✅ PASS" : "❌ FAIL"}`);
@@ -50,7 +58,9 @@ async function runMemoryEval() {
 
   const scorePct = ((totalScore / goldenSet.questions.length) * 100).toFixed(1);
   console.log(`\n-------------------------------------------------------`);
-  console.log(`[Memory Eval Result] Score: ${totalScore}/${goldenSet.questions.length} (${scorePct}%)`);
+  console.log(
+    `[Memory Eval Result] Score: ${totalScore}/${goldenSet.questions.length} (${scorePct}%)`
+  );
   console.log(`-------------------------------------------------------\n`);
 
   if (isControlEmpty && totalScore !== 0) {

@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import http from "node:http";
-import {
-  getHostSettings,
-  setHostSettings,
-  getHostSettingsFilePath
-} from "../lib/hostSettings";
+import { getHostSettings, setHostSettings, getHostSettingsFilePath } from "../lib/hostSettings";
 import { shouldAdvertiseHostTools, HOST_TOOLS_DEFINITIONS } from "../lib/hostMode";
 import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
 
@@ -47,7 +43,11 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
     setHostSettings({ hostAccessEnabled: false });
     assert.equal(fs.existsSync(settingsFile), true, "Settings file must exist after update");
     const reloaded = getHostSettings();
-    assert.equal(reloaded.hostAccessEnabled, false, "hostAccessEnabled must be false when switched off");
+    assert.equal(
+      reloaded.hostAccessEnabled,
+      false,
+      "hostAccessEnabled must be false when switched off"
+    );
   });
 
   it("3. Preference persists across server restarts via persistent file store", () => {
@@ -68,13 +68,25 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
   it("4. Switch ON + daemon down (UNAVAILABLE) yields shouldAdvertiseHostTools = false", () => {
     // When hostAccessEnabled is true but runner is UNAVAILABLE / down
     const shouldAdvertise = shouldAdvertiseHostTools(true, "UNAVAILABLE");
-    assert.equal(shouldAdvertise, false, "Must not advertise host tools when daemon is UNAVAILABLE");
+    assert.equal(
+      shouldAdvertise,
+      false,
+      "Must not advertise host tools when daemon is UNAVAILABLE"
+    );
 
     const shouldAdvertiseMismatch = shouldAdvertiseHostTools(true, "MISMATCH");
-    assert.equal(shouldAdvertiseMismatch, false, "Must not advertise host tools when daemon is in MISMATCH state");
+    assert.equal(
+      shouldAdvertiseMismatch,
+      false,
+      "Must not advertise host tools when daemon is in MISMATCH state"
+    );
 
     const shouldAdvertiseReady = shouldAdvertiseHostTools(true, "READY");
-    assert.equal(shouldAdvertiseReady, true, "Must advertise host tools when switch is ON and daemon is READY");
+    assert.equal(
+      shouldAdvertiseReady,
+      true,
+      "Must advertise host tools when switch is ON and daemon is READY"
+    );
   });
 
   /**
@@ -91,11 +103,13 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
       const url = req.url || "";
       if (url.includes("/health")) {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          status: "ok",
-          protocolVersion: PROTOCOL_VERSION,
-          bridgeSourceSha256: manifest.bridgeSourceSha256
-        }));
+        res.end(
+          JSON.stringify({
+            status: "ok",
+            protocolVersion: PROTOCOL_VERSION,
+            bridgeSourceSha256: manifest.bridgeSourceSha256,
+          })
+        );
         return;
       }
       if (url.includes("/sse")) {
@@ -112,8 +126,16 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
             capturedPayloads.push(JSON.parse(body));
           } catch {}
           res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-          res.write(JSON.stringify({ message: { role: "assistant", content: "All done." } }) + "\n");
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, eval_count: 12 }) + "\n");
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "All done." } }) + "\n"
+          );
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "" },
+              done: true,
+              eval_count: 12,
+            }) + "\n"
+          );
           res.end();
           return;
         }
@@ -138,7 +160,7 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
       MCP_SERVER_URL: process.env.MCP_SERVER_URL,
       BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
       LLM_ENGINE: process.env.LLM_ENGINE,
-      HOST_RUNNER_URL: process.env.HOST_RUNNER_URL
+      HOST_RUNNER_URL: process.env.HOST_RUNNER_URL,
     };
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
@@ -164,7 +186,7 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
         title: threadParams.title,
         hostAccess: threadParams.hostAccess,
         taskId: threadParams.taskId,
-        isTest: true
+        isTest: true,
       });
 
       const { NextRequest } = await import("next/server");
@@ -176,9 +198,15 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
           threadId,
           userMessageId: "u-1",
           assistantMessageId: "a-1",
-          messages: [{ role: "user", content: "Inspect the repo patterns and report what you find.", id: "u-1" }],
-          model: "swift-15-27b-mtp"
-        })
+          messages: [
+            {
+              role: "user",
+              content: "Inspect the repo patterns and report what you find.",
+              id: "u-1",
+            },
+          ],
+          model: "swift-15-27b-mtp",
+        }),
       });
       const res = await chatRouteModule.POST(req as any);
       const reader = res.body!.getReader();
@@ -219,7 +247,11 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
 
     // Task thread: identical switch + READY runner, but taskId present -> prohibition must hold.
     const taskNames = advertisedToolNames(
-      await runTurn({ title: "Task Thread", hostAccess: true, taskId: `task-prohibition-${Date.now()}` })
+      await runTurn({
+        title: "Task Thread",
+        hostAccess: true,
+        taskId: `task-prohibition-${Date.now()}`,
+      })
     );
     assert.ok(taskNames.length > 0, "Task thread turn must still advertise non-host tools");
     for (const hostName of hostToolNames) {

@@ -40,7 +40,9 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
     await resetStub();
   });
 
-  test("UI-A1 (CHAT-14): Reasoning panel visible while content empty, preserved across reload, and completes", async ({ page }) => {
+  test("UI-A1 (CHAT-14): Reasoning panel visible while content empty, preserved across reload, and completes", async ({
+    page,
+  }) => {
     await setStubScript("long-thinking");
 
     await page.goto("/");
@@ -57,10 +59,14 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
     const thinkingPanel = page.locator('[data-testid="thinking-panel"]').last();
     await expect(thinkingPanel).toBeVisible({ timeout: 10000 });
     await expect(thinkingPanel).toContainText("Reasoning");
-    await expect(page.locator("text=Analyzing requirements").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("text=Analyzing requirements").first()).toBeVisible({
+      timeout: 15000,
+    });
 
     // Verify assistant content has not arrived yet
-    const finalAnswer = page.locator("text=Deliberation complete. Here is the verified answer.").last();
+    const finalAnswer = page
+      .locator("text=Deliberation complete. Here is the verified answer.")
+      .last();
     await expect(finalAnswer).toHaveCount(0);
 
     // 3. Reload page mid-deliberation
@@ -70,7 +76,9 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
     const thinkingPanelAfterReload = page.locator('[data-testid="thinking-panel"]').last();
     await expect(thinkingPanelAfterReload).toBeVisible({ timeout: 10000 });
     await expect(thinkingPanelAfterReload).toContainText("Reasoning");
-    await expect(page.locator("text=Analyzing requirements").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("text=Analyzing requirements").first()).toBeVisible({
+      timeout: 15000,
+    });
 
     // 5. Release stub engine to stream final answer
     await releaseStub();
@@ -79,7 +87,9 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
     await expect(finalAnswer).toBeVisible({ timeout: 15000 });
   });
 
-  test("UI-A2 (CHAT-13): Mid-turn steer preserves prior thinking and delivers redirected answer", async ({ page }) => {
+  test("UI-A2 (CHAT-13): Mid-turn steer preserves prior thinking and delivers redirected answer", async ({
+    page,
+  }) => {
     await setStubScript("two-round");
 
     await page.goto("/");
@@ -117,10 +127,14 @@ test.describe("Real-Mode Runtime E2E Invariants (No Browser Route Mocks)", () =>
     if ((await toggleButton.getAttribute("aria-expanded")) === "false") {
       await toggleButton.click();
     }
-    await expect(page.locator("text=Assessing user weather request").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=Assessing user weather request").first()).toBeVisible({
+      timeout: 10000,
+    });
 
     // 6. Round 2 delivers redirected answer
-    const redirectedAnswer = page.locator("text=Redirected Answer: Here is the SVG diagram you requested").last();
+    const redirectedAnswer = page
+      .locator("text=Redirected Answer: Here is the SVG diagram you requested")
+      .last();
     await expect(redirectedAnswer).toBeVisible({ timeout: 15000 });
   });
 });

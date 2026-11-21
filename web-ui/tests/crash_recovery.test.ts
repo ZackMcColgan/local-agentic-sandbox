@@ -25,16 +25,20 @@ describe("Sprint 12 Phase 4 — Crash Recovery (crash_recovery.test.ts)", () => 
         gitShas: ["sha-c1"],
         milestoneSummary: [
           { id: "M1", title: "Step 1", status: "completed", commitSha: "sha-c1" },
-          { id: "M2", title: "Step 2", status: "in_progress" }
+          { id: "M2", title: "Step 2", status: "in_progress" },
         ],
-        deploymentRef: "pending"
+        deploymentRef: "pending",
       });
 
       const crashedRuns = ledger.scanAndMarkCrashedRuns({ staleThresholdSeconds: 60 });
       assert.equal(crashedRuns.length, 1, "Must detect 1 crashed run");
       assert.equal(crashedRuns[0].runId, "run-crash-1");
       assert.equal(crashedRuns[0].status, "crashed");
-      assert.equal(crashedRuns[0].resumable, true, "Crashed run must offer resume (resumable=true)");
+      assert.equal(
+        crashedRuns[0].resumable,
+        true,
+        "Crashed run must offer resume (resumable=true)"
+      );
 
       const fromDb = ledger.getRun("run-crash-1");
       assert.ok(fromDb);
@@ -69,7 +73,7 @@ describe("Sprint 12 Phase 4 — Crash Recovery (crash_recovery.test.ts)", () => 
         model: "swift-27b-mtp",
         gitShas: [],
         milestoneSummary: [{ id: "M1", title: "Work", status: "in_progress" }],
-        deploymentRef: "none"
+        deploymentRef: "none",
       });
 
       ledger.recordRunStart({
@@ -82,7 +86,7 @@ describe("Sprint 12 Phase 4 — Crash Recovery (crash_recovery.test.ts)", () => 
         model: "swift-27b-mtp",
         gitShas: [],
         milestoneSummary: [{ id: "M1", title: "Work", status: "in_progress" }],
-        deploymentRef: "none"
+        deploymentRef: "none",
       });
 
       // With threshold=30s, only the 40s-old run is stale (>30s)
@@ -121,16 +125,13 @@ describe("Sprint 12 Phase 4 — Crash Recovery (crash_recovery.test.ts)", () => 
           model: "swift-27b-mtp",
           gitShas: [],
           milestoneSummary: [{ id: "M1", title: "Task", status: "in_progress" }],
-          deploymentRef: "none"
+          deploymentRef: "none",
         });
       }
 
       const crashed = ledger.scanAndMarkCrashedRuns({ staleThresholdSeconds: 60 });
       assert.equal(crashed.length, 3, "All 3 crashed runs must be detected");
-      assert.deepEqual(
-        crashed.map((r) => r.runId).sort(),
-        ["run-m1", "run-m2", "run-m3"]
-      );
+      assert.deepEqual(crashed.map((r) => r.runId).sort(), ["run-m1", "run-m2", "run-m3"]);
       assert.ok(crashed.every((r) => r.status === "crashed" && r.resumable === true));
 
       ledger.close();

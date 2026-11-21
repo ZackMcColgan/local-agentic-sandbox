@@ -14,7 +14,10 @@ describe("P3.2 & P3.3: Finish-verification gate & milestone handoff chunking", (
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = path.join(os.tmpdir(), `p3-gate-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    tmpDir = path.join(
+      os.tmpdir(),
+      `p3-gate-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    );
     fs.mkdirSync(tmpDir, { recursive: true });
     execSync("git init", { cwd: tmpDir, stdio: "ignore" });
     execSync('git config user.email "test@example.com"', { cwd: tmpDir, stdio: "ignore" });
@@ -36,7 +39,10 @@ describe("P3.2 & P3.3: Finish-verification gate & milestone handoff chunking", (
       baseCommit,
     });
     assert.equal(fail.ok, false);
-    assert.ok(fail.reasons.length >= 2, "must report missing artifact, failed gate, and no new commits");
+    assert.ok(
+      fail.reasons.length >= 2,
+      "must report missing artifact, failed gate, and no new commits"
+    );
 
     fs.writeFileSync(path.join(tmpDir, "out.ts"), "export const x = 1;\n");
     execSync("git add . && git commit -m feat", { cwd: tmpDir, stdio: "ignore" });

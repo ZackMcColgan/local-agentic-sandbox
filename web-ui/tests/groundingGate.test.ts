@@ -6,7 +6,7 @@ import {
   hasSubstantiveWebResults,
   isMetaChallenge,
   shouldInjectHonestAbort,
-  HONEST_ABORT_DIRECTIVE
+  HONEST_ABORT_DIRECTIVE,
 } from "../lib/grounding";
 
 test("isValidSearchQuery: accepts concise information need query", () => {
@@ -31,7 +31,11 @@ test("isValidSearchQuery: boundary checks for length (empty, 200 chars, 201 char
   assert.equal(isValidSearchQuery(" "), false);
   assert.equal(isValidSearchQuery("a"), false);
 
-  const query200 = "Spanish Fort AL weather forecast today with hourly cloud cover wind humidity rain details ".padEnd(200, "x");
+  const query200 =
+    "Spanish Fort AL weather forecast today with hourly cloud cover wind humidity rain details ".padEnd(
+      200,
+      "x"
+    );
   assert.equal(query200.length, 200);
   assert.equal(isValidSearchQuery(query200), true);
 
@@ -65,7 +69,11 @@ test("evaluateSearchQueryAttempt helper: first invalid -> nudge, countAttempt fa
   assert.equal(emptySecond.countAttempt, true);
 
   // Valid query -> proceed
-  const validAttempt = evaluateSearchQueryAttempt("Spanish Fort AL hourly forecast today", userPrompt, 0);
+  const validAttempt = evaluateSearchQueryAttempt(
+    "Spanish Fort AL hourly forecast today",
+    userPrompt,
+    0
+  );
   assert.equal(validAttempt.action, "proceed");
   assert.equal(validAttempt.countAttempt, false);
 });
@@ -89,30 +97,54 @@ test("hasSubstantiveWebResults: false for no web traces", () => {
 test("hasSubstantiveWebResults: false for empty / no-results / error shapes", () => {
   assert.equal(hasSubstantiveWebResults([{ tool: "search_web", result: "" }]), false);
   assert.equal(hasSubstantiveWebResults([{ tool: "search_web", result: { results: [] } }]), false);
-  assert.equal(hasSubstantiveWebResults([{ tool: "search_web", result: "No results found for query." }]), false);
-  assert.equal(hasSubstantiveWebResults([{ tool: "search_web", result: { error: "timeout " + longText } }]), false);
   assert.equal(
-    hasSubstantiveWebResults([{ tool: "search_web", result: { content: [{ type: "text", text: "No results found." }] } }]),
+    hasSubstantiveWebResults([{ tool: "search_web", result: "No results found for query." }]),
     false
   );
   assert.equal(
-    hasSubstantiveWebResults([{ tool: "search_web", result: { isError: true, content: [{ type: "text", text: longText }] } }]),
+    hasSubstantiveWebResults([{ tool: "search_web", result: { error: "timeout " + longText } }]),
+    false
+  );
+  assert.equal(
+    hasSubstantiveWebResults([
+      { tool: "search_web", result: { content: [{ type: "text", text: "No results found." }] } },
+    ]),
+    false
+  );
+  assert.equal(
+    hasSubstantiveWebResults([
+      {
+        tool: "search_web",
+        result: { isError: true, content: [{ type: "text", text: longText }] },
+      },
+    ]),
     false
   );
 });
 
 test("hasSubstantiveWebResults: true for real content", () => {
   assert.equal(
-    hasSubstantiveWebResults([{ tool: "search_web", result: { content: [{ type: "text", text: longText }] } }]),
+    hasSubstantiveWebResults([
+      { tool: "search_web", result: { content: [{ type: "text", text: longText }] } },
+    ]),
     true
   );
-  assert.equal(hasSubstantiveWebResults([{ tool: "fetch_webpage_markdown", result: longText }]), true);
+  assert.equal(
+    hasSubstantiveWebResults([{ tool: "fetch_webpage_markdown", result: longText }]),
+    true
+  );
 });
 
 test("Oct 19 regression: empty search on live intent injects honest abort", () => {
-  const traces = [{ tool: "search_web", args: { query: "weather Spanish Fort AL" }, result: { results: [] } }];
+  const traces = [
+    { tool: "search_web", args: { query: "weather Spanish Fort AL" }, result: { results: [] } },
+  ];
   assert.equal(
-    shouldInjectHonestAbort({ userPrompt: "Create a svg of the weather today in Spanish Fort AL", webResearchCalls: 1, traces }),
+    shouldInjectHonestAbort({
+      userPrompt: "Create a svg of the weather today in Spanish Fort AL",
+      webResearchCalls: 1,
+      traces,
+    }),
     true
   );
   assert.match(HONEST_ABORT_DIRECTIVE, /could not be retrieved/i);
@@ -121,10 +153,28 @@ test("Oct 19 regression: empty search on live intent injects honest abort", () =
 
 test("honest abort not injected when results are substantive or no search ran", () => {
   const good = [{ tool: "search_web", result: longText }];
-  assert.equal(shouldInjectHonestAbort({ userPrompt: "weather today in Mobile AL", webResearchCalls: 1, traces: good }), false);
-  assert.equal(shouldInjectHonestAbort({ userPrompt: "weather today in Mobile AL", webResearchCalls: 0, traces: [] }), false);
   assert.equal(
-    shouldInjectHonestAbort({ userPrompt: "explain recursion", webResearchCalls: 1, traces: [{ tool: "search_web", result: "" }] }),
+    shouldInjectHonestAbort({
+      userPrompt: "weather today in Mobile AL",
+      webResearchCalls: 1,
+      traces: good,
+    }),
+    false
+  );
+  assert.equal(
+    shouldInjectHonestAbort({
+      userPrompt: "weather today in Mobile AL",
+      webResearchCalls: 0,
+      traces: [],
+    }),
+    false
+  );
+  assert.equal(
+    shouldInjectHonestAbort({
+      userPrompt: "explain recursion",
+      webResearchCalls: 1,
+      traces: [{ tool: "search_web", result: "" }],
+    }),
     false
   );
 });
@@ -135,7 +185,7 @@ test("honest abort applies to meta-challenge follow-up via prior prompt", () => 
       userPrompt: "Did you actually look up the weather?",
       priorUserPrompt: "What's the weather today in Spanish Fort AL",
       webResearchCalls: 1,
-      traces: [{ tool: "search_web", result: "No results found." }]
+      traces: [{ tool: "search_web", result: "No results found." }],
     }),
     true
   );

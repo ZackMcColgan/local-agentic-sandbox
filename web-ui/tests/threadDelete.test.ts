@@ -8,7 +8,7 @@ import {
   registerTurnAbortController,
   markTurnActive,
   getActiveTurn,
-  resolveThreadsDir
+  resolveThreadsDir,
 } from "../lib/threads/threadStore";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
 import { TaskManifest } from "../lib/subagents/types";
@@ -59,13 +59,29 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     assert.strictEqual(result, true, "deleteThread should return true for existing thread");
 
     // Assert target artifacts deleted
-    assert.strictEqual(fs.existsSync(path.join(tmpDir, `${threadId}.json`)), false, "Thread JSON must be removed");
-    assert.strictEqual(fs.existsSync(path.join(tmpDir, threadId)), false, "Thread subdirectory must be removed recursively");
+    assert.strictEqual(
+      fs.existsSync(path.join(tmpDir, `${threadId}.json`)),
+      false,
+      "Thread JSON must be removed"
+    );
+    assert.strictEqual(
+      fs.existsSync(path.join(tmpDir, threadId)),
+      false,
+      "Thread subdirectory must be removed recursively"
+    );
     assert.strictEqual(fs.existsSync(steerFile), false, "Steer sidecar file must be removed");
 
     // Assert sibling artifacts preserved
-    assert.strictEqual(fs.existsSync(path.join(tmpDir, `${siblingId}.json`)), true, "Sibling thread JSON must remain");
-    assert.strictEqual(fs.existsSync(path.join(siblingSubDir, "stay.txt")), true, "Sibling subfile must remain");
+    assert.strictEqual(
+      fs.existsSync(path.join(tmpDir, `${siblingId}.json`)),
+      true,
+      "Sibling thread JSON must remain"
+    );
+    assert.strictEqual(
+      fs.existsSync(path.join(siblingSubDir, "stay.txt")),
+      true,
+      "Sibling subfile must remain"
+    );
   });
 
   it("2. Deleting a thread with an actively streaming turn aborts the turn first and prevents resurrection on would-be late persist", async () => {
@@ -77,7 +93,11 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     registerTurnAbortController(threadId, controller);
     markTurnActive(threadId);
 
-    assert.strictEqual(controller.signal.aborted, false, "Controller should not be aborted before delete");
+    assert.strictEqual(
+      controller.signal.aborted,
+      false,
+      "Controller should not be aborted before delete"
+    );
     assert.ok(getActiveTurn(threadId), "Active turn should be present before delete");
 
     // Delete thread while turn is live
@@ -85,16 +105,24 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     assert.strictEqual(result, true);
 
     // Turn must be aborted and active presence cleared
-    assert.strictEqual(controller.signal.aborted, true, "Streaming turn abort controller must be triggered");
+    assert.strictEqual(
+      controller.signal.aborted,
+      true,
+      "Streaming turn abort controller must be triggered"
+    );
     assert.strictEqual(getActiveTurn(threadId), null, "Active turn presence must be cleared");
-    assert.strictEqual(fs.existsSync(path.join(tmpDir, `${threadId}.json`)), false, "Thread file must be gone");
+    assert.strictEqual(
+      fs.existsSync(path.join(tmpDir, `${threadId}.json`)),
+      false,
+      "Thread file must be gone"
+    );
 
     // Late persist attempt from severed streaming turn
     store.addMessage(threadId, {
       id: "msg-late-assistant",
       role: "assistant",
       content: "Late completion text that should not resurrect thread",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     store.saveThread({
@@ -104,15 +132,23 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
           id: "msg-resurrect",
           role: "assistant",
           content: "Resurrect attempt",
-          timestamp: new Date().toISOString()
-        }
-      ]
+          timestamp: new Date().toISOString(),
+        },
+      ],
     });
 
     // Record MUST STILL BE ABSENT after would-be final persist
-    assert.strictEqual(fs.existsSync(path.join(tmpDir, `${threadId}.json`)), false, "Thread must NOT resurrect from late message/save");
+    assert.strictEqual(
+      fs.existsSync(path.join(tmpDir, `${threadId}.json`)),
+      false,
+      "Thread must NOT resurrect from late message/save"
+    );
     const retrieved = await store.getThread(threadId);
-    assert.strictEqual(retrieved, null, "getThread must return null for deleted thread even after late persist attempt");
+    assert.strictEqual(
+      retrieved,
+      null,
+      "getThread must return null for deleted thread even after late persist attempt"
+    );
   });
 
   it("3. Deleting a checkpoint-synthesized ghost thread removes its checkpoint manifest so it never resurrects", async () => {
@@ -132,7 +168,7 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
       checkpoints: [],
       ambiguityFlags: [],
       updatedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -149,7 +185,11 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     assert.strictEqual(result, true, "deleteThread should succeed on ghost thread");
 
     // Checkpoint manifest MUST be removed from disk
-    assert.strictEqual(fs.existsSync(checkpointFile), false, "Checkpoint manifest file must be removed for ghost thread");
+    assert.strictEqual(
+      fs.existsSync(checkpointFile),
+      false,
+      "Checkpoint manifest file must be removed for ghost thread"
+    );
 
     // Subsequent listThreads must NOT resurrect the ghost thread
     const refreshedList = await store.listThreads();
@@ -174,7 +214,7 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
       checkpoints: [],
       ambiguityFlags: [],
       updatedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -185,7 +225,7 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     store.createThread({
       id: realThreadId,
       title: "Real Run Thread",
-      taskId
+      taskId,
     });
     assert.strictEqual(fs.existsSync(path.join(tmpDir, `${realThreadId}.json`)), true);
 
@@ -197,9 +237,17 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     assert.strictEqual(fs.existsSync(path.join(tmpDir, `${realThreadId}.json`)), false);
 
     // Checkpoint manifest file MUST BE RETAINED for real thread, with status cancelled
-    assert.strictEqual(fs.existsSync(checkpointFile), true, "Checkpoint manifest must be retained for real thread with taskId");
+    assert.strictEqual(
+      fs.existsSync(checkpointFile),
+      true,
+      "Checkpoint manifest must be retained for real thread with taskId"
+    );
     const updatedManifest: TaskManifest = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
-    assert.strictEqual(updatedManifest.status, "cancelled", "Retained checkpoint status must be set to cancelled");
+    assert.strictEqual(
+      updatedManifest.status,
+      "cancelled",
+      "Retained checkpoint status must be set to cancelled"
+    );
   });
 
   it("5. deleteThread removes .handoff.json and -runlog.md sidecars for real task threads while retaining cancelled checkpoint", async () => {
@@ -219,7 +267,7 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
       checkpoints: [],
       ambiguityFlags: [],
       updatedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(manifest);
@@ -235,9 +283,21 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
     const result = await store.deleteThread(realThreadId);
     assert.strictEqual(result, true);
 
-    assert.strictEqual(fs.existsSync(handoffFile), false, ".handoff.json must be removed on deleteThread");
-    assert.strictEqual(fs.existsSync(runlogFile), false, "-runlog.md must be removed on deleteThread");
-    assert.strictEqual(fs.existsSync(checkpointFile), true, "Checkpoint manifest must still be retained for real task thread");
+    assert.strictEqual(
+      fs.existsSync(handoffFile),
+      false,
+      ".handoff.json must be removed on deleteThread"
+    );
+    assert.strictEqual(
+      fs.existsSync(runlogFile),
+      false,
+      "-runlog.md must be removed on deleteThread"
+    );
+    assert.strictEqual(
+      fs.existsSync(checkpointFile),
+      true,
+      "Checkpoint manifest must still be retained for real task thread"
+    );
     const updatedManifest: TaskManifest = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
     assert.strictEqual(updatedManifest.status, "cancelled");
   });
@@ -259,6 +319,10 @@ describe("PART B — Thread Deletion Backend Invariants", () => {
 
     assert.strictEqual(fs.existsSync(handoffFile), false, ".handoff.json must be removed");
     assert.strictEqual(fs.existsSync(runlogFile), false, "-runlog.md must be removed");
-    assert.strictEqual(fs.existsSync(lgCheckpointFile), false, "-lg-checkpoint.json must be removed for non-task thread");
+    assert.strictEqual(
+      fs.existsSync(lgCheckpointFile),
+      false,
+      "-lg-checkpoint.json must be removed for non-task thread"
+    );
   });
 });

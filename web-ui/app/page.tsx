@@ -31,7 +31,7 @@ import {
   Sparkles,
   Settings,
   Columns3,
-  FolderGit2
+  FolderGit2,
 } from "lucide-react";
 import { DiffViewer } from "@/components/DiffViewer";
 import { CodeBlock } from "@/components/ArtifactRenderers";
@@ -44,12 +44,14 @@ import type { BoardControlAction, BoardControlState } from "@/lib/board/boardCon
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import {
-  getInitialWelcomeMessage,
-  loadChatHistory,
-  saveChatHistory
-} from "@/lib/chatHistory";
+  PRESET_MODEL_PROFILES,
+  ModelProfile,
+  AgentMode,
+  DEFAULT_AGENT_MODE,
+  DEFAULT_PRIMARY_MODEL,
+} from "@/config/models";
+import { getInitialWelcomeMessage, loadChatHistory, saveChatHistory } from "@/lib/chatHistory";
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -66,7 +68,7 @@ export default function Home() {
     llm: "INITIALIZING",
     ollama: "INITIALIZING",
     mcp: "INITIALIZING",
-    airGapped: true
+    airGapped: true,
   });
   const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -147,7 +149,10 @@ export default function Home() {
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
-  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{
+    path: string;
+    content: string;
+  } | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
   const skipThreadLoadRef = useRef<string | null>(null);
 
@@ -177,7 +182,7 @@ export default function Home() {
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL)
+    getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL),
   ]);
 
   // Synchronous-like hydration for theme support
@@ -192,7 +197,7 @@ export default function Home() {
         const speedNum = querySpeed ? parseFloat(querySpeed) : undefined;
         setInitialSimulation({
           scenarioKey: querySimulate as SimulationScenarioKey,
-          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum
+          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum,
         });
       }
       if (queryTab === "skills") setActiveNavView("skills");
@@ -202,8 +207,11 @@ export default function Home() {
       else if (queryTab === "settings") setActiveNavView("settings");
       else if (queryTab === "security") setViewMode("security");
 
-      const saved = queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
-      const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const saved =
+        queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
+      const isDark = saved
+        ? saved === "dark"
+        : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
       const applyTheme = (dark: boolean) => {
         document.documentElement.classList.toggle("dark", dark);
@@ -230,7 +238,6 @@ export default function Home() {
     } catch {}
   }, []);
 
-
   // Fetch sandbox & service status
   const fetchStatus = async () => {
     try {
@@ -238,13 +245,14 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
-        const llmModels = data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
+        const llmModels =
+          data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
         const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
         setStatus({
           llm: llmStatus,
           ollama: llmStatus,
           mcp: data.services?.mcp_server?.status || "OFFLINE",
-          airGapped: true
+          airGapped: true,
         });
         if (llmModels) {
           setInstalledModels(llmModels);
@@ -269,7 +277,7 @@ export default function Home() {
         llm: "UNREACHABLE",
         ollama: "UNREACHABLE",
         mcp: "UNREACHABLE",
-        airGapped: true
+        airGapped: true,
       });
     }
   };
@@ -327,7 +335,7 @@ export default function Home() {
       const res = await fetch("/api/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState }),
       });
       if (res.ok) {
         setSelfDeployEnabled(targetState);
@@ -344,16 +352,24 @@ export default function Home() {
           action: "executeSelfDeploy",
           taskId,
           threadId: selectedThreadId,
-          branchName: activeTask?.branchName || (activeTask as any)?.branch
-        })
+          branchName: activeTask?.branchName || (activeTask as any)?.branch,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         if (activeTask && activeTask.taskId === taskId) {
           setActiveTask({
             ...activeTask,
-            deploymentUrl: data.deploymentUrl || (data.status === "deployed" || data.record?.status === "deployed" || data.success ? `http://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:3001` : activeTask.deploymentUrl),
-            deploymentNamespace: data.deploymentNamespace || data.namespace || activeTask.deploymentNamespace || "local-agentic-sandbox"
+            deploymentUrl:
+              data.deploymentUrl ||
+              (data.status === "deployed" || data.record?.status === "deployed" || data.success
+                ? `http://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:3001`
+                : activeTask.deploymentUrl),
+            deploymentNamespace:
+              data.deploymentNamespace ||
+              data.namespace ||
+              activeTask.deploymentNamespace ||
+              "local-agentic-sandbox",
           });
         }
         await fetchDeployStatus();
@@ -374,7 +390,8 @@ export default function Home() {
           setThreads(data.threads);
           if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
             const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
-            const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+            const urlParams =
+              typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");
             const explicitView = (urlParams?.get("view") || urlParams?.get("tab")) as NavView;
             const drawerQuery = urlParams?.get("drawer");
@@ -429,7 +446,10 @@ export default function Home() {
           setTasks(data.tasks);
         }
         if (data.activeTask) {
-          if (!selectedThreadId && (data.activeTask.status === "active" || data.activeTask.status === "planning")) {
+          if (
+            !selectedThreadId &&
+            (data.activeTask.status === "active" || data.activeTask.status === "planning")
+          ) {
             setActiveTask(data.activeTask);
           }
           if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
@@ -481,7 +501,7 @@ export default function Home() {
       try {
         const res = await fetch(`/api/threads/${selectedThreadId}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
+          headers: { "Cache-Control": "no-cache" },
         });
         if (res.ok) {
           const data = await res.json();
@@ -519,13 +539,15 @@ export default function Home() {
       try {
         const res = await fetch(`/api/threads/${selectedThreadId}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
+          headers: { "Cache-Control": "no-cache" },
         });
         if (!res.ok || !active) return;
         const data = await res.json();
         if (Array.isArray(data?.thread?.messages)) {
           setMessages(data.thread.messages);
-          const lastAssistant = [...data.thread.messages].reverse().find((m: ChatMessage) => m.role === "assistant");
+          const lastAssistant = [...data.thread.messages]
+            .reverse()
+            .find((m: ChatMessage) => m.role === "assistant");
           if (isLiveStreamingMessage(lastAssistant) && active) {
             timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
           }
@@ -628,8 +650,8 @@ export default function Home() {
         body: JSON.stringify({
           title: "New thread",
           model: selectedModel,
-          reasoningEffort
-        })
+          reasoningEffort,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -641,7 +663,11 @@ export default function Home() {
           setViewMode("unified");
           setActiveNavView("sessions");
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
         }
       }
@@ -687,8 +713,8 @@ export default function Home() {
           attachments,
           model: selectedModel,
           reasoningEffort,
-          autoDeployOnGreen: Boolean(autoDeployOnGreen)
-        })
+          autoDeployOnGreen: Boolean(autoDeployOnGreen),
+        }),
       });
 
       if (res.ok) {
@@ -706,14 +732,20 @@ export default function Home() {
           setSelectedThreadId(data.thread.id);
           setMessages(data.thread.messages || []);
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
         }
         if (data.task) {
           setActiveTask(data.task);
         }
       } else {
-        const errData = await res.json().catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
+        const errData = await res
+          .json()
+          .catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
         const msg = errData.error || `Failed to launch task: HTTP ${res.status}`;
         setMessages((prev) => [
           ...prev,
@@ -721,8 +753,8 @@ export default function Home() {
             id: `msg-${Date.now()}-err`,
             role: "assistant",
             content: `Error launching task: ${msg}`,
-            timestamp: new Date().toISOString()
-          }
+            timestamp: new Date().toISOString(),
+          },
         ]);
         throw new Error(msg);
       }
@@ -743,12 +775,12 @@ export default function Home() {
         await fetch(`/api/threads/${selectedThreadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "stop" })
+          body: JSON.stringify({ action: "stop" }),
         });
       }
       if (activeTask) {
         await fetch(`/api/tasks?taskId=${activeTask.taskId}`, { method: "DELETE" });
-        setActiveTask((prev) => prev ? { ...prev, status: "cancelled" } : null);
+        setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
       }
       fetchThreads(false);
     } catch (err) {
@@ -784,8 +816,8 @@ export default function Home() {
         body: JSON.stringify({
           title: initialTitle || "New session",
           model: selectedModel,
-          reasoningEffort
-        })
+          reasoningEffort,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -795,7 +827,11 @@ export default function Home() {
           setThreads((prev) => [data.thread, ...prev]);
           setSelectedThreadId(data.thread.id);
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
           return data.thread.id;
         }
@@ -810,7 +846,9 @@ export default function Home() {
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
   return (
-    <div className={`app-shell h-[100dvh] md:flex md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
+    <div
+      className={`app-shell h-[100dvh] md:flex md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}
+    >
       {/* Material 3 Navigation Drawer */}
       <NavigationDrawer
         isLoadingThreads={isLoadingThreads}
@@ -847,7 +885,7 @@ export default function Home() {
             fetch(`/api/threads/${selectedThreadId}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "setModel", model: m, reasoningEffort })
+              body: JSON.stringify({ action: "setModel", model: m, reasoningEffort }),
             }).catch(() => {});
           }
         }}
@@ -863,7 +901,11 @@ export default function Home() {
             fetch(`/api/threads/${selectedThreadId}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "setModel", model: selectedModel, reasoningEffort: e })
+              body: JSON.stringify({
+                action: "setModel",
+                model: selectedModel,
+                reasoningEffort: e,
+              }),
             }).catch(() => {});
           }
         }}
@@ -871,11 +913,17 @@ export default function Home() {
       />
 
       {/* 1. PERSISTENT LABELED LEFT NAVIGATION RAIL (82px) */}
-      <nav className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-stone-200/80 dark:border-white/[0.08] bg-stone-50 dark:bg-black py-3 justify-between items-center z-20 select-none" aria-label="Primary Navigation">
+      <nav
+        className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-stone-200/80 dark:border-white/[0.08] bg-stone-50 dark:bg-black py-3 justify-between items-center z-20 select-none"
+        aria-label="Primary Navigation"
+      >
         <div className="flex flex-col items-center gap-2 w-full px-1.5">
           <button
             type="button"
-            onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("sessions");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "sessions" && viewMode === "unified"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -889,7 +937,10 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => { setActiveNavView("board"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("board");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "board"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -903,7 +954,10 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("builds");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "builds"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -917,7 +971,10 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => { setActiveNavView("projects"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("projects");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "projects"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -931,7 +988,10 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("morning-report");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "morning-report"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -940,12 +1000,17 @@ export default function Home() {
             title="Morning Report"
           >
             <Sun className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold text-center leading-tight">Morning Report</span>
+            <span className="rail-label text-[11px] font-bold text-center leading-tight">
+              Morning Report
+            </span>
           </button>
 
           <button
             type="button"
-            onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("skills");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all relative ${
               activeNavView === "skills"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -966,7 +1031,10 @@ export default function Home() {
         <div className="flex flex-col items-center gap-2 w-full px-1.5">
           <button
             type="button"
-            onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
+            onClick={() => {
+              setActiveNavView("settings");
+              setViewMode("unified");
+            }}
             className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
               activeNavView === "settings"
                 ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
@@ -984,7 +1052,7 @@ export default function Home() {
       <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden relative">
         {/* Mobile Backdrop for slide-over Drawers (Sidebar & Inspector) */}
         <div
-          className={`mobile-backdrop ${(isSidebarOpen || isWorkspaceOpen) ? "block md:hidden" : "hidden"} fixed inset-0 bg-black/60 z-40 md:hidden`}
+          className={`mobile-backdrop ${isSidebarOpen || isWorkspaceOpen ? "block md:hidden" : "hidden"} fixed inset-0 bg-black/60 z-40 md:hidden`}
           onClick={() => {
             setIsSidebarOpen(false);
             setIsWorkspaceOpen(false);
@@ -992,7 +1060,9 @@ export default function Home() {
         />
 
         {/* 3-Pane Collapsible Workbench (Sessions View) */}
-        <div className={`${((activeNavView === "sessions" || !["board", "builds", "projects", "morning-report", "skills", "settings"].includes(activeNavView)) && viewMode === "unified") ? "flex" : "hidden"} flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative`}>
+        <div
+          className={`${(activeNavView === "sessions" || !["board", "builds", "projects", "morning-report", "skills", "settings"].includes(activeNavView)) && viewMode === "unified" ? "flex" : "hidden"} flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative`}
+        >
           {/* Left Sessions Panel */}
           {isSidebarOpen && (
             <aside
@@ -1016,75 +1086,81 @@ export default function Home() {
           )}
 
           {/* Center Main Stage */}
-          <main
-            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
-          >
+          <main className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black">
             <div className="flex flex-1 min-h-0 flex-row relative">
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
-              <ChatStream
-              messages={messages}
-              draftPrompt={draftComposerPrompt}
-              onClearDraftPrompt={() => setDraftComposerPrompt(null)}
-              setMessages={setMessages}
-              onTracesUpdate={handleTracesUpdate}
-              liveTraces={traces}
-              isActiveView={activeNavView === "sessions" && viewMode === "unified"}
-              activeModel={selectedModel}
-              agentMode={agentMode}
-              reasoningEffort={reasoningEffort}
-              threadId={currentThread?.id}
-              threadTitle={currentThread?.title || "New session"}
-              supervisorState={currentThread ? {
-                needsAttention: currentThread.needsAttention,
-                stalledReason: currentThread.stalledReason,
-                autoResumeCount: currentThread.autoResumeCount,
-              } : undefined}
-              threadStatus={currentThread?.status}
-              threadScope={currentThread?.scope}
-              threadHostAccess={currentThread?.hostAccess}
-              onHostAccessChanged={(enabled, updatedThread) => {
-                if (updatedThread) {
-                  setThreads((prev) =>
-                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
-                  );
-                }
-              }}
-              activeTask={activeTask}
-              onStopTask={handleStopRun}
-              onTaskUpdated={(task, updatedThread) => {
-                if (task) setActiveTask(task);
-                if (updatedThread) {
-                  setThreads((prev) =>
-                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
-                  );
-                }
-              }}
-              onBackToList={handleBackToList}
-              onOpenModelSheet={() => setIsModelSheetOpen(true)}
-              onOpenSettings={() => { setActiveNavView("settings"); setViewMode("unified"); }}
-              onOpenDrawer={() => setIsDrawerOpen(true)}
-              onLaunchTask={handleLaunchTask}
-              onNewThread={handleNewThread}
-              onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
-              onDeployRun={handleDeployRun}
-              onEnsureThread={handleEnsureThread}
-              onViewSecurityTelemetry={() => setViewMode("security")}
-              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-              isSidebarOpen={isSidebarOpen}
-              onToggleWorkspace={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
-              isWorkspaceOpen={isWorkspaceOpen}
-              onOpenProjects={() => {
-                setActiveNavView("projects");
-                setViewMode("unified");
-              }}
-              initialSimulation={initialSimulation || undefined}
-              placeholder="Message..."
-            />
-            </div>
-            <ExplorerPanel
-              open={isExplorerOpen}
-              onClose={() => setIsExplorerOpen(false)}
-            />
+              <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
+                <ChatStream
+                  messages={messages}
+                  draftPrompt={draftComposerPrompt}
+                  onClearDraftPrompt={() => setDraftComposerPrompt(null)}
+                  setMessages={setMessages}
+                  onTracesUpdate={handleTracesUpdate}
+                  liveTraces={traces}
+                  isActiveView={activeNavView === "sessions" && viewMode === "unified"}
+                  activeModel={selectedModel}
+                  agentMode={agentMode}
+                  reasoningEffort={reasoningEffort}
+                  threadId={currentThread?.id}
+                  threadTitle={currentThread?.title || "New session"}
+                  supervisorState={
+                    currentThread
+                      ? {
+                          needsAttention: currentThread.needsAttention,
+                          stalledReason: currentThread.stalledReason,
+                          autoResumeCount: currentThread.autoResumeCount,
+                        }
+                      : undefined
+                  }
+                  threadStatus={currentThread?.status}
+                  threadScope={currentThread?.scope}
+                  threadHostAccess={currentThread?.hostAccess}
+                  onHostAccessChanged={(enabled, updatedThread) => {
+                    if (updatedThread) {
+                      setThreads((prev) =>
+                        prev.map((t) =>
+                          t.id === updatedThread.id ? { ...t, ...updatedThread } : t
+                        )
+                      );
+                    }
+                  }}
+                  activeTask={activeTask}
+                  onStopTask={handleStopRun}
+                  onTaskUpdated={(task, updatedThread) => {
+                    if (task) setActiveTask(task);
+                    if (updatedThread) {
+                      setThreads((prev) =>
+                        prev.map((t) =>
+                          t.id === updatedThread.id ? { ...t, ...updatedThread } : t
+                        )
+                      );
+                    }
+                  }}
+                  onBackToList={handleBackToList}
+                  onOpenModelSheet={() => setIsModelSheetOpen(true)}
+                  onOpenSettings={() => {
+                    setActiveNavView("settings");
+                    setViewMode("unified");
+                  }}
+                  onOpenDrawer={() => setIsDrawerOpen(true)}
+                  onLaunchTask={handleLaunchTask}
+                  onNewThread={handleNewThread}
+                  onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
+                  onDeployRun={handleDeployRun}
+                  onEnsureThread={handleEnsureThread}
+                  onViewSecurityTelemetry={() => setViewMode("security")}
+                  onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+                  isSidebarOpen={isSidebarOpen}
+                  onToggleWorkspace={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
+                  isWorkspaceOpen={isWorkspaceOpen}
+                  onOpenProjects={() => {
+                    setActiveNavView("projects");
+                    setViewMode("unified");
+                  }}
+                  initialSimulation={initialSimulation || undefined}
+                  placeholder="Message..."
+                />
+              </div>
+              <ExplorerPanel open={isExplorerOpen} onClose={() => setIsExplorerOpen(false)} />
             </div>
           </main>
 
@@ -1106,7 +1182,9 @@ export default function Home() {
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
-                  <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">Workspace</span>
+                  <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">
+                    Workspace
+                  </span>
                   {activeTask?.status === "completed" && (
                     <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                       Verified
@@ -1159,113 +1237,141 @@ export default function Home() {
 
               {/* Inspector Body */}
               <div className="inspector-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-                {workspaceTab === "diff" && (() => {
-                  const taskDiff = activeTask?.milestones?.map((m) => m.diffSummary || m.diff).filter(Boolean).join("\n") || "";
-                  const activeBranch = activeTask?.branchName || (currentThread?.title ? "feature/" + currentThread.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) : "");
-                  if (!taskDiff) {
+                {workspaceTab === "diff" &&
+                  (() => {
+                    const taskDiff =
+                      activeTask?.milestones
+                        ?.map((m) => m.diffSummary || m.diff)
+                        .filter(Boolean)
+                        .join("\n") || "";
+                    const activeBranch =
+                      activeTask?.branchName ||
+                      (currentThread?.title
+                        ? "feature/" +
+                          currentThread.title
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")
+                            .slice(0, 30)
+                        : "");
+                    if (!taskDiff) {
+                      return (
+                        <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
+                          No file diffs recorded for this run.
+                        </div>
+                      );
+                    }
                     return (
-                      <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
-                        No file diffs recorded for this run.
+                      <DiffViewer
+                        branch={activeBranch || "feature/task-diff"}
+                        diff={taskDiff}
+                        modifiedFiles={plannedFiles.length > 0 ? plannedFiles : []}
+                      />
+                    );
+                  })()}
+
+                {workspaceTab === "output" &&
+                  (() => {
+                    const activeCritic = activeTask?.milestones?.find(
+                      (m) => m.status === "in_progress"
+                    )?.criticCritique;
+                    const lastCritic = activeTask?.milestones
+                      ?.slice()
+                      .reverse()
+                      .find((m) => m.criticCritique)?.criticCritique;
+                    const testSummary = activeTask?.testSummary;
+                    const outputText =
+                      activeCritic ||
+                      lastCritic ||
+                      (testSummary
+                        ? `Passed: ${testSummary.passed}, Failed: ${testSummary.failed}${testSummary.durationMs ? ` (${testSummary.durationMs}ms)` : ""}`
+                        : "");
+
+                    return (
+                      <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
+                        <div className="text-emerald-400 font-bold mb-2">
+                          ● Active Execution Output
+                        </div>
+                        {outputText ? (
+                          <div>{outputText}</div>
+                        ) : (
+                          <div className="text-slate-400">No test output recorded yet.</div>
+                        )}
                       </div>
                     );
-                  }
-                  return (
-                    <DiffViewer
-                      branch={activeBranch || "feature/task-diff"}
-                      diff={taskDiff}
-                      modifiedFiles={plannedFiles.length > 0 ? plannedFiles : []}
-                    />
-                  );
-                })()}
+                  })()}
 
-                {workspaceTab === "output" && (() => {
-                  const activeCritic = activeTask?.milestones?.find((m) => m.status === "in_progress")?.criticCritique;
-                  const lastCritic = activeTask?.milestones?.slice().reverse().find((m) => m.criticCritique)?.criticCritique;
-                  const testSummary = activeTask?.testSummary;
-                  const outputText = activeCritic || lastCritic || (testSummary ? `Passed: ${testSummary.passed}, Failed: ${testSummary.failed}${testSummary.durationMs ? ` (${testSummary.durationMs}ms)` : ""}` : "");
-
-                  return (
-                    <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
-                      <div className="text-emerald-400 font-bold mb-2">● Active Execution Output</div>
-                      {outputText ? (
-                        <div>{outputText}</div>
-                      ) : (
-                        <div className="text-slate-400">No test output recorded yet.</div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {workspaceTab === "files" && (() => {
-                  const traceFiles: string[] = [];
-                  const activeMessages = currentThread?.messages || messages;
-                  activeMessages.forEach((m) => {
-                    m.traces?.forEach((t: any) => {
-                      if (
-                        (t.tool === "workspace_write_file" || t.tool === "workspace_patch_file") &&
-                        t.args?.path
-                      ) {
-                        traceFiles.push(t.args.path);
-                      }
+                {workspaceTab === "files" &&
+                  (() => {
+                    const traceFiles: string[] = [];
+                    const activeMessages = currentThread?.messages || messages;
+                    activeMessages.forEach((m) => {
+                      m.traces?.forEach((t: any) => {
+                        if (
+                          (t.tool === "workspace_write_file" ||
+                            t.tool === "workspace_patch_file") &&
+                          t.args?.path
+                        ) {
+                          traceFiles.push(t.args.path);
+                        }
+                      });
                     });
-                  });
-                  const allFiles = Array.from(new Set([...plannedFiles, ...traceFiles]));
+                    const allFiles = Array.from(new Set([...plannedFiles, ...traceFiles]));
 
-                  return (
-                    <div className="space-y-2 font-mono text-xs">
-                      <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">
-                        Planned Deliverables
-                      </div>
-                      {allFiles.length > 0 ? (
-                        <>
-                          <div className="space-y-1.5">
-                            {allFiles.map((f, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => handlePreviewWorkspaceFile(f)}
-                                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-colors shadow-2xs ${
-                                  selectedWorkspaceFile?.path === f
-                                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
-                                    : "bg-slate-50 dark:bg-zinc-800/60 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                }`}
-                              >
-                                <span className="truncate">{f}</span>
-                                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shrink-0 ml-2">
-                                  {plannedFiles.includes(f) ? "Planned" : "Created"}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                          {selectedWorkspaceFile && (
-                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-zinc-800">
-                              <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1.5">
-                                <span className="font-semibold text-slate-700 dark:text-zinc-300">
-                                  Preview: {selectedWorkspaceFile.path}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedWorkspaceFile(null)}
-                                  className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                                >
-                                  Close
-                                </button>
-                              </div>
-                              <CodeBlock
-                                filename={selectedWorkspaceFile.path}
-                                code={selectedWorkspaceFile.content}
-                              />
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
-                          No workspace files modified yet.
+                    return (
+                      <div className="space-y-2 font-mono text-xs">
+                        <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">
+                          Planned Deliverables
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                        {allFiles.length > 0 ? (
+                          <>
+                            <div className="space-y-1.5">
+                              {allFiles.map((f, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => handlePreviewWorkspaceFile(f)}
+                                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-colors shadow-2xs ${
+                                    selectedWorkspaceFile?.path === f
+                                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                      : "bg-slate-50 dark:bg-zinc-800/60 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                                  }`}
+                                >
+                                  <span className="truncate">{f}</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shrink-0 ml-2">
+                                    {plannedFiles.includes(f) ? "Planned" : "Created"}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            {selectedWorkspaceFile && (
+                              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-zinc-800">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1.5">
+                                  <span className="font-semibold text-slate-700 dark:text-zinc-300">
+                                    Preview: {selectedWorkspaceFile.path}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedWorkspaceFile(null)}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                                <CodeBlock
+                                  filename={selectedWorkspaceFile.path}
+                                  code={selectedWorkspaceFile.content}
+                                />
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
+                            No workspace files modified yet.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
               </div>
             </aside>
           )}
@@ -1323,7 +1429,7 @@ export default function Home() {
               const res = await fetch("/api/projects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
+                body: JSON.stringify(data),
               });
               if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
@@ -1335,13 +1441,13 @@ export default function Home() {
               await fetch("/api/projects", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id, allowlisted })
+                body: JSON.stringify({ id, allowlisted }),
               });
               await fetchProjects();
             }}
             onDeleteProject={async (id) => {
               const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
-                method: "DELETE"
+                method: "DELETE",
               });
               if (res.ok) {
                 if (selectedProjectId === id) {
@@ -1390,7 +1496,8 @@ export default function Home() {
                 <MorningReportView overnightReport={overnightReport} report={morningReport} />
               ) : (
                 <div className="p-8 text-center text-slate-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-200 dark:border-zinc-800">
-                  No overnight report generated yet. Reports synthesize at completion of overnight supervisor runs.
+                  No overnight report generated yet. Reports synthesize at completion of overnight
+                  supervisor runs.
                 </div>
               )}
             </div>

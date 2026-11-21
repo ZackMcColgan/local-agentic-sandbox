@@ -1,25 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import {
-  BoardStore,
-  getBoardStore,
-  type BoardItem,
-} from "./boardStore";
+import { BoardStore, getBoardStore, type BoardItem } from "./boardStore";
 import {
   BoardControlStore,
   getBoardControlStore,
   type BoardControlRecord,
 } from "./boardControlStore";
-import {
-  PrioritySlotScheduler,
-  SlotPriority,
-  getSharedSlotScheduler,
-} from "../slotScheduler";
-import {
-  createLlmGenerate,
-  type GenerateFn,
-} from "../subagents/llmClient";
+import { PrioritySlotScheduler, SlotPriority, getSharedSlotScheduler } from "../slotScheduler";
+import { createLlmGenerate, type GenerateFn } from "../subagents/llmClient";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 
 export interface IntakeStackItem {
@@ -252,9 +241,7 @@ export function validateIntakeStack(
     }
 
     const tempKey =
-      typeof obj.tempKey === "string" && obj.tempKey.trim()
-        ? obj.tempKey.trim()
-        : `STACK-${i + 1}`;
+      typeof obj.tempKey === "string" && obj.tempKey.trim() ? obj.tempKey.trim() : `STACK-${i + 1}`;
 
     if (seenTempKeys.has(tempKey)) {
       reasons.push(`Duplicate stack key "${tempKey}"`);
@@ -292,9 +279,7 @@ export function validateIntakeStack(
     const item = normalized[i];
     for (const dep of item.dependencies) {
       if (!existingKeys.has(dep) && !stackIndexByKey.has(dep)) {
-        reasons.push(
-          `Unknown dependency key "${dep}" on ${item.tempKey} (${item.title})`
-        );
+        reasons.push(`Unknown dependency key "${dep}" on ${item.tempKey} (${item.title})`);
       }
     }
   }
@@ -461,9 +446,7 @@ function formatFiledBrief(item: IntakeStackItem): string {
     parts.push(`Files: ${item.fileAllowlist.join(", ")}`);
   }
   if (item.acceptanceCriteria.length > 0) {
-    parts.push(
-      `Acceptance:\n${item.acceptanceCriteria.map((c) => `- ${c}`).join("\n")}`
-    );
+    parts.push(`Acceptance:\n${item.acceptanceCriteria.map((c) => `- ${c}`).join("\n")}`);
   }
   return parts.join("\n\n");
 }

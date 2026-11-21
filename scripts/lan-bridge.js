@@ -1,11 +1,11 @@
 /**
  * LAN Reverse Proxy Bridge for local-agentic-sandbox
- * 
+ *
  * Purpose: Windows Defender Firewall actively blocks inbound external connections
  * to Docker Desktop's binary (com.docker.backend.exe), preventing mobile/LAN devices
  * from accessing container ports directly. However, node.exe is explicitly ALLOWED
  * inbound across all profiles.
- * 
+ *
  * This zero-dependency bridge binds node.exe to 0.0.0.0 on port 80 (standard HTTP),
  * port 443 (HTTPS with TLS), and port 3000 (legacy/dev port) on the host, permitting
  * external LAN devices (e.g. mobile phones on 192.168.50.x) to connect cleanly by IP
@@ -30,31 +30,49 @@ const STRATA_PORT = parseInt(process.env.STRATA_PORT || "8080", 10);
 
 function getStrataStatus() {
   return new Promise((resolve) => {
-    const req = http.get(`http://${STRATA_HOST}:${STRATA_PORT}/health`, { timeout: 2500 }, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          resolve({
-            status: json.loaded ? "running" : "starting",
-            reachable: true,
-            model: json.model || "qwen3.8-flash-next-gyro-gyro-s",
-            vram_mb: 16000,
-            uptime_s: 3600,
-            pid: "active"
-          });
-        } catch {
-          resolve({ status: "running", reachable: true, model: "qwen3.8-flash-next-gyro-gyro-s" });
-        }
-      });
-    });
+    const req = http.get(
+      `http://${STRATA_HOST}:${STRATA_PORT}/health`,
+      { timeout: 2500 },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            resolve({
+              status: json.loaded ? "running" : "starting",
+              reachable: true,
+              model: json.model || "qwen3.8-flash-next-gyro-gyro-s",
+              vram_mb: 16000,
+              uptime_s: 3600,
+              pid: "active",
+            });
+          } catch {
+            resolve({
+              status: "running",
+              reachable: true,
+              model: "qwen3.8-flash-next-gyro-gyro-s",
+            });
+          }
+        });
+      }
+    );
     req.on("error", () => {
-      resolve({ status: "stopped", reachable: false, model: "qwen3.8-flash-next-gyro-gyro-s", vram_mb: 0 });
+      resolve({
+        status: "stopped",
+        reachable: false,
+        model: "qwen3.8-flash-next-gyro-gyro-s",
+        vram_mb: 0,
+      });
     });
     req.on("timeout", () => {
       req.destroy();
-      resolve({ status: "stopped", reachable: false, model: "qwen3.8-flash-next-gyro-gyro-s", vram_mb: 0 });
+      resolve({
+        status: "stopped",
+        reachable: false,
+        model: "qwen3.8-flash-next-gyro-gyro-s",
+        vram_mb: 0,
+      });
     });
   });
 }
@@ -62,7 +80,9 @@ function getStrataStatus() {
 function stopStrata() {
   try {
     const stopScript = path.resolve(__dirname, "stop-strata.ps1");
-    execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${stopScript}"`, { stdio: "ignore" });
+    execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${stopScript}"`, {
+      stdio: "ignore",
+    });
     return true;
   } catch (err) {
     console.error("[LAN Bridge] Error stopping Strata:", err.message);
@@ -73,7 +93,10 @@ function stopStrata() {
 function startStrata() {
   try {
     const startScript = path.resolve(__dirname, "start-strata.ps1");
-    const out = execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${startScript}"`, { encoding: "utf8" });
+    const out = execSync(
+      `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${startScript}"`,
+      { encoding: "utf8" }
+    );
     console.log("[LAN Bridge] Launched Strata PID:", out.trim());
     return true;
   } catch (err) {
@@ -82,7 +105,8 @@ function startStrata() {
   }
 }
 
-const SSL_CERT_PATH = process.env.SSL_CERT_PATH || path.resolve(__dirname, "../deploy/ssl/cert.pem");
+const SSL_CERT_PATH =
+  process.env.SSL_CERT_PATH || path.resolve(__dirname, "../deploy/ssl/cert.pem");
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH || path.resolve(__dirname, "../deploy/ssl/key.pem");
 
 function ensureSslCerts() {
@@ -96,7 +120,8 @@ function ensureSslCerts() {
 }
 
 const DEFAULT_BIND_HOST = "0.0.0.0";
-const STARTUP_WARNING = '[LAN Bridge] WARNING: unauthenticated — any device on the local network can reach the UI and execute shell commands via workspace_run_command. See README.md "LAN bridge security" section.';
+const STARTUP_WARNING =
+  '[LAN Bridge] WARNING: unauthenticated — any device on the local network can reach the UI and execute shell commands via workspace_run_command. See README.md "LAN bridge security" section.';
 
 function createProxyServer(listenPort) {
   const isHttps = listenPort === 443;
@@ -107,16 +132,18 @@ function createProxyServer(listenPort) {
     // Direct Host Engine Control Handler for Strata (:8080)
     if (req.url === "/api/engine" || req.url.startsWith("/api/engine?")) {
       if (req.method === "GET") {
-        getStrataStatus().then((statusData) => {
-          res.writeHead(200, {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store"
+        getStrataStatus()
+          .then((statusData) => {
+            res.writeHead(200, {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store",
+            });
+            res.end(JSON.stringify(statusData));
+          })
+          .catch((err) => {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ status: "stopped", reachable: false, error: err.message }));
           });
-          res.end(JSON.stringify(statusData));
-        }).catch((err) => {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "stopped", reachable: false, error: err.message }));
-        });
         return;
       }
 
@@ -186,13 +213,23 @@ function createProxyServer(listenPort) {
         resHeaders["expires"] = "0";
       }
       res.writeHead(proxyRes.statusCode, resHeaders);
-      res.on("error", () => { try { proxyReq.destroy(); } catch {} });
-      proxyRes.on("error", () => { try { res.destroy(); } catch {} });
+      res.on("error", () => {
+        try {
+          proxyReq.destroy();
+        } catch {}
+      });
+      proxyRes.on("error", () => {
+        try {
+          res.destroy();
+        } catch {}
+      });
       proxyRes.pipe(res, { end: true });
 
       proxyRes.on("end", () => {
         if (!req.url.startsWith("/_next/")) {
-          console.log(`[LAN Bridge :${listenPort}] ${new Date().toISOString().slice(11, 19)} | ${clientIp} | ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
+          console.log(
+            `[LAN Bridge :${listenPort}] ${new Date().toISOString().slice(11, 19)} | ${clientIp} | ${req.method} ${req.url} -> ${proxyRes.statusCode}`
+          );
         }
       });
     });
@@ -220,7 +257,9 @@ function createProxyServer(listenPort) {
 
     req.on("error", (err) => {
       console.error(`[LAN Bridge :${listenPort} Req Error] ${req.method} ${req.url}:`, err.message);
-      try { proxyReq.destroy(); } catch {}
+      try {
+        proxyReq.destroy();
+      } catch {}
     });
 
     // Pipe incoming request body to target (e.g. POST /api/chat)
@@ -229,14 +268,18 @@ function createProxyServer(listenPort) {
 
   let server;
   if (isHttps) {
-    try { ensureSslCerts(); } catch {}
+    try {
+      ensureSslCerts();
+    } catch {}
     if (!fs.existsSync(SSL_CERT_PATH) || !fs.existsSync(SSL_KEY_PATH)) {
-      console.warn(`[LAN Bridge :443] Notice: SSL cert/key not found at ${SSL_CERT_PATH}. Skipping HTTPS.`);
+      console.warn(
+        `[LAN Bridge :443] Notice: SSL cert/key not found at ${SSL_CERT_PATH}. Skipping HTTPS.`
+      );
       return null;
     }
     const sslOptions = {
       cert: fs.readFileSync(SSL_CERT_PATH),
-      key: fs.readFileSync(SSL_KEY_PATH)
+      key: fs.readFileSync(SSL_KEY_PATH),
     };
     server = https.createServer(sslOptions, requestHandler);
   } else {
@@ -269,7 +312,9 @@ function createProxyServer(listenPort) {
   });
 
   server.listen(listenPort, DEFAULT_BIND_HOST, () => {
-    console.log(`[LAN Bridge Active] Listening on ${DEFAULT_BIND_HOST}:${listenPort} -> Forwarding to http://${TARGET_HOST}:${TARGET_PORT}`);
+    console.log(
+      `[LAN Bridge Active] Listening on ${DEFAULT_BIND_HOST}:${listenPort} -> Forwarding to http://${TARGET_HOST}:${TARGET_PORT}`
+    );
     if (listenPort === 80) {
       console.log(`  -> Direct HTTP URL: http://192.168.50.254/ (port 80)`);
     } else if (listenPort === 443) {
@@ -280,7 +325,9 @@ function createProxyServer(listenPort) {
   });
 
   server.on("clientError", (err, socket) => {
-    try { socket.destroy(); } catch {}
+    try {
+      socket.destroy();
+    } catch {}
   });
 
   server.on("error", (err) => {
@@ -298,14 +345,16 @@ class GatewayWatchdog {
     this.probeTimeoutMs = options.probeTimeoutMs || 3000;
     this.maxHeals = options.maxHeals || 3;
     this.windowMs = options.windowMs || 300000; // 5 minutes
-    this.enabled = options.enabled !== undefined ? options.enabled : (process.env.ACCESS_PATH_MODE === "gateway");
+    this.enabled =
+      options.enabled !== undefined ? options.enabled : process.env.ACCESS_PATH_MODE === "gateway";
     this.detectionBudgetDescription = "<=11s plus container start time";
 
     this.nowFn = options.nowFn || (() => Date.now());
     this.logFn = options.logFn || ((msg) => console.log(msg));
 
     this.probeFn = options.probeFn || this._defaultProbe.bind(this);
-    this.restartContainerFn = options.restartContainerFn || this._defaultRestartContainer.bind(this);
+    this.restartContainerFn =
+      options.restartContainerFn || this._defaultRestartContainer.bind(this);
     this.startGatewayFn = options.startGatewayFn || this._defaultStartGateway.bind(this);
     this.containerExistsFn = options.containerExistsFn || this._defaultContainerExists.bind(this);
 
@@ -343,7 +392,10 @@ class GatewayWatchdog {
 
   _defaultContainerExists() {
     try {
-      const out = execSync("docker ps -a -q -f name=^kind-gateway$", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const out = execSync("docker ps -a -q -f name=^kind-gateway$", {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
       return Boolean(out && out.trim());
     } catch {
       return false;
@@ -352,7 +404,11 @@ class GatewayWatchdog {
 
   _defaultRestartContainer() {
     try {
-      const out = execSync("docker restart kind-gateway", { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
+      const out = execSync("docker restart kind-gateway", {
+        encoding: "utf8",
+        timeout: 15000,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
       return { ok: true, output: out.trim() };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -362,11 +418,14 @@ class GatewayWatchdog {
   _defaultStartGateway(port) {
     try {
       const scriptPath = path.resolve(__dirname, "kind-gateway", "start-gateway.ps1");
-      const out = execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -Port ${port}`, {
-        encoding: "utf8",
-        timeout: 20000,
-        stdio: ["ignore", "pipe", "ignore"]
-      });
+      const out = execSync(
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -Port ${port}`,
+        {
+          encoding: "utf8",
+          timeout: 20000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }
+      );
       return { ok: true, output: out.trim() };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -378,14 +437,17 @@ class GatewayWatchdog {
       consecutiveFailures: this.consecutiveFailures,
       healTimestamps: [...this.healTimestamps],
       isExhausted: this.isExhausted,
-      totalHeals: this.totalHeals
+      totalHeals: this.totalHeals,
     };
   }
 
   async step() {
     if (!this.enabled) return;
 
-    const probeResult = await this.probeFn(`http://${this.targetHost}:${this.targetPort}/`, this.probeTimeoutMs);
+    const probeResult = await this.probeFn(
+      `http://${this.targetHost}:${this.targetPort}/`,
+      this.probeTimeoutMs
+    );
     if (probeResult.ok) {
       this.consecutiveFailures = 0;
       this.lastProbeError = null;
@@ -407,7 +469,9 @@ class GatewayWatchdog {
     if (this.healTimestamps.length >= this.maxHeals) {
       if (!this.isExhausted) {
         this.isExhausted = true;
-        this.logFn(`[LAN Bridge Watchdog] ${new Date(now).toISOString()} | WATCHDOG EXHAUSTED: max ${this.maxHeals} heals in 5-minute window reached. Pausing auto-heal.`);
+        this.logFn(
+          `[LAN Bridge Watchdog] ${new Date(now).toISOString()} | WATCHDOG EXHAUSTED: max ${this.maxHeals} heals in 5-minute window reached. Pausing auto-heal.`
+        );
       }
       return;
     }
@@ -420,11 +484,15 @@ class GatewayWatchdog {
     if (containerExists) {
       action = "docker restart kind-gateway";
       const res = this.restartContainerFn();
-      result = res.ok ? "Success (restarted container)" : `Failed (${res.error || "unknown error"})`;
+      result = res.ok
+        ? "Success (restarted container)"
+        : `Failed (${res.error || "unknown error"})`;
     } else {
       action = `start-gateway.ps1 (port ${this.targetPort})`;
       const res = this.startGatewayFn(this.targetPort);
-      result = res.ok ? "Success (launched new container)" : `Failed (${res.error || "unknown error"})`;
+      result = res.ok
+        ? "Success (launched new container)"
+        : `Failed (${res.error || "unknown error"})`;
     }
 
     this.healTimestamps.push(now);
@@ -467,7 +535,9 @@ if (require.main === module) {
 
   const watchdog = new GatewayWatchdog();
   if (watchdog.enabled) {
-    console.log("[LAN Bridge] Gateway mode enabled — starting E2E kind-gateway watchdog (5s probe, <=11s detection budget)...");
+    console.log(
+      "[LAN Bridge] Gateway mode enabled — starting E2E kind-gateway watchdog (5s probe, <=11s detection budget)..."
+    );
     watchdog.start();
   }
 }
@@ -479,7 +549,7 @@ module.exports = {
   DEFAULT_BIND_HOST,
   PORTS,
   TARGET_PORT,
-  TARGET_HOST
+  TARGET_HOST,
 };
 
 process.on("uncaughtException", (err) => {

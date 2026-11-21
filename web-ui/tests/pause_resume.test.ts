@@ -27,9 +27,9 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         gitShas: ["sha000"],
         milestoneSummary: [
           { id: "M1", title: "Milestone 1", status: "completed", commitSha: "sha111" },
-          { id: "M2", title: "Milestone 2", status: "in_progress" }
+          { id: "M2", title: "Milestone 2", status: "in_progress" },
         ],
-        deploymentRef: "local"
+        deploymentRef: "local",
       });
       executionLog.push("M1");
 
@@ -38,7 +38,7 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         taskId: "run-pr-1",
         threadId: "thread-pr",
         completedMilestoneIds: ["M1"],
-        currentMilestoneId: "M2"
+        currentMilestoneId: "M2",
       });
 
       assert.equal(pausedRun.status, "paused", "Run status must transition to paused");
@@ -86,16 +86,17 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         startedAt: new Date().toISOString(),
         model: "swift-27b-mtp",
         gitShas: [],
-        milestoneSummary: [
-          { id: "M1", title: "Initial Setup", status: "pending" }
-        ],
-        deploymentRef: "none"
+        milestoneSummary: [{ id: "M1", title: "Initial Setup", status: "pending" }],
+        deploymentRef: "none",
       });
 
       // Call pauseRun without a pre-existing checkpoint payload
       const paused = ledger.pauseRun("run-pr-nockpt");
       assert.equal(paused.status, "paused", "Status must be paused even without prior checkpoint");
-      assert.ok(paused.checkpointPath, "Synthesized fallback checkpoint must be created gracefully");
+      assert.ok(
+        paused.checkpointPath,
+        "Synthesized fallback checkpoint must be created gracefully"
+      );
       assert.equal(paused.milestoneSummary[0].status, "pending");
 
       ledger.close();
@@ -124,11 +125,11 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
       milestones: [
         { id: "M1", title: "M1", status: "pending" },
         { id: "M2", title: "M2", status: "pending" },
-        { id: "M3", title: "M3", status: "pending" }
+        { id: "M3", title: "M3", status: "pending" },
       ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
 
     const mockExecutor = async (milestone: any) => {
@@ -142,7 +143,11 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
 
     await supervisor.executeTaskWithRecovery(task, { stepExecutor: mockExecutor });
 
-    assert.deepEqual(executedMilestones, ["M1"], "Milestone 2 and 3 must never execute after pause");
+    assert.deepEqual(
+      executedMilestones,
+      ["M1"],
+      "Milestone 2 and 3 must never execute after pause"
+    );
     assert.equal(task.status, "paused");
   });
 
@@ -170,11 +175,11 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         milestones: [
           { id: "M1", title: "M1", status: "pending" },
           { id: "M2", title: "M2", status: "pending" },
-          { id: "M3", title: "M3", status: "pending" }
+          { id: "M3", title: "M3", status: "pending" },
         ],
         checkpoints: [],
         ambiguityFlags: [],
-        journal: []
+        journal: [],
       };
 
       const mockExecutor = async (milestone: any) => {
@@ -187,7 +192,11 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
 
       const result = await supA.executeTaskWithRecovery(task, { stepExecutor: mockExecutor });
 
-      assert.deepEqual(executedMilestones, ["M1"], "Milestone 2 and 3 must never execute after supB pause");
+      assert.deepEqual(
+        executedMilestones,
+        ["M1"],
+        "Milestone 2 and 3 must never execute after supB pause"
+      );
       assert.equal(result.status, "paused", "supA must return status=paused");
 
       const checkpointFile = supA.getCheckpointFilePath(taskId);
@@ -221,14 +230,14 @@ describe("Sprint 12 Phase 4 — Pause & Resume Controls (pause_resume.test.ts)",
         milestones: [{ id: "M1", title: "M1", status: "pending" }],
         checkpoints: [],
         ambiguityFlags: [],
-        journal: []
+        journal: [],
       } as any);
 
       activeExecutionSet.delete(taskId);
 
       const thread = threadStore.createThread({
         title: "Paused thread test",
-        taskId
+        taskId,
       });
       thread.status = "active";
       threadStore.saveThread(thread);

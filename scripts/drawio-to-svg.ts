@@ -3,7 +3,10 @@ import fs from "fs";
 import path from "path";
 import { convertDrawioToSvg, sanitizeSvg, isDrawioXml } from "../web-ui/lib/svgUtils";
 
-export function convertDrawioFileToSvg(inputPath: string, outputPath: string): { bytesWritten: number; durationMs: number } {
+export function convertDrawioFileToSvg(
+  inputPath: string,
+  outputPath: string
+): { bytesWritten: number; durationMs: number } {
   const startTime = Date.now();
 
   const resolvedInput = path.resolve(process.cwd(), inputPath);
@@ -53,7 +56,9 @@ if (require.main === module || process.argv[1]?.includes("drawio-to-svg")) {
   try {
     console.log(`[drawio-to-svg] Compiling ${inputArg} -> ${outputArg}...`);
     const { bytesWritten, durationMs } = convertDrawioFileToSvg(inputArg, outputArg);
-    console.log(`[drawio-to-svg] SUCCESS: Generated ${outputArg} (${bytesWritten} bytes) in ${durationMs}ms`);
+    console.log(
+      `[drawio-to-svg] SUCCESS: Generated ${outputArg} (${bytesWritten} bytes) in ${durationMs}ms`
+    );
   } catch (err: any) {
     console.error(`[drawio-to-svg] ERROR: ${err.message}`);
     process.exit(1);

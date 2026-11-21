@@ -8,7 +8,7 @@ import {
   fitContextWindow,
   ARTIFACT_OUTPUT_HEADROOM_TOKENS,
   ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB,
-  runChatToolLoop
+  runChatToolLoop,
 } from "../lib/contextBudget.js";
 
 describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
@@ -26,7 +26,10 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
     it("returns false for static coding, architecture, and reasoning queries", () => {
       assert.equal(isLiveRealTimeIntent("write a binary search function in typescript"), false);
       assert.equal(isLiveRealTimeIntent("explain how React useEffect hook works"), false);
-      assert.equal(isLiveRealTimeIntent("create a beautiful SVG architecture diagram of our cluster"), false);
+      assert.equal(
+        isLiveRealTimeIntent("create a beautiful SVG architecture diagram of our cluster"),
+        false
+      );
       assert.equal(isLiveRealTimeIntent("how do I configure docker compose for postgres?"), false);
       assert.equal(isLiveRealTimeIntent(""), false);
     });
@@ -37,7 +40,7 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
       const msgs = [
         { role: "user", content: "weather in Chicago" },
         { role: "assistant", content: "", tool_calls: [{ function: { name: "search_web" } }] },
-        { role: "tool", name: "search_web", content: "Sunny and 72F" }
+        { role: "tool", name: "search_web", content: "Sunny and 72F" },
       ];
       assert.equal(hasWebResearchResults(msgs), true);
     });
@@ -45,8 +48,12 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
     it("returns false when only sandbox or git tools were invoked", () => {
       const msgs = [
         { role: "user", content: "run pytest" },
-        { role: "assistant", content: "", tool_calls: [{ function: { name: "workspace_run_command" } }] },
-        { role: "tool", name: "workspace_run_command", content: "all tests passed" }
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ function: { name: "workspace_run_command" } }],
+        },
+        { role: "tool", name: "workspace_run_command", content: "all tests passed" },
       ];
       assert.equal(hasWebResearchResults(msgs), false);
     });
@@ -57,7 +64,7 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
       const msgs = [
         { role: "system", content: "You are an assistant." },
         { role: "user", content: "Draw an SVG card of today's weather in Austin" },
-        { role: "tool", name: "search_web", content: "Austin weather: 75F, Clear Skies" }
+        { role: "tool", name: "search_web", content: "Austin weather: 75F, Clear Skies" },
       ];
 
       // With web research results present, headroom scales to 4000 tokens
@@ -101,27 +108,34 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
           yield {
             message: {
               content: "",
-              tool_calls: [{ function: { name: "search_web", arguments: JSON.stringify({ query: "Austin weather" }) } }]
-            }
+              tool_calls: [
+                {
+                  function: {
+                    name: "search_web",
+                    arguments: JSON.stringify({ query: "Austin weather" }),
+                  },
+                },
+              ],
+            },
           };
         }
       };
 
-      const messages: any[] = [
-        { role: "user", content: "What is the weather in Austin today?" }
-      ];
+      const messages: any[] = [{ role: "user", content: "What is the weather in Austin today?" }];
 
       const result = await runChatToolLoop({
         conversationMessages: messages,
         maxToolRounds: 4,
         streamLlmChat: fakeStream as any,
-        executeTool: async (toolCall: any) => ({ result: "Sunny, 75F" })
+        executeTool: async (toolCall: any) => ({ result: "Sunny, 75F" }),
       });
 
       // The gate should have rejected round 0 and forced round 1
       assert.ok(callCount >= 2, `Expected at least 2 rounds, got ${callCount}`);
       // Verify grounding directive was injected into conversationMessages
-      const systemMsg = messages.find((m) => m.role === "system" && m.content.includes("GROUNDING ENFORCEMENT"));
+      const systemMsg = messages.find(
+        (m) => m.role === "system" && m.content.includes("GROUNDING ENFORCEMENT")
+      );
       assert.ok(systemMsg, "Expected GROUNDING ENFORCEMENT directive to be injected");
     });
   });

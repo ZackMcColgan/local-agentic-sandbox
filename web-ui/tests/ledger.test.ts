@@ -22,10 +22,8 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
         startedAt,
         model: "swift-27b-mtp",
         gitShas: ["db75d01"],
-        milestoneSummary: [
-          { id: "M1", title: "Create checklist", status: "in_progress" }
-        ],
-        deploymentRef: "local-dev"
+        milestoneSummary: [{ id: "M1", title: "Create checklist", status: "in_progress" }],
+        deploymentRef: "local-dev",
       });
 
       assert.equal(record.runId, "run-001");
@@ -68,7 +66,7 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
             model: "swift-27b-mtp",
             gitShas: [],
             milestoneSummary: [],
-            deploymentRef: "none"
+            deploymentRef: "none",
           });
         },
         /Missing required ledger field/i,
@@ -86,7 +84,7 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
             model: undefined as any, // missing model
             gitShas: [],
             milestoneSummary: [],
-            deploymentRef: "none"
+            deploymentRef: "none",
           });
         },
         /Missing required ledger field/i,
@@ -117,9 +115,9 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
         gitShas: ["a111111"],
         milestoneSummary: [
           { id: "M1", title: "Step 1", status: "pending" },
-          { id: "M2", title: "Step 2", status: "pending" }
+          { id: "M2", title: "Step 2", status: "pending" },
         ],
-        deploymentRef: "pending"
+        deploymentRef: "pending",
       });
 
       // Mid-run update after M1 completes
@@ -127,8 +125,8 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
         gitShas: ["a111111", "b222222"],
         milestoneSummary: [
           { id: "M1", title: "Step 1", status: "completed", commitSha: "b222222" },
-          { id: "M2", title: "Step 2", status: "in_progress" }
-        ]
+          { id: "M2", title: "Step 2", status: "in_progress" },
+        ],
       });
 
       // Kill mid-flight
@@ -172,23 +170,39 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
         model: "swift-15-27b-mtp",
         gitShas: [],
         milestoneSummary: [{ id: "M1", title: "M1", status: "in_progress" }],
-        deploymentRef: "local"
+        deploymentRef: "local",
       });
 
       const pausedEntry = ledger.pauseRun(runId);
       assert.ok(pausedEntry.checkpointPath, "Must have checkpointPath");
 
-      expectedCheckpointPath = path.join(supervisor.checkpointDirectory, `${runId}.checkpoint.json`);
-      assert.equal(pausedEntry.checkpointPath, expectedCheckpointPath, "Checkpoint path must match supervisor.checkpointDirectory");
-      assert.ok(fs.existsSync(expectedCheckpointPath), "Checkpoint file must exist in supervisor.checkpointDirectory");
+      expectedCheckpointPath = path.join(
+        supervisor.checkpointDirectory,
+        `${runId}.checkpoint.json`
+      );
+      assert.equal(
+        pausedEntry.checkpointPath,
+        expectedCheckpointPath,
+        "Checkpoint path must match supervisor.checkpointDirectory"
+      );
+      assert.ok(
+        fs.existsSync(expectedCheckpointPath),
+        "Checkpoint file must exist in supervisor.checkpointDirectory"
+      );
     } finally {
       if (expectedCheckpointPath) {
-        try { fs.unlinkSync(expectedCheckpointPath); } catch {}
+        try {
+          fs.unlinkSync(expectedCheckpointPath);
+        } catch {}
       }
       if (ledger) {
-        try { ledger.close(); } catch {}
+        try {
+          ledger.close();
+        } catch {}
       }
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {}
     }
   });
 
@@ -215,4 +229,3 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
     }
   });
 });
-

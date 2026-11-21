@@ -4,7 +4,7 @@ import {
   getProjectDiffSummary,
   acceptProjectFile,
   revertProjectFile,
-  finalizeProjectReview
+  finalizeProjectReview,
 } from "@/lib/projects/projectGit";
 
 interface RouteParams {

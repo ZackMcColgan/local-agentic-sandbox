@@ -10,7 +10,10 @@ describe("P2.2: Patch integrity & command-dialect guard", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = path.join(os.tmpdir(), `p22-patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    tmpDir = path.join(
+      os.tmpdir(),
+      `p22-patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    );
     fs.mkdirSync(tmpDir, { recursive: true });
   });
 

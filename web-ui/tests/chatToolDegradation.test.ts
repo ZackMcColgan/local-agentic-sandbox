@@ -8,9 +8,15 @@ describe("Phase 1 & 2: Chat Tool Registration Graceful Degradation & Model Defau
     const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
     const content = fs.readFileSync(routePath, "utf8");
 
-    assert.ok(content.includes("const ADVERTISED_TOOLS = new Set(["), "ADVERTISED_TOOLS must be declared");
+    assert.ok(
+      content.includes("const ADVERTISED_TOOLS = new Set(["),
+      "ADVERTISED_TOOLS must be declared"
+    );
     assert.ok(content.includes('"search_web"'), "ADVERTISED_TOOLS must include search_web");
-    assert.ok(content.includes('"fetch_webpage_markdown"'), "ADVERTISED_TOOLS must include fetch_webpage_markdown");
+    assert.ok(
+      content.includes('"fetch_webpage_markdown"'),
+      "ADVERTISED_TOOLS must include fetch_webpage_markdown"
+    );
   });
 
   it("chat route catches unmapped advertised tools and returns graceful tool status instead of throwing unregistered tool error", () => {

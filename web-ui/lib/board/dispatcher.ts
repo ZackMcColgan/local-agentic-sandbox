@@ -71,9 +71,7 @@ export function isDispatcherAutoIssueEnabled(
  * - status must be "queued" (parked, working, pr-open, done are skipped)
  * - all dependencies must have status "done"
  */
-export function selectHeadEligibleItem(
-  items: DispatcherBoardItem[]
-): DispatcherBoardItem | null {
+export function selectHeadEligibleItem(items: DispatcherBoardItem[]): DispatcherBoardItem | null {
   for (const item of items) {
     if (item.status !== "queued") continue;
     if (!isItemEligible(item, items)) continue;
@@ -109,9 +107,7 @@ export function composeDispatcherBrief(
   opts: ComposeBriefOptions = {}
 ): string {
   const memoryText =
-    opts.operatorMemory !== undefined
-      ? opts.operatorMemory
-      : loadOperatorMemory().text;
+    opts.operatorMemory !== undefined ? opts.operatorMemory : loadOperatorMemory().text;
 
   const sections: string[] = [];
 
@@ -128,8 +124,7 @@ export function composeDispatcherBrief(
       sections.push(`Open questions:\n- ${h.openQuestions.join("\n- ")}`);
     }
   } else {
-    const deps =
-      item.dependencies.length > 0 ? item.dependencies.join(", ") : "none";
+    const deps = item.dependencies.length > 0 ? item.dependencies.join(", ") : "none";
     sections.push(
       `BOARD ITEM — ${item.key} ${item.title}`,
       `Dependencies (all done): ${deps}`,
@@ -150,9 +145,7 @@ export function composeDispatcherBrief(
  * Evaluates live job state, owner preemption, board eligibility, and the
  * stage gate, then either refuses, logs in shadow mode, or issues a thread.
  */
-export async function dispatchNextBoardItem(
-  opts: DispatchOptions
-): Promise<DispatchResult> {
+export async function dispatchNextBoardItem(opts: DispatchOptions): Promise<DispatchResult> {
   const log = opts.log ?? ((msg: string) => console.info(msg));
 
   if (opts.liveJobState.isRunning) {

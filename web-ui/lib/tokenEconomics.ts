@@ -44,7 +44,7 @@ export function buildJobTokenRollup(input: {
     rounds: input.rounds || 0,
     promptTokens: input.promptTokens || 0,
     outputTokens: input.outputTokens || 0,
-    compactions: input.compactions || 0
+    compactions: input.compactions || 0,
   };
 }
 

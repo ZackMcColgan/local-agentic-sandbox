@@ -8,7 +8,7 @@ export const REVIEWER_GATE_STAGE3_DEFAULT = false;
  */
 export function isReviewerGateStage3Enabled(
   override?: boolean,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): boolean {
   if (typeof override === "boolean") {
     return override;
@@ -208,10 +208,7 @@ export interface EvaluateReviewerGateOptions {
   stage3Enabled?: boolean;
   ciAllGreen?: boolean;
   finishVerificationClean?: boolean;
-  issueReviewerThread: (params: {
-    itemId: string;
-    brief: string;
-  }) => Promise<ReviewerVerdict>;
+  issueReviewerThread: (params: { itemId: string; brief: string }) => Promise<ReviewerVerdict>;
   log?: (message: string) => void;
 }
 
@@ -249,7 +246,7 @@ export function composeReviewerPrompt(brief: string, diff: string): string {
  * (PASS only when BOTH pass), and enforces shadow mode while Stage 3 is OFF.
  */
 export async function evaluateReviewerGate(
-  options: EvaluateReviewerGateOptions,
+  options: EvaluateReviewerGateOptions
 ): Promise<ReviewerGateResult> {
   const mechanical = runMechanicalChecks(options.mechanicalInput);
   const prompt = composeReviewerPrompt(options.brief, options.mechanicalInput.diff);
@@ -271,7 +268,7 @@ export async function evaluateReviewerGate(
   });
 
   options.log?.(
-    `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`,
+    `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`
   );
 
   return {
@@ -297,11 +294,7 @@ export function isMergeAuthorized(input: MergeAuthorizationInput): boolean {
   if (!isReviewerGateStage3Enabled(input.stage3Enabled)) {
     return false;
   }
-  return (
-    input.ciAllGreen &&
-    input.reviewerGateVerdict === "PASS" &&
-    input.finishVerificationClean
-  );
+  return input.ciAllGreen && input.reviewerGateVerdict === "PASS" && input.finishVerificationClean;
 }
 
 export interface AuditComparison {
@@ -346,15 +339,14 @@ export function createAgreementLedger(): AgreementLedger {
  */
 export function recordAuditComparison(
   ledger: AgreementLedger,
-  comparison: AuditComparison,
+  comparison: AuditComparison
 ): AgreementLedger {
   const totalPrs = ledger.totalPrs + 1;
   const agreed = comparison.driverVerdict === comparison.reviewerVerdict;
   const agreements = ledger.agreements + (agreed ? 1 : 0);
   const agreementRate = agreements / totalPrs;
 
-  const isEscape =
-    comparison.driverVerdict === "FAIL" && comparison.reviewerVerdict === "PASS";
+  const isEscape = comparison.driverVerdict === "FAIL" && comparison.reviewerVerdict === "PASS";
   const escapeRecord: EscapeRecord | null = isEscape
     ? {
         prNumber: comparison.prNumber,
@@ -368,8 +360,7 @@ export function recordAuditComparison(
     ? [...ledger.reviewerTestCases, escapeRecord]
     : ledger.reviewerTestCases;
 
-  const stage3Eligible =
-    totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
+  const stage3Eligible = totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
 
   return {
     totalPrs,

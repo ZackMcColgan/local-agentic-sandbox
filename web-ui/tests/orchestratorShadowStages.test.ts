@@ -4,19 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import {
-  BoardOrchestrator,
-  type JobExecutionOutcome,
-} from "../lib/board/boardOrchestrator";
+import { BoardOrchestrator, type JobExecutionOutcome } from "../lib/board/boardOrchestrator";
 import type { DispatcherBoardItem } from "../lib/board/dispatcher";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
-import {
-  AgreementLedgerStore,
-} from "../lib/board/agreementLedger";
-import {
-  isReviewerGateStage3Enabled,
-  type MechanicalCheckInput,
-} from "../lib/board/reviewerGate";
+import { AgreementLedgerStore } from "../lib/board/agreementLedger";
+import { isReviewerGateStage3Enabled, type MechanicalCheckInput } from "../lib/board/reviewerGate";
 import {
   isSelfDeployVerifiedEnabled,
   runSelfDeployVerified,
@@ -71,7 +63,10 @@ function makeCleanMechanicalInput(): MechanicalCheckInput {
 
 test("stage flags default to OFF when unset or non-true", () => {
   assert.equal(isReviewerGateStage3Enabled(undefined, {}), false);
-  assert.equal(isReviewerGateStage3Enabled(undefined, { BOARD_STAGE_REVIEWER_GATE: "false" }), false);
+  assert.equal(
+    isReviewerGateStage3Enabled(undefined, { BOARD_STAGE_REVIEWER_GATE: "false" }),
+    false
+  );
   assert.equal(isReviewerGateStage3Enabled(undefined, { BOARD_STAGE_REVIEWER_GATE: "1" }), false);
   assert.equal(isReviewerGateStage3Enabled(undefined, { BOARD_STAGE_REVIEWER_GATE: "true" }), true);
 
@@ -112,7 +107,11 @@ test("1. PR opened triggers shadow monitorPrToConclusion: logs CI state and neve
               { name: "Typecheck (full error report)", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Unit Tests & Static Analysis", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Code Coverage Report", status: "COMPLETED", conclusion: "SUCCESS" },
-              { name: "Container Build & Docker Scout Scan", status: "COMPLETED", conclusion: "SUCCESS" },
+              {
+                name: "Container Build & Docker Scout Scan",
+                status: "COMPLETED",
+                conclusion: "SUCCESS",
+              },
               { name: "Playwright UI (Shard 1/3)", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Playwright UI (Shard 2/3)", status: "COMPLETED", conclusion: "SUCCESS" },
               { name: "Playwright UI (Shard 3/3)", status: "COMPLETED", conclusion: "SUCCESS" },
@@ -128,7 +127,11 @@ test("1. PR opened triggers shadow monitorPrToConclusion: logs CI state and neve
 
     const report = await orchestrator.drain();
     assert.equal(pollCount, 1);
-    assert.equal(issueThreadCalled, 0, "must never issue fix-cycle or mutate PR while stage is off");
+    assert.equal(
+      issueThreadCalled,
+      0,
+      "must never issue fix-cycle or mutate PR while stage is off"
+    );
     assert.equal(report.outcomes.length, 1);
     assert.equal(report.outcomes[0].shadowStages?.flowMonitor?.action, "shadow");
     assert.equal(report.outcomes[0].shadowStages?.flowMonitor?.verdict.status, "green");
@@ -229,10 +232,19 @@ test("3. POST /api/board/reviewer-audit persists agreement ledger, tracks escape
       );
       assert.equal(res.status, 200);
       const payload = (await res.json()) as {
-        ledger: { totalPrs: number; agreementRate: number; escapes: unknown[]; stage3Eligible: boolean };
+        ledger: {
+          totalPrs: number;
+          agreementRate: number;
+          escapes: unknown[];
+          stage3Eligible: boolean;
+        };
       };
       assert.equal(payload.ledger.totalPrs, pr);
-      assert.equal(payload.ledger.stage3Eligible, false, `9 PRs boundary: pr=${pr} must not be eligible`);
+      assert.equal(
+        payload.ledger.stage3Eligible,
+        false,
+        `9 PRs boundary: pr=${pr} must not be eligible`
+      );
     }
 
     // 10th PR with an escape (reviewer PASS, driver FAIL) -> lands in escapes, stage3Eligible = false
@@ -261,7 +273,11 @@ test("3. POST /api/board/reviewer-audit persists agreement ledger, tracks escape
     assert.equal(escapePayload.ledger.totalPrs, 10);
     assert.equal(escapePayload.ledger.escapes.length, 1);
     assert.equal(escapePayload.ledger.escapes[0].prNumber, 10);
-    assert.equal(escapePayload.ledger.stage3Eligible, false, "10 PRs with an escape must NOT be eligible");
+    assert.equal(
+      escapePayload.ledger.stage3Eligible,
+      false,
+      "10 PRs with an escape must NOT be eligible"
+    );
 
     // Clean ledger with 10 PRs, >=95% agreement, 0 escapes -> stage3Eligible flips true
     const cleanDir = makeTempBoardDir();
@@ -269,7 +285,11 @@ test("3. POST /api/board/reviewer-audit persists agreement ledger, tracks escape
     try {
       const cleanStore = new AgreementLedgerStore(cleanDir);
       for (let pr = 1; pr <= 10; pr += 1) {
-        cleanStore.recordShadowVerdict({ prNumber: pr, headSha: `clean-${pr}`, reviewerVerdict: "PASS" });
+        cleanStore.recordShadowVerdict({
+          prNumber: pr,
+          headSha: `clean-${pr}`,
+          reviewerVerdict: "PASS",
+        });
         const res = await postReviewerAudit(
           new NextRequest("http://localhost/api/board/reviewer-audit", {
             method: "POST",
@@ -373,7 +393,11 @@ test("4. runSelfDeployVerified with stage OFF returns shadow_prepared and never 
     assert.ok(deployResult, "selfDeploy shadow result must be recorded on merged item");
     assert.equal(deployResult.mode, "shadow");
     assert.equal(deployResult.status, "shadow_prepared");
-    assert.deepEqual(executedSteps, [], "orchestrator must never invoke deploy steps when stage is OFF");
+    assert.deepEqual(
+      executedSteps,
+      [],
+      "orchestrator must never invoke deploy steps when stage is OFF"
+    );
   } finally {
     fs.rmSync(boardDir, { recursive: true, force: true });
   }

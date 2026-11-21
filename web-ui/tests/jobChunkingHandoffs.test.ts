@@ -48,7 +48,11 @@ test("(a) fixture job hitting round budget banks commit + complete handoff and e
       budget: { maxRounds: 3, maxDurationMs: 60_000 },
       totalSteps: 5,
       stepExecutor: async (stepIndex) => {
-        fs.writeFileSync(path.join(repoDir, `step-${stepIndex}.txt`), `step ${stepIndex}\n`, "utf8");
+        fs.writeFileSync(
+          path.join(repoDir, `step-${stepIndex}.txt`),
+          `step ${stepIndex}\n`,
+          "utf8"
+        );
         return {
           currentState: `completed step ${stepIndex}`,
           nextStep: `step ${stepIndex + 1}`,
@@ -92,7 +96,11 @@ test("(b) fixture job hitting time budget banks commit + complete handoff and en
       totalSteps: 5,
       stepExecutor: async (stepIndex) => {
         fakeNow += 600; // 2 steps -> 1200ms > 1000ms
-        fs.writeFileSync(path.join(repoDir, `time-step-${stepIndex}.txt`), `step ${stepIndex}\n`, "utf8");
+        fs.writeFileSync(
+          path.join(repoDir, `time-step-${stepIndex}.txt`),
+          `step ${stepIndex}\n`,
+          "utf8"
+        );
         return {
           currentState: `time step ${stepIndex}`,
           nextStep: `step ${stepIndex + 1}`,
@@ -147,9 +155,13 @@ test("(d) marathon-opt-out job exceeds default budget without chunking", async (
   assert.equal(evalDefault.exceeded, true);
   assert.equal(evalDefault.reason, "rounds");
 
-  const evalOptOut = evaluateChunkBudget(DEFAULT_CHUNK_MAX_ROUNDS + 10, DEFAULT_CHUNK_MAX_DURATION_MS + 10_000, {
-    marathonOptOut: true,
-  });
+  const evalOptOut = evaluateChunkBudget(
+    DEFAULT_CHUNK_MAX_ROUNDS + 10,
+    DEFAULT_CHUNK_MAX_DURATION_MS + 10_000,
+    {
+      marathonOptOut: true,
+    }
+  );
   assert.equal(evalOptOut.exceeded, false);
   assert.equal(evalOptOut.reason, null);
 });
@@ -169,8 +181,16 @@ test("(e) continuation from banked handoff reaches the same gate result as unint
       budget: { marathonOptOut: true },
       totalSteps: 4,
       stepExecutor: async (stepIndex) => {
-        fs.writeFileSync(path.join(uninterruptedRepo, `artifact-${stepIndex}.txt`), `val-${stepIndex}\n`, "utf8");
-        return { currentState: `step ${stepIndex}`, nextStep: `step ${stepIndex + 1}`, openQuestions: [] };
+        fs.writeFileSync(
+          path.join(uninterruptedRepo, `artifact-${stepIndex}.txt`),
+          `val-${stepIndex}\n`,
+          "utf8"
+        );
+        return {
+          currentState: `step ${stepIndex}`,
+          nextStep: `step ${stepIndex + 1}`,
+          openQuestions: [],
+        };
       },
     });
 
@@ -182,8 +202,16 @@ test("(e) continuation from banked handoff reaches the same gate result as unint
       budget: { maxRounds: 2, maxDurationMs: 60_000 },
       totalSteps: 4,
       stepExecutor: async (stepIndex) => {
-        fs.writeFileSync(path.join(chunkedRepo, `artifact-${stepIndex}.txt`), `val-${stepIndex}\n`, "utf8");
-        return { currentState: `step ${stepIndex}`, nextStep: `step ${stepIndex + 1}`, openQuestions: [] };
+        fs.writeFileSync(
+          path.join(chunkedRepo, `artifact-${stepIndex}.txt`),
+          `val-${stepIndex}\n`,
+          "utf8"
+        );
+        return {
+          currentState: `step ${stepIndex}`,
+          nextStep: `step ${stepIndex + 1}`,
+          openQuestions: [],
+        };
       },
     });
     assert.equal(firstChunk.endState, "chunk-complete");
@@ -195,8 +223,16 @@ test("(e) continuation from banked handoff reaches the same gate result as unint
       budget: { maxRounds: 10, maxDurationMs: 60_000 },
       totalSteps: 4,
       stepExecutor: async (stepIndex) => {
-        fs.writeFileSync(path.join(chunkedRepo, `artifact-${stepIndex}.txt`), `val-${stepIndex}\n`, "utf8");
-        return { currentState: `step ${stepIndex}`, nextStep: `step ${stepIndex + 1}`, openQuestions: [] };
+        fs.writeFileSync(
+          path.join(chunkedRepo, `artifact-${stepIndex}.txt`),
+          `val-${stepIndex}\n`,
+          "utf8"
+        );
+        return {
+          currentState: `step ${stepIndex}`,
+          nextStep: `step ${stepIndex + 1}`,
+          openQuestions: [],
+        };
       },
     });
 
@@ -244,7 +280,10 @@ test("(f) handoff HEAD SHA resolves in git log", async () => {
 test("supervisor chunk resume enforces max 2 auto-resumes then needs-attention", () => {
   assert.deepEqual(resolveSupervisorChunkResume(0), { action: "auto-resume", nextResumeCount: 1 });
   assert.deepEqual(resolveSupervisorChunkResume(1), { action: "auto-resume", nextResumeCount: 2 });
-  assert.deepEqual(resolveSupervisorChunkResume(2), { action: "needs-attention", nextResumeCount: 2 });
+  assert.deepEqual(resolveSupervisorChunkResume(2), {
+    action: "needs-attention",
+    nextResumeCount: 2,
+  });
 });
 
 test("live turn budget hit banks commit, writes complete handoff, and returns chunk-complete marker", async () => {
@@ -305,13 +344,16 @@ test("live turn budget hit banks commit, writes complete handoff, and returns ch
 test("resolveThreadChunkBudget plumbs per-job config and marathonOptOut from thread record", () => {
   assert.equal(resolveThreadChunkBudget(null), undefined);
   assert.deepEqual(
-    resolveThreadChunkBudget({ chunkBudget: { maxRounds: 5, maxDurationMs: 12000, marathonOptOut: true } }),
+    resolveThreadChunkBudget({
+      chunkBudget: { maxRounds: 5, maxDurationMs: 12000, marathonOptOut: true },
+    }),
     { maxRounds: 5, maxDurationMs: 12000, marathonOptOut: true }
   );
-  assert.deepEqual(
-    resolveThreadChunkBudget({ marathonOptOut: true }),
-    { maxRounds: undefined, maxDurationMs: undefined, marathonOptOut: true }
-  );
+  assert.deepEqual(resolveThreadChunkBudget({ marathonOptOut: true }), {
+    maxRounds: undefined,
+    maxDurationMs: undefined,
+    marathonOptOut: true,
+  });
 });
 
 test("rendezvous: route handoff path resolves to supervisor checkpoint dir + taskId", () => {
@@ -378,7 +420,10 @@ test("rendezvous: chunkComplete handoff written via route target is seen by supe
     });
     assert.equal(hit.exceeded, true);
 
-    const supervisorPath = path.join(getCanonicalCheckpointDir(), "task-1794817009888.handoff.json");
+    const supervisorPath = path.join(
+      getCanonicalCheckpointDir(),
+      "task-1794817009888.handoff.json"
+    );
     const priorHandoff = readMilestoneHandoff(supervisorPath) as ChunkHandoffBrief | null;
     assert.ok(priorHandoff);
     assert.equal(priorHandoff?.chunkComplete, true);

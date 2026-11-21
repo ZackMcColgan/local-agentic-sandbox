@@ -11,7 +11,10 @@ export async function POST(
     const scheduleId = resolvedParams?.id;
 
     if (!scheduleId || typeof scheduleId !== "string") {
-      return NextResponse.json({ error: "Missing required schedule ID parameter" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required schedule ID parameter" },
+        { status: 400 }
+      );
     }
 
     const workspaceDir = process.env.WORKSPACE_DIR;

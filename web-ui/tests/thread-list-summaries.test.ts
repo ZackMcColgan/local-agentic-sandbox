@@ -39,7 +39,9 @@ describe("B1: Lightweight thread summaries", () => {
       assert.ok(serializedSize < 1024, `Expected summary < 1024 bytes, got ${serializedSize}`);
       assert.equal(summary.messageCount, 2);
       assert.equal(summary.hasDiffs, true);
-      assert.ok(typeof summary.lastMessagePreview === "string" && summary.lastMessagePreview.length > 0);
+      assert.ok(
+        typeof summary.lastMessagePreview === "string" && summary.lastMessagePreview.length > 0
+      );
       assert.ok(summary.title && summary.title !== "New session", "Expected derived title");
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

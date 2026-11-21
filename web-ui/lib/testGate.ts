@@ -7,7 +7,7 @@ import path from "path";
  * Every workspace in root package.json is included: web-ui, mcp-server, browser-mcp.
  */
 export const CANONICAL_WORKSPACES = ["web-ui", "mcp-server", "browser-mcp"] as const;
-export type CanonicalWorkspace = typeof CANONICAL_WORKSPACES[number];
+export type CanonicalWorkspace = (typeof CANONICAL_WORKSPACES)[number];
 
 export interface AffectedTestsResult {
   tests: string[];
@@ -56,15 +56,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/threadClearMessages.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("LiveRunBlock.tsx") ||
-      p.includes("liveRunBlockStatus.test.ts"),
+    match: (p) => p.includes("LiveRunBlock.tsx") || p.includes("liveRunBlockStatus.test.ts"),
     tests: ["tests/liveRunBlockStatus.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("LiveRunBlock.tsx") ||
-      p.includes("liveRunBlockPreview.test.ts"),
+    match: (p) => p.includes("LiveRunBlock.tsx") || p.includes("liveRunBlockPreview.test.ts"),
     tests: ["tests/liveRunBlockPreview.test.ts"],
   },
   {
@@ -75,9 +71,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/ciSpeed.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("explorerFs.test.ts") ||
-      p.includes("explorerFs.ts"),
+    match: (p) => p.includes("explorerFs.test.ts") || p.includes("explorerFs.ts"),
     tests: ["tests/explorerFs.test.ts"],
   },
   {
@@ -100,15 +94,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/e2e/invariantNetB4.spec.ts"],
   },
   {
-    match: (p) =>
-      p.includes("invariantNetB3.spec.ts") ||
-      p.includes("ChatStream.tsx"),
+    match: (p) => p.includes("invariantNetB3.spec.ts") || p.includes("ChatStream.tsx"),
     tests: ["tests/e2e/invariantNetB3.spec.ts"],
   },
   {
-    match: (p) =>
-      p.includes("invariantNetB2.spec.ts") ||
-      p.includes("ChatStream.tsx"),
+    match: (p) => p.includes("invariantNetB2.spec.ts") || p.includes("ChatStream.tsx"),
     tests: ["tests/e2e/invariantNetB2.spec.ts"],
   },
   {
@@ -127,9 +117,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/invariantNetA4.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("invariantNetA3.test.ts") ||
-      p.includes("toolCallIntegrity.ts"),
+    match: (p) => p.includes("invariantNetA3.test.ts") || p.includes("toolCallIntegrity.ts"),
     tests: ["tests/invariantNetA3.test.ts"],
   },
   {
@@ -164,27 +152,20 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/uiuxAuditFixes.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("lib/board/reviewerGate") ||
-      p.includes("reviewerGate.test.ts"),
+    match: (p) => p.includes("lib/board/reviewerGate") || p.includes("reviewerGate.test.ts"),
     tests: ["tests/reviewerGate.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("lib/board/flowMonitor") ||
-      p.includes("flowMonitor.test.ts"),
+    match: (p) => p.includes("lib/board/flowMonitor") || p.includes("flowMonitor.test.ts"),
     tests: ["tests/flowMonitor.test.ts"],
   },
   {
-    match: (p) =>
-      p.includes("lib/board/dispatcher") ||
-      p.includes("dispatcher.test.ts"),
+    match: (p) => p.includes("lib/board/dispatcher") || p.includes("dispatcher.test.ts"),
     tests: ["tests/dispatcher.test.ts"],
   },
   {
     match: (p) =>
-      p.includes("lib/board/mergeThreadsIntoBoard") ||
-      p.includes("boardGhostStatus.test.ts"),
+      p.includes("lib/board/mergeThreadsIntoBoard") || p.includes("boardGhostStatus.test.ts"),
     tests: ["tests/boardGhostStatus.test.ts"],
   },
   {
@@ -285,12 +266,12 @@ const MAPPING_RULES: MappingRule[] = [
   // job-queue-isolation: single-slot queue + per-job worktrees
   {
     match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
-    tests: ["tests/jobQueueIsolation.test.ts"]
+    tests: ["tests/jobQueueIsolation.test.ts"],
   },
   {
     // job-queue-isolation wiring: route serialization seam + route-level proof
     match: (p) => p.includes("lib/chatTurnGate") || p.includes("app/api/chat/route"),
-    tests: ["tests/jobQueueRoute.test.ts"]
+    tests: ["tests/jobQueueRoute.test.ts"],
   },
   {
     // PrioritySlotScheduler single-slot arbiter & preemption wiring
@@ -303,7 +284,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/subagents/workerPool") ||
       p.includes("slotScheduler.test.ts") ||
       p.includes("slotUtilizationMetrics.test.ts"),
-    tests: ["tests/slotScheduler.test.ts", "tests/slotUtilizationMetrics.test.ts"]
+    tests: ["tests/slotScheduler.test.ts", "tests/slotUtilizationMetrics.test.ts"],
   },
   {
     match: (p) =>
@@ -345,7 +326,17 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("hostRunnerDisconnectPresentation.test.ts") ||
       p.includes("narrationChunkSeparator.test.ts") ||
       p.includes("threadInitialSelection.test.ts"),
-    tests: ["tests/darkTextFloor.test.ts", "tests/overlayMutualExclusion.test.ts", "tests/timestampFormat.test.ts", "tests/telegramErrorDismiss.test.ts", "tests/titleTruncationResiduals.test.ts", "tests/threadSummariesCache.test.ts", "tests/hostRunnerDisconnectPresentation.test.ts", "tests/narrationChunkSeparator.test.ts", "tests/threadInitialSelection.test.ts"],
+    tests: [
+      "tests/darkTextFloor.test.ts",
+      "tests/overlayMutualExclusion.test.ts",
+      "tests/timestampFormat.test.ts",
+      "tests/telegramErrorDismiss.test.ts",
+      "tests/titleTruncationResiduals.test.ts",
+      "tests/threadSummariesCache.test.ts",
+      "tests/hostRunnerDisconnectPresentation.test.ts",
+      "tests/narrationChunkSeparator.test.ts",
+      "tests/threadInitialSelection.test.ts",
+    ],
   },
   {
     match: (p) =>
@@ -366,27 +357,35 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/icon.svg") ||
       p.includes("app/layout.tsx") ||
       p.includes("app/page.tsx"),
-    tests: ["tests/lane-c-ui-polish.test.ts", "tests/canvas.test.ts", "tests/settingsView.test.ts", "tests/modelBottomSheet.test.ts", "tests/buildsView.test.ts", "tests/skillsView.test.ts", "tests/uiLayoutInvariants.test.ts"]
+    tests: [
+      "tests/lane-c-ui-polish.test.ts",
+      "tests/canvas.test.ts",
+      "tests/settingsView.test.ts",
+      "tests/modelBottomSheet.test.ts",
+      "tests/buildsView.test.ts",
+      "tests/skillsView.test.ts",
+      "tests/uiLayoutInvariants.test.ts",
+    ],
   },
   // kind-gateway assets & launcher scripts
   {
     match: (p) => p.includes("kind-gateway") || p.includes("scripts/kind-gateway"),
-    tests: ["tests/kindGateway.test.ts"]
+    tests: ["tests/kindGateway.test.ts"],
   },
   // Dev-proxy & LAN-bridge watchdog
   {
     match: (p) => p.includes("scripts/dev-proxy") || p.includes("scripts/lan-bridge"),
-    tests: ["tests/gatewayWatchdog.test.ts"]
+    tests: ["tests/gatewayWatchdog.test.ts"],
   },
   // Direct test file changed: run itself
   {
     match: (p) => /tests\/[^/]+\.test\.(ts|js)$/.test(p),
-    tests: [] // handled dynamically
+    tests: [], // handled dynamically
   },
   // Notifications & Telegram outbound alerts
   {
     match: (p) => p.includes("notifications"),
-    tests: ["tests/notifications.test.ts"]
+    tests: ["tests/notifications.test.ts"],
   },
   // Host Mode & approvals & status & Host Bridge & Host Settings
   {
@@ -418,38 +417,38 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/chatFilePaging.test.ts",
       "tests/hostGitSafetyBattery.test.ts",
       "tests/unattendedGitOps.test.ts",
-      "tests/unattendedGitToolAdmission.test.ts"
-    ]
+      "tests/unattendedGitToolAdmission.test.ts",
+    ],
   },
   // Progressive tool registry (patch tool registration)
   {
     match: (p) => p.includes("progressiveTools"),
-    tests: ["tests/patchTools.test.ts"]
+    tests: ["tests/patchTools.test.ts"],
   },
   // Test helpers (e.g. tests/helpers/serviceMocks.ts)
   {
     match: (p) => p.includes("tests/helpers/"),
-    tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"]
+    tests: ["tests/workerPool.test.ts", "tests/deliverableContracts.test.ts"],
   },
   // Grounding helpers (search query derivation, honest-abort gate)
   {
     match: (p) => p.includes("lib/grounding"),
-    tests: ["tests/groundingGate.test.ts"]
+    tests: ["tests/groundingGate.test.ts"],
   },
   // Simulation mode engine, scenarios registry, and offline runner
   {
     match: (p) => p.includes("lib/simulator"),
-    tests: ["tests/simulator.test.ts"]
+    tests: ["tests/simulator.test.ts"],
   },
   // Clipboard utility
   {
     match: (p) => p.includes("lib/clipboard"),
-    tests: ["tests/clipboard.test.ts"]
+    tests: ["tests/clipboard.test.ts"],
   },
   // Artifact download naming, MIME inference, and download helpers
   {
     match: (p) => p.includes("lib/artifactDownload") || p.includes("lib/attachmentMime"),
-    tests: ["tests/artifactDownload.test.ts", "tests/svgComponent.test.ts"]
+    tests: ["tests/artifactDownload.test.ts", "tests/svgComponent.test.ts"],
   },
   // SVG utilities and SVG viewer component
   {
@@ -458,29 +457,37 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/svgRendering.test.ts",
       "tests/svgComponent.test.ts",
       "tests/architectureSvgPair.test.ts",
-      "tests/artifactDeliveryAndPolish.test.ts"
-    ]
+      "tests/artifactDeliveryAndPolish.test.ts",
+    ],
   },
   {
     match: (p) => p.includes("app/api/board/route"),
-    tests: ["tests/p5BoardAndPipeline.test.ts"]
+    tests: ["tests/p5BoardAndPipeline.test.ts"],
   },
 
   {
     match: (p) => p.includes("lib/prePrPipeline"),
-    tests: ["tests/p5BoardAndPipeline.test.ts"]
+    tests: ["tests/p5BoardAndPipeline.test.ts"],
   },
   {
     match: (p) => p.includes("lib/securityHardening") || p.includes("lib/selfDeployMachinery"),
-    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"]
+    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"],
   },
   {
     match: (p) => p.includes("lib/subagents/finishVerificationGate"),
-    tests: ["tests/p32AndP33SupervisorGates.test.ts"]
+    tests: ["tests/p32AndP33SupervisorGates.test.ts"],
   },
   // ChatStream, ThinkingPanel, chatUtils, contextBudget, and chat history components
   {
-    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThinkingPanel") || p.includes("lib/chatUtils") || p.includes("lib/chatDiffs") || p.includes("lib/contextBudget") || p.includes("lib/chatStatus") || p.includes("lib/modelLimits") || p.includes("lib/conversationCompaction"),
+    match: (p) =>
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThinkingPanel") ||
+      p.includes("lib/chatUtils") ||
+      p.includes("lib/chatDiffs") ||
+      p.includes("lib/contextBudget") ||
+      p.includes("lib/chatStatus") ||
+      p.includes("lib/modelLimits") ||
+      p.includes("lib/conversationCompaction"),
     tests: [
       "tests/thinkingPanel.test.ts",
       "tests/stopTurnFidelity.test.ts",
@@ -517,8 +524,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/capDefault.test.ts",
       "tests/chatRoundBudget.test.ts",
       "tests/chatWebResearchCap.test.ts",
-      "tests/uirHeaderActivity.test.ts"
-    ]
+      "tests/uirHeaderActivity.test.ts",
+    ],
   },
   // uir-0/uir-1: Live Activity Header, live-activity helpers, header diet
   {
@@ -526,8 +533,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/uirHeaderActivity.test.ts",
       "tests/chatLiveVisibility.test.ts",
-      "tests/chatPolish.test.ts"
-    ]
+      "tests/chatPolish.test.ts",
+    ],
   },
   // Threads store & Threads API
   {
@@ -553,8 +560,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/buildLaunchVisibility.test.ts",
       "tests/supervisorGitOpsIntegration.test.ts",
       // UI-008: readable thread-list titles derived at record-create time
-      "tests/threadTitleDerivation.test.ts"
-    ]
+      "tests/threadTitleDerivation.test.ts",
+    ],
   },
   // Turn liveness: stall window, heartbeat, forced round-boundary snapshot, sidebar badges
   {
@@ -563,36 +570,37 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/threads/threadStore") ||
       p.includes("lib/threads/streamSnapshot") ||
       p.includes("components/ThreadsSidebar"),
-    tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"]
+    tests: ["tests/turnLiveness.test.ts", "tests/roundDeadlines.test.ts"],
   },
   // qa-6 / UI-001 + UI-002: zombie streaming cap — leaked presence /
   // execution live signals older than the hard cap with a stale record are
   // reaped by reconcile instead of keeping a dead turn live forever
   {
     match: (p) => p.includes("lib/threads/threadStore"),
-    tests: ["tests/zombieStreamingCap.test.ts"]
+    tests: ["tests/zombieStreamingCap.test.ts"],
   },
   {
     match: (p) =>
       p.includes("lib/commandDialectGuard") ||
       p.includes("lib/commandDialectTraps") ||
       p.includes("lib/hostMode"),
-    tests: ["tests/commandDialectGuard.test.ts"]
+    tests: ["tests/commandDialectGuard.test.ts"],
   },
   {
-    match: (p) => p.includes("lib/finishVerification") || p.includes("components/CompletionVerificationBadge"),
-    tests: ["tests/finishVerification.test.ts"]
+    match: (p) =>
+      p.includes("lib/finishVerification") || p.includes("components/CompletionVerificationBadge"),
+    tests: ["tests/finishVerification.test.ts"],
   },
   {
     match: (p) => p.includes("lib/evidenceLinkedSummaries") || p.includes("app/api/chat/route"),
-    tests: ["tests/evidenceLinkedSummaries.test.ts"]
+    tests: ["tests/evidenceLinkedSummaries.test.ts"],
   },
   {
     match: (p) =>
       p.includes("lib/toolCallIntegrity") ||
       p.includes("app/api/chat/route") ||
       p.includes("components/ChatStream"),
-    tests: ["tests/toolCallIntegrity.test.ts"]
+    tests: ["tests/toolCallIntegrity.test.ts"],
   },
   // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
   // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
@@ -601,7 +609,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") ||
       p.includes("components/LiveRunBlock") ||
       p.includes("app/page"),
-    tests: ["tests/chatLiveTraceRows.test.ts"]
+    tests: ["tests/chatLiveTraceRows.test.ts"],
   },
   // qa-7 / UI-013: live header context meter — latest round's actual prompt
   // tokens from the record on every client (helper, snapshot carriage, pill)
@@ -611,23 +619,20 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/streamSnapshot") ||
       p.includes("components/ChatStream") ||
       p.includes("app/api/chat/route"),
-    tests: ["tests/uirLiveMeter.test.ts"]
+    tests: ["tests/uirLiveMeter.test.ts"],
   },
   // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
   // title wrap (UI-012), long-brief collapse (UI-014)
   {
-    match: (p) =>
-      p.includes("components/ChatStream") ||
-      p.includes("components/ThreadsSidebar"),
-    tests: ["tests/uirChatTextFixes.test.ts"]
+    match: (p) => p.includes("components/ChatStream") || p.includes("components/ThreadsSidebar"),
+    tests: ["tests/uirChatTextFixes.test.ts"],
   },
   // Board parity PR1 (FINAL-DESIGN): header composition + context meter
   // format/geometry + composer/send geometry in ChatStream, formatContextK
   // in tokenEconomics
   {
-    match: (p) =>
-      p.includes("components/ChatStream") || p.includes("lib/tokenEconomics"),
-    tests: ["tests/parityHeaderComposer.test.ts"]
+    match: (p) => p.includes("components/ChatStream") || p.includes("lib/tokenEconomics"),
+    tests: ["tests/parityHeaderComposer.test.ts"],
   },
   // Board parity PR2 (FINAL-DESIGN): chat surfaces — brief bubble, thinking
   // card, live trace rows, RUNNING pill, activity header details
@@ -637,7 +642,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThinkingPanel") ||
       p.includes("components/LiveRunBlock") ||
       p.includes("components/LiveActivityHeader"),
-    tests: ["tests/parityChatSurfaces.test.ts"]
+    tests: ["tests/parityChatSurfaces.test.ts"],
   },
   // Board parity PR3 (FINAL-DESIGN): sessions sidebar + drawer + rail —
   // board session cards, status chips, running-card actions, rail selection
@@ -646,7 +651,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ThreadsSidebar") ||
       p.includes("components/NavigationDrawer") ||
       p.endsWith("app/page.tsx"),
-    tests: ["tests/paritySidebarDrawer.test.ts"]
+    tests: ["tests/paritySidebarDrawer.test.ts"],
   },
   // Board parity PR4 (FINAL-DESIGN + canvas boards): canvas pane/diff form,
   // chat canvas doors, Morning Report verdict/KPI/attention forms, and the
@@ -658,7 +663,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/MorningReportView") ||
       p.includes("components/ExecutionTrace") ||
       p.includes("components/TraceWaterfall"),
-    tests: ["tests/parityVerificationPass.test.ts"]
+    tests: ["tests/parityVerificationPass.test.ts"],
   },
   // Token Economics parts (a)/(c)/(d): per-round prompt tokens + per-job rollup,
   // micro-elision of superseded tool results, and within-thread read dedup
@@ -670,7 +675,11 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/chat/route") ||
       p.includes("lib/threads/threadStore") ||
       p.includes("lib/llm/"),
-    tests: ["tests/tokenEconomics.test.ts", "tests/microElision.test.ts", "tests/readDedup.test.ts"]
+    tests: [
+      "tests/tokenEconomics.test.ts",
+      "tests/microElision.test.ts",
+      "tests/readDedup.test.ts",
+    ],
   },
   // Shared-Volume Permissions Hardening (0770/0660) & Deploy Manifests
   {
@@ -678,7 +687,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("permissions") ||
       p.includes("deploy/k8s/mcp-runner") ||
       p.includes("deploy/k8s/web-ui"),
-    tests: ["tests/permissions.test.ts"]
+    tests: ["tests/permissions.test.ts"],
   },
   // Artifact canvas (uir-2): core logic, pane, and its card affordances
   {
@@ -688,7 +697,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/CanvasContext") ||
       p.includes("components/ArtifactRenderers") ||
       p.includes("components/ChatStream"),
-    tests: ["tests/uirCanvas.test.ts", "tests/chatDiffCollapseCanvasSwitch.test.ts"]
+    tests: ["tests/uirCanvas.test.ts", "tests/chatDiffCollapseCanvasSwitch.test.ts"],
   },
   // Unified Agent UI (Material 3) components & design tokens
   {
@@ -727,12 +736,12 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/projectsNavAndWorkflow.test.ts",
       "tests/selfDeployWiring.test.ts",
       "tests/threadsDeleteTouch.test.ts",
-      "tests/uiStateAndDedup.test.ts"
-    ]
+      "tests/uiStateAndDedup.test.ts",
+    ],
   },
   {
     match: (p) => p.includes("lib/chatHistory"),
-    tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"]
+    tests: ["tests/chatHistory.test.ts", "tests/frontendRefreshRehydration.test.ts"],
   },
   // Projects & Folders (Phases 1-4)
   {
@@ -744,22 +753,25 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/projectsRegistryAndExplorer.test.ts",
       "tests/projectOvernightRunner.test.ts",
       "tests/projectDiffReview.test.ts",
-      "tests/projectMorningReportIntegration.test.ts"
-    ]
+      "tests/projectMorningReportIntegration.test.ts",
+    ],
   },
   // Memory profile & durable facts
   {
     match: (p) => p.includes("lib/memory"),
-    tests: ["tests/userProfile.test.ts"]
+    tests: ["tests/userProfile.test.ts"],
   },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
-    tests: ["tests/skillGate.test.ts"]
+    tests: ["tests/skillGate.test.ts"],
   },
   // Chat API route and progressive tools
   {
-    match: (p) => p.includes("app/api/chat/route") || p.includes("lib/progressiveTools") || p.includes("lib/conversationCompaction"),
+    match: (p) =>
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/progressiveTools") ||
+      p.includes("lib/conversationCompaction"),
     tests: [
       "tests/chatStreaming.test.ts",
       "tests/toolParser.test.ts",
@@ -787,8 +799,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/thread-list-loading-and-selection.test.ts",
       "tests/thread-search-snippet.test.ts",
       "tests/live-meter-done-parity.test.ts",
-      "tests/chatWebResearchCap.test.ts"
-    ]
+      "tests/chatWebResearchCap.test.ts",
+    ],
   },
   // LLM Provider abstraction, standalone supervisor & engine control
   {
@@ -802,13 +814,18 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/llmProvider.test.ts",
       "tests/engineRoute.test.ts",
       "tests/engineToggle.test.ts",
-      "tests/shakeoutFixes.test.ts"
-    ]
+      "tests/shakeoutFixes.test.ts",
+    ],
   },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
-    tests: ["tests/tasksApi.test.ts", "tests/activeTaskRehydration.test.ts", "tests/taskControls.test.ts", "tests/buildLaunchVisibility.test.ts"]
+    tests: [
+      "tests/tasksApi.test.ts",
+      "tests/activeTaskRehydration.test.ts",
+      "tests/taskControls.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+    ],
   },
   // Files API route, Workspace File alias & thread outputs
   {
@@ -820,13 +837,13 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/filesApi.test.ts",
       "tests/chatAttachments.test.ts",
       "tests/svgRendering.test.ts",
-      "tests/punchlistBackendFixes.test.ts"
-    ]
+      "tests/punchlistBackendFixes.test.ts",
+    ],
   },
   // Patch Core surgical utility
   {
     match: (p) => p.includes("lib/subagents/patchCore"),
-    tests: ["tests/punchlistBackendFixes.test.ts"]
+    tests: ["tests/punchlistBackendFixes.test.ts"],
   },
   // Subagents & Supervisor
   {
@@ -846,8 +863,8 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/supervisorGitOpsIntegration.test.ts",
       "tests/taskPathObservability.test.ts",
       "tests/taskPathExecutionFix.test.ts",
-      "tests/completionGateAndPlanningAbort.test.ts"
-    ]
+      "tests/completionGateAndPlanningAbort.test.ts",
+    ],
   },
   {
     match: (p) =>
@@ -860,14 +877,14 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/threads/route") ||
       p.includes("app/api/threads/[id]/route") ||
       p.includes("lib/threads/threadStore"),
-    tests: ["tests/taskPathExecutionFix.test.ts"]
+    tests: ["tests/taskPathExecutionFix.test.ts"],
   },
   {
     match: (p) =>
       p.includes("lib/threads/inAppSupervisor") ||
       p.includes("inAppSupervisor.test.ts") ||
       p.includes("inAppSupervisorWiring.test.ts"),
-    tests: ["tests/inAppSupervisor.test.ts", "tests/inAppSupervisorWiring.test.ts"]
+    tests: ["tests/inAppSupervisor.test.ts", "tests/inAppSupervisorWiring.test.ts"],
   },
   {
     match: (p) =>
@@ -875,27 +892,49 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/supervisorBadgeState") ||
       p.includes("supervisorStatusBadge.test.ts") ||
       p.includes("supervisorStatusBadgeWiring.test.ts"),
-    tests: ["tests/supervisorStatusBadge.test.ts", "tests/supervisorStatusBadgeWiring.test.ts"]
+    tests: ["tests/supervisorStatusBadge.test.ts", "tests/supervisorStatusBadgeWiring.test.ts"],
   },
   {
     match: (p) => p.includes("lib/subagents/workerPool"),
-    tests: ["tests/workerPool.test.ts", "tests/workerPoolIsolation.test.ts", "tests/critic.test.ts", "tests/workerHonesty.test.ts", "tests/langgraphSupervisorNodes.test.ts", "tests/blockingGateRevert.test.ts", "tests/modelRoster.test.ts", "tests/evidenceLinking.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/plannerScope.test.ts"]
+    tests: [
+      "tests/workerPool.test.ts",
+      "tests/workerPoolIsolation.test.ts",
+      "tests/critic.test.ts",
+      "tests/workerHonesty.test.ts",
+      "tests/langgraphSupervisorNodes.test.ts",
+      "tests/blockingGateRevert.test.ts",
+      "tests/modelRoster.test.ts",
+      "tests/evidenceLinking.test.ts",
+      "tests/explorerAndCriticUpgrade.test.ts",
+      "tests/plannerScope.test.ts",
+    ],
   },
   {
     match: (p) => p.includes("lib/subagents/llmClient"),
-    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts", "tests/llmClient.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/workerPool.test.ts", "tests/llmClient.test.ts"],
   },
   {
     match: (p) => p.includes("lib/subagents/residency"),
-    tests: ["tests/workerHonesty.test.ts", "tests/vramResidencyAndMultiFile.test.ts"]
+    tests: ["tests/workerHonesty.test.ts", "tests/vramResidencyAndMultiFile.test.ts"],
   },
   {
     match: (p) => p.includes("lib/subagents/planner"),
-    tests: ["tests/planner.test.ts", "tests/shakeoutFixes.test.ts", "tests/plannerScope.test.ts", "tests/explorerAndCriticUpgrade.test.ts", "tests/buildLaunchVisibility.test.ts"]
+    tests: [
+      "tests/planner.test.ts",
+      "tests/shakeoutFixes.test.ts",
+      "tests/plannerScope.test.ts",
+      "tests/explorerAndCriticUpgrade.test.ts",
+      "tests/buildLaunchVisibility.test.ts",
+    ],
   },
   {
-    match: (p) => p.includes("lib/subagents/morningReport") || p.includes("lib/subagents/failureSummary"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/buildPushHonesty.test.ts"]
+    match: (p) =>
+      p.includes("lib/subagents/morningReport") || p.includes("lib/subagents/failureSummary"),
+    tests: [
+      "tests/morningReport.test.ts",
+      "tests/realReportTestCounts.test.ts",
+      "tests/buildPushHonesty.test.ts",
+    ],
   },
   {
     match: (p) => p.includes("lib/subagents/types"),
@@ -908,56 +947,60 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/evidenceLinking.test.ts",
       "tests/explorerAndCriticUpgrade.test.ts",
       "tests/productionTestRunnerWiring.test.ts",
-      "tests/threadsResumeRestartExecution.test.ts"
-    ]
+      "tests/threadsResumeRestartExecution.test.ts",
+    ],
   },
   {
-    match: (p) => p.includes("lib/subagents/scheduler") || p.includes("app/api/schedules") || p.includes("app/api/scheduler"),
+    match: (p) =>
+      p.includes("lib/subagents/scheduler") ||
+      p.includes("app/api/schedules") ||
+      p.includes("app/api/scheduler"),
     tests: [
       "tests/scheduler.test.ts",
       "tests/schedulerApi.test.ts",
       "tests/shakeoutFixes.test.ts",
       "tests/schedulerDaemon.test.ts",
-      "tests/schedulerHealth.test.ts"
-    ]
+      "tests/schedulerHealth.test.ts",
+    ],
   },
   // Telemetry, Tool Parser, File Parser
   {
     match: (p) => p.includes("lib/telemetry"),
-    tests: ["tests/telemetry.test.ts"]
+    tests: ["tests/telemetry.test.ts"],
   },
   {
     match: (p) => p.includes("lib/toolParser"),
-    tests: ["tests/toolParser.test.ts"]
+    tests: ["tests/toolParser.test.ts"],
   },
   {
     match: (p) => p.includes("lib/fileParser") || p.includes("lib/visionProcessor"),
-    tests: ["tests/fileParser.test.ts"]
+    tests: ["tests/fileParser.test.ts"],
   },
   // Ingestion
   {
     match: (p) => p.includes("lib/ingestion"),
-    tests: ["tests/ingestionPipeline.test.ts"]
+    tests: ["tests/ingestionPipeline.test.ts"],
   },
   // Models config & modelfiles
   {
-    match: (p) => p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
-    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts"]
+    match: (p) =>
+      p.includes("config/models") || p.includes("deploy/modelfiles") || p.includes("Modelfile"),
+    tests: ["tests/models.test.ts", "tests/modelfiles.test.ts"],
   },
   // Makefile deployment configuration
   {
     match: (p) => p === "Makefile" || p.endsWith("/Makefile"),
-    tests: ["tests/deploymentConfig.test.ts"]
+    tests: ["tests/deploymentConfig.test.ts"],
   },
   // Sandbox tier runner
   {
     match: (p) => p.includes("lib/sandbox/tierRunner"),
-    tests: ["tests/buildSandboxTier.test.ts"]
+    tests: ["tests/buildSandboxTier.test.ts"],
   },
   // Oracle ingestion
   {
     match: (p) => p.includes("lib/oracle/ingestion") || p.includes("lib/ingestion"),
-    tests: ["tests/ingestionPipeline.test.ts"]
+    tests: ["tests/ingestionPipeline.test.ts"],
   },
   // Architecture diagram generator & dogfood toolchain
   {
@@ -969,8 +1012,8 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/architectureSvgPair.test.ts",
       "tests/dogfoodPhase1Acceptance.test.ts",
-      "tests/dogfoodToolchain.test.ts"
-    ]
+      "tests/dogfoodToolchain.test.ts",
+    ],
   },
   // UI views and components
   {
@@ -978,7 +1021,11 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/MorningReportView") ||
       p.includes("app/morning-report") ||
       p.includes("app/api/morning-report"),
-    tests: ["tests/morningReport.test.ts", "tests/realReportTestCounts.test.ts", "tests/morningReportViewRestructure.test.ts"]
+    tests: [
+      "tests/morningReport.test.ts",
+      "tests/realReportTestCounts.test.ts",
+      "tests/morningReportViewRestructure.test.ts",
+    ],
   },
   // Run Ledger & Run Controls (Sprint 12 Phase 4)
   {
@@ -988,54 +1035,65 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/ledgerStats.test.ts",
       "tests/pause_resume.test.ts",
       "tests/restart.test.ts",
-      "tests/crash_recovery.test.ts"
-    ]
+      "tests/crash_recovery.test.ts",
+    ],
   },
   // Deploy API (Sprint 7)
   {
     match: (p) => p.includes("app/api/deploy") || p.includes("components/LiveRunBlock"),
-    tests: ["tests/deployApiWiring.test.ts"]
+    tests: ["tests/deployApiWiring.test.ts"],
   },
   // Build Deploy Flow (Sprint 12 Phase 5)
   {
     match: (p) => p.includes("lib/deploy/"),
-    tests: ["tests/deployFlow.test.ts"]
+    tests: ["tests/deployFlow.test.ts"],
   },
   // Human Skill Gates (Sprint 3)
   {
-    match: (p) => p.includes("app/api/skills") || p.includes("components/SkillsView") || p.includes("lib/subagents/skillGate"),
-    tests: ["tests/humanSkillGates.test.ts", "tests/skillsProposeApprove.test.ts", "tests/skillsViewPreview.test.ts"]
+    match: (p) =>
+      p.includes("app/api/skills") ||
+      p.includes("components/SkillsView") ||
+      p.includes("lib/subagents/skillGate"),
+    tests: [
+      "tests/humanSkillGates.test.ts",
+      "tests/skillsProposeApprove.test.ts",
+      "tests/skillsViewPreview.test.ts",
+    ],
   },
   // Flywheel Skills Spike (Sprint 12 Phase 7)
   {
     match: (p) => p.includes("lib/flywheel/"),
-    tests: ["tests/flywheelSkills.test.ts"]
+    tests: ["tests/flywheelSkills.test.ts"],
   },
   // Worker Git Operations (Sprint 12 Phase 8)
   {
     match: (p) => p.includes("lib/git/"),
-    tests: ["tests/workerGitOps.test.ts", "tests/buildPushHonesty.test.ts", "tests/supervisorGitOpsIntegration.test.ts"]
+    tests: [
+      "tests/workerGitOps.test.ts",
+      "tests/buildPushHonesty.test.ts",
+      "tests/supervisorGitOpsIntegration.test.ts",
+    ],
   },
   // Worker CI Feedback (Sprint 12 Phase 9)
   {
     match: (p) => p.includes("lib/ci/"),
-    tests: ["tests/workerCiFeedback.test.ts", "tests/productionTestRunnerWiring.test.ts"]
+    tests: ["tests/workerCiFeedback.test.ts", "tests/productionTestRunnerWiring.test.ts"],
   },
   {
     match: (p) => p.includes("lib/deploy/selfDeployVerified"),
-    tests: ["tests/selfDeployVerified.test.ts"]
+    tests: ["tests/selfDeployVerified.test.ts"],
   },
   {
     match: (p) =>
       p.includes("components/DiffViewer") ||
       p.includes("components/ThinkingPanel") ||
       p.includes("next.config"),
-    tests: ["tests/uiPolishPass2.test.ts"]
+    tests: ["tests/uiPolishPass2.test.ts"],
   },
   // Self-Deploy Pipeline (Sprint 12 Phase 10)
   {
     match: (p) => p.includes("lib/deploy/selfDeploy"),
-    tests: ["tests/selfDeploy.test.ts"]
+    tests: ["tests/selfDeploy.test.ts"],
   },
   {
     match: (p) => p.includes("components/ChatStream"),
@@ -1053,33 +1111,33 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/p6SecurityDeployEvalIngestion.test.ts",
       "tests/chatQueue.test.ts",
       "tests/punchlistUiFixes.test.ts",
-      "tests/uiStateAndDedup.test.ts"
-    ]
+      "tests/uiStateAndDedup.test.ts",
+    ],
   },
   // CHAT-8 live streaming visibility (server snapshots + client poll loop)
   {
     match: (p) => p.includes("lib/streamSnapshot") || p.includes("app/page"),
-    tests: ["tests/chatLiveVisibility.test.ts", "tests/chatThinkingPreservation.test.ts"]
+    tests: ["tests/chatLiveVisibility.test.ts", "tests/chatThinkingPreservation.test.ts"],
   },
   // CHAT-QUEUE client-side message queue
   {
     match: (p) => p.includes("lib/chatQueue"),
-    tests: ["tests/chatQueue.test.ts"]
+    tests: ["tests/chatQueue.test.ts"],
   },
   // Turn delivery & client reconciliation
   {
     match: (p) => p.includes("lib/turnReconciliation") || p.includes("turnDeliveryReconciliation"),
-    tests: ["tests/turnDeliveryReconciliation.test.ts"]
+    tests: ["tests/turnDeliveryReconciliation.test.ts"],
   },
   // UI-006/UI-006b reconcile-poll backoff policy (ChatStream poll loop gating)
   {
     match: (p) => p.includes("lib/reconcilePollPolicy") || p.includes("reconcilePollBackoff"),
-    tests: ["tests/reconcilePollBackoff.test.ts"]
+    tests: ["tests/reconcilePollBackoff.test.ts"],
   },
   // CHAT-STEER mid-turn server steer mailbox
   {
     match: (p) => p.includes("app/api/threads") && p.includes("steer"),
-    tests: ["tests/chatSteer.test.ts"]
+    tests: ["tests/chatSteer.test.ts"],
   },
   {
     match: (p) =>
@@ -1095,28 +1153,32 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/projectsNavAndWorkflow.test.ts",
       "tests/selfDeployWiring.test.ts",
       "tests/traceRowAccessibleNames.test.ts",
-      "tests/chatDiffCollapseCanvasSwitch.test.ts"
-    ]
+      "tests/chatDiffCollapseCanvasSwitch.test.ts",
+    ],
   },
   // MCP server files
   {
     match: (p) => p.startsWith("mcp-server/"),
-    tests: ["mcp-server:tests"]
+    tests: ["mcp-server:tests"],
   },
   // Browser MCP files
   {
     match: (p) => p.startsWith("browser-mcp/"),
-    tests: ["browser-mcp:tests"]
+    tests: ["browser-mcp:tests"],
   },
   // Test gate itself
   {
     match: (p) => p.includes("lib/testGate") || p.includes("scripts/test-gate"),
-    tests: ["tests/testGate.test.ts", "tests/gateManifestCompleteness.test.ts", "tests/testGateRunner.test.ts"]
+    tests: [
+      "tests/testGate.test.ts",
+      "tests/gateManifestCompleteness.test.ts",
+      "tests/testGateRunner.test.ts",
+    ],
   },
   // Overnight dogfood runner
   {
     match: (p) => p.includes("scripts/run-dogfood-overnight"),
-    tests: ["tests/dogfoodPhase1Acceptance.test.ts", "tests/realReportTestCounts.test.ts"]
+    tests: ["tests/dogfoodPhase1Acceptance.test.ts", "tests/realReportTestCounts.test.ts"],
   },
   // Memory evaluation, ingestion and verification scripts
   {
@@ -1125,15 +1187,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/ingest-docs") ||
       p.includes("scripts/verify-phase-d") ||
       p.includes("eval/"),
-    tests: ["tests/skillGate.test.ts"]
+    tests: ["tests/skillGate.test.ts"],
   },
   {
     match: (p) => p.includes("scripts/verify-phase-c"),
-    tests: ["tests/userProfile.test.ts"]
+    tests: ["tests/userProfile.test.ts"],
   },
   {
     match: (p) => p.includes("scripts/verify-lan-copy"),
-    tests: ["tests/clipboard.test.ts"]
+    tests: ["tests/clipboard.test.ts"],
   },
   // Verification & capture scripts timeout guard (Phase 0.5)
   {
@@ -1144,91 +1206,90 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("scripts/test-honest-abort-live") ||
       p.includes("scripts/test-model-formulation-live") ||
       p.includes("scripts/verify-"),
-    tests: ["tests/e2eScriptTimeouts.test.ts"]
+    tests: ["tests/e2eScriptTimeouts.test.ts"],
   },
   // Architecture diagrams
   {
     match: (p) => p.includes("docs/architecture.drawio"),
-    tests: [
-      "tests/architectureSvgPair.test.ts",
-      "tests/dogfoodPhase1Acceptance.test.ts"
-    ]
+    tests: ["tests/architectureSvgPair.test.ts", "tests/dogfoodPhase1Acceptance.test.ts"],
   },
   // Package manifests
   {
     match: (p) => p.endsWith("package.json") || p.endsWith("tsconfig.json"),
-    tests: [
-      "tests/tasksApi.test.ts",
-      "tests/supervisor.test.ts"
-    ]
+    tests: ["tests/tasksApi.test.ts", "tests/supervisor.test.ts"],
   },
   // Settings Memory store, API route, prompt injection, and Settings card
   {
     match: (p) => p.includes("lib/memory/operatorMemory") || p.includes("app/api/settings/memory"),
-    tests: ["tests/operatorMemory.test.ts", "tests/operatorMemoryInjection.test.ts"]
+    tests: ["tests/operatorMemory.test.ts", "tests/operatorMemoryInjection.test.ts"],
   },
   {
     match: (p) => p.includes("app/api/chat/route"),
-    tests: ["tests/operatorMemoryInjection.test.ts"]
+    tests: ["tests/operatorMemoryInjection.test.ts"],
   },
   {
     match: (p) => p.includes("components/SettingsView"),
-    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"]
+    tests: ["tests/settingsMemoryUi.test.ts", "tests/settingsZones.test.ts"],
   },
   // Repository hygiene & documentation integrity (Sprint 4 & 5)
   {
-    match: (p) => p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report"),
-    tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"]
+    match: (p) =>
+      p === "LICENSE" || p.includes(".opencode-remote-session") || p.includes("triage-report"),
+    tests: ["tests/repoHygiene.test.ts", "tests/docsIntegrity.test.ts"],
   },
   {
     match: (p) => p.includes("deploy/k8s/observability.yaml"),
-    tests: ["tests/otelJaegerDedup.test.ts"]
+    tests: ["tests/otelJaegerDedup.test.ts"],
   },
   // Charter modules (P0.1)
   {
     match: (p) => p.includes("lib/liveStatus"),
-    tests: ["tests/liveStatus.test.ts"]
+    tests: ["tests/liveStatus.test.ts"],
   },
   {
     match: (p) => p.includes("lib/executionSummary"),
-    tests: ["tests/executionSummary.test.ts"]
+    tests: ["tests/executionSummary.test.ts"],
   },
   {
     match: (p) => p.includes("lib/modelEval"),
-    tests: ["tests/modelEval.test.ts"]
+    tests: ["tests/modelEval.test.ts"],
   },
   {
     match: (p) => p.includes("lib/board/boardStore"),
-    tests: ["tests/boardStore.test.ts"]
+    tests: ["tests/boardStore.test.ts"],
   },
   {
     match: (p) => p.includes("lib/board/dispatcher"),
-    tests: ["tests/dispatcher.test.ts"]
+    tests: ["tests/dispatcher.test.ts"],
   },
   {
     match: (p) => p.includes("lib/board/flowMonitor"),
-    tests: ["tests/flowMonitor.test.ts"]
+    tests: ["tests/flowMonitor.test.ts"],
   },
   {
     match: (p) => p.includes("lib/board/reviewerGate"),
-    tests: ["tests/reviewerGate.test.ts"]
+    tests: ["tests/reviewerGate.test.ts"],
   },
   {
-    match: (p) => p.includes("config/models") || p.includes("lib/chatUtils") || p.includes("lib/subagents/llmClient"),
-    tests: ["tests/p02ModelEffort.test.ts"]
+    match: (p) =>
+      p.includes("config/models") ||
+      p.includes("lib/chatUtils") ||
+      p.includes("lib/subagents/llmClient"),
+    tests: ["tests/p02ModelEffort.test.ts"],
   },
   {
     match: (p) => p.includes("lib/threads/threadStore"),
-    tests: ["tests/p03DataLoss.test.ts"]
+    tests: ["tests/p03DataLoss.test.ts"],
   },
   {
-    match: (p) => p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
-    tests: ["tests/p04VisualGuard.test.ts"]
+    match: (p) =>
+      p.includes("app/globals.css") || p.includes("app/layout.tsx") || p.includes("app/error.tsx"),
+    tests: ["tests/p04VisualGuard.test.ts"],
   },
   {
     match: (p) => p.includes("app/page.tsx") || p.includes("components/SettingsView"),
-    tests: ["tests/p05StrayUi.test.ts"]
-  }
+    tests: ["tests/p05StrayUi.test.ts"],
+  },
 ];
 
 /**
@@ -1285,8 +1346,16 @@ function isIgnoredFile(normalizedPath: string): boolean {
   ) {
     // Exceptions: covered files in otherwise ignored paths
     if (normalizedPath.includes("architecture.drawio")) return false;
-    if (normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") || normalizedPath.startsWith("deploy/k8s/web-ui.yaml")) return false;
-    if (normalizedPath.startsWith("scripts/dev-proxy") || normalizedPath.startsWith("scripts/lan-bridge")) return false;
+    if (
+      normalizedPath.startsWith("deploy/k8s/mcp-runner.yaml") ||
+      normalizedPath.startsWith("deploy/k8s/web-ui.yaml")
+    )
+      return false;
+    if (
+      normalizedPath.startsWith("scripts/dev-proxy") ||
+      normalizedPath.startsWith("scripts/lan-bridge")
+    )
+      return false;
     return true;
   }
   return false;
@@ -1338,7 +1407,7 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
   return {
     tests: Array.from(testSet),
     uncoveredFiles: uncovered,
-    ignoredFiles: ignored
+    ignoredFiles: ignored,
   };
 }
 
@@ -1346,7 +1415,9 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
  * Inspects git to retrieve changed files (uncommitted + recent branch commits).
  */
 export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string[] {
-  const root = repoRoot || path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
+  const root =
+    repoRoot ||
+    path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
   const files = new Set<string>();
 
   try {
@@ -1373,17 +1444,26 @@ export function getGitChangedFiles(repoRoot?: string, sinceRef?: string): string
       // Find merge-base with origin/develop, origin/main, or HEAD~1
       let baseSha = "";
       try {
-        baseSha = execSync("git merge-base HEAD origin/develop", { cwd: root, encoding: "utf8" }).trim();
+        baseSha = execSync("git merge-base HEAD origin/develop", {
+          cwd: root,
+          encoding: "utf8",
+        }).trim();
       } catch {
         try {
-          baseSha = execSync("git merge-base HEAD origin/main", { cwd: root, encoding: "utf8" }).trim();
+          baseSha = execSync("git merge-base HEAD origin/main", {
+            cwd: root,
+            encoding: "utf8",
+          }).trim();
         } catch {
           baseSha = "HEAD~1";
         }
       }
 
       if (baseSha) {
-        const diffOut = execSync(`git diff --name-only ${baseSha}..HEAD`, { cwd: root, encoding: "utf8" });
+        const diffOut = execSync(`git diff --name-only ${baseSha}..HEAD`, {
+          cwd: root,
+          encoding: "utf8",
+        });
         for (const line of diffOut.split("\n")) {
           const trimmed = line.trim();
           if (trimmed) files.add(trimmed);
@@ -1437,7 +1517,10 @@ export const PLAYWRIGHT_STAGE_TIMEOUT_MS = 15 * 60 * 1000;
  * Partitions web-ui test paths into Playwright e2e specs (`tests/e2e/*.spec.ts`)
  * and tsx unit/integration tests.
  */
-export function partitionWebUiTests(tests: string[]): { playwrightSpecs: string[]; tsxTests: string[] } {
+export function partitionWebUiTests(tests: string[]): {
+  playwrightSpecs: string[];
+  tsxTests: string[];
+} {
   const playwrightSpecs: string[] = [];
   const tsxTests: string[] = [];
 
@@ -1479,7 +1562,8 @@ export function parsePlaywrightReport(reportPath: string): { passed: number; fai
     throw new Error(`Invalid Playwright JSON report structure at ${reportPath}`);
   }
 
-  const passed = parsed.stats.expected + (typeof parsed.stats.flaky === "number" ? parsed.stats.flaky : 0);
+  const passed =
+    parsed.stats.expected + (typeof parsed.stats.flaky === "number" ? parsed.stats.flaky : 0);
   const topLevelErrors = Array.isArray(parsed.errors) ? parsed.errors.length : 0;
   const failed =
     parsed.stats.unexpected +
@@ -1512,7 +1596,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       testsRan: [],
       changedFiles: changed,
       uncoveredFiles: resolved.uncoveredFiles,
-      error: errorMsg
+      error: errorMsg,
     };
   }
 
@@ -1528,11 +1612,13 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       testsRan: resolved.tests,
       changedFiles: changed,
       uncoveredFiles: [],
-      stages: ["tsc --noEmit", "tests"]
+      stages: ["tsc --noEmit", "tests"],
     };
   }
 
-  const repoRoot = options.repoRoot || path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
+  const repoRoot =
+    options.repoRoot ||
+    path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
   const webUiCwd = fs.existsSync(path.join(process.cwd(), "tests"))
     ? process.cwd()
     : path.resolve(repoRoot, "web-ui");
@@ -1568,13 +1654,16 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
 
   // 0. Run TypeScript typecheck (tsc --noEmit) for web-ui
   try {
-    const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+    const remainingTime = Math.max(
+      1,
+      budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+    );
     const tscOut = execSync("npx tsc --noEmit", {
       cwd: webUiCwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
-      timeout: remainingTime
+      timeout: remainingTime,
     });
     if (tscOut) testOutput += tscOut;
   } catch (err: any) {
@@ -1588,14 +1677,17 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   // 1. Run web-ui tsx tests if any mapped
   if (tsxTests.length > 0) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+      const remainingTime = Math.max(
+        1,
+        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+      );
       const cmd = `npx tsx --tsconfig tsconfig.json --test ${tsxTests.join(" ")}`;
       const out = execSync(cmd, {
         cwd: webUiCwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
         env: childEnv,
-        timeout: remainingTime
+        timeout: remainingTime,
       });
       testOutput += out;
       const counts = parseTapCounts(out);
@@ -1634,7 +1726,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
             env: childEnv,
-            timeout: PLAYWRIGHT_STAGE_TIMEOUT_MS
+            timeout: PLAYWRIGHT_STAGE_TIMEOUT_MS,
           });
           testOutput += `\n--- Playwright Stage Build ---\n${buildOut}`;
           buildOk = true;
@@ -1657,7 +1749,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
             env: childEnv,
-            timeout: pwRemainingMs
+            timeout: pwRemainingMs,
           });
           testOutput += `\n--- Playwright Spec Stage ---\n${pwOut}`;
           const counts = parsePlaywrightReport(reportPath);
@@ -1696,13 +1788,16 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   // 2. Run mcp-server tests if mcp-server was touched
   if (mcpIncluded && fs.existsSync(mcpServerCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+      const remainingTime = Math.max(
+        1,
+        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+      );
       const mcpOut = execSync("npm test", {
         cwd: mcpServerCwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
         env: childEnv,
-        timeout: remainingTime
+        timeout: remainingTime,
       });
       testOutput += `\n--- MCP Server Test Suite ---\n${mcpOut}`;
       const counts = parseTapCounts(mcpOut);
@@ -1731,13 +1826,16 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   // 3. Run browser-mcp tests if browser-mcp was touched
   if (browserMcpIncluded && fs.existsSync(browserMcpCwd) && !runError) {
     try {
-      const remainingTime = Math.max(1, budgetSeconds * 1000 - ((Date.now() - startTime) - playwrightDurationMs));
+      const remainingTime = Math.max(
+        1,
+        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+      );
       const browserOut = execSync("npm test", {
         cwd: browserMcpCwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
         env: childEnv,
-        timeout: remainingTime
+        timeout: remainingTime,
       });
       testOutput += `\n--- Browser MCP Test Suite ---\n${browserOut}`;
       const counts = parseTapCounts(browserOut);
@@ -1769,7 +1867,8 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   const nonPlaywrightDurationSeconds = (totalElapsedMs - playwrightDurationMs) / 1000;
 
   // Check budget overrun (excluding Playwright stage duration) or execution timeout
-  const timedOut = nonPlaywrightDurationSeconds > budgetSeconds ||
+  const timedOut =
+    nonPlaywrightDurationSeconds > budgetSeconds ||
     (runError && (runError.includes("ETIMEDOUT") || runError.includes("timed out")));
 
   if (timedOut) {
@@ -1784,7 +1883,7 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       changedFiles: changed,
       uncoveredFiles: [],
       error: `Test execution exceeded budget of ${budgetSeconds}s (took ${durationSeconds}s)`,
-      output: testOutput
+      output: testOutput,
     };
   }
 
@@ -1802,6 +1901,6 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
     changedFiles: changed,
     uncoveredFiles: [],
     error: runError,
-    output: testOutput
+    output: testOutput,
   };
 }

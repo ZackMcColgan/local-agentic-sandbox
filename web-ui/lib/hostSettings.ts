@@ -20,9 +20,11 @@ export function getHostSettings(): HostSettings {
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
       return {
-        hostAccessEnabled: typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
+        hostAccessEnabled:
+          typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
         allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit),
-        jobChunkingEnabled: typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true
+        jobChunkingEnabled:
+          typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true,
       };
     }
   } catch {}
@@ -30,7 +32,7 @@ export function getHostSettings(): HostSettings {
   return {
     hostAccessEnabled: true,
     allowUnattendedHostGit: false,
-    jobChunkingEnabled: true
+    jobChunkingEnabled: true,
   };
 }
 
@@ -38,7 +40,7 @@ export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
   const current = getHostSettings();
   const next: HostSettings = {
     ...current,
-    ...updates
+    ...updates,
   };
 
   try {
@@ -60,9 +62,9 @@ export async function fetchRecentGitActivity(limit = 20): Promise<any[]> {
     const res = await fetch(`${getHostRunnerBaseUrl()}/git-ops/logs?limit=${limit}`, {
       method: "GET",
       headers: {
-        "X-Host-Runner-Secret": secret
+        "X-Host-Runner-Secret": secret,
       },
-      signal: AbortSignal.timeout(1500)
+      signal: AbortSignal.timeout(1500),
     });
     if (res.ok) {
       const data = await res.json();
@@ -75,7 +77,7 @@ export async function fetchRecentGitActivity(limit = 20): Promise<any[]> {
   // Fallback: direct read from local disk
   const paths = [
     "C:\\AI\\ai-control\\logs\\git-ops.jsonl",
-    path.resolve(process.cwd(), "logs", "git-ops.jsonl")
+    path.resolve(process.cwd(), "logs", "git-ops.jsonl"),
   ];
 
   for (const p of paths) {

@@ -31,7 +31,7 @@ export function parseSimulateCommand(text: string): {
   return {
     isSimulate: true,
     scenarioKey,
-    speed
+    speed,
   };
 }
 
@@ -63,8 +63,8 @@ export async function createSimulatedChatResponse(
     return new Response(JSON.stringify({ error: errorMsg }), {
       status: 503,
       headers: {
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+      },
     });
   }
 
@@ -117,7 +117,7 @@ export async function createSimulatedChatResponse(
                 type: "done",
                 content: event.content,
                 thought: event.thought,
-                durationMs: Math.round(event.timeMs)
+                durationMs: Math.round(event.timeMs),
               };
             } else if (event.type === "error") {
               ssePayload = { type: "error", error: event.error };
@@ -143,7 +143,7 @@ export async function createSimulatedChatResponse(
 
         timers.push(timer);
       }
-    }
+    },
   });
 
   return new Response(stream, {
@@ -151,8 +151,8 @@ export async function createSimulatedChatResponse(
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
-    }
+      Connection: "keep-alive",
+    },
   });
 }
 

@@ -1,14 +1,23 @@
 import { test, expect } from "@playwright/test";
 import fs from "fs";
 import path from "path";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L7: Host-Mode Stress & Clamping Honesty @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("verifies >70KB host read without clamping, executes >75KB PowerShell output with honest 64KB clamp marker, and completes", async ({ page, baseURL }) => {
+  test("verifies >70KB host read without clamping, executes >75KB PowerShell output with honest 64KB clamp marker, and completes", async ({
+    page,
+    baseURL,
+  }) => {
     const url = baseURL || "http://192.168.50.254";
 
     const scratchDir = "C:\\AI\\scratch";
@@ -21,7 +30,9 @@ test.describe("L7: Host-Mode Stress & Clamping Honesty @full", () => {
 
     // Clean up verify file
     const verifyPath = path.join(scratchDir, "s8-verify.txt");
-    try { fs.unlinkSync(verifyPath); } catch {}
+    try {
+      fs.unlinkSync(verifyPath);
+    } catch {}
 
     // 1. Create fresh session
     const threadId = await createFreshSession(page, url, "L7 Host Stress");
@@ -36,7 +47,13 @@ Confirm when complete.`;
     console.log(`[L7] Dispatching stress prompt on thread ${threadId}...`);
     await sendPrompt(page, stressPrompt);
 
-    const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.HEAVY, "l7-host-stress");
+    const completedTurn = await awaitTurnCompletion(
+      page,
+      url,
+      threadId,
+      DEADLINES.HEAVY,
+      "l7-host-stress"
+    );
     const thread = completedTurn.thread;
     const lastMsg = thread.messages[thread.messages.length - 1];
 
@@ -55,7 +72,9 @@ Confirm when complete.`;
     const toolSpans = allSpans.filter((sp: any) => sp.name === "mcp.tool_call");
 
     const ranReadFile = toolSpans.some((sp: any) => sp.attributes?.tool === "host_read_file");
-    const ranPowershell = toolSpans.some((sp: any) => sp.attributes?.tool === "host_run_powershell");
+    const ranPowershell = toolSpans.some(
+      (sp: any) => sp.attributes?.tool === "host_run_powershell"
+    );
     const ranWriteFile = toolSpans.some((sp: any) => sp.attributes?.tool === "host_write_file");
 
     expect(ranReadFile).toBe(true);

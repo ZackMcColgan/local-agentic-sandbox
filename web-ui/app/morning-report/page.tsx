@@ -30,7 +30,8 @@ export default function MorningReportPage() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
-      const saved = queryTheme || localStorage.getItem("app-theme") || localStorage.getItem("theme");
+      const saved =
+        queryTheme || localStorage.getItem("app-theme") || localStorage.getItem("theme");
       const isDark = saved
         ? saved === "dark"
         : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -79,10 +80,7 @@ export default function MorningReportPage() {
             Loading overnight morning report...
           </div>
         ) : (
-          <MorningReportView
-            overnightReport={overnightReport}
-            report={morningReport}
-          />
+          <MorningReportView overnightReport={overnightReport} report={morningReport} />
         )}
       </main>
     </div>

@@ -4,8 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WEB_UI_ROOT = path.resolve(__dirname, "..");
-const drawerSrc = fs.readFileSync(path.join(WEB_UI_ROOT, "components", "NavigationDrawer.tsx"), "utf8");
-const settingsSrc = fs.readFileSync(path.join(WEB_UI_ROOT, "components", "SettingsView.tsx"), "utf8");
+const drawerSrc = fs.readFileSync(
+  path.join(WEB_UI_ROOT, "components", "NavigationDrawer.tsx"),
+  "utf8"
+);
+const settingsSrc = fs.readFileSync(
+  path.join(WEB_UI_ROOT, "components", "SettingsView.tsx"),
+  "utf8"
+);
 const boardSrc = fs.readFileSync(path.join(WEB_UI_ROOT, "components", "BoardView.tsx"), "utf8");
 
 test("Phase A4 — NavigationDrawer nav labels use primary text tier (zinc-100 / --tx1)", () => {

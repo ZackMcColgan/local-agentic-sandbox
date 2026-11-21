@@ -23,7 +23,10 @@ describe("E6: BuildsView Self-Deploy Pipeline uses latest displayed task when ac
       } as any)
     );
 
-    assert.ok(html.includes("feat/e6-branch"), "Expected completed task branch in Self-Deploy Pipeline");
+    assert.ok(
+      html.includes("feat/e6-branch"),
+      "Expected completed task branch in Self-Deploy Pipeline"
+    );
     assert.ok(html.includes("Gate Passed"), "Expected 'Gate Passed' in Self-Deploy Pipeline");
   });
 });

@@ -87,7 +87,8 @@ export interface ReadDedupMeta {
  * than even a small read payload; the FULL digest rides on the audit meta
  * (ThreadMessage.readDedups), so recoverability is not weakened. */
 export function buildReadDedupStub(meta: ReadDedupMeta): string {
-  const messageRef = typeof meta.messageIndex === "number" ? ` firstReadMessage=${meta.messageIndex}` : "";
+  const messageRef =
+    typeof meta.messageIndex === "number" ? ` firstReadMessage=${meta.messageIndex}` : "";
   return `[Read dedup: path=${meta.path} contentHash=${meta.contentHash.slice(0, 16)} firstReadRound=${meta.round} firstReadTrace=${meta.traceIndex}${messageRef}. Full content in thread trace record.]`;
 }
 
@@ -135,7 +136,7 @@ export class ReadDedupRegistry {
         round,
         traceIndex,
         messageIndex: i,
-        originalChars: typeof msg.content === "string" ? msg.content.length : 0
+        originalChars: typeof msg.content === "string" ? msg.content.length : 0,
       });
     }
   }
@@ -171,7 +172,7 @@ export class ReadDedupRegistry {
       contentHash,
       round,
       traceIndex,
-      originalChars: resultContent.length
+      originalChars: resultContent.length,
     };
     this.entries.set(path, meta);
     return { deduplicated: false, meta };

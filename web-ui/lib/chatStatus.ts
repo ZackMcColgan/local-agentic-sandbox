@@ -33,7 +33,9 @@ export function resolveTurnStatusPhase(input: TurnStatusInput): string | null {
 
   const raw = (input.streamStatus || "").trim();
   if (raw) {
-    const runningMatch = raw.match(/^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+?)(?:\.+)?$/i);
+    const runningMatch = raw.match(
+      /^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+?)(?:\.+)?$/i
+    );
     if (runningMatch) {
       return `Running ${runningMatch[1].replace(/\.+$/, "")}`;
     }
@@ -71,7 +73,7 @@ export function evaluateTurnCompletion({
   content,
   round,
   maxToolRounds,
-  tracesCount
+  tracesCount,
 }: {
   content?: string;
   round: number;
@@ -102,7 +104,7 @@ export function evaluateTurnCompletion({
   return {
     cleanedContent,
     turnStatus,
-    isIncomplete: turnStatus === "incomplete" ? true : undefined
+    isIncomplete: turnStatus === "incomplete" ? true : undefined,
   };
 }
 

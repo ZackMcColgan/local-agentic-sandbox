@@ -27,11 +27,11 @@ describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer togg
     assert.ok(bubble.includes("rounded-2xl"), "board radius is 16px (rounded-2xl)");
     assert.ok(
       bubble.includes("dark:bg-[rgba(14,116,144,0.18)]"),
-      "board bubble bg rgba(14,116,144,.18)",
+      "board bubble bg rgba(14,116,144,.18)"
     );
     assert.ok(
       bubble.includes("dark:border-[rgba(56,189,248,0.32)]"),
-      "board bubble border rgba(56,189,248,.32)",
+      "board bubble border rgba(56,189,248,.32)"
     );
     assert.ok(!bubble.includes("rounded-3xl"), "the old 24px radius is gone");
   });
@@ -43,7 +43,7 @@ describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer togg
     assert.ok(toggle.includes("chars)"), "toggle label carries the brief char count");
     assert.ok(
       toggle.includes("dark:text-[#bae6fd]"),
-      "toggle label uses the board's pale sky text in dark mode",
+      "toggle label uses the board's pale sky text in dark mode"
     );
   });
 });
@@ -52,7 +52,7 @@ describe("parity PR2 — thinking card (dark surface structure + UI-018 near-whi
   it("header leads with the glowing emerald dot", () => {
     assert.ok(
       thinkingPanel.includes("shadow-[0_0_10px_rgba(16,185,129,0.9)]"),
-      "glowing emerald dot in the thinking header",
+      "glowing emerald dot in the thinking header"
     );
   });
 
@@ -61,15 +61,15 @@ describe("parity PR2 — thinking card (dark surface structure + UI-018 near-whi
     assert.ok(narrative.includes("text-[13px]"), "board body size 13px");
     assert.ok(
       narrative.includes("dark:text-zinc-100"),
-      "UI-018: reasoning text near-white in dark mode",
+      "UI-018: reasoning text near-white in dark mode"
     );
     assert.ok(
       !narrative.includes("rounded-lg"),
-      "the nested inner box around the narrative is gone",
+      "the nested inner box around the narrative is gone"
     );
     assert.ok(
       !thinkingPanel.includes("rounded-lg bg-slate-50 dark:bg-black"),
-      "old nested narrative surface removed file-wide",
+      "old nested narrative surface removed file-wide"
     );
   });
 });
@@ -88,7 +88,7 @@ describe("parity PR2 — live trace rows (board rows + UI-021 brightening)", () 
     assert.ok(chatStream.includes("earlier tool calls"), "earlier-calls grouping label");
     assert.ok(
       chatStream.includes('data-testid="earlier-calls-toggle"'),
-      "earlier-calls toggle carries its test id",
+      "earlier-calls toggle carries its test id"
     );
   });
 
@@ -122,15 +122,15 @@ describe("parity PR2 — RUNNING pill + activity header details", () => {
     assert.ok(activityHeader.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
     assert.ok(
       activityHeader.includes("text-[27px]") && activityHeader.includes("sm:text-[34px]"),
-      "hero elapsed 27px phone / 34px desktop",
+      "hero elapsed 27px phone / 34px desktop"
     );
     assert.ok(
       activityHeader.includes("from-emerald-500 to-cyan-400"),
-      "pulse track carries the moving emerald-to-cyan gradient",
+      "pulse track carries the moving emerald-to-cyan gradient"
     );
     assert.ok(
       activityHeader.includes('data-testid="live-activity-tool"'),
-      "the tool half of the phase line renders as its own mono muted span",
+      "the tool half of the phase line renders as its own mono muted span"
     );
   });
 });

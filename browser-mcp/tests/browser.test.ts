@@ -1,7 +1,11 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerBrowserTools, htmlToMarkdown, evaluateContentQuality } from "../src/tools/browser.js";
+import {
+  registerBrowserTools,
+  htmlToMarkdown,
+  evaluateContentQuality,
+} from "../src/tools/browser.js";
 
 describe("Browser MCP Toolchain Suite", () => {
   let mcp: McpServer;
@@ -9,7 +13,7 @@ describe("Browser MCP Toolchain Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-browser-mcp",
-      version: "1.0.0"
+      version: "1.0.0",
     });
   });
 
@@ -54,7 +58,7 @@ describe("Browser MCP Toolchain Suite", () => {
         "http://127.0.0.1:8080/admin",
         "http://169.254.169.254/latest/meta-data/",
         "http://10.0.0.1/router",
-        "http://192.168.1.1/gateway"
+        "http://192.168.1.1/gateway",
       ];
 
       for (const url of testUrls) {
@@ -121,13 +125,17 @@ describe("Browser MCP Toolchain Suite", () => {
   describe("Content Quality Evaluator", () => {
     it("distinguishes substantive informative text from empty SPA navigation shells", () => {
       const spaShell = "Home About Contact Settings Login Sign In Menu Search Copyright 2026";
-      const richArticle = "The current weather condition is partly sunny with a high of 85°F and a low of 68°F. Winds are calm at 5 mph from the south. Tomorrow will feature scattered rain showers with a 40% precipitation probability. The barometer stands at 30.12 in.";
+      const richArticle =
+        "The current weather condition is partly sunny with a high of 85°F and a low of 68°F. Winds are calm at 5 mph from the south. Tomorrow will feature scattered rain showers with a 40% precipitation probability. The barometer stands at 30.12 in.";
 
       const spaScore = evaluateContentQuality(spaShell);
       const articleScore = evaluateContentQuality(richArticle);
 
       assert.strictEqual(spaScore, 0, "Short boilerplate text should yield 0 score");
-      assert.ok(articleScore >= 100, `Informative text with sentences and numbers should score high (got ${articleScore})`);
+      assert.ok(
+        articleScore >= 100,
+        `Informative text with sentences and numbers should score high (got ${articleScore})`
+      );
     });
   });
 });

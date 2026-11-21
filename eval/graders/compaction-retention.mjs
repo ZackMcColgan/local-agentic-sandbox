@@ -24,7 +24,8 @@ export async function gradeCompactionRetention(output, passBar, repoRoot, source
     );
     const marker = "=== SESSION CONTEXT ===";
     const idx = promptText.indexOf(marker);
-    baselineLen = idx >= 0 ? promptText.slice(idx + marker.length).trim().length : promptText.length;
+    baselineLen =
+      idx >= 0 ? promptText.slice(idx + marker.length).trim().length : promptText.length;
   }
 
   const retentionRatio = baselineLen > 0 ? text.length / baselineLen : 0;

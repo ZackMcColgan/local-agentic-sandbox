@@ -22,7 +22,12 @@ export type TurnDeliveryState =
   | { state: "idle" }
   | { state: "streaming"; content: string }
   | { state: "transient_disconnected"; partialContent: string; threadId: string }
-  | { state: "resolved_reconciled"; finalContent: string; finish_reason?: string; outputTokens?: number }
+  | {
+      state: "resolved_reconciled";
+      finalContent: string;
+      finish_reason?: string;
+      outputTokens?: number;
+    }
   | { state: "aborted"; content: string }
   | { state: "error"; message: string };
 
@@ -38,7 +43,7 @@ export function transitionOnStreamDisconnect(
     return {
       state: "transient_disconnected",
       partialContent,
-      threadId
+      threadId,
     };
   }
   return currentState;
@@ -46,7 +51,12 @@ export function transitionOnStreamDisconnect(
 
 export function transitionOnDetachedTurnReconciliation(
   currentState: TurnDeliveryState,
-  persistedMessage: { content: string; status?: string; finish_reason?: string; outputTokens?: number }
+  persistedMessage: {
+    content: string;
+    status?: string;
+    finish_reason?: string;
+    outputTokens?: number;
+  }
 ): TurnDeliveryState {
   if (currentState.state === "transient_disconnected") {
     if (persistedMessage.status !== "streaming") {
@@ -54,7 +64,7 @@ export function transitionOnDetachedTurnReconciliation(
         state: "resolved_reconciled",
         finalContent: persistedMessage.content,
         finish_reason: persistedMessage.finish_reason,
-        outputTokens: persistedMessage.outputTokens
+        outputTokens: persistedMessage.outputTokens,
       };
     }
   }

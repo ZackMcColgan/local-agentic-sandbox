@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
-        path: false
+        path: false,
       };
     }
     return config;

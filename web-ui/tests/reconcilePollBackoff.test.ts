@@ -8,7 +8,7 @@ import {
   RECONCILE_POLL_MAX_ATTEMPTS,
   RECONCILE_POLL_MAX_TOTAL_MS,
   reconcilePollDelayMs,
-  shouldStopReconcilePoll
+  shouldStopReconcilePoll,
 } from "../lib/reconcilePollPolicy";
 
 /**
@@ -33,7 +33,10 @@ test("reconcile poll re-arm interval grows exponentially across attempts", () =>
     );
   }
   // growth must actually exceed the old fixed 1s cadence
-  assert.ok(reconcilePollDelayMs(3) > RECONCILE_POLL_BASE_MS, "backoff must grow past the fixed 1s cadence");
+  assert.ok(
+    reconcilePollDelayMs(3) > RECONCILE_POLL_BASE_MS,
+    "backoff must grow past the fixed 1s cadence"
+  );
 });
 
 test("reconcile poll delay is clamped to the max delay ceiling", () => {
@@ -43,12 +46,20 @@ test("reconcile poll delay is clamped to the max delay ceiling", () => {
 
 test("reconcile poll stops after the attempt cap", () => {
   assert.equal(
-    shouldStopReconcilePoll({ attempts: RECONCILE_POLL_MAX_ATTEMPTS - 1, elapsedMs: 0, isActiveView: true }),
+    shouldStopReconcilePoll({
+      attempts: RECONCILE_POLL_MAX_ATTEMPTS - 1,
+      elapsedMs: 0,
+      isActiveView: true,
+    }),
     false,
     "must keep polling one attempt below the cap"
   );
   assert.equal(
-    shouldStopReconcilePoll({ attempts: RECONCILE_POLL_MAX_ATTEMPTS, elapsedMs: 0, isActiveView: true }),
+    shouldStopReconcilePoll({
+      attempts: RECONCILE_POLL_MAX_ATTEMPTS,
+      elapsedMs: 0,
+      isActiveView: true,
+    }),
     true,
     "must stop at the attempt cap"
   );
@@ -56,12 +67,20 @@ test("reconcile poll stops after the attempt cap", () => {
 
 test("reconcile poll stops after the total-time cap", () => {
   assert.equal(
-    shouldStopReconcilePoll({ attempts: 1, elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS - 1, isActiveView: true }),
+    shouldStopReconcilePoll({
+      attempts: 1,
+      elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS - 1,
+      isActiveView: true,
+    }),
     false,
     "must keep polling one ms below the total-time cap"
   );
   assert.equal(
-    shouldStopReconcilePoll({ attempts: 1, elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS, isActiveView: true }),
+    shouldStopReconcilePoll({
+      attempts: 1,
+      elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS,
+      isActiveView: true,
+    }),
     true,
     "must stop at the total-time cap"
   );
@@ -74,7 +93,11 @@ test("reconcile poll stops entirely when ChatStream is not the active view (UI-0
     "hidden ChatStream must never poll"
   );
   assert.equal(
-    shouldStopReconcilePoll({ attempts: RECONCILE_POLL_MAX_ATTEMPTS, elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS, isActiveView: false }),
+    shouldStopReconcilePoll({
+      attempts: RECONCILE_POLL_MAX_ATTEMPTS,
+      elapsedMs: RECONCILE_POLL_MAX_TOTAL_MS,
+      isActiveView: false,
+    }),
     true,
     "hidden ChatStream must stay stopped even past caps"
   );
@@ -102,7 +125,11 @@ test("ChatStream uses the backoff policy instead of the fixed 1s re-arm", () => 
 
 test("ChatStream gates the poll on the active-view signal", () => {
   assert.match(streamSrc, /isActiveView/, "ChatStream must receive an active-view signal");
-  assert.match(streamSrc, /reconcilingThreadId,\s*isActiveView\]/, "poll effect must depend on the active-view signal");
+  assert.match(
+    streamSrc,
+    /reconcilingThreadId,\s*isActiveView\]/,
+    "poll effect must depend on the active-view signal"
+  );
 });
 
 test("page.tsx derives isActiveView from the existing active-view signal, no new global", () => {

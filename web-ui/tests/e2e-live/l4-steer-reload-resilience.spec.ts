@@ -1,29 +1,40 @@
 import { test, expect } from "@playwright/test";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L4: Mid-Turn Steer & Reload Resilience @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("dispatches long generation, applies mid-turn steer with interrupt, survives page reload, and completes cleanly without duplicate user turns", async ({ page, baseURL }) => {
+  test("dispatches long generation, applies mid-turn steer with interrupt, survives page reload, and completes cleanly without duplicate user turns", async ({
+    page,
+    baseURL,
+  }) => {
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
     const threadId = await createFreshSession(page, url, "L4 Steer & Reload");
 
     // 2. Dispatch long generation prompt
-    const initialPrompt = "Provide an in-depth academic treatise comparing the Raft and Paxos consensus algorithms across 12 comprehensive sections.";
+    const initialPrompt =
+      "Provide an in-depth academic treatise comparing the Raft and Paxos consensus algorithms across 12 comprehensive sections.";
     await sendPrompt(page, initialPrompt);
 
     // Allow generation stream to start
     await page.waitForTimeout(6000);
 
     // 3. Inject mid-turn steer via API with interrupt: true
-    const steerText = "CRITICAL REDIRECTION: Pivot immediately and focus exclusively on Byzantine Fault Tolerance (PBFT) and state machine replication.";
+    const steerText =
+      "CRITICAL REDIRECTION: Pivot immediately and focus exclusively on Byzantine Fault Tolerance (PBFT) and state machine replication.";
     console.log(`[L4] Dispatching mid-turn steer to thread ${threadId}...`);
     const steerRes = await page.request.post(`${url}/api/threads/${threadId}/steer`, {
-      data: { text: steerText, interrupt: true }
+      data: { text: steerText, interrupt: true },
     });
     expect(steerRes.ok()).toBe(true);
     const steerJson = await steerRes.json();
@@ -34,7 +45,13 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience @full", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
 
     // 5. Await turn completion server-side with 14m deadline (within 15m runner timeout)
-    const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.WEDGING_LIMIT, "l4-steer-turn");
+    const completedTurn = await awaitTurnCompletion(
+      page,
+      url,
+      threadId,
+      DEADLINES.WEDGING_LIMIT,
+      "l4-steer-turn"
+    );
     const messages = completedTurn.thread.messages;
     const lastAssistant = [...messages].reverse().find((m: any) => m.role === "assistant");
 
@@ -51,7 +68,9 @@ test.describe("L4: Mid-Turn Steer & Reload Resilience @full", () => {
     expect(absorbed).toBe(true);
 
     // 7. Verify no duplicate user initial prompts were created
-    const initialUserPrompts = messages.filter((m: any) => m.role === "user" && !m.content?.startsWith("[Steer from user, mid-turn]"));
+    const initialUserPrompts = messages.filter(
+      (m: any) => m.role === "user" && !m.content?.startsWith("[Steer from user, mid-turn]")
+    );
     expect(initialUserPrompts.length).toBe(1);
   });
 });

@@ -45,16 +45,8 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     );
 
     // Verify 0o770 is present instead
-    assert.match(
-      threadStoreCode,
-      /0o770/,
-      "web-ui/lib/threads/threadStore.ts must use 0o770"
-    );
-    assert.match(
-      routeCode,
-      /0o770/,
-      "web-ui/app/api/chat/route.ts must use 0o770"
-    );
+    assert.match(threadStoreCode, /0o770/, "web-ui/lib/threads/threadStore.ts must use 0o770");
+    assert.match(routeCode, /0o770/, "web-ui/app/api/chat/route.ts must use 0o770");
 
     // Verify writeFileSync with mode 0o660 is present in threadStore.ts
     assert.match(
@@ -66,7 +58,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
   it("Test 2: Runtime directory permissions — verify directories are created with 0770 permissions", () => {
     const targetThreadsDir = path.join(tempDir!, "threads_runtime_dir");
-    
+
     // Track mkdirSync and chmodSync calls
     const origMkdirSync = fs.mkdirSync;
     const origChmodSync = fs.chmodSync;
@@ -98,11 +90,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
       // Verify that any chmodSync calls pass 0o770 (never 0o777)
       for (const call of chmodCalls) {
-        assert.notStrictEqual(
-          call.mode,
-          0o777,
-          `chmodSync called with 0o777 on ${call.path}`
-        );
+        assert.notStrictEqual(call.mode, 0o777, `chmodSync called with 0o777 on ${call.path}`);
       }
 
       // On POSIX systems, check actual filesystem mode
@@ -137,7 +125,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
       const store = new ThreadStore(targetThreadsDir);
       const thread = store.createThread({
         title: "Test Hardened Thread",
-        initialPrompt: "Testing file mode 0660"
+        initialPrompt: "Testing file mode 0660",
       });
 
       assert.ok(thread && thread.id);
@@ -219,7 +207,10 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
     // CPU limits and requests must remain unchanged.
     assert.match(webUiYaml, /cpu:\s*"?1000m"?/, "web-ui CPU limit must stay 1000m");
-    assert.match(webUiYaml, /requests:\s*\n\s*cpu:\s*"?100m"?\s*\n\s*memory:\s*"128Mi"/,
-      "web-ui requests must stay cpu 100m / memory 128Mi");
+    assert.match(
+      webUiYaml,
+      /requests:\s*\n\s*cpu:\s*"?100m"?\s*\n\s*memory:\s*"128Mi"/,
+      "web-ui requests must stay cpu 100m / memory 128Mi"
+    );
   });
 });

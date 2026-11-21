@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () => {
   // 1. Script Invocation Construction
   it("1. Constructs valid PowerShell command lines for AI-ON and AI-OFF with -OnlyHostRunner", () => {
-    function buildLifecycleCommand(scriptPath: string, options: { onlyHostRunner?: boolean; skipStrata?: boolean; skipHermes?: boolean }) {
+    function buildLifecycleCommand(
+      scriptPath: string,
+      options: { onlyHostRunner?: boolean; skipStrata?: boolean; skipHermes?: boolean }
+    ) {
       const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath];
       if (options.onlyHostRunner) args.push("-OnlyHostRunner");
       if (options.skipStrata) args.push("-SkipStrata");
@@ -12,24 +15,28 @@ describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () =
       return args;
     }
 
-    const aiOnCmd = buildLifecycleCommand("C:\\AI\\ai-control\\AI-ON.ps1", { onlyHostRunner: true });
+    const aiOnCmd = buildLifecycleCommand("C:\\AI\\ai-control\\AI-ON.ps1", {
+      onlyHostRunner: true,
+    });
     assert.deepEqual(aiOnCmd, [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
       "-File",
       "C:\\AI\\ai-control\\AI-ON.ps1",
-      "-OnlyHostRunner"
+      "-OnlyHostRunner",
     ]);
 
-    const aiOffCmd = buildLifecycleCommand("C:\\AI\\ai-control\\AI-OFF.ps1", { onlyHostRunner: true });
+    const aiOffCmd = buildLifecycleCommand("C:\\AI\\ai-control\\AI-OFF.ps1", {
+      onlyHostRunner: true,
+    });
     assert.deepEqual(aiOffCmd, [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
       "-File",
       "C:\\AI\\ai-control\\AI-OFF.ps1",
-      "-OnlyHostRunner"
+      "-OnlyHostRunner",
     ]);
   });
 
@@ -55,7 +62,7 @@ describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () =
     // Stopped
     assert.deepEqual(evaluateHostRunnerState({ ok: false }, currentSha), {
       action: "spawn",
-      status: "STOPPED"
+      status: "STOPPED",
     });
 
     // Matching instance: idempotent preservation
@@ -71,10 +78,10 @@ describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () =
     );
 
     // Foreign process on port (not answering /health with status: ok)
-    assert.deepEqual(
-      evaluateHostRunnerState({ ok: true, status: "unknown" }, currentSha),
-      { action: "ignore_foreign", status: "OFFLINE_FOREIGN_CONFLICT" }
-    );
+    assert.deepEqual(evaluateHostRunnerState({ ok: true, status: "unknown" }, currentSha), {
+      action: "ignore_foreign",
+      status: "OFFLINE_FOREIGN_CONFLICT",
+    });
   });
 
   // 3. PIN 3 Failure Isolation (non-blocking failure behavior)
@@ -96,7 +103,11 @@ describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () =
     }
 
     const failureRun = simulateStartupWithBuildResult(false);
-    assert.equal(failureRun.exitCode, 0, "Startup must exit 0 on bridge failure (non-blocking isolation)");
+    assert.equal(
+      failureRun.exitCode,
+      0,
+      "Startup must exit 0 on bridge failure (non-blocking isolation)"
+    );
     assert.equal(failureRun.layerStatus["HostRunner"], "OFFLINE (compilation failed)");
 
     const successRun = simulateStartupWithBuildResult(true);
@@ -115,7 +126,7 @@ describe("PART C — Host Runner Lifecycle Unit Tests (Mocked Boundaries)", () =
       }
       return {
         remainingPorts: runningPorts.filter((p) => !killedPorts.includes(p)),
-        killedPorts
+        killedPorts,
       };
     }
 

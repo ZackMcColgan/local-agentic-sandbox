@@ -6,7 +6,10 @@ test.describe("Real User Interaction Flows @chaos", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("Flow 1: Hamburger -> Drawer opens -> Every destination renders and navigates", async ({ page, isMobile }) => {
+  test("Flow 1: Hamburger -> Drawer opens -> Every destination renders and navigates", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("header");
 
@@ -39,7 +42,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
       await expect(page.getByRole("heading", { name: "Builds", exact: true })).toBeVisible();
 
       // Re-open drawer from Builds view and navigate back to Sessions
-      const buildsMenuBtn = page.locator('button[data-testid="builds-menu-btn"], button[title="Open menu"]').first();
+      const buildsMenuBtn = page
+        .locator('button[data-testid="builds-menu-btn"], button[title="Open menu"]')
+        .first();
       await buildsMenuBtn.click();
       await expect(drawer).toBeVisible();
       await drawer.locator('button:has-text("Sessions")').click();
@@ -51,13 +56,18 @@ test.describe("Real User Interaction Flows @chaos", () => {
       await buildsBtn.click();
       await expect(page.getByRole("heading", { name: "Builds", exact: true })).toBeVisible();
 
-      const sessionsBtn = page.locator('button:has-text("Chat"), button:has-text("Sessions")').first();
+      const sessionsBtn = page
+        .locator('button:has-text("Chat"), button:has-text("Sessions")')
+        .first();
       await sessionsBtn.click();
       await expect(page.locator("textarea")).toBeVisible();
     }
   });
 
-  test("Flow 2: Create a session -> Reopen it from drawer sessions list (Recents)", async ({ page, isMobile }) => {
+  test("Flow 2: Create a session -> Reopen it from drawer sessions list (Recents)", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("textarea");
 
@@ -67,7 +77,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
     await textarea.press("Enter");
 
     // Verify user message bubble appeared
-    await expect(page.locator("p:has-text('Analyze database performance indexes')").first()).toBeVisible();
+    await expect(
+      page.locator("p:has-text('Analyze database performance indexes')").first()
+    ).toBeVisible();
 
     if (isMobile) {
       // 2. Open drawer and verify thread in Recents
@@ -76,7 +88,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
       await expect(drawer).toBeVisible();
 
       // Tap session item in Recents to load it
-      const recentSession = drawer.locator('button:has-text("Initial System Setup"), button:has-text("Analyze database")').first();
+      const recentSession = drawer
+        .locator('button:has-text("Initial System Setup"), button:has-text("Analyze database")')
+        .first();
       await expect(recentSession).toBeVisible();
       await recentSession.click();
 
@@ -102,30 +116,44 @@ test.describe("Real User Interaction Flows @chaos", () => {
     // desktop-only; on mobile Projects is reached through the drawer.
     if (isMobile) {
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")').click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Projects & Folders"), div.rounded-r-3xl button:has-text("Projects & Folders")'
+        )
+        .click();
     } else {
       await page.locator('button[aria-label="Open Projects"]').click();
     }
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
 
     // 2. Open Register Modal
-    const registerBtn = page.locator('button:has-text("New Project"), button:has-text("Register Folder")').first();
+    const registerBtn = page
+      .locator('button:has-text("New Project"), button:has-text("Register Folder")')
+      .first();
     await registerBtn.click();
-    const modal = page.locator('div[data-testid="add-project-modal"], div:has-text("Add Project")').first();
+    const modal = page
+      .locator('div[data-testid="add-project-modal"], div:has-text("Add Project")')
+      .first();
     await expect(modal).toBeVisible();
 
     // 3. Test Greenfield Project creation
-    const greenfieldTab = modal.locator('button:has-text("New Greenfield"), button:has-text("Greenfield")').first();
+    const greenfieldTab = modal
+      .locator('button:has-text("New Greenfield"), button:has-text("Greenfield")')
+      .first();
     if (await greenfieldTab.isVisible()) {
       await greenfieldTab.click();
-      const nameInput = modal.locator('input[placeholder*="project"], input[placeholder*="Name"]').first();
+      const nameInput = modal
+        .locator('input[placeholder*="project"], input[placeholder*="Name"]')
+        .first();
       if (await nameInput.isVisible()) {
         await nameInput.fill("Payment Gateway Service");
       }
     }
 
     // 4. Test Existing Folder registration
-    const browseTab = modal.locator('button:has-text("Browse Repos"), button:has-text("Browse")').first();
+    const browseTab = modal
+      .locator('button:has-text("Browse Repos"), button:has-text("Browse")')
+      .first();
     if (await browseTab.isVisible()) {
       await browseTab.click();
       const folderItem = modal.locator('text="fixture-repo", text="non-repo-folder"').first();
@@ -135,7 +163,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
     }
 
     // Close modal
-    const closeBtn = modal.locator('button[aria-label="Close modal"], button[title="Close modal"]').first();
+    const closeBtn = modal
+      .locator('button[aria-label="Close modal"], button[title="Close modal"]')
+      .first();
     if (await closeBtn.isVisible()) {
       await closeBtn.click();
     }
@@ -143,7 +173,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
     await expect(page.getByRole("heading", { name: "Projects & Folders" })).toBeVisible();
   });
 
-  test("Flow 4: Composer has no Chat/Build switch (uir-0) and stubbed streaming completion", async ({ page }) => {
+  test("Flow 4: Composer has no Chat/Build switch (uir-0) and stubbed streaming completion", async ({
+    page,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("textarea");
 
@@ -161,10 +193,15 @@ test.describe("Real User Interaction Flows @chaos", () => {
 
     // 3. Verify assistant stubbed streaming reply renders
     await expect(page.locator("text=Analysis complete.")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator("text=All systems verified operational.")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=All systems verified operational.")).toBeVisible({
+      timeout: 5000,
+    });
   });
 
-  test("Flow 5: Thread deletion via UI: overflow button -> action sheet -> confirm dialog -> reload -> absent", async ({ page, isMobile }) => {
+  test("Flow 5: Thread deletion via UI: overflow button -> action sheet -> confirm dialog -> reload -> absent", async ({
+    page,
+    isMobile,
+  }) => {
     test.skip(isMobile, "Desktop sessions panel flow");
 
     await page.goto("/");
@@ -207,14 +244,19 @@ test.describe("Real User Interaction Flows @chaos", () => {
     await expect(page.locator('[data-testid="thread-row-thread-fixture-1"]')).toBeHidden();
   });
 
-  test("Flow 6: Mobile thread deletion via NavigationDrawer: drawer -> long press / overflow -> delete -> absent", async ({ page, isMobile }) => {
+  test("Flow 6: Mobile thread deletion via NavigationDrawer: drawer -> long press / overflow -> delete -> absent", async ({
+    page,
+    isMobile,
+  }) => {
     test.skip(!isMobile, "Mobile drawer flow only");
 
     await page.goto("/");
     await page.waitForSelector("textarea");
 
     // 1. Open mobile NavigationDrawer
-    const menuBtn = page.locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]').first();
+    const menuBtn = page
+      .locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]')
+      .first();
     await expect(menuBtn).toBeVisible();
     await menuBtn.click();
 
@@ -255,7 +297,9 @@ test.describe("Real User Interaction Flows @chaos", () => {
     // 8. Reload and verify still absent
     await page.goto("/");
     await page.waitForSelector("textarea");
-    const menuBtnAfter = page.locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]').first();
+    const menuBtnAfter = page
+      .locator('button[aria-label="Open navigation menu"], button[title="Open navigation menu"]')
+      .first();
     await menuBtnAfter.click();
     await expect(drawer.locator('[data-testid="thread-row-thread-fixture-1"]')).toBeHidden();
   });

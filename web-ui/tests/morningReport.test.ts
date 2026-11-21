@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   generateMorningReport,
   formatMorningReportMarkdown,
-  MorningReportInput
+  MorningReportInput,
 } from "../lib/subagents/morningReport.js";
 
 describe("Phase 1 — Morning Report Suite", () => {
@@ -23,7 +23,7 @@ describe("Phase 1 — Morning Report Suite", () => {
         commitSha: "a1b2c3d",
         testsPassed: 4,
         testsFailed: 0,
-        diffSummary: "Cataloged 5 services, 2 networks, 3 volumes"
+        diffSummary: "Cataloged 5 services, 2 networks, 3 volumes",
       },
       {
         id: "M2",
@@ -32,7 +32,7 @@ describe("Phase 1 — Morning Report Suite", () => {
         commitSha: "bca5b34",
         testsPassed: 6,
         testsFailed: 0,
-        diffSummary: "Created docs/architecture.drawio.svg (valid XML, light theme)"
+        diffSummary: "Created docs/architecture.drawio.svg (valid XML, light theme)",
       },
       {
         id: "M3",
@@ -41,24 +41,27 @@ describe("Phase 1 — Morning Report Suite", () => {
         commitSha: "d4e5f6a",
         testsPassed: 8,
         testsFailed: 0,
-        diffSummary: "Verified against acceptance criteria AC-1-1 and AC-2-1"
-      }
+        diffSummary: "Verified against acceptance criteria AC-1-1 and AC-2-1",
+      },
     ],
     ambiguityFlags: [
       {
         id: "AMB-1",
         milestoneId: "M2",
-        question: "Should the draw.io architecture diagram default to white background or dark canvas?",
-        judgmentCall: "Selected crisp white (#ffffff) background per Zack's standing UI & visual inspection rule.",
-        reasoning: "Rule 2.A specifies Light Mode Purity / white background for diagrams linked to root README.",
+        question:
+          "Should the draw.io architecture diagram default to white background or dark canvas?",
+        judgmentCall:
+          "Selected crisp white (#ffffff) background per Zack's standing UI & visual inspection rule.",
+        reasoning:
+          "Rule 2.A specifies Light Mode Purity / white background for diagrams linked to root README.",
         revertAction: {
           type: "git_revert",
-          target: "bca5b34"
+          target: "bca5b34",
         },
-        reviewed: false
-      }
+        reviewed: false,
+      },
     ],
-    parkedItems: []
+    parkedItems: [],
   };
 
   it("generates structured Morning Report with milestones, commits, and ambiguity flags", () => {
@@ -68,7 +71,10 @@ describe("Phase 1 — Morning Report Suite", () => {
     assert.equal(report.status, "completed");
     assert.equal(report.milestones.length, 3);
     assert.equal(report.ambiguityFlags.length, 1);
-    assert.equal(report.ambiguityFlags[0].judgmentCall.includes("white (#ffffff) background"), true);
+    assert.equal(
+      report.ambiguityFlags[0].judgmentCall.includes("white (#ffffff) background"),
+      true
+    );
     assert.equal(report.totalTestsPassed, 18);
     assert.equal(report.totalTestsFailed, 0);
   });
@@ -89,7 +95,9 @@ describe("Phase 1 — Morning Report Suite", () => {
     const parkedInput: MorningReportInput = {
       ...sampleInput,
       status: "parked",
-      parkedItems: ["Milestone M2 stalled after 20 minutes without forward progress. State snapshotted."]
+      parkedItems: [
+        "Milestone M2 stalled after 20 minutes without forward progress. State snapshotted.",
+      ],
     };
 
     const report = generateMorningReport(parkedInput);
@@ -112,7 +120,7 @@ describe("Phase 1 — Morning Report Suite", () => {
           budgetSeconds: 90,
           testsPassed: 45,
           testsFailed: 0,
-          details: "Zero-coverage check verified across 12 modified files"
+          details: "Zero-coverage check verified across 12 modified files",
         },
         {
           name: "Tier 2: Full Regression Suite",
@@ -121,27 +129,37 @@ describe("Phase 1 — Morning Report Suite", () => {
           durationSeconds: 11.8,
           testsPassed: 123,
           testsFailed: 0,
-          details: "All 21 web-ui suites and 9 mcp-server suites green"
-        }
-      ]
+          details: "All 21 web-ui suites and 9 mcp-server suites green",
+        },
+      ],
     };
 
     const report = generateMorningReport(tieredInput);
     const md = formatMorningReportMarkdown(report);
 
-    assert.ok(md.includes("## 2. Test Verification Tiers (Phase C)"), "Contains Test Verification Tiers heading");
+    assert.ok(
+      md.includes("## 2. Test Verification Tiers (Phase C)"),
+      "Contains Test Verification Tiers heading"
+    );
     assert.ok(md.includes("Tier 1: Change-Aware Gate"), "Contains Tier 1 name");
     assert.ok(md.includes("`npm run test:gate`"), "Contains Tier 1 command");
     assert.ok(md.includes("Tier 2: Full Regression Suite"), "Contains Tier 2 name");
     assert.ok(md.includes("<90s"), "Contains budget constraint");
-    assert.ok(md.includes("All 21 web-ui suites and 9 mcp-server suites green"), "Contains details");
+    assert.ok(
+      md.includes("All 21 web-ui suites and 9 mcp-server suites green"),
+      "Contains details"
+    );
   });
 });
 
 describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window)", () => {
   it("generates an overnight report from a mix of completed, parked, and failed tasks", async () => {
-    const mod = await import("../lib/subagents/morningReport.js") as any;
-    assert.equal(typeof mod.generateOvernightMorningReport, "function", "generateOvernightMorningReport must be exported");
+    const mod = (await import("../lib/subagents/morningReport.js")) as any;
+    assert.equal(
+      typeof mod.generateOvernightMorningReport,
+      "function",
+      "generateOvernightMorningReport must be exported"
+    );
 
     const tasks = [
       {
@@ -165,10 +183,11 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
             builderIterations: 1,
             criticRounds: 1,
             plannedFiles: ["docs/camping-checklist.md"],
-            diffSummary: "File: docs/camping-checklist.md\n+# Weekend Camping Checklist\n- [ ] Tent",
+            diffSummary:
+              "File: docs/camping-checklist.md\n+# Weekend Camping Checklist\n- [ ] Tent",
             testsPassed: 5,
-            testsFailed: 0
-          }
+            testsFailed: 0,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
@@ -176,9 +195,9 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
           {
             timestamp: "2026-10-13T23:18:00.000Z",
             role: "builder",
-            message: "Generated deliverable docs/camping-checklist.md (420 bytes)."
-          }
-        ]
+            message: "Generated deliverable docs/camping-checklist.md (420 bytes).",
+          },
+        ],
       },
       {
         taskId: "task-102-parked",
@@ -202,7 +221,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
             criticRounds: 1,
             plannedFiles: ["src/auth/tokenClient.ts"],
             testsPassed: 3,
-            testsFailed: 0
+            testsFailed: 0,
           },
           {
             id: "M2",
@@ -213,12 +232,12 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
             builderIterations: 3,
             criticRounds: 1,
             testsPassed: 0,
-            testsFailed: 2
-          }
+            testsFailed: 2,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
-        journal: []
+        journal: [],
       },
       {
         taskId: "task-103-failed",
@@ -243,8 +262,8 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
             criticRounds: 0,
             criticCritique: "SyntaxError: wasm-pack target binary missing in air-gapped container",
             testsPassed: 0,
-            testsFailed: 1
-          }
+            testsFailed: 1,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
@@ -252,10 +271,11 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
           {
             timestamp: "2026-10-14T03:04:10.000Z",
             role: "supervisor",
-            message: "Worker crash detected in milestone M1: SyntaxError: wasm-pack target binary missing"
-          }
-        ]
-      }
+            message:
+              "Worker crash detected in milestone M1: SyntaxError: wasm-pack target binary missing",
+          },
+        ],
+      },
     ];
 
     const report = mod.generateOvernightMorningReport(tasks);
@@ -270,10 +290,13 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     assert.ok(completedEntry);
     assert.equal(completedEntry.status, "completed");
     assert.equal(completedEntry.durationFormatted, "3m 30s");
-    assert.ok(completedEntry.artifacts.length >= 1, "Completed task should list produced artifacts");
+    assert.ok(
+      completedEntry.artifacts.length >= 1,
+      "Completed task should list produced artifacts"
+    );
     assert.ok(
       completedEntry.artifacts[0].previewUrl.includes("/api/files?path=") &&
-      completedEntry.artifacts[0].previewUrl.includes("camping-checklist.md"),
+        completedEntry.artifacts[0].previewUrl.includes("camping-checklist.md"),
       "Artifact must include a working preview link"
     );
 
@@ -291,15 +314,23 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
 
     // What needs attention section must include both parked and failed tasks
     assert.equal(report.attentionItems.length, 2);
-    assert.ok(report.attentionItems.some((item: any) => item.taskId === "task-102-parked" && item.status === "parked"));
-    assert.ok(report.attentionItems.some((item: any) => item.taskId === "task-103-failed" && item.status === "failed"));
+    assert.ok(
+      report.attentionItems.some(
+        (item: any) => item.taskId === "task-102-parked" && item.status === "parked"
+      )
+    );
+    assert.ok(
+      report.attentionItems.some(
+        (item: any) => item.taskId === "task-103-failed" && item.status === "failed"
+      )
+    );
   });
 
   it("persists and reloads the overnight morning report to disk so it is readable at 7am without log diving", async () => {
     const fs = await import("fs");
     const path = await import("path");
     const os = await import("os");
-    const mod = await import("../lib/subagents/morningReport.js") as any;
+    const mod = (await import("../lib/subagents/morningReport.js")) as any;
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "morning-report-test-"));
     try {
@@ -323,13 +354,13 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
               status: "completed",
               builderIterations: 1,
               criticRounds: 1,
-              plannedFiles: ["badge.svg"]
-            }
+              plannedFiles: ["badge.svg"],
+            },
           ],
           checkpoints: [],
           ambiguityFlags: [],
-          journal: []
-        }
+          journal: [],
+        },
       ]);
 
       mod.persistOvernightMorningReport(report, tmpDir);
@@ -354,7 +385,8 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
 
   it("Fix 1.1: supervisor persistence hook and API route load function round-trip using unified checkpoint directory", async () => {
     const { OvernightSupervisor } = await import("../lib/subagents/supervisor.js");
-    const { loadPersistedOvernightMorningReport } = await import("../lib/subagents/morningReport.js");
+    const { loadPersistedOvernightMorningReport } =
+      await import("../lib/subagents/morningReport.js");
 
     const supervisor = new OvernightSupervisor();
     const manifest = {
@@ -368,7 +400,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       milestones: [],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     } as any;
 
     supervisor.saveCheckpoint(manifest);
@@ -376,8 +408,14 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
 
     // Calling load without arguments (as the API route did) MUST load the report saved by the supervisor
     const loaded = loadPersistedOvernightMorningReport();
-    assert.ok(loaded, "Persisted report written by supervisor must be found by loadPersistedOvernightMorningReport()");
-    assert.ok(loaded.tasks.some(t => t.taskId === "task-roundtrip-7am"), "Loaded report must contain supervisor task");
+    assert.ok(
+      loaded,
+      "Persisted report written by supervisor must be found by loadPersistedOvernightMorningReport()"
+    );
+    assert.ok(
+      loaded.tasks.some((t) => t.taskId === "task-roundtrip-7am"),
+      "Loaded report must contain supervisor task"
+    );
   });
 
   it("Addendum 1: MorningReportView renders exactly 1 task-row and 1 artifact-card with no duplicate sections", async () => {
@@ -385,7 +423,8 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     const { renderToString } = await import("react-dom/server");
     const { Window } = await import("happy-dom");
     const { MorningReportView } = await import("../components/MorningReportView.js");
-    const { generateOvernightMorningReport, generateMorningReport } = await import("../lib/subagents/morningReport.js");
+    const { generateOvernightMorningReport, generateMorningReport } =
+      await import("../lib/subagents/morningReport.js");
 
     const sampleTask: any = {
       taskId: "task-single-001",
@@ -402,12 +441,12 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
           title: "Generate artifact",
           description: "Artifact generation",
           status: "completed",
-          plannedFiles: ["docs/single-output.md"]
-        }
+          plannedFiles: ["docs/single-output.md"],
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
 
     const overnightReport = generateOvernightMorningReport([sampleTask]);
@@ -421,13 +460,13 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       completedAt: sampleTask.completedAt,
       milestones: [],
       ambiguityFlags: [],
-      parkedItems: []
+      parkedItems: [],
     });
 
     const html = renderToString(
       React.createElement(MorningReportView as any, {
         overnightReport,
-        report: singleReport
+        report: singleReport,
       })
     );
 
@@ -438,7 +477,11 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
     const artifactCards = window.document.querySelectorAll('[data-testid="artifact-card"]');
 
     assert.equal(taskRows.length, 1, `Expected exactly 1 task-row, got ${taskRows.length}`);
-    assert.equal(artifactCards.length, 1, `Expected exactly 1 artifact-card, got ${artifactCards.length}`);
+    assert.equal(
+      artifactCards.length,
+      1,
+      `Expected exactly 1 artifact-card, got ${artifactCards.length}`
+    );
   });
 
   it("generateOvernightMorningReport deduplicates candidate tasks by taskId", async () => {
@@ -456,17 +499,25 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
       milestones: [],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
 
     const sampleTask2: any = {
       ...sampleTask1,
-      goal: "Duplicate copy of task with same taskId"
+      goal: "Duplicate copy of task with same taskId",
     };
 
     const report = generateOvernightMorningReport([sampleTask1, sampleTask2]);
-    assert.equal(report.tasks.length, 1, `Expected 1 deduplicated task, got ${report.tasks.length}`);
-    assert.equal(report.completedCount, 1, `Expected completedCount to be 1, got ${report.completedCount}`);
+    assert.equal(
+      report.tasks.length,
+      1,
+      `Expected 1 deduplicated task, got ${report.tasks.length}`
+    );
+    assert.equal(
+      report.completedCount,
+      1,
+      `Expected completedCount to be 1, got ${report.completedCount}`
+    );
   });
 
   describe("Sprint U4 — Morning Report Timezone & Filter Suite", () => {
@@ -504,7 +555,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         toolchain: "node:22",
         status: "completed",
         startedAt: new Date(Date.now() - 3600000).toISOString(),
-        milestones: []
+        milestones: [],
       };
 
       const oldTask: any = {
@@ -514,14 +565,18 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         toolchain: "node:22",
         status: "completed",
         startedAt: new Date(Date.now() - 172800000).toISOString(),
-        milestones: []
+        milestones: [],
       };
 
-      const report24h = generateOvernightMorningReport([recentTask, oldTask], { windowFilter: "24h" });
+      const report24h = generateOvernightMorningReport([recentTask, oldTask], {
+        windowFilter: "24h",
+      });
       assert.equal(report24h.tasks.length, 1, "24h filter must only return tasks from last 24h");
       assert.equal(report24h.tasks[0].taskId, "task-recent-1");
 
-      const reportAll = generateOvernightMorningReport([recentTask, oldTask], { windowFilter: "all" });
+      const reportAll = generateOvernightMorningReport([recentTask, oldTask], {
+        windowFilter: "all",
+      });
       assert.equal(reportAll.tasks.length, 2, "all filter must return all tasks");
     });
 
@@ -548,7 +603,7 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         artifacts: [],
         ambiguityFlags: [],
         testsPassed: 4,
-        testsFailed: 0
+        testsFailed: 0,
       };
 
       const overnightReport: any = {
@@ -564,12 +619,12 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
         tasks: [daytimeTask],
         artifactsProduced: [],
         attentionItems: [],
-        summaryMarkdown: ""
+        summaryMarkdown: "",
       };
 
       const html = renderToString(
         React.createElement(MorningReportView as any, {
-          overnightReport
+          overnightReport,
         })
       );
 
@@ -587,8 +642,6 @@ describe("Sprint 12 Phase 2 — Overnight Morning Report Loop (Multi-Task Window
   });
 });
 
-
-
 import { summarizeTaskFailureReason } from "../lib/subagents/morningReport";
 
 describe("E5: Morning Report cleanup (UI-036)", () => {
@@ -602,7 +655,10 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
     const res = summarizeTaskFailureReason(raw);
     assert.ok(res.summary.length <= 160, "Expected concise summary");
     assert.equal(res.summary.includes("git status --porcelain"), false);
-    assert.ok(res.details && res.details.includes("ChatStream.tsx"), "Expected raw text in details");
+    assert.ok(
+      res.details && res.details.includes("ChatStream.tsx"),
+      "Expected raw text in details"
+    );
   });
 
   it("renders raw git-status dump as one-sentence summary with collapsed details", async () => {
@@ -643,17 +699,17 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
           milestones: [],
           ambiguityFlags: [],
           testsPassed: 0,
-          testsFailed: 1
-        }
+          testsFailed: 1,
+        },
       ],
       artifactsProduced: [],
       attentionItems: [],
-      summaryMarkdown: ""
+      summaryMarkdown: "",
     };
 
     const html = renderToString(
       React.createElement(MorningReportView as any, {
-        overnightReport
+        overnightReport,
       })
     );
 
@@ -662,13 +718,19 @@ describe("E5: Morning Report cleanup (UI-036)", () => {
 
     const details = window.document.querySelector("details");
     assert.ok(details, "Expected a <details> element for raw failure details");
-    assert.equal(details.hasAttribute("open"), false, "Expected <details> to be collapsed by default");
+    assert.equal(
+      details.hasAttribute("open"),
+      false,
+      "Expected <details> to be collapsed by default"
+    );
     assert.ok(
       details.textContent?.includes("git status --porcelain"),
       "Expected raw git status dump inside <details>"
     );
     assert.ok(
-      html.includes("Uncommitted workspace changes or dirty working tree blocked milestone verification."),
+      html.includes(
+        "Uncommitted workspace changes or dirty working tree blocked milestone verification."
+      ),
       "Expected human-readable summary in rendered output"
     );
   });

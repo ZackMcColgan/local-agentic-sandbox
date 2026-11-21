@@ -16,8 +16,18 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
       title: "Cached summary test",
       model: "test-model",
     });
-    store.addMessage(t.id, { id: "u1", role: "user", content: "Hello world", timestamp: new Date().toISOString() });
-    store.addMessage(t.id, { id: "a1", role: "assistant", content: "Hi there!", timestamp: new Date().toISOString() });
+    store.addMessage(t.id, {
+      id: "u1",
+      role: "user",
+      content: "Hello world",
+      timestamp: new Date().toISOString(),
+    });
+    store.addMessage(t.id, {
+      id: "a1",
+      role: "assistant",
+      content: "Hi there!",
+      timestamp: new Date().toISOString(),
+    });
   });
 
   afterEach(() => {
@@ -56,12 +66,22 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
       title: "Older thread",
       model: "test-model",
     });
-    store.addMessage(older.id, { id: "u1", role: "user", content: "old", timestamp: "2026-01-01T00:00:00.000Z" });
+    store.addMessage(older.id, {
+      id: "u1",
+      role: "user",
+      content: "old",
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
     const newer = await store.createThread({
       title: "Newer thread",
       model: "test-model",
     });
-    store.addMessage(newer.id, { id: "u2", role: "user", content: "new", timestamp: "2026-01-02T00:00:00.000Z" });
+    store.addMessage(newer.id, {
+      id: "u2",
+      role: "user",
+      content: "new",
+      timestamp: "2026-01-02T00:00:00.000Z",
+    });
 
     // Manually set distinct updatedAt timestamps in the thread files
     for (const [t, ts] of [
@@ -76,20 +96,30 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
 
     const list = await store.listThreadSummaries();
     const titles = list.map((s) => s.title);
-    assert.ok(titles.indexOf("Newer thread") < titles.indexOf("Older thread"), `Expected Newer before Older, got ${titles.join(", ")}`);
+    assert.ok(
+      titles.indexOf("Newer thread") < titles.indexOf("Older thread"),
+      `Expected Newer before Older, got ${titles.join(", ")}`
+    );
   });
 
   it("FP1(b): a fresh ThreadStore instance serves listThreadSummaries from .summaries-index.json with 0 full thread reads", async () => {
     const first = await store.listThreadSummaries();
     assert.equal(first.length, 1);
-    assert.ok(fs.existsSync(path.join(tmpDir, ".summaries-index.json")), "Expected .summaries-index.json to be created");
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, ".summaries-index.json")),
+      "Expected .summaries-index.json to be created"
+    );
 
     const freshStore = new ThreadStore(tmpDir);
     let threadFileReads = 0;
     const origReadFile = fs.promises.readFile;
     (fs.promises as any).readFile = async (p: any, ...args: any[]) => {
       const s = String(p);
-      if (s.endsWith(".json") && !s.endsWith(".summaries-index.json") && !s.includes(".summaries-cache")) {
+      if (
+        s.endsWith(".json") &&
+        !s.endsWith(".summaries-index.json") &&
+        !s.includes(".summaries-cache")
+      ) {
         threadFileReads++;
       }
       return origReadFile.call(fs.promises, p, ...args);
@@ -98,7 +128,11 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
     try {
       const second = await freshStore.listThreadSummaries();
       assert.deepEqual(second, first);
-      assert.equal(threadFileReads, 0, `Expected 0 full thread reads on fresh store, got ${threadFileReads}`);
+      assert.equal(
+        threadFileReads,
+        0,
+        `Expected 0 full thread reads on fresh store, got ${threadFileReads}`
+      );
     } finally {
       (fs.promises as any).readFile = origReadFile;
     }
@@ -109,7 +143,12 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
       title: "Running thread",
       model: "test-model",
     });
-    store.addMessage(runningThread.id, { id: "u1", role: "user", content: "run", timestamp: new Date().toISOString() });
+    store.addMessage(runningThread.id, {
+      id: "u1",
+      role: "user",
+      content: "run",
+      timestamp: new Date().toISOString(),
+    });
 
     activeExecutionSet.add(runningThread.id);
     try {
@@ -123,7 +162,11 @@ describe("listThreadSummaries avoids re-reading full thread bodies", () => {
     // Now activeExecutionSet no longer has runningThread.id, and file mtime did NOT change.
     const second = await store.listThreadSummaries();
     const found2 = second.find((s) => s.id === runningThread.id);
-    assert.notEqual(found2?.status, "running", "Expected cached summary to reconcile status when execution is no longer active");
+    assert.notEqual(
+      found2?.status,
+      "running",
+      "Expected cached summary to reconcile status when execution is no longer active"
+    );
   });
 });
 
@@ -140,10 +183,7 @@ describe("AUD-12: reconcileSummaryStatus honest status reconciliation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function writeFixtureThread(
-    id: string,
-    overrides: Record<string, unknown> = {}
-  ): void {
+  function writeFixtureThread(id: string, overrides: Record<string, unknown> = {}): void {
     const now = new Date().toISOString();
     const data = {
       id,

@@ -50,7 +50,7 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.allowlistStatus, "not-declared");
     assert.ok(
       result.notes.some((n) => /not[- ]declared|skipped/i.test(n) && /allowlist/i.test(n)),
-      "expected not-declared/skipped allowlist note in evidence",
+      "expected not-declared/skipped allowlist note in evidence"
     );
   });
 
@@ -69,8 +69,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "allowlist" && f.evidence.includes("web-ui/lib/board/boardStore.ts"),
-      ),
+        (f) => f.check === "allowlist" && f.evidence.includes("web-ui/lib/board/boardStore.ts")
+      )
     );
   });
 
@@ -90,17 +90,13 @@ describe("reviewerGate — mechanical checks", () => {
   });
 
   it("FAILs when a banned string appears in a commit subject", () => {
-    const result = runMechanicalChecks(
-      makeCleanInput({ commitSubjects: ["Fix bug with codex"] }),
-    );
+    const result = runMechanicalChecks(makeCleanInput({ commitSubjects: ["Fix bug with codex"] }));
     assert.equal(result.verdict, "FAIL");
     assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes("codex")));
   });
 
   it("FAILs when a banned string appears in the branch name", () => {
-    const result = runMechanicalChecks(
-      makeCleanInput({ branchName: "feature/gemini-reviewer" }),
-    );
+    const result = runMechanicalChecks(makeCleanInput({ branchName: "feature/gemini-reviewer" }));
     assert.equal(result.verdict, "FAIL");
     assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes("gemini")));
   });
@@ -123,16 +119,14 @@ describe("reviewerGate — mechanical checks", () => {
 
     it(`FAILs when ${term} appears in a commit subject`, () => {
       const result = runMechanicalChecks(
-        makeCleanInput({ commitSubjects: [`Fix issue in ${term} pass`] }),
+        makeCleanInput({ commitSubjects: [`Fix issue in ${term} pass`] })
       );
       assert.equal(result.verdict, "FAIL");
       assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
     });
 
     it(`FAILs when ${term} appears in the branch name`, () => {
-      const result = runMechanicalChecks(
-        makeCleanInput({ branchName: `feature/${term}-fix` }),
-      );
+      const result = runMechanicalChecks(makeCleanInput({ branchName: `feature/${term}-fix` }));
       assert.equal(result.verdict, "FAIL");
       assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
     });
@@ -154,8 +148,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts"),
-      ),
+        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts")
+      )
     );
   });
 
@@ -175,8 +169,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts"),
-      ),
+        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts")
+      )
     );
   });
 });
@@ -295,7 +289,7 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
         reviewerGateVerdict: "PASS",
         finishVerificationClean: true,
       }),
-      true,
+      true
     );
     assert.equal(
       isMergeAuthorized({
@@ -304,7 +298,7 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
         reviewerGateVerdict: "FAIL",
         finishVerificationClean: true,
       }),
-      false,
+      false
     );
   });
 

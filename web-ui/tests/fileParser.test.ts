@@ -4,7 +4,8 @@ import { parseAttachment } from "../lib/fileParser.js";
 
 describe("File Parser & Multimodal Ingestion Suite", () => {
   it("extracts clean raw base64 for image files", async () => {
-    const rawPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const rawPngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     const dataUrl = `data:image/png;base64,${rawPngBase64}`;
 
     const parsed = await parseAttachment("diagram.png", "image/png", 100, dataUrl);
@@ -28,7 +29,12 @@ describe("File Parser & Multimodal Ingestion Suite", () => {
     const base64Json = Buffer.from(jsonStr, "utf-8").toString("base64");
     const dataUrl = `data:application/json;base64,${base64Json}`;
 
-    const parsed = await parseAttachment("policy.json", "application/json", jsonStr.length, dataUrl);
+    const parsed = await parseAttachment(
+      "policy.json",
+      "application/json",
+      jsonStr.length,
+      dataUrl
+    );
     assert.strictEqual(parsed.textContent, jsonStr);
   });
 });

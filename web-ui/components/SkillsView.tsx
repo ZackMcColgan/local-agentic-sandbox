@@ -27,14 +27,16 @@ export function SkillsView({
   initialPending,
   initialActive,
   initialFlywheel,
-  initialPreviewCandidate
+  initialPreviewCandidate,
 }: SkillsViewProps) {
   const [pending, setPending] = useState<SkillCandidateItem[]>(initialPending || []);
   const [active, setActive] = useState<string[]>(initialActive || []);
   const [flywheel, setFlywheel] = useState<any[]>(initialFlywheel || []);
   const [loading, setLoading] = useState<boolean>(!initialPending);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [previewCandidate, setPreviewCandidate] = useState<SkillCandidateItem | null>(initialPreviewCandidate || null);
+  const [previewCandidate, setPreviewCandidate] = useState<SkillCandidateItem | null>(
+    initialPreviewCandidate || null
+  );
 
   const fetchSkills = async () => {
     if (typeof window === "undefined" || !window.location || !window.location.origin) {
@@ -68,7 +70,7 @@ export function SkillsView({
       const res = await fetch("/api/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve", candidateId })
+        body: JSON.stringify({ action: "approve", candidateId }),
       });
       if (res.ok) {
         await fetchSkills();
@@ -87,7 +89,7 @@ export function SkillsView({
       const res = await fetch("/api/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject", candidateId })
+        body: JSON.stringify({ action: "reject", candidateId }),
       });
       if (res.ok) {
         await fetchSkills();
@@ -121,7 +123,8 @@ export function SkillsView({
           </div>
           {pending.length > 0 && (
             <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-500/30 tabular-nums">
-              {pending.length} <span className="hidden sm:inline">Pending Review</span><span className="sm:hidden">Pending</span>
+              {pending.length} <span className="hidden sm:inline">Pending Review</span>
+              <span className="sm:hidden">Pending</span>
             </span>
           )}
         </div>
@@ -138,9 +141,12 @@ export function SkillsView({
             <div className="h-12 w-12 rounded-2xl bg-stone-100 dark:bg-[#1f1f28] flex items-center justify-center mx-auto text-zinc-600 dark:text-zinc-400">
               <Wrench className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">No skills to review</h3>
+            <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">
+              No skills to review
+            </h3>
             <p className="text-xs text-stone-600 dark:text-stone-400 max-w-sm mx-auto">
-              Skill candidates proposed by the recorder will appear here for human review and promotion into active skills.
+              Skill candidates proposed by the recorder will appear here for human review and
+              promotion into active skills.
             </p>
           </div>
         ) : (
@@ -210,39 +216,42 @@ export function SkillsView({
 
         {/* Section 2: Active Promoted Skills (.agent/skills) */}
         {(pending.length > 0 || active.length > 0) && (
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-base font-semibold text-slate-900 dark:text-zinc-100">
-              Active Promoted Skills ({active.length})
-            </h2>
-          </div>
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-base font-semibold text-slate-900 dark:text-zinc-100">
+                Active Promoted Skills ({active.length})
+              </h2>
+            </div>
 
-          {active.length === 0 ? (
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 text-center text-xs text-slate-500 dark:text-zinc-400">
-              No active skills promoted yet. Approved skills are saved to <code className="font-mono">.agent/skills/*.md</code>.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {active.map((filename) => (
-                <div
-                  key={filename}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center gap-3"
-                >
-                  <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="h-4 w-4" />
+            {active.length === 0 ? (
+              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-zinc-800 text-center text-xs text-slate-500 dark:text-zinc-400">
+                No active skills promoted yet. Approved skills are saved to{" "}
+                <code className="font-mono">.agent/skills/*.md</code>.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {active.map((filename) => (
+                  <div
+                    key={filename}
+                    className="bg-white dark:bg-zinc-900 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-zinc-800 flex items-center gap-3"
+                  >
+                    <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-mono font-medium text-slate-800 dark:text-zinc-200 truncate block">
+                        {filename}
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                        Promoted &amp; Active
+                      </span>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-mono font-medium text-slate-800 dark:text-zinc-200 truncate block">
-                      {filename}
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">Promoted &amp; Active</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
         {/* Section 3: SQLite Flywheel Reusable Patterns */}
@@ -258,7 +267,9 @@ export function SkillsView({
                   className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs"
                 >
                   <div>
-                    <span className="font-semibold text-slate-900 dark:text-zinc-100">{fSkill.name}</span>
+                    <span className="font-semibold text-slate-900 dark:text-zinc-100">
+                      {fSkill.name}
+                    </span>
                     <span className="text-slate-500 dark:text-zinc-400 ml-2 font-mono text-[11px]">
                       [{fSkill.domain}] • {fSkill.sourceTaskId}
                     </span>
@@ -281,10 +292,7 @@ export function SkillsView({
           aria-modal="true"
           aria-label="Skill Inspector"
         >
-          <div
-            className="fixed inset-0 -z-10"
-            onClick={() => setPreviewCandidate(null)}
-          />
+          <div className="fixed inset-0 -z-10" onClick={() => setPreviewCandidate(null)} />
           <div className="bg-white dark:bg-zinc-900 w-[420px] max-w-[92vw] h-full flex flex-col shadow-2xl border-l border-slate-200 dark:border-zinc-800 overflow-hidden animate-in slide-in-from-right duration-200">
             {/* Header */}
             <div className="px-5 py-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
@@ -312,7 +320,7 @@ export function SkillsView({
                   {`skills/pending/${previewCandidate.id || "candidate"}.md`}
                 </div>
                 <pre className="p-4 font-mono text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
-{`---
+                  {`---
 id: ${previewCandidate.id}
 status: ${previewCandidate.status || "pending"}
 confidence: ${(previewCandidate as any).confidence ?? 0.94}

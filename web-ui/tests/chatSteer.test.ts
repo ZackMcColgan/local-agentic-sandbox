@@ -13,7 +13,10 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
   let store: ThreadStore;
 
   beforeEach(() => {
-    tmpDir = path.join(os.tmpdir(), `test-steer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    tmpDir = path.join(
+      os.tmpdir(),
+      `test-steer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     fs.mkdirSync(tmpDir, { recursive: true });
     store = new ThreadStore(tmpDir);
   });
@@ -69,7 +72,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const req = new NextRequest("http://localhost/api/threads/t-endpoint/steer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Please focus on tests" })
+        body: JSON.stringify({ text: "Please focus on tests" }),
       });
 
       const res = await STEER_POST(req, { params: Promise.resolve({ id: "t-endpoint" }) });
@@ -86,10 +89,12 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const req = new NextRequest("http://localhost/api/threads/nonexistent-thread-999999/steer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Orphan steer attempt" })
+        body: JSON.stringify({ text: "Orphan steer attempt" }),
       });
 
-      const res = await STEER_POST(req, { params: Promise.resolve({ id: "nonexistent-thread-999999" }) });
+      const res = await STEER_POST(req, {
+        params: Promise.resolve({ id: "nonexistent-thread-999999" }),
+      });
       assert.equal(res.status, 404);
       const json = await res.json();
       assert.ok(json.error);
@@ -100,7 +105,7 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const req = new NextRequest("http://localhost/api/threads/t-empty/steer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "   " })
+        body: JSON.stringify({ text: "   " }),
       });
 
       const res = await STEER_POST(req, { params: Promise.resolve({ id: "t-empty" }) });
@@ -120,7 +125,9 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
         req.on("data", (c) => (body += c));
         req.on("end", () => {
           let parsed: any = {};
-          try { parsed = JSON.parse(body); } catch {}
+          try {
+            parsed = JSON.parse(body);
+          } catch {}
           roundHandler(parsed, res);
         });
       });
@@ -147,22 +154,28 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (roundCount === 1) {
           store.appendSteer(threadId, "skip A - do B");
-          res.write(JSON.stringify({
-            message: {
-              content: "Executing first step...",
-              tool_calls: [{
-                id: "tc-1",
-                type: "function",
-                function: { name: "workspace_read_file", arguments: '{"path":"dummy.txt"}' }
-              }]
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "Executing first step...",
+                tool_calls: [
+                  {
+                    id: "tc-1",
+                    type: "function",
+                    function: { name: "workspace_read_file", arguments: '{"path":"dummy.txt"}' },
+                  },
+                ],
+              },
+            }) + "\n"
+          );
         } else {
-          res.write(JSON.stringify({
-            message: {
-              content: "Done with B."
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "Done with B.",
+              },
+            }) + "\n"
+          );
         }
         res.write(JSON.stringify({ message: {}, done: true }) + "\n");
         res.end();
@@ -178,8 +191,8 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
           assistantMessageId: "a-steer",
           messages: [{ role: "user", content: "Start work", id: "u-steer" }],
           model: "swift-15-27b-mtp",
-          enableTools: true
-        })
+          enableTools: true,
+        }),
       });
 
       const chatRes = await CHAT_POST(chatReq);
@@ -210,14 +223,18 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       // 2. Steer appeared in persisted thread transcript
       const thread = await store.getThread(threadId);
       assert.ok(thread);
-      const persistedSteer = thread.messages.find((m) => m.content.includes("[Steer from user, mid-turn] skip A - do B"));
+      const persistedSteer = thread.messages.find((m) =>
+        m.content.includes("[Steer from user, mid-turn] skip A - do B")
+      );
       assert.ok(persistedSteer, "Steer must be persisted into thread transcript in position");
       assert.equal(persistedSteer.role, "user");
 
       // 3. Steer appeared in subsequent model request
       assert.ok(recordedRequests.length >= 2, "Must have made at least 2 LLM requests");
       const round2Messages = recordedRequests[1].messages || [];
-      const steerInPrompt = round2Messages.find((m: any) => m.content && m.content.includes("[Steer from user, mid-turn] skip A - do B"));
+      const steerInPrompt = round2Messages.find(
+        (m: any) => m.content && m.content.includes("[Steer from user, mid-turn] skip A - do B")
+      );
       assert.ok(steerInPrompt, "Steer must appear in subsequent round messages");
 
       // 4. Mailbox is empty
@@ -237,18 +254,22 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
         if (roundCount === 1) {
           // Model answered the initial question with 0 tools
           store.appendSteer(threadId, "Create a svg of it");
-          res.write(JSON.stringify({
-            message: {
-              content: "The weather in Spanish Fort is sunny."
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "The weather in Spanish Fort is sunny.",
+              },
+            }) + "\n"
+          );
         } else if (roundCount === 2) {
           // Second round should be synthesis incorporating the steer!
-          res.write(JSON.stringify({
-            message: {
-              content: "Here is the SVG of the sunny weather: <svg></svg>"
-            }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: {
+                content: "Here is the SVG of the sunny weather: <svg></svg>",
+              },
+            }) + "\n"
+          );
         }
         res.write(JSON.stringify({ message: {}, done: true }) + "\n");
         res.end();
@@ -264,8 +285,8 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
           assistantMessageId: "a-late",
           messages: [{ role: "user", content: "What's the weather today?", id: "u-late" }],
           model: "swift-15-27b-mtp",
-          enableTools: false
-        })
+          enableTools: false,
+        }),
       });
 
       const chatRes = await CHAT_POST(chatReq);
@@ -296,13 +317,18 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       // 2. Steer appeared in subsequent model synthesis request
       assert.ok(recordedRequests.length >= 2, "Must have dispatched synthesis request to model");
       const synthMessages = recordedRequests[1].messages || [];
-      const steerInPrompt = synthMessages.find((m: any) => m.content && m.content.includes("[Steer from user, mid-turn] Create a svg of it"));
+      const steerInPrompt = synthMessages.find(
+        (m: any) =>
+          m.content && m.content.includes("[Steer from user, mid-turn] Create a svg of it")
+      );
       assert.ok(steerInPrompt, "Steer must appear in synthesis model request");
 
       // 3. Steer appeared in persisted transcript
       const thread = await store.getThread(threadId);
       assert.ok(thread);
-      const persistedSteer = thread.messages.find((m) => m.content.includes("[Steer from user, mid-turn] Create a svg of it"));
+      const persistedSteer = thread.messages.find((m) =>
+        m.content.includes("[Steer from user, mid-turn] Create a svg of it")
+      );
       assert.ok(persistedSteer, "Steer must be persisted into thread transcript as consumed");
 
       // 4. Mailbox is empty
@@ -321,7 +347,9 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
 
       // Verify thread messages do NOT contain the unconsumed steer
       const thread = await store.getThread(threadId);
-      const foundInTranscript = (thread?.messages || []).some((m) => m.content.includes("late arrival"));
+      const foundInTranscript = (thread?.messages || []).some((m) =>
+        m.content.includes("late arrival")
+      );
       assert.equal(foundInTranscript, false, "Unconsumed steer must not be in transcript");
     });
 
@@ -346,8 +374,8 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
             JSON.stringify({
               message: {
                 thinking: "Starting long analysis...",
-                content: "Initial partial response before interrupt."
-              }
+                content: "Initial partial response before interrupt.",
+              },
             }) + "\n"
           );
           // Do NOT call res.end() here — wait for roundAbortController to abort the request!
@@ -360,8 +388,8 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
           res.write(
             JSON.stringify({
               message: {
-                content: "Redirected response incorporating immediate interrupt steer!"
-              }
+                content: "Redirected response incorporating immediate interrupt steer!",
+              },
             }) + "\n"
           );
           res.write(JSON.stringify({ message: {}, done: true }) + "\n");
@@ -379,8 +407,8 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
           assistantMessageId: "a-int",
           messages: [{ role: "user", content: "Write a very long essay", id: "u-int" }],
           model: "swift-15-27b-mtp",
-          enableTools: false
-        })
+          enableTools: false,
+        }),
       });
 
       const chatRes = await CHAT_POST(chatReq);
@@ -402,7 +430,10 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
               try {
                 const evt = JSON.parse(p.slice(5));
                 events.push(evt);
-                if (evt.type === "token" && String(evt.content || "").includes("Initial partial response")) {
+                if (
+                  evt.type === "token" &&
+                  String(evt.content || "").includes("Initial partial response")
+                ) {
                   round1FirstTokenReceivedResolve();
                 }
               } catch {}
@@ -418,13 +449,17 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const steerReq = new NextRequest(`http://localhost/api/threads/${threadId}/steer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Switch to concise bullet points now", interrupt: true })
+        body: JSON.stringify({ text: "Switch to concise bullet points now", interrupt: true }),
       });
       const steerRes = await STEER_POST(steerReq, { params: Promise.resolve({ id: threadId }) });
       assert.equal(steerRes.status, 200);
       const steerJson = await steerRes.json();
       assert.equal(steerJson.success, true);
-      assert.equal(steerJson.interrupted, true, "Must report interrupted=true when active round stream was aborted");
+      assert.equal(
+        steerJson.interrupted,
+        true,
+        "Must report interrupted=true when active round stream was aborted"
+      );
 
       await streamDonePromise;
 
@@ -437,14 +472,24 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       assert.ok(doneEvent, "Turn must complete with done event (not abort)");
 
       // 2. Round 2 request must contain both the partial round 1 assistant text and the steer
-      assert.equal(recordedRequests.length, 2, "Must have made 2 LLM requests (interrupted round 1 + steered round 2)");
+      assert.equal(
+        recordedRequests.length,
+        2,
+        "Must have made 2 LLM requests (interrupted round 1 + steered round 2)"
+      );
       const round2Messages = recordedRequests[1].messages || [];
       const partialAssistantInRound2 = round2Messages.find(
-        (m: any) => m.role === "assistant" && m.content.includes("Initial partial response before interrupt.")
+        (m: any) =>
+          m.role === "assistant" && m.content.includes("Initial partial response before interrupt.")
       );
-      assert.ok(partialAssistantInRound2, "Partial content from interrupted round 1 must be preserved in round 2 context");
+      assert.ok(
+        partialAssistantInRound2,
+        "Partial content from interrupted round 1 must be preserved in round 2 context"
+      );
       const steerInRound2 = round2Messages.find(
-        (m: any) => m.role === "user" && m.content.includes("[Steer from user, mid-turn] Switch to concise bullet points now")
+        (m: any) =>
+          m.role === "user" &&
+          m.content.includes("[Steer from user, mid-turn] Switch to concise bullet points now")
       );
       assert.ok(steerInRound2, "Interrupt steer must be injected into round 2 messages");
 
@@ -455,7 +500,11 @@ describe("CHAT-STEER — mid-turn steering mailbox (behavioral)", () => {
       const assistantMsg = thread.messages.find((m) => m.id === "a-int");
       assert.ok(assistantMsg);
       assert.equal(assistantMsg.status, "completed");
-      assert.ok(assistantMsg.content.includes("Redirected response incorporating immediate interrupt steer!"));
+      assert.ok(
+        assistantMsg.content.includes(
+          "Redirected response incorporating immediate interrupt steer!"
+        )
+      );
     });
   });
 });

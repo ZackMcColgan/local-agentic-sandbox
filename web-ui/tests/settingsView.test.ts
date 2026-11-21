@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SettingsView, getHostCardPresentation, formatEngineActionMessage } from "../components/SettingsView";
+import {
+  SettingsView,
+  getHostCardPresentation,
+  formatEngineActionMessage,
+} from "../components/SettingsView";
 import { ProjectsView } from "../components/ProjectsView";
 
 describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
@@ -14,16 +18,26 @@ describe("E3: Flash-Next model identity & LOW effort default (UI-035)", () => {
         onResetOnboarding: () => {},
       })
     );
-    assert.equal(html.includes("Flash-Next"), true, "Expected SettingsView to display 'Flash-Next'");
-    assert.equal(html.includes("Fast"), true, "Expected SettingsView to display 'Fast' (low effort)");
+    assert.equal(
+      html.includes("Flash-Next"),
+      true,
+      "Expected SettingsView to display 'Flash-Next'"
+    );
+    assert.equal(
+      html.includes("Fast"),
+      true,
+      "Expected SettingsView to display 'Fast' (low effort)"
+    );
     assert.equal(html.includes("swift-15-27b-mtp"), false, "Expected no stale 'swift-15-27b-mtp'");
   });
 
   it("ProjectsView displays 'Engine: Flash-Next' instead of 'Swift 1.5'", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(ProjectsView as any, {})
+    const html = renderToStaticMarkup(React.createElement(ProjectsView as any, {}));
+    assert.equal(
+      html.includes("Swift 1.5"),
+      false,
+      "Expected no stale 'Swift 1.5' in ProjectsView"
     );
-    assert.equal(html.includes("Swift 1.5"), false, "Expected no stale 'Swift 1.5' in ProjectsView");
   });
 });
 
@@ -36,9 +50,16 @@ describe("E7: Settings view nits (UI-043)", () => {
         onResetOnboarding: () => {},
       })
     );
-    assert.ok(html.includes('href="#settings-danger-zone"'), "Expected href='#settings-danger-zone'");
+    assert.ok(
+      html.includes('href="#settings-danger-zone"'),
+      "Expected href='#settings-danger-zone'"
+    );
     assert.ok(html.includes('id="settings-danger-zone"'), "Expected id='settings-danger-zone'");
-    assert.equal(html.includes("Stop engine to reclaim 16GB VRAM."), false, "Expected duplicate VRAM sentence trimmed");
+    assert.equal(
+      html.includes("Stop engine to reclaim 16GB VRAM."),
+      false,
+      "Expected duplicate VRAM sentence trimmed"
+    );
   });
 });
 
@@ -50,7 +71,11 @@ describe("Settings engine card honesty", () => {
         onThemeChange: () => {},
       })
     );
-    assert.equal(html.includes("Standalone llama.cpp"), false, "Should not hardcode 'Standalone llama.cpp'");
+    assert.equal(
+      html.includes("Standalone llama.cpp"),
+      false,
+      "Should not hardcode 'Standalone llama.cpp'"
+    );
     assert.equal(html.includes("AMD Radeon RX 9070 XT"), false, "Should not hardcode GPU model");
     assert.equal(html.includes("16,384 MB"), false, "Should not fabricate 16,384 MB VRAM");
     assert.ok(
@@ -107,7 +132,11 @@ describe("Settings Danger Zone title polarity", () => {
         selfDeployEnabled: false,
       })
     );
-    assert.equal(html.includes("Disable self-deploy"), false, "Should not invert switch title as 'Disable self-deploy'");
+    assert.equal(
+      html.includes("Disable self-deploy"),
+      false,
+      "Should not invert switch title as 'Disable self-deploy'"
+    );
     assert.ok(html.includes("Enable self-deploy"), "Should label switch as 'Enable self-deploy'");
   });
 });
@@ -117,14 +146,27 @@ describe("Settings engine unload/stop honesty", () => {
     const msg = formatEngineActionMessage("stop", false, 404, { success: false });
     assert.equal(msg.toLowerCase().includes("vram released"), false);
     assert.equal(msg.toLowerCase().includes("reclaimed"), false);
-    assert.ok(msg.toLowerCase().includes("not applicable"), `Expected 'not applicable' message, got: ${msg}`);
+    assert.ok(
+      msg.toLowerCase().includes("not applicable"),
+      `Expected 'not applicable' message, got: ${msg}`
+    );
   });
 
   it("claims VRAM released only when engine confirms unload", () => {
-    const confirmed = formatEngineActionMessage("stop", true, 200, { success: true, vramReleased: true });
-    assert.ok(confirmed.toLowerCase().includes("vram"), `Expected VRAM confirmation, got: ${confirmed}`);
+    const confirmed = formatEngineActionMessage("stop", true, 200, {
+      success: true,
+      vramReleased: true,
+    });
+    assert.ok(
+      confirmed.toLowerCase().includes("vram"),
+      `Expected VRAM confirmation, got: ${confirmed}`
+    );
 
     const unconfirmed = formatEngineActionMessage("stop", true, 200, { success: true });
-    assert.equal(unconfirmed.toLowerCase().includes("vram"), false, "Should not claim VRAM released without confirmation");
+    assert.equal(
+      unconfirmed.toLowerCase().includes("vram"),
+      false,
+      "Should not claim VRAM released without confirmation"
+    );
   });
 });

@@ -19,7 +19,7 @@ describe("qa-7 helper — latestRoundPromptTokens", () => {
     const v = latestRoundPromptTokens([
       { roundPromptTokens: [12000, 34000] },
       { roundPromptTokens: [34567] },
-      {}
+      {},
     ]);
     assert.equal(v, 34567);
   });
@@ -28,7 +28,7 @@ describe("qa-7 helper — latestRoundPromptTokens", () => {
     const v = latestRoundPromptTokens([
       { roundPromptTokens: [0, -5, 22100] },
       { roundPromptTokens: [] },
-      { role: "user" }
+      { role: "user" },
     ] as any);
     assert.equal(v, 22100);
   });
@@ -46,12 +46,18 @@ describe("qa-7 snapshot — round prompt tokens ride mid-turn snapshots", () => 
     const sink = {
       addMessage: (_tid: string, msg: StreamingSnapshotMessage) => {
         captured.push(msg);
-      }
+      },
     };
     let now = 100000;
-    const snap = new ThrottledStreamSnapshot(sink as any, "thread-1", "assistant-1", 1000, () => now);
+    const snap = new ThrottledStreamSnapshot(
+      sink as any,
+      "thread-1",
+      "assistant-1",
+      1000,
+      () => now
+    );
     const wrote1 = snap.maybeWrite("partial text", undefined, undefined, {
-      roundPromptTokens: [12000, 34567]
+      roundPromptTokens: [12000, 34567],
     });
     assert.equal(wrote1, true);
     assert.deepEqual(captured[0].roundPromptTokens, [12000, 34567]);
@@ -74,7 +80,7 @@ describe("qa-7 meter — ChatStream pill hydrates from the record", () => {
         onTracesUpdate: () => {},
         activeModel: "qwen3.8-flash-next-gyro-gyro-s",
         reasoningEffort: "low",
-        messages
+        messages,
       })
     );
   }
@@ -82,7 +88,7 @@ describe("qa-7 meter — ChatStream pill hydrates from the record", () => {
   it("pill shows the latest round's actual prompt tokens from messages", () => {
     const html = renderChat([
       { id: "u1", role: "user", content: "do the job" },
-      { id: "a1", role: "assistant", content: "working", roundPromptTokens: [12000, 34567] }
+      { id: "a1", role: "assistant", content: "working", roundPromptTokens: [12000, 34567] },
     ]);
     assert.ok(html.includes('data-testid="context-meter-pill"'), "meter pill must render");
     assert.ok(

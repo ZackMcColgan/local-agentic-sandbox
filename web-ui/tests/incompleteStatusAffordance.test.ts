@@ -14,8 +14,7 @@ import { ChatStream } from "../components/ChatStream";
 // Presentation + affordance only: the persisted marker text and the
 // reconciliation behavior are untouched by this suite's contract.
 
-const DISCONNECT_MARKER =
-  "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
+const DISCONNECT_MARKER = "⚠️ [Turn incomplete: Stream aborted or disconnected.]";
 
 function render(messages: any[]): string {
   return renderToString(
@@ -23,7 +22,7 @@ function render(messages: any[]): string {
       onTracesUpdate: () => {},
       activeModel: "qwen3.8:27b-q3_k_m",
       reasoningEffort: "medium",
-      messages
+      messages,
     })
   );
 }
@@ -36,8 +35,8 @@ describe("UI-007: incomplete turns render a distinct recoverable-status affordan
         id: "a1",
         role: "assistant",
         status: "incomplete",
-        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`
-      }
+        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`,
+      },
     ]);
     assert.ok(
       html.includes('data-testid="message-status-badge"'),
@@ -53,8 +52,8 @@ describe("UI-007: incomplete turns render a distinct recoverable-status affordan
         id: "a1",
         role: "assistant",
         status: "incomplete",
-        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`
-      }
+        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`,
+      },
     ]);
     assert.ok(
       html.includes('data-testid="incomplete-retry"'),
@@ -78,8 +77,8 @@ describe("UI-007: incomplete turns render a distinct recoverable-status affordan
         id: "a2",
         role: "assistant",
         status: "completed",
-        content: "Sweep finished; findings written to docs."
-      }
+        content: "Sweep finished; findings written to docs.",
+      },
     ]);
     assert.ok(
       !html.includes('data-testid="message-status-badge"'),
@@ -98,8 +97,8 @@ describe("UI-007: incomplete turns render a distinct recoverable-status affordan
         id: "a1",
         role: "assistant",
         status: "incomplete",
-        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`
-      }
+        content: `${DISCONNECT_MARKER} Partial answer captured before the disconnect.`,
+      },
     ]);
     assert.ok(
       html.includes("Turn incomplete: Stream aborted or disconnected."),

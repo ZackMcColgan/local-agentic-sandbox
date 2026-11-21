@@ -13,10 +13,14 @@ describe("otel-collector manifest hygiene", () => {
 
     // Split multi-document YAML
     const docs = raw.split(/^---\s*$/m);
-    const deploymentDoc = docs.find((d) => /kind:\s*Deployment/.test(d) && /name:\s*otel-collector/.test(d));
+    const deploymentDoc = docs.find(
+      (d) => /kind:\s*Deployment/.test(d) && /name:\s*otel-collector/.test(d)
+    );
     assert.ok(deploymentDoc, "otel-collector Deployment must exist in observability.yaml");
 
-    const serviceDoc = docs.find((d) => /kind:\s*Service/.test(d) && /name:\s*otel-collector/.test(d));
+    const serviceDoc = docs.find(
+      (d) => /kind:\s*Service/.test(d) && /name:\s*otel-collector/.test(d)
+    );
     assert.ok(serviceDoc, "otel-collector Service must exist in observability.yaml");
 
     // Extract containers section from Deployment pod spec
@@ -25,7 +29,9 @@ describe("otel-collector manifest hygiene", () => {
     const containersBlock = containersMatch[1];
 
     // Count container entries (`- name: <name>` at container list indentation)
-    const containerNames = [...containersBlock.matchAll(/^\s{8}-\s*name:\s*(\S+)/gm)].map((m) => m[1]);
+    const containerNames = [...containersBlock.matchAll(/^\s{8}-\s*name:\s*(\S+)/gm)].map(
+      (m) => m[1]
+    );
     assert.equal(
       containerNames.length,
       1,
@@ -44,7 +50,9 @@ describe("otel-collector manifest hygiene", () => {
     assert.ok(containerPorts.has(4318), "otel-collector container must expose OTLP HTTP port 4318");
 
     // Extract targetPorts from otel-collector Service
-    const serviceTargetPorts = [...serviceDoc.matchAll(/targetPort:\s*(\d+)/g)].map((m) => Number(m[1]));
+    const serviceTargetPorts = [...serviceDoc.matchAll(/targetPort:\s*(\d+)/g)].map((m) =>
+      Number(m[1])
+    );
     assert.ok(serviceTargetPorts.length > 0, "otel-collector Service must declare targetPorts");
     for (const port of serviceTargetPorts) {
       assert.ok(
@@ -64,7 +72,11 @@ describe("otel-collector manifest hygiene", () => {
     assert.match(uiServiceDoc, /type:\s*NodePort/, "jaeger-ui Service must be type NodePort");
     assert.match(uiServiceDoc, /targetPort:\s*16686/, "jaeger-ui Service must target port 16686");
     assert.match(uiServiceDoc, /nodePort:\s*30686/, "jaeger-ui Service must expose nodePort 30686");
-    assert.match(uiServiceDoc, /app:\s*otel-collector/, "jaeger-ui Service must select app: otel-collector");
+    assert.match(
+      uiServiceDoc,
+      /app:\s*otel-collector/,
+      "jaeger-ui Service must select app: otel-collector"
+    );
   });
 });
 

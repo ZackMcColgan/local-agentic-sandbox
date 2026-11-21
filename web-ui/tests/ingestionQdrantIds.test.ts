@@ -15,7 +15,7 @@ describe("B-14: Qdrant point IDs in real ingestion path", () => {
         endLine: 10,
         corpus: "test",
         content: "hello world",
-        checksum: "abc123"
+        checksum: "abc123",
       },
       {
         id: "doc-alpha_chunk_1",
@@ -25,8 +25,8 @@ describe("B-14: Qdrant point IDs in real ingestion path", () => {
         endLine: 20,
         corpus: "test",
         content: "second chunk",
-        checksum: "def456"
-      }
+        checksum: "def456",
+      },
     ];
     const embedder = async (texts: string[]) => texts.map(() => [0.1, 0.2, 0.3]);
 

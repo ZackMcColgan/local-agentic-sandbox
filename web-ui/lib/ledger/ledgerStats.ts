@@ -21,7 +21,7 @@ export function summarizeLedgerRuns(runs: RunLedgerEntry[]): LedgerSummary {
       failedOrParkedRuns: 0,
       successRatePct: 0,
       totalCommits: 0,
-      averageDurationMs: 0
+      averageDurationMs: 0,
     };
   }
 
@@ -34,11 +34,7 @@ export function summarizeLedgerRuns(runs: RunLedgerEntry[]): LedgerSummary {
   for (const run of runs) {
     if (run.status === "completed") {
       completedRuns++;
-    } else if (
-      run.status === "failed" ||
-      run.status === "parked" ||
-      run.status === "crashed"
-    ) {
+    } else if (run.status === "failed" || run.status === "parked" || run.status === "crashed") {
       failedOrParkedRuns++;
     }
 
@@ -70,6 +66,6 @@ export function summarizeLedgerRuns(runs: RunLedgerEntry[]): LedgerSummary {
     failedOrParkedRuns,
     successRatePct,
     totalCommits: uniqueShas.size,
-    averageDurationMs
+    averageDurationMs,
   };
 }

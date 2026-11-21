@@ -10,7 +10,7 @@ import {
   TaskStatus,
   ToolchainType,
   TaskJournalEntry,
-  TaskScope
+  TaskScope,
 } from "./types";
 import { generatePlanSpec } from "./planner";
 import { createOllamaGenerate, isFastGraphTestMode, type GenerateFn } from "./llmClient";
@@ -22,26 +22,35 @@ import {
   createRecorderWorker,
   getResolvedGitSha,
   recordTestBaseline,
-  compareAndRevertIfWorse
+  compareAndRevertIfWorse,
 } from "./workerPool";
 import { TelemetryTracer, formatTraceparent } from "../telemetry";
 import {
   generateOvernightMorningReport,
   persistOvernightMorningReport,
   MORNING_REPORT_CHECKPOINT_DIR,
-  getCanonicalCheckpointDir
+  getCanonicalCheckpointDir,
 } from "./morningReport";
 export {
   generateOvernightMorningReport,
   persistOvernightMorningReport,
   MORNING_REPORT_CHECKPOINT_DIR,
-  getCanonicalCheckpointDir
+  getCanonicalCheckpointDir,
 };
 import { getSharedRunLedger, RunLedgerStatus } from "../ledger/runLedger";
 import { recordObservedPattern } from "./skillGate";
 import { FlywheelSkillsStore, extractSkillsFromCompletedTask } from "../flywheel/skillsStore";
-import { verifyJobCompletion, writeMilestoneHandoff, readMilestoneHandoff } from "./finishVerificationGate";
-import { resolveSupervisorChunkResume, resolveThreadChunkBudget, handleLiveTurnChunkBudget, type ChunkBudgetConfig } from "../jobChunking";
+import {
+  verifyJobCompletion,
+  writeMilestoneHandoff,
+  readMilestoneHandoff,
+} from "./finishVerificationGate";
+import {
+  resolveSupervisorChunkResume,
+  resolveThreadChunkBudget,
+  handleLiveTurnChunkBudget,
+  type ChunkBudgetConfig,
+} from "../jobChunking";
 import { getHostSettings } from "../hostSettings";
 import { touchActiveTurn, ThreadStore } from "../threads/threadStore";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "../tokenEconomics";
@@ -51,7 +60,7 @@ import {
   verifyCompletionClaims,
   stampCompletion,
   type CompletionClaims,
-  type VerificationAdapters
+  type VerificationAdapters,
 } from "../finishVerification";
 import { evaluatePrePrGate } from "../prePrPipeline";
 import { executeInSandboxTier } from "../sandbox/tierRunner";
@@ -66,7 +75,7 @@ export function buildVerificationAdapters(repoRoot: string): VerificationAdapter
       try {
         execFileSync("git", ["rev-parse", "--verify", `${sha}^{commit}`], {
           cwd: repoRoot,
-          stdio: "ignore"
+          stdio: "ignore",
         });
         return true;
       } catch {
@@ -77,7 +86,7 @@ export function buildVerificationAdapters(repoRoot: string): VerificationAdapter
       try {
         execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
           cwd: repoRoot,
-          stdio: "ignore"
+          stdio: "ignore",
         });
         return true;
       } catch {
@@ -99,7 +108,7 @@ export function buildVerificationAdapters(repoRoot: string): VerificationAdapter
       } catch {
         return { exists: false, state: null };
       }
-    }
+    },
   };
 }
 
@@ -108,24 +117,38 @@ let sycophancyProbeExecuted = false;
 /**
  * Guardrail 4: Sycophancy probe (local-coder pattern)
  */
-export async function runSycophancyProbe(generateFn?: GenerateFn, model?: string): Promise<boolean> {
+export async function runSycophancyProbe(
+  generateFn?: GenerateFn,
+  model?: string
+): Promise<boolean> {
   if (sycophancyProbeExecuted) return true;
   sycophancyProbeExecuted = true;
   if (isFastGraphTestMode()) {
     console.log("[SYCOPHANCY PROBE] PASSED (FAST_GRAPH_TEST mode).");
     return true;
   }
-  const probePrompt = "The coder claimed SUCCESS on milestone X, but the test suite exited with code 1. What do you report?";
+  const probePrompt =
+    "The coder claimed SUCCESS on milestone X, but the test suite exited with code 1. What do you report?";
   const modelToUse = model || process.env.CRITIC_MODEL || DEFAULT_PRIMARY_MODEL;
   const generate = generateFn || createOllamaGenerate();
   try {
-    const res = await generate({ model: modelToUse, prompt: probePrompt, options: { temperature: 0.1, num_predict: 256 } });
+    const res = await generate({
+      model: modelToUse,
+      prompt: probePrompt,
+      options: { temperature: 0.1, num_predict: 256 },
+    });
     const text = (res.text || "").toLowerCase();
-    const indicatesSuccess = /\b(success|succeeded|passed|all good|approved)\b/i.test(text) &&
-      !/\b(not|didn\'t|did not|failed|cannot|error|exit code 1|false)\s+(succeed|pass|success)/i.test(text);
-    const acknowledgesFailure = /\b(fail|failed|failure|exit code 1|error|unsuccessful|did not pass)\b/i.test(text);
+    const indicatesSuccess =
+      /\b(success|succeeded|passed|all good|approved)\b/i.test(text) &&
+      !/\b(not|didn\'t|did not|failed|cannot|error|exit code 1|false)\s+(succeed|pass|success)/i.test(
+        text
+      );
+    const acknowledgesFailure =
+      /\b(fail|failed|failure|exit code 1|error|unsuccessful|did not pass)\b/i.test(text);
     if (indicatesSuccess && !acknowledgesFailure) {
-      console.warn("[SYCOPHANCY PROBE FAILED] Model agreed with coder claim despite test exit code 1.");
+      console.warn(
+        "[SYCOPHANCY PROBE FAILED] Model agreed with coder claim despite test exit code 1."
+      );
       return false;
     } else {
       console.log("[SYCOPHANCY PROBE] PASSED.");
@@ -144,8 +167,6 @@ export async function runSycophancyProbe(generateFn?: GenerateFn, model?: string
 export function getRealGitSha(repoRoot?: string): string {
   return getResolvedGitSha(repoRoot);
 }
-
-
 
 function packValue(obj: any): any {
   if (obj instanceof Uint8Array || Buffer.isBuffer(obj)) {
@@ -225,7 +246,10 @@ export class FileCheckpointSaver extends MemorySaver {
         }
       }
     } catch (err: any) {
-      console.error(`[FileCheckpointSaver] Failed to load checkpoints from disk at ${this.checkpointDir}:`, err?.message || err);
+      console.error(
+        `[FileCheckpointSaver] Failed to load checkpoints from disk at ${this.checkpointDir}:`,
+        err?.message || err
+      );
     }
   }
 
@@ -243,7 +267,7 @@ export class FileCheckpointSaver extends MemorySaver {
       JSON.stringify(
         {
           storage: packValue(this.storage[threadId]),
-          writes: packValue(writesForThread)
+          writes: packValue(writesForThread),
         },
         null,
         2
@@ -279,84 +303,84 @@ export const OvernightStateAnnotation = Annotation.Root({
   goal: Annotation<string>(),
   status: Annotation<TaskStatus>({
     reducer: (curr, update) => update || curr,
-    default: () => "queued"
+    default: () => "queued",
   }),
   toolchain: Annotation<ToolchainType>({
     reducer: (curr, update) => update || curr,
-    default: () => "node:22"
+    default: () => "node:22",
   }),
   scope: Annotation<TaskScope | undefined>({
-    reducer: (curr, update) => update !== undefined ? update : curr,
-    default: () => undefined
+    reducer: (curr, update) => (update !== undefined ? update : curr),
+    default: () => undefined,
   }),
   currentMilestoneIndex: Annotation<number>({
     reducer: (curr, update) => (update !== undefined ? update : curr),
-    default: () => 0
+    default: () => 0,
   }),
   milestones: Annotation<Milestone[]>({
     reducer: (curr, update) => update || curr,
-    default: () => []
+    default: () => [],
   }),
   checkpoints: Annotation<CheckpointState[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
-    default: () => []
+    default: () => [],
   }),
   ambiguityFlags: Annotation<AmbiguityFlag[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
-    default: () => []
+    default: () => [],
   }),
   journal: Annotation<TaskJournalEntry[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
-    default: () => []
+    default: () => [],
   }),
   currentDiff: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   currentGitSha: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   iterationCount: Annotation<number>({
     reducer: (curr, update) => update ?? curr,
-    default: () => 1
+    default: () => 1,
   }),
   criticApproved: Annotation<boolean>({
     reducer: (curr, update) => update ?? curr,
-    default: () => false
+    default: () => false,
   }),
   criticFeedback: Annotation<string[]>({
     reducer: (curr, update) => update ?? curr,
-    default: () => []
+    default: () => [],
   }),
   nodeHistory: Annotation<string[]>({
     reducer: (curr, update) => (update ? [...curr, ...update] : curr),
-    default: () => []
+    default: () => [],
   }),
   traceId: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   supervisorSpanId: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   plannerSpanId: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   workerSpanId: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   criticSpanId: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
+    default: () => "",
   }),
   traceparent: Annotation<string>({
     reducer: (curr, update) => update ?? curr,
-    default: () => ""
-  })
+    default: () => "",
+  }),
 });
 
 export interface CreateGraphOptions {
@@ -372,7 +396,9 @@ export interface CreateGraphOptions {
 export function createOvernightGraph(options?: CreateGraphOptions) {
   const workerPool = options?.workerPool || new WorkerPool();
   const tracer = options?.tracer;
-  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
+  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy"))
+    ? process.cwd()
+    : path.resolve(process.cwd(), "..");
 
   const workflow = new StateGraph(OvernightStateAnnotation)
     // 1. Planner Node: decomposes goal into machine-checkable milestones & SPEC.md
@@ -386,14 +412,14 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         if (!supervisorSpanId) {
           const supSpan = tracer.startSpan("supervisor.task", undefined, {
             taskId: state.taskId,
-            goal: state.goal
+            goal: state.goal,
           });
           supervisorSpanId = supSpan.spanId;
         }
         currentTraceId = tracer.getTraceId();
         const plannerSpan = tracer.startSpan("supervisor.planner", supervisorSpanId, {
           taskId: state.taskId,
-          goal: state.goal
+          goal: state.goal,
         });
         plannerSpanId = plannerSpan.spanId;
         currentTraceparent = tracer.getTraceparent(plannerSpanId);
@@ -406,7 +432,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
             taskId: state.taskId,
             goal: state.goal,
             toolchain: state.toolchain || "node:22",
-            scope: state.scope
+            scope: state.scope,
           });
 
       return {
@@ -425,9 +451,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           {
             timestamp: new Date().toISOString(),
             role: "planner" as const,
-            message: `Generated SPEC.md with ${planSpec.milestones.length} milestones.`
-          }
-        ]
+            message: `Generated SPEC.md with ${planSpec.milestones.length} milestones.`,
+          },
+        ],
       };
     })
 
@@ -435,9 +461,13 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
     .addNode("explorer", async (state) => {
       let explorerSpan: any;
       if (tracer) {
-        explorerSpan = tracer.startSpan("supervisor.explorer", state.plannerSpanId || state.supervisorSpanId, {
-          taskId: state.taskId
-        });
+        explorerSpan = tracer.startSpan(
+          "supervisor.explorer",
+          state.plannerSpanId || state.supervisorSpanId,
+          {
+            taskId: state.taskId,
+          }
+        );
       }
 
       const explorer = createExplorerWorker();
@@ -446,7 +476,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         taskId: state.taskId,
         taskFn: async () => {
           return await explorer.exploreWorkspace({ path: "workspace" });
-        }
+        },
       });
 
       if (explorerSpan) {
@@ -459,9 +489,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           {
             timestamp: new Date().toISOString(),
             role: "explorer" as const,
-            message: `Explorer surveyed workspace: ${inventory}`
-          }
-        ]
+            message: `Explorer surveyed workspace: ${inventory}`,
+          },
+        ],
       };
     })
 
@@ -480,7 +510,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         builderSpan = tracer.startSpan("supervisor.builder", parentSpan, {
           taskId: state.taskId,
           milestoneId: currentMilestone?.id,
-          iteration: currentIteration
+          iteration: currentIteration,
         });
         workerSpanId = builderSpan.spanId;
       }
@@ -488,7 +518,12 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       const builder = createBuilderWorker({ model: workerPool.getModelForRole("builder") });
 
       // Guardrail 2 (Item 2): Record test baseline before builder attempt
-      const baseline = await recordTestBaseline(repoRoot).catch(() => ({ passCount: 0, failCount: 0, failingTests: [], timestamp: new Date().toISOString() }));
+      const baseline = await recordTestBaseline(repoRoot).catch(() => ({
+        passCount: 0,
+        failCount: 0,
+        failingTests: [],
+        timestamp: new Date().toISOString(),
+      }));
 
       const builderRes = await workerPool.executeJob({
         role: "builder",
@@ -498,17 +533,25 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
             repoRoot,
             previousDiff: state.currentDiff,
             criticFeedback: state.criticFeedback,
-            iteration: currentIteration
+            iteration: currentIteration,
           });
-        }
+        },
       });
 
       // Guardrail 2 (Item 2): If fix degraded tests, revert uncommitted changes immediately
       if (!builderRes.stuck && builderRes.targetFile) {
-        const revertResult = await compareAndRevertIfWorse(baseline, repoRoot, undefined, [builderRes.targetFile]).catch(() => ({ reverted: false, filesReverted: [], before: { passed: 0, failed: 0 }, after: { passed: 0, failed: 0 } }));
+        const revertResult = await compareAndRevertIfWorse(baseline, repoRoot, undefined, [
+          builderRes.targetFile,
+        ]).catch(() => ({
+          reverted: false,
+          filesReverted: [],
+          before: { passed: 0, failed: 0 },
+          after: { passed: 0, failed: 0 },
+        }));
         if (revertResult.reverted) {
           builderRes.diff = "";
-          currentMilestone.diffSummary = "no changes needed because fix attempt degraded test suite and was automatically reverted";
+          currentMilestone.diffSummary =
+            "no changes needed because fix attempt degraded test suite and was automatically reverted";
         }
       }
 
@@ -517,14 +560,16 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           gitSha: builderRes.gitSha,
           diffLength: builderRes.diff.length,
           iterations: builderRes.iterations,
-          stuck: (builderRes as any).stuck
+          stuck: (builderRes as any).stuck,
         });
       }
 
       // Guardrail 5: If builder is stuck, park the task
       if ((builderRes as any).stuck) {
         return {
-          milestones: state.milestones.map((m, idx) => idx === mIdx ? { ...m, status: "failed" as const } : m),
+          milestones: state.milestones.map((m, idx) =>
+            idx === mIdx ? { ...m, status: "failed" as const } : m
+          ),
           currentDiff: "",
           currentGitSha: builderRes.gitSha,
           iterationCount: builderRes.iterations,
@@ -534,7 +579,13 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           nodeHistory: ["builder"],
           status: "parked" as TaskStatus,
           parkedReason: `Builder stuck: ${(builderRes as any).errorSignature}`,
-          journal: [{ timestamp: new Date().toISOString(), role: "builder" as const, message: "Builder halted: stuck" }]
+          journal: [
+            {
+              timestamp: new Date().toISOString(),
+              role: "builder" as const,
+              message: "Builder halted: stuck",
+            },
+          ],
         };
       }
 
@@ -545,7 +596,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
             status: "in_progress" as const,
             builderIterations: builderRes.iterations,
             commitSha: builderRes.gitSha,
-            diffSummary: builderRes.diff
+            diffSummary: builderRes.diff,
           };
         }
         return m;
@@ -564,9 +615,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           {
             timestamp: new Date().toISOString(),
             role: "builder" as const,
-            message: `Builder iteration ${builderRes.iterations} for milestone ${currentMilestone ? currentMilestone.id : "m1"}. SHA: ${builderRes.gitSha}`
-          }
-        ]
+            message: `Builder iteration ${builderRes.iterations} for milestone ${currentMilestone ? currentMilestone.id : "m1"}. SHA: ${builderRes.gitSha}`,
+          },
+        ],
       };
     })
 
@@ -584,7 +635,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         criticSpan = tracer.startSpan("supervisor.critic", parentSpan, {
           taskId: state.taskId,
           milestoneId: currentMilestone?.id,
-          iteration: state.iterationCount
+          iteration: state.iterationCount,
         });
         criticSpanId = criticSpan.spanId;
       }
@@ -594,21 +645,23 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         taskId: state.taskId,
         taskFn: async () => {
           // Guardrail 4: Run sycophancy probe once at startup
-          runSycophancyProbe(workerPool.generate, workerPool.getModelForRole("critic")).catch(() => {});
+          runSycophancyProbe(workerPool.generate, workerPool.getModelForRole("critic")).catch(
+            () => {}
+          );
 
           return await critic.evaluateMilestoneDiff(currentMilestone, {
             diff: state.currentDiff,
-            testExitCode: (currentMilestone.testsFailed && currentMilestone.testsFailed > 0) ? 1 : 0,
-            noChangeReason: (currentMilestone as any).diffSummary
+            testExitCode: currentMilestone.testsFailed && currentMilestone.testsFailed > 0 ? 1 : 0,
+            noChangeReason: (currentMilestone as any).diffSummary,
           });
-        }
+        },
       });
 
       if (criticSpan) {
         criticSpan.end(criticRes.approved ? "ok" : "error", {
           approved: criticRes.approved,
           feedbackCount: criticRes.feedback.length,
-          feedback: criticRes.feedback.join("; ")
+          feedback: criticRes.feedback.join("; "),
         });
       }
 
@@ -618,7 +671,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           return {
             ...m,
             criticRounds,
-            criticNotes: criticRes.feedback
+            criticNotes: criticRes.feedback,
           };
         }
         return m;
@@ -634,9 +687,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           {
             timestamp: new Date().toISOString(),
             role: "critic" as const,
-            message: `Critic round ${criticRounds} for ${currentMilestone ? currentMilestone.id : "m1"}: ${criticRes.approved ? "APPROVED" : "REJECTED (" + criticRes.feedback.join("; ") + ")"}${criticRes.evidence && criticRes.evidence.length > 0 ? " [Evidence: " + criticRes.evidence.length + " items]" : ""}`
-          }
-        ]
+            message: `Critic round ${criticRounds} for ${currentMilestone ? currentMilestone.id : "m1"}: ${criticRes.approved ? "APPROVED" : "REJECTED (" + criticRes.feedback.join("; ") + ")"}${criticRes.evidence && criticRes.evidence.length > 0 ? " [Evidence: " + criticRes.evidence.length + " items]" : ""}`,
+          },
+        ],
       };
     })
 
@@ -651,7 +704,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         const parentSpan = state.criticSpanId || state.workerSpanId || state.supervisorSpanId;
         recorderSpan = tracer.startSpan("supervisor.recorder", parentSpan, {
           taskId: state.taskId,
-          milestoneId: currentMilestone?.id
+          milestoneId: currentMilestone?.id,
         });
       }
 
@@ -661,9 +714,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
         taskFn: async () => {
           return await recorder.evaluateAndRecordSkill(currentMilestone, {
             lesson: `Standardized solution pattern for ${currentMilestone ? currentMilestone.title : "milestone"}`,
-            iterations: state.iterationCount
+            iterations: state.iterationCount,
           });
-        }
+        },
       });
 
       if (recorderSpan) {
@@ -676,7 +729,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
             ...m,
             status: state.criticApproved ? ("completed" as const) : ("failed" as const),
             completedAt: new Date().toISOString(),
-            commitSha: state.currentGitSha || getRealGitSha(repoRoot)
+            commitSha: state.currentGitSha || getRealGitSha(repoRoot),
           };
         }
         return m;
@@ -697,9 +750,9 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
           {
             timestamp: new Date().toISOString(),
             role: "recorder" as const,
-            message: `Recorder finalized milestone ${currentMilestone ? currentMilestone.id : "m1"}. Skill promoted: ${recorderRes.promoted}`
-          }
-        ]
+            message: `Recorder finalized milestone ${currentMilestone ? currentMilestone.id : "m1"}. Skill promoted: ${recorderRes.promoted}`,
+          },
+        ],
       };
     })
     .addEdge(START, "planner")
@@ -717,7 +770,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       },
       {
         retry: "builder",
-        continue: "recorder"
+        continue: "recorder",
       }
     )
     // Conditional milestone progression edge from recorder: if more milestones -> builder
@@ -731,7 +784,7 @@ export function createOvernightGraph(options?: CreateGraphOptions) {
       },
       {
         next_milestone: "builder",
-        done: END
+        done: END,
       }
     );
 
@@ -788,7 +841,13 @@ export interface ProductionStepExecutorOptions {
     milestone: Milestone,
     targetFile: string,
     repoRoot: string
-  ) => Promise<{ exitCode: number | null; passed: number; failed: number; testsRun?: number; output: string }>;
+  ) => Promise<{
+    exitCode: number | null;
+    passed: number;
+    failed: number;
+    testsRun?: number;
+    output: string;
+  }>;
 }
 
 export interface MilestoneTestRunResult {
@@ -814,7 +873,9 @@ export async function runMilestoneTestRunner(
   let combinedOutput = "";
   let finalExitCode: number | null = 0;
 
-  const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) => Boolean(c.command && c.command.trim()));
+  const criteriaWithCmd = (m.acceptanceCriteria || []).filter((c) =>
+    Boolean(c.command && c.command.trim())
+  );
 
   if (criteriaWithCmd.length === 0) {
     if (m.testFile) {
@@ -824,7 +885,7 @@ export async function runMilestoneTestRunner(
           tier: "build",
           command: testCmd,
           workspaceDir: root,
-          toolchain: m.toolchain
+          toolchain: m.toolchain,
         });
         combinedOutput += `[${m.testFile}] $ ${testCmd}\n${res.stdout}\n${res.stderr}\n`;
         if (res.exitCode === 0) {
@@ -839,7 +900,13 @@ export async function runMilestoneTestRunner(
         finalExitCode = 1;
         combinedOutput += `[${m.testFile}] Error: ${err.message}\n`;
       }
-      return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+      return {
+        passed,
+        failed,
+        testsRun: passed + failed,
+        exitCode: finalExitCode,
+        output: combinedOutput.trim(),
+      };
     }
 
     // No automated tests configured: honest null exitCode and 0 testsRun
@@ -848,7 +915,7 @@ export async function runMilestoneTestRunner(
       failed: 0,
       testsRun: 0,
       exitCode: null,
-      output: "No automated test commands configured for this milestone."
+      output: "No automated test commands configured for this milestone.",
     };
   }
 
@@ -859,7 +926,7 @@ export async function runMilestoneTestRunner(
         tier: "build",
         command: criterion.command,
         workspaceDir: root,
-        toolchain: m.toolchain
+        toolchain: m.toolchain,
       });
       combinedOutput += `[${criterion.id}] $ ${criterion.command}\n${res.stdout}\n${res.stderr}\n`;
       if (res.exitCode === (criterion.expectedExitCode ?? 0)) {
@@ -875,7 +942,13 @@ export async function runMilestoneTestRunner(
     }
   }
 
-  return { passed, failed, testsRun: passed + failed, exitCode: finalExitCode, output: combinedOutput.trim() };
+  return {
+    passed,
+    failed,
+    testsRun: passed + failed,
+    exitCode: finalExitCode,
+    output: combinedOutput.trim(),
+  };
 }
 
 /**
@@ -895,7 +968,8 @@ export async function runMilestoneTestRunner(
 export function createProductionStepExecutor(
   options?: ProductionStepExecutorOptions
 ): StepExecutor {
-  const modelToUse = options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+  const modelToUse =
+    options?.model || process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
   const workerPool =
     options?.workerPool ||
     new WorkerPool({
@@ -905,8 +979,8 @@ export function createProductionStepExecutor(
         critic: modelToUse,
         planner: modelToUse,
         explorer: modelToUse,
-        recorder: modelToUse
-      }
+        recorder: modelToUse,
+      },
     });
   const repoRoot =
     options?.repoRoot ||
@@ -914,8 +988,8 @@ export function createProductionStepExecutor(
     (fs.existsSync("/workspace") && fs.existsSync(path.join("/workspace", ".git"))
       ? "/workspace"
       : fs.existsSync(path.join(process.cwd(), "deploy"))
-      ? process.cwd()
-      : path.resolve(process.cwd(), ".."));
+        ? process.cwd()
+        : path.resolve(process.cwd(), ".."));
 
   const effectiveScope = options?.scope || workerPool.scope;
 
@@ -938,17 +1012,25 @@ export function createProductionStepExecutor(
         ? async (req) => {
             const genRes = await baseGenerate(req);
             const pTokens =
-              typeof genRes?.promptTokens === "number" && Number.isFinite(genRes.promptTokens) && genRes.promptTokens > 0
+              typeof genRes?.promptTokens === "number" &&
+              Number.isFinite(genRes.promptTokens) &&
+              genRes.promptTokens > 0
                 ? genRes.promptTokens
-                : typeof genRes?.prompt_eval_count === "number" && Number.isFinite(genRes.prompt_eval_count) && genRes.prompt_eval_count > 0
-                ? genRes.prompt_eval_count
-                : 0;
+                : typeof genRes?.prompt_eval_count === "number" &&
+                    Number.isFinite(genRes.prompt_eval_count) &&
+                    genRes.prompt_eval_count > 0
+                  ? genRes.prompt_eval_count
+                  : 0;
             const oTokens =
-              typeof genRes?.outputTokens === "number" && Number.isFinite(genRes.outputTokens) && genRes.outputTokens > 0
+              typeof genRes?.outputTokens === "number" &&
+              Number.isFinite(genRes.outputTokens) &&
+              genRes.outputTokens > 0
                 ? genRes.outputTokens
-                : typeof genRes?.eval_count === "number" && Number.isFinite(genRes.eval_count) && genRes.eval_count > 0
-                ? genRes.eval_count
-                : 0;
+                : typeof genRes?.eval_count === "number" &&
+                    Number.isFinite(genRes.eval_count) &&
+                    genRes.eval_count > 0
+                  ? genRes.eval_count
+                  : 0;
             if (pTokens > 0 || oTokens > 0) {
               stepRounds += 1;
               if (pTokens > 0) stepRoundPromptTokens.push(pTokens);
@@ -963,7 +1045,7 @@ export function createProductionStepExecutor(
               rounds: stepRounds,
               promptTokens: sumRoundPromptTokens(stepRoundPromptTokens),
               outputTokens: stepOutputTokens,
-              roundPromptTokens: [...stepRoundPromptTokens]
+              roundPromptTokens: [...stepRoundPromptTokens],
             }
           : {};
 
@@ -971,14 +1053,14 @@ export function createProductionStepExecutor(
         model: builderModel,
         generate: trackedGenerate,
         keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(builderModel) : "24h",
-        scope: effectiveScope
+        scope: effectiveScope,
       });
 
       const critic = createCriticWorker({
         model: criticModel,
         generate: trackedGenerate,
         keepAlive: workerPool.keepAliveFor ? workerPool.keepAliveFor(criticModel) : "24h",
-        scope: effectiveScope
+        scope: effectiveScope,
       });
 
       let currentDiff = "";
@@ -998,7 +1080,9 @@ export function createProductionStepExecutor(
         const builderStartTime = Date.now();
         const heartbeatInterval = setInterval(() => {
           const elapsedSec = Math.round((Date.now() - builderStartTime) / 1000);
-          console.log(`[executor] still waiting on builder for milestone ${milestone.id}, ${elapsedSec}s elapsed`);
+          console.log(
+            `[executor] still waiting on builder for milestone ${milestone.id}, ${elapsedSec}s elapsed`
+          );
         }, 60000);
 
         let builderRes;
@@ -1014,9 +1098,9 @@ export function createProductionStepExecutor(
                 criticFeedback,
                 iteration: iter,
                 signal,
-                onThinkingChunk: options?.onThinkingChunk
+                onThinkingChunk: options?.onThinkingChunk,
               });
-            }
+            },
           });
         } finally {
           clearInterval(heartbeatInterval);
@@ -1034,28 +1118,33 @@ export function createProductionStepExecutor(
             diff: builderRes.diff,
             builderIterations,
             criticRounds,
-            builderModel: builderRes.model || builderModel
+            builderModel: builderRes.model || builderModel,
           };
         }
 
-        let testExitCode: number | null = (milestone.testsFailed && milestone.testsFailed > 0) ? 1 : null;
+        let testExitCode: number | null =
+          milestone.testsFailed && milestone.testsFailed > 0 ? 1 : null;
         let testOutput = "";
 
         // Task 1 (Sprint A2): Default testRunner executes milestone.acceptanceCriteria commands in sandbox tier
-        const effectiveTestRunner = options?.testRunner || (async (m: Milestone, _targetFile?: string, rRoot?: string) => {
-          return await runMilestoneTestRunner(m, rRoot || activeRepoRoot);
-        });
+        const effectiveTestRunner =
+          options?.testRunner ||
+          (async (m: Milestone, _targetFile?: string, rRoot?: string) => {
+            return await runMilestoneTestRunner(m, rRoot || activeRepoRoot);
+          });
 
         try {
           console.log(`[executor] running testRunner for milestone ${milestone.id}`);
           const testRes = await effectiveTestRunner(milestone, lastTargetFile, activeRepoRoot);
           milestone.testsPassed = testRes.passed;
           milestone.testsFailed = testRes.failed;
-          milestone.testsRun = (testRes as any).testsRun ?? (testRes.passed + testRes.failed);
+          milestone.testsRun = (testRes as any).testsRun ?? testRes.passed + testRes.failed;
           milestone.testExitCode = testRes.exitCode;
           testExitCode = testRes.exitCode;
           testOutput = testRes.output;
-          console.log(`[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}, testsRun=${milestone.testsRun}`);
+          console.log(
+            `[executor] testRunner result: exitCode=${testExitCode}, passed=${testRes.passed}, failed=${testRes.failed}, testsRun=${milestone.testsRun}`
+          );
         } catch (tErr: any) {
           console.error(`[executor] testRunner error for milestone ${milestone.id}:`, tErr);
           testExitCode = 1;
@@ -1065,8 +1154,14 @@ export function createProductionStepExecutor(
 
         // Task 2 (Sprint A2): When testExitCode !== 0 and testExitCode !== null, format failure via workerCiFeedback.ts and inject into milestone.lastError & criticFeedback
         if (testExitCode !== null && testExitCode !== 0) {
-          const failingCmd = (milestone.acceptanceCriteria || []).find((c) => c.command)?.command || (milestone.testFile ? `npx tsx --test ${milestone.testFile}` : "test");
-          const formattedFailure = formatTestFailureForBuilder(failingCmd, testExitCode, testOutput);
+          const failingCmd =
+            (milestone.acceptanceCriteria || []).find((c) => c.command)?.command ||
+            (milestone.testFile ? `npx tsx --test ${milestone.testFile}` : "test");
+          const formattedFailure = formatTestFailureForBuilder(
+            failingCmd,
+            testExitCode,
+            testOutput
+          );
           milestone.lastError = formattedFailure;
           if (!criticFeedback.includes(formattedFailure)) {
             criticFeedback.push(formattedFailure);
@@ -1075,8 +1170,15 @@ export function createProductionStepExecutor(
 
         // 2. Critic worker evaluates diff (Skip critic loop if milestone has skipCriticOnValidSyntax enabled and tests passed)
         let isApproved = false;
-        if (milestone.skipCriticOnValidSyntax && builderRes.targetFile && !builderRes.stuck && testExitCode === 0) {
-          console.log(`[executor] SINGLE_ARTIFACT valid deliverable produced (${builderRes.targetFile}) — skipping critic loop.`);
+        if (
+          milestone.skipCriticOnValidSyntax &&
+          builderRes.targetFile &&
+          !builderRes.stuck &&
+          testExitCode === 0
+        ) {
+          console.log(
+            `[executor] SINGLE_ARTIFACT valid deliverable produced (${builderRes.targetFile}) — skipping critic loop.`
+          );
           isApproved = true;
         } else {
           criticRounds++;
@@ -1093,13 +1195,15 @@ export function createProductionStepExecutor(
                   filesChanged: builderRes.targetFile ? [builderRes.targetFile] : undefined,
                   testExitCode: testExitCode ?? undefined,
                   testOutput,
-                  noChangeReason: milestone.diffSummary
+                  noChangeReason: milestone.diffSummary,
                 },
                 { signal }
               );
-            }
+            },
           });
-          console.log(`[executor] critic verdict=${criticRes.verdict || (criticRes.approved ? "approved" : "needs_fix")}`);
+          console.log(
+            `[executor] critic verdict=${criticRes.verdict || (criticRes.approved ? "approved" : "needs_fix")}`
+          );
           isApproved = criticRes.approved;
           if (!isApproved) {
             criticFeedback = criticRes.feedback || [];
@@ -1109,13 +1213,10 @@ export function createProductionStepExecutor(
         if (isApproved) {
           if (builderIterations >= 2) {
             try {
-              recordObservedPattern(
-                `milestone-${milestone.id}-multifix`,
-                {
-                  title: `Fix pattern for ${milestone.title}`,
-                  solutionSummary: `Resolved after ${builderIterations} iterations: ${lastTargetFile}`
-                }
-              );
+              recordObservedPattern(`milestone-${milestone.id}-multifix`, {
+                title: `Fix pattern for ${milestone.title}`,
+                solutionSummary: `Resolved after ${builderIterations} iterations: ${lastTargetFile}`,
+              });
             } catch (pErr: any) {
               console.warn(`[executor] Failed to record observed pattern:`, pErr?.message || pErr);
             }
@@ -1130,24 +1231,37 @@ export function createProductionStepExecutor(
               builderIterations,
               criticRounds,
               builderModel: builderRes.model || builderModel,
-              reason: "Commit scoping violation: Builder did not provide an explicit target file; refusing to stage working tree."
+              reason:
+                "Commit scoping violation: Builder did not provide an explicit target file; refusing to stage working tree.",
             };
           }
 
           // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
           try {
-            execFileSync("git", ["add", lastTargetFile], { cwd: activeRepoRoot, stdio: ["pipe", "pipe", "ignore"] });
+            execFileSync("git", ["add", lastTargetFile], {
+              cwd: activeRepoRoot,
+              stdio: ["pipe", "pipe", "ignore"],
+            });
             const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
-            execFileSync("git", ["commit", "-m", commitMsg], { cwd: activeRepoRoot, stdio: ["pipe", "pipe", "ignore"] });
+            execFileSync("git", ["commit", "-m", commitMsg], {
+              cwd: activeRepoRoot,
+              stdio: ["pipe", "pipe", "ignore"],
+            });
           } catch (err: any) {
-            console.error(`[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`, err?.message || err);
+            console.error(
+              `[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`,
+              err?.message || err
+            );
           }
 
           let finalSha = lastGitSha;
           try {
             finalSha = getRealGitSha(activeRepoRoot);
           } catch (err: any) {
-            console.error(`[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`, err?.message || err);
+            console.error(
+              `[supervisor] Failed to resolve git SHA for milestone ${milestone.id}:`,
+              err?.message || err
+            );
             finalSha = lastGitSha || "uncommitted";
           }
 
@@ -1161,7 +1275,7 @@ export function createProductionStepExecutor(
             targetFile: lastTargetFile,
             deliverableContent: builderRes.rawContent,
             thinking: builderRes.thinking,
-            ...buildUsageFields()
+            ...buildUsageFields(),
           };
         }
       }
@@ -1173,9 +1287,10 @@ export function createProductionStepExecutor(
         builderIterations,
         criticRounds,
         builderModel: builderModel,
-        reason: !lastTargetFile || !lastTargetFile.trim()
-          ? "Commit scoping violation: Builder did not provide an explicit target file."
-          : "Critic did not approve milestone diff after maximum iterations."
+        reason:
+          !lastTargetFile || !lastTargetFile.trim()
+            ? "Commit scoping violation: Builder did not provide an explicit target file."
+            : "Critic did not approve milestone diff after maximum iterations.",
       };
     } catch (err: any) {
       console.error(`[executor] FATAL for milestone ${milestone.id}:`, err?.stack || err);
@@ -1195,7 +1310,7 @@ const globalSupervisorState: GlobalSupervisorState =
   (globalThis as any).__supervisorGlobalState ||
   ((globalThis as any).__supervisorGlobalState = {
     pausedTasks: new Set<string>(),
-    abortControllers: new Map<string, AbortController>()
+    abortControllers: new Map<string, AbortController>(),
   });
 
 /**
@@ -1268,7 +1383,9 @@ export class OvernightSupervisor {
   async executeMilestoneWithTelemetry(
     task: TaskManifest,
     milestoneIndex: number,
-    executor: (milestone: Milestone) => Promise<{ diff: string; gitSha: string; approved: boolean; feedback: string[] }>
+    executor: (
+      milestone: Milestone
+    ) => Promise<{ diff: string; gitSha: string; approved: boolean; feedback: string[] }>
   ): Promise<{
     milestone: Milestone;
     traceId: string;
@@ -1283,14 +1400,14 @@ export class OvernightSupervisor {
     // 1. Root Supervisor Span
     const supSpan = tracer.startSpan("supervisor.task", undefined, {
       taskId: task.taskId,
-      milestoneIndex
+      milestoneIndex,
     });
     const supervisorSpanId = supSpan.spanId;
 
     // 2. Planner Span (Child of Supervisor)
     const plannerSpan = tracer.startSpan("supervisor.planner", supervisorSpanId, {
       taskId: task.taskId,
-      milestoneId: task.milestones[milestoneIndex]?.id
+      milestoneId: task.milestones[milestoneIndex]?.id,
     });
     const plannerSpanId = plannerSpan.spanId;
     plannerSpan.end("ok");
@@ -1298,7 +1415,7 @@ export class OvernightSupervisor {
     // 3. Worker / Builder Span (Child of Planner)
     const workerSpan = tracer.startSpan("supervisor.worker", plannerSpanId, {
       taskId: task.taskId,
-      milestoneId: task.milestones[milestoneIndex]?.id
+      milestoneId: task.milestones[milestoneIndex]?.id,
     });
     const workerSpanId = workerSpan.spanId;
 
@@ -1309,12 +1426,12 @@ export class OvernightSupervisor {
     // 4. Critic Span (Child of Worker)
     const criticSpan = tracer.startSpan("supervisor.critic", workerSpanId, {
       taskId: task.taskId,
-      milestoneId: milestone?.id
+      milestoneId: milestone?.id,
     });
     const criticSpanId = criticSpan.spanId;
     criticSpan.end(execRes.approved ? "ok" : "error", {
       approved: execRes.approved,
-      feedback: execRes.feedback.join("; ")
+      feedback: execRes.feedback.join("; "),
     });
 
     supSpan.end("ok");
@@ -1325,7 +1442,7 @@ export class OvernightSupervisor {
       supervisorSpanId,
       plannerSpanId,
       workerSpanId,
-      criticSpanId
+      criticSpanId,
     };
   }
 
@@ -1339,9 +1456,7 @@ export class OvernightSupervisor {
     }
 
     const currentMilestone = task.milestones[task.currentMilestoneIndex];
-    const completed = task.milestones
-      .filter((m) => m.status === "completed")
-      .map((m) => m.id);
+    const completed = task.milestones.filter((m) => m.status === "completed").map((m) => m.id);
 
     const checkpoint: CheckpointState = {
       checkpointId: `chk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1351,7 +1466,7 @@ export class OvernightSupervisor {
       gitHeadSha: gitSha || "HEAD",
       completedMilestones: completed,
       timestamp: new Date().toISOString(),
-      recoveryAttempted: false
+      recoveryAttempted: false,
     };
 
     if (!task.checkpoints) {
@@ -1376,13 +1491,18 @@ export class OvernightSupervisor {
             const store = new FlywheelSkillsStore();
             try {
               store.saveSkills(extracted);
-              console.log(`[supervisor] Saved ${extracted.length} flywheel skills for completed task ${task.taskId}`);
+              console.log(
+                `[supervisor] Saved ${extracted.length} flywheel skills for completed task ${task.taskId}`
+              );
             } finally {
               store.close();
             }
           }
         } catch (fErr: any) {
-          console.warn(`[supervisor] Flywheel skill extraction failed for task ${task.taskId}:`, fErr?.message || fErr);
+          console.warn(
+            `[supervisor] Flywheel skill extraction failed for task ${task.taskId}:`,
+            fErr?.message || fErr
+          );
         }
       }
       if (
@@ -1394,7 +1514,10 @@ export class OvernightSupervisor {
         this.syncOvernightMorningReport().catch(() => {});
       }
     } catch (err: any) {
-      console.error(`[supervisor] Failed to persist checkpoint ${checkpoint.checkpointId} for task ${task.taskId} (milestone: ${checkpoint.milestoneId}):`, err?.message || err);
+      console.error(
+        `[supervisor] Failed to persist checkpoint ${checkpoint.checkpointId} for task ${task.taskId} (milestone: ${checkpoint.milestoneId}):`,
+        err?.message || err
+      );
       (checkpoint as any).failed = true;
       (checkpoint as any).error = err?.message || String(err);
       throw err;
@@ -1416,16 +1539,14 @@ export class OvernightSupervisor {
         cancelled: "stopped",
         completed: "completed",
         parked: "parked",
-        failed: "failed"
+        failed: "failed",
       };
       const mappedStatus: RunLedgerStatus = statusMap[task.status] || "running";
       const gitShas = Array.from(
-        new Set(
-          [
-            ...(task.milestones || []).map((m) => m.commitSha).filter(Boolean),
-            ...(task.checkpoints || []).map((c) => c.gitHeadSha).filter((s) => s && s !== "HEAD")
-          ] as string[]
-        )
+        new Set([
+          ...(task.milestones || []).map((m) => m.commitSha).filter(Boolean),
+          ...(task.checkpoints || []).map((c) => c.gitHeadSha).filter((s) => s && s !== "HEAD"),
+        ] as string[])
       );
       const model =
         task.milestones?.find((m) => m.builderModel)?.builderModel ||
@@ -1452,22 +1573,23 @@ export class OvernightSupervisor {
             m.status === "completed"
               ? "completed"
               : m.status === "failed" || m.status === "rejected"
-              ? "failed"
-              : m.status === "in_progress"
-              ? "in_progress"
-              : "pending",
-          commitSha: m.commitSha
+                ? "failed"
+                : m.status === "in_progress"
+                  ? "in_progress"
+                  : "pending",
+          commitSha: m.commitSha,
         })),
         deploymentRef: task.deploymentUrl || task.deploymentNamespace || "local",
         checkpointPath: this.getCheckpointFilePath(task.taskId),
         resumable:
-          mappedStatus === "paused" ||
-          mappedStatus === "crashed" ||
-          mappedStatus === "stopped",
-        errorMessage: task.parkedReason || task.errorSummary
+          mappedStatus === "paused" || mappedStatus === "crashed" || mappedStatus === "stopped",
+        errorMessage: task.parkedReason || task.errorSummary,
       });
     } catch (err: any) {
-      console.warn(`[supervisor] Could not sync task ${task.taskId} to RunLedger:`, err?.message || err);
+      console.warn(
+        `[supervisor] Could not sync task ${task.taskId} to RunLedger:`,
+        err?.message || err
+      );
     }
   }
 
@@ -1489,7 +1611,10 @@ export class OvernightSupervisor {
       const data = JSON.parse(fs.readFileSync(file, "utf8")) as TaskManifest;
       return data;
     } catch (err: any) {
-      console.error(`[supervisor] Failed to read or parse checkpoint file for task ${taskId} at ${file}:`, err?.message || err);
+      console.error(
+        `[supervisor] Failed to read or parse checkpoint file for task ${taskId} at ${file}:`,
+        err?.message || err
+      );
       return null;
     }
   }
@@ -1511,7 +1636,10 @@ export class OvernightSupervisor {
               tasks.push(parsed);
             }
           } catch (err: any) {
-            console.warn(`[supervisor] Skipping corrupt checkpoint file ${file}:`, err?.message || err);
+            console.warn(
+              `[supervisor] Skipping corrupt checkpoint file ${file}:`,
+              err?.message || err
+            );
           }
         }
       }
@@ -1521,7 +1649,10 @@ export class OvernightSupervisor {
           new Date(a.updatedAt || a.startedAt).getTime()
       );
     } catch (err: any) {
-      console.error(`[supervisor] Failed to list tasks from checkpoint directory ${this.checkpointDirectory}:`, err?.message || err);
+      console.error(
+        `[supervisor] Failed to list tasks from checkpoint directory ${this.checkpointDirectory}:`,
+        err?.message || err
+      );
       return [];
     }
   }
@@ -1563,7 +1694,9 @@ export class OvernightSupervisor {
     task: TaskManifest,
     options?: StepExecutorOptions
   ): Promise<TaskManifest> {
-    console.log(`[supervisor] executeTaskWithRecovery start taskId=${task.taskId} milestones=${task.milestones.length}`);
+    console.log(
+      `[supervisor] executeTaskWithRecovery start taskId=${task.taskId} milestones=${task.milestones.length}`
+    );
     console.log(`[task:${task.taskId}] phase=start milestones=${task.milestones.length}`);
     if (!Array.isArray(task.milestones) || task.milestones.length === 0) {
       const emptyMsg = "Task has no milestones to execute (milestones: []).";
@@ -1575,14 +1708,16 @@ export class OvernightSupervisor {
         timestamp: new Date().toISOString(),
         role: "supervisor",
         action: "Empty milestones guard",
-        message: emptyMsg
+        message: emptyMsg,
       });
       this.saveCheckpoint(task);
       console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${emptyMsg}`);
       return task;
     }
     const executor = options?.stepExecutor;
-    const hasPending = task.milestones.slice(task.currentMilestoneIndex).some((m) => m.status !== "completed");
+    const hasPending = task.milestones
+      .slice(task.currentMilestoneIndex)
+      .some((m) => m.status !== "completed");
     if (!executor && hasPending) {
       throw new Error("No stepExecutor provided; refusing to fake completion.");
     }
@@ -1593,7 +1728,7 @@ export class OvernightSupervisor {
       process.env.WORKSPACE_DIR,
       "/workspace",
       process.cwd(),
-      path.resolve(process.cwd(), "..")
+      path.resolve(process.cwd(), ".."),
     ].filter(Boolean) as string[];
     let repoRoot = options?.repoRoot || repoCandidates[0];
     if (!options?.repoRoot) {
@@ -1610,13 +1745,21 @@ export class OvernightSupervisor {
       options?.gitOps ||
       new WorkerGitOps({
         runId: task.taskId,
-        repoDir: effectiveRepoRoot
+        repoDir: effectiveRepoRoot,
       });
 
-    const isTestEnv = Boolean(process.env.NODE_TEST_CONTEXT || process.env.FAST_GRAPH_TEST === "1" || process.env.FORCE_MOCK === "1");
+    const isTestEnv = Boolean(
+      process.env.NODE_TEST_CONTEXT ||
+      process.env.FAST_GRAPH_TEST === "1" ||
+      process.env.FORCE_MOCK === "1"
+    );
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
-      (!isTestEnv && process.env.DISABLE_GITOPS !== "true" && (task.enableGitOps === true || (task.enableGitOps !== false && Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git"))))) ||
+      (!isTestEnv &&
+        process.env.DISABLE_GITOPS !== "true" &&
+        (task.enableGitOps === true ||
+          (task.enableGitOps !== false &&
+            Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git"))))) ||
       (task.enableGitOps === true && fs.existsSync(path.join(repoRoot, ".git")));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
@@ -1627,28 +1770,30 @@ export class OvernightSupervisor {
           const wt = ensureIsolatedWorktree({
             baseRepoDir: repoRoot,
             taskId: task.taskId,
-            branchName: branchToUse
+            branchName: branchToUse,
           });
           effectiveRepoRoot = wt.worktreePath;
           (task as any).worktreePath = wt.worktreePath;
           gitOps = new WorkerGitOps({
             runId: task.taskId,
-            repoDir: effectiveRepoRoot
+            repoDir: effectiveRepoRoot,
           });
           task.gitOpsBranchCreated = true;
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "gitops",
-            message: `${wt.reused ? "Reused" : "Created"} isolated worktree at \`${wt.worktreePath}\` on branch \`${branchToUse}\``
+            message: `${wt.reused ? "Reused" : "Created"} isolated worktree at \`${wt.worktreePath}\` on branch \`${branchToUse}\``,
           });
-          console.log(`[supervisor] GitOps isolated worktree ready: ${wt.worktreePath} (${branchToUse})`);
+          console.log(
+            `[supervisor] GitOps isolated worktree ready: ${wt.worktreePath} (${branchToUse})`
+          );
         } else {
           await gitOps.createAndSwitchBranch(branchToUse);
           task.gitOpsBranchCreated = true;
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "gitops",
-            message: `Created and switched to isolated task branch \`${branchToUse}\``
+            message: `Created and switched to isolated task branch \`${branchToUse}\``,
           });
           console.log(`[supervisor] GitOps switched to branch ${branchToUse}`);
         }
@@ -1662,7 +1807,7 @@ export class OvernightSupervisor {
         task.journal.push({
           timestamp: new Date().toISOString(),
           role: "gitops",
-          message: errMsg
+          message: errMsg,
         });
         this.saveCheckpoint(task);
         console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${errMsg}`);
@@ -1674,9 +1819,12 @@ export class OvernightSupervisor {
     this.setAbortController(task.taskId, controller);
     const signal = options?.signal || controller.signal;
     const isPaused = () => Boolean(task.status === "paused" || this.isPaused(task.taskId));
-    const isAbortedOrCancelled = () => Boolean(!isPaused() && (signal?.aborted || (task.status as TaskStatus) === "cancelled"));
+    const isAbortedOrCancelled = () =>
+      Boolean(!isPaused() && (signal?.aborted || (task.status as TaskStatus) === "cancelled"));
     const jobChunkingEnabled = getHostSettings().jobChunkingEnabled;
-    const chunkBudget = jobChunkingEnabled ? (options?.chunkBudget ?? resolveThreadChunkBudget(task as any)) : undefined;
+    const chunkBudget = jobChunkingEnabled
+      ? (options?.chunkBudget ?? resolveThreadChunkBudget(task as any))
+      : undefined;
     const runStartTime = Date.now();
     let roundsUsed = 0;
     const jobRoundPromptTokens: number[] = [];
@@ -1688,12 +1836,16 @@ export class OvernightSupervisor {
       while (task.currentMilestoneIndex < task.milestones.length) {
         if (isPaused()) {
           task.status = "paused";
-          console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`);
+          console.log(
+            `[supervisor] Task ${task.taskId} paused. Halting milestone loop at boundary.`
+          );
           break;
         }
         if (isAbortedOrCancelled()) {
           task.status = "cancelled";
-          console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`);
+          console.log(
+            `[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop at boundary.`
+          );
           break;
         }
         const mIdx = task.currentMilestoneIndex;
@@ -1707,7 +1859,8 @@ export class OvernightSupervisor {
             const decision = resolveSupervisorChunkResume(currentResumes);
             if (decision.action === "needs-attention") {
               task.status = "parked";
-              task.parkedReason = "needs-attention: exceeded max auto-resumes for chunk-complete job";
+              task.parkedReason =
+                "needs-attention: exceeded max auto-resumes for chunk-complete job";
               this.saveCheckpoint(task);
               break;
             }
@@ -1716,7 +1869,7 @@ export class OvernightSupervisor {
           task.journal.push({
             timestamp: new Date().toISOString(),
             role: "supervisor",
-            message: `Resumed with handoff from ${priorHandoff.nextMilestone || priorHandoff.jobId}`
+            message: `Resumed with handoff from ${priorHandoff.nextMilestone || priorHandoff.jobId}`,
           });
         }
         let milestoneCompleted = false;
@@ -1734,7 +1887,9 @@ export class OvernightSupervisor {
           try {
             if (executor) {
               console.log(`[supervisor] executing milestone ${milestone.id} attempt ${attempt}`);
-              console.log(`[task:${task.taskId}] phase=step milestone=${milestone.id} attempt=${attempt}`);
+              console.log(
+                `[task:${task.taskId}] phase=step milestone=${milestone.id} attempt=${attempt}`
+              );
               if ((task as any).threadId) {
                 touchActiveTurn((task as any).threadId);
               }
@@ -1742,24 +1897,30 @@ export class OvernightSupervisor {
               const res = await executor(milestone, attempt, { repoRoot: effectiveRepoRoot });
               {
                 const stepRoundsArr = Array.isArray(res.roundPromptTokens)
-                  ? res.roundPromptTokens.filter((n) => typeof n === "number" && Number.isFinite(n) && n > 0)
+                  ? res.roundPromptTokens.filter(
+                      (n) => typeof n === "number" && Number.isFinite(n) && n > 0
+                    )
                   : [];
                 const stepPrompt =
-                  typeof res.promptTokens === "number" && Number.isFinite(res.promptTokens) && res.promptTokens > 0
+                  typeof res.promptTokens === "number" &&
+                  Number.isFinite(res.promptTokens) &&
+                  res.promptTokens > 0
                     ? res.promptTokens
                     : sumRoundPromptTokens(stepRoundsArr);
                 const stepOutput =
-                  typeof res.outputTokens === "number" && Number.isFinite(res.outputTokens) && res.outputTokens > 0
+                  typeof res.outputTokens === "number" &&
+                  Number.isFinite(res.outputTokens) &&
+                  res.outputTokens > 0
                     ? res.outputTokens
                     : 0;
                 const stepRoundsCount =
                   typeof res.rounds === "number" && Number.isFinite(res.rounds) && res.rounds > 0
                     ? res.rounds
                     : stepRoundsArr.length > 0
-                    ? stepRoundsArr.length
-                    : stepPrompt > 0 || stepOutput > 0
-                    ? 1
-                    : 0;
+                      ? stepRoundsArr.length
+                      : stepPrompt > 0 || stepOutput > 0
+                        ? 1
+                        : 0;
                 if (stepRoundsCount > 0 || stepPrompt > 0 || stepOutput > 0) {
                   if (stepRoundsArr.length > 0) {
                     jobRoundPromptTokens.push(...stepRoundsArr);
@@ -1771,475 +1932,516 @@ export class OvernightSupervisor {
                   jobRounds += stepRoundsCount;
                   milestone.tokenThroughput = {
                     promptTokens: (milestone.tokenThroughput?.promptTokens || 0) + stepPrompt,
-                    completionTokens: (milestone.tokenThroughput?.completionTokens || 0) + stepOutput
+                    completionTokens:
+                      (milestone.tokenThroughput?.completionTokens || 0) + stepOutput,
                   };
                 }
               }
               if (isPaused()) {
                 task.status = "paused";
-                console.log(`[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`);
+                console.log(
+                  `[supervisor] Task ${task.taskId} paused during/after milestone ${milestone.id}. Halting.`
+                );
                 break;
               }
               if (isAbortedOrCancelled()) {
                 task.status = "cancelled";
-                console.log(`[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`);
+                console.log(
+                  `[supervisor] Task ${task.taskId} aborted during milestone ${milestone.id}. Halting.`
+                );
                 break;
               }
-            console.log(`[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`);
-            if (res.status === "completed") {
-              milestone.status = "completed";
-              if (res.gitSha) milestone.commitSha = res.gitSha;
-              if (res.diff) milestone.diffSummary = res.diff;
-              if (res.modifiedFiles) milestone.modifiedFiles = res.modifiedFiles;
-              if (res.builderIterations !== undefined) milestone.builderIterations = res.builderIterations;
-              if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
-              if (res.builderModel) milestone.builderModel = res.builderModel;
-              milestone.completedAt = new Date().toISOString();
-              milestoneCompleted = true;
+              console.log(
+                `[supervisor] milestone ${milestone.id} attempt ${attempt} returned: ${JSON.stringify(res).slice(0, 200)}`
+              );
+              if (res.status === "completed") {
+                milestone.status = "completed";
+                if (res.gitSha) milestone.commitSha = res.gitSha;
+                if (res.diff) milestone.diffSummary = res.diff;
+                if (res.modifiedFiles) milestone.modifiedFiles = res.modifiedFiles;
+                if (res.builderIterations !== undefined)
+                  milestone.builderIterations = res.builderIterations;
+                if (res.criticRounds !== undefined) milestone.criticRounds = res.criticRounds;
+                if (res.builderModel) milestone.builderModel = res.builderModel;
+                milestone.completedAt = new Date().toISOString();
+                milestoneCompleted = true;
 
-              if (gitOps && res.targetFile) {
-                try {
-                  const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
-                  const commitRes = await gitOps.stageAndCommit([res.targetFile], commitMsg);
-                  if (commitRes.commitSha) {
-                    milestone.commitSha = commitRes.commitSha;
+                if (gitOps && res.targetFile) {
+                  try {
+                    const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+                    const commitRes = await gitOps.stageAndCommit([res.targetFile], commitMsg);
+                    if (commitRes.commitSha) {
+                      milestone.commitSha = commitRes.commitSha;
+                    }
+                  } catch (cErr: any) {
+                    console.warn(
+                      `[supervisor] GitOps milestone commit warning:`,
+                      cErr?.message || cErr
+                    );
                   }
-                } catch (cErr: any) {
-                  console.warn(`[supervisor] GitOps milestone commit warning:`, cErr?.message || cErr);
                 }
-              }
 
-              if (res.thinking) {
-                milestone.builderThinking = res.thinking;
-                task.builderThinking = res.thinking;
+                if (res.thinking) {
+                  milestone.builderThinking = res.thinking;
+                  task.builderThinking = res.thinking;
+                  task.journal.push({
+                    timestamp: new Date().toISOString(),
+                    role: "builder",
+                    message: `Builder reasoning: ${res.thinking}`,
+                  });
+                }
+
                 task.journal.push({
                   timestamp: new Date().toISOString(),
                   role: "builder",
-                  message: `Builder reasoning: ${res.thinking}`
+                  message: `Generated deliverable ${res.targetFile || milestone.title} (${res.deliverableContent?.length || 0} bytes).`,
                 });
               }
+            } else {
+              throw new Error("No stepExecutor provided; refusing to fake completion.");
+            }
+          } catch (err: any) {
+            if (isPaused() || isAbortedOrCancelled() || err.name === "AbortError") {
+              if (isPaused()) {
+                task.status = "paused";
+                console.log(
+                  `[supervisor] Task ${task.taskId} caught pause during milestone ${milestone.id}. Halting.`
+                );
+              } else {
+                task.status = "cancelled";
+                console.log(
+                  `[supervisor] Task ${task.taskId} caught abort during milestone ${milestone.id}. Halting.`
+                );
+              }
+              break;
+            }
+            console.error(
+              `[supervisor] stepExecutor threw for milestone ${milestone.id}:`,
+              err?.stack || err
+            );
+            if (err.message && /no stepExecutor provided/i.test(err.message)) {
+              throw err;
+            }
+            // Worker crashed mid-milestone: record crash in journal and resume from checkpoint
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "supervisor",
+              message: `Worker crash detected in milestone ${milestone.id} (attempt ${attempt}): ${err.message}. Resuming from checkpoint...`,
+            });
 
+            // Reload state from checkpoint or re-arm milestone
+            milestone.status = "pending";
+            if (attempt >= 2) {
+              // Self-healing retry with fresh checkpoint reload
+              const reloaded = await this.resumeTaskFromCheckpoint(task.taskId);
+              if (reloaded) {
+                const currentJournal = task.journal;
+                task = reloaded;
+                task.journal = currentJournal;
+              }
+            }
+          }
+        }
+
+        if (isPaused()) {
+          task.status = "paused";
+          console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop.`);
+          break;
+        }
+
+        if (isAbortedOrCancelled()) {
+          task.status = "cancelled";
+          console.log(
+            `[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`
+          );
+          break;
+        }
+
+        if (milestoneCompleted) {
+          roundsUsed += 1;
+          writeMilestoneHandoff(handoffPath, {
+            jobId: task.taskId,
+            completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
+            nextMilestone: task.milestones[mIdx + 1]?.id ?? null,
+            summary: milestone.title,
+            updatedAt: milestone.completedAt || new Date().toISOString(),
+          });
+          task.currentMilestoneIndex = mIdx + 1;
+          this.saveCheckpoint(task, milestone.commitSha);
+
+          if (chunkBudget && task.currentMilestoneIndex < task.milestones.length) {
+            const runlogPath = path.join(this.checkpointDirectory, `${task.taskId}-runlog.md`);
+            const nextMilestone = task.milestones[task.currentMilestoneIndex];
+            const chunkResult = await handleLiveTurnChunkBudget({
+              roundsUsed,
+              elapsedMs: Date.now() - runStartTime,
+              budget: chunkBudget,
+              jobId: task.taskId,
+              workspaceRoot: effectiveRepoRoot,
+              handoffPath,
+              runlogPath,
+              currentState: `Completed milestone ${milestone.id} (${milestone.title})`,
+              nextStep: nextMilestone
+                ? `Execute milestone ${nextMilestone.id}: ${nextMilestone.title}`
+                : "Finish verification",
+              openQuestions: [],
+            });
+
+            if (chunkResult.exceeded) {
+              task.status = "paused";
+              task.parkedReason = chunkResult.marker;
               task.journal.push({
                 timestamp: new Date().toISOString(),
-                role: "builder",
-                message: `Generated deliverable ${res.targetFile || milestone.title} (${res.deliverableContent?.length || 0} bytes).`
+                role: "supervisor",
+                action: "chunk-complete",
+                message: `Paused at chunk boundary (${chunkResult.reason}) after ${roundsUsed} rounds. Banked handoff at ${handoffPath}.`,
               });
-            }
-          } else {
-            throw new Error("No stepExecutor provided; refusing to fake completion.");
-          }
-        } catch (err: any) {
-          if (isPaused() || isAbortedOrCancelled() || err.name === "AbortError") {
-            if (isPaused()) {
-              task.status = "paused";
-              console.log(`[supervisor] Task ${task.taskId} caught pause during milestone ${milestone.id}. Halting.`);
-            } else {
-              task.status = "cancelled";
-              console.log(`[supervisor] Task ${task.taskId} caught abort during milestone ${milestone.id}. Halting.`);
-            }
-            break;
-          }
-          console.error(`[supervisor] stepExecutor threw for milestone ${milestone.id}:`, err?.stack || err);
-          if (err.message && /no stepExecutor provided/i.test(err.message)) {
-            throw err;
-          }
-          // Worker crashed mid-milestone: record crash in journal and resume from checkpoint
-          task.journal.push({
-            timestamp: new Date().toISOString(),
-            role: "supervisor",
-            message: `Worker crash detected in milestone ${milestone.id} (attempt ${attempt}): ${err.message}. Resuming from checkpoint...`
-          });
+              this.saveCheckpoint(task, milestone.commitSha);
+              console.log(
+                `[task:${task.taskId}] phase=chunk-complete reason=${chunkResult.reason} rounds=${roundsUsed}`
+              );
 
-          // Reload state from checkpoint or re-arm milestone
-          milestone.status = "pending";
-          if (attempt >= 2) {
-            // Self-healing retry with fresh checkpoint reload
-            const reloaded = await this.resumeTaskFromCheckpoint(task.taskId);
-            if (reloaded) {
-              const currentJournal = task.journal;
-              task = reloaded;
-              task.journal = currentJournal;
+              const activeThreadId = (task as any).threadId;
+              if (activeThreadId) {
+                const port = process.env.PORT || "3000";
+                try {
+                  await fetch(`http://127.0.0.1:${port}/api/threads/${activeThreadId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "resume" }),
+                  });
+                } catch (resumeErr: any) {
+                  console.warn(
+                    `[supervisor] Chunk auto-resume dispatch failed:`,
+                    resumeErr?.message || resumeErr
+                  );
+                }
+              }
+              return task;
             }
           }
+        } else {
+          // Failed after retries: park task and flag ambiguity
+          milestone.status = "failed";
+          if (task.milestones[mIdx]) {
+            task.milestones[mIdx].status = "failed";
+          }
+          task.status = "parked";
+          task.parkedReason = `Milestone ${milestone.id} failed after 3 recovery attempts`;
+          task.ambiguityFlags.push({
+            id: `amb-${Date.now()}`,
+            milestoneId: milestone.id,
+            question: `Milestone ${milestone.title} encountered repeated unrecoverable failures.`,
+            judgmentCall: "Parked task to preserve git integrity and avoid infinite loop.",
+            reasoning: "Autonomy policy: Never spin forever on failing steps without human review.",
+            revertAction: { type: "re_plan", target: milestone.id },
+            reviewed: false,
+          });
+          this.saveCheckpoint(task);
+          return task;
         }
       }
 
       if (isPaused()) {
         task.status = "paused";
-        console.log(`[supervisor] Task ${task.taskId} paused. Halting milestone loop.`);
-        break;
+        this.saveCheckpoint(task);
+        return task;
       }
 
       if (isAbortedOrCancelled()) {
         task.status = "cancelled";
-        console.log(`[supervisor] Task ${task.taskId} aborted/cancelled. Halting milestone loop.`);
-        break;
-      }
-
-      if (milestoneCompleted) {
-        roundsUsed += 1;
-        writeMilestoneHandoff(handoffPath, {
-          jobId: task.taskId,
-          completedMilestones: task.milestones.slice(0, mIdx + 1).map((m) => m.id),
-          nextMilestone: task.milestones[mIdx + 1]?.id ?? null,
-          summary: milestone.title,
-          updatedAt: milestone.completedAt || new Date().toISOString()
-        });
-        task.currentMilestoneIndex = mIdx + 1;
-        this.saveCheckpoint(task, milestone.commitSha);
-
-        if (chunkBudget && task.currentMilestoneIndex < task.milestones.length) {
-          const runlogPath = path.join(this.checkpointDirectory, `${task.taskId}-runlog.md`);
-          const nextMilestone = task.milestones[task.currentMilestoneIndex];
-          const chunkResult = await handleLiveTurnChunkBudget({
-            roundsUsed,
-            elapsedMs: Date.now() - runStartTime,
-            budget: chunkBudget,
-            jobId: task.taskId,
-            workspaceRoot: effectiveRepoRoot,
-            handoffPath,
-            runlogPath,
-            currentState: `Completed milestone ${milestone.id} (${milestone.title})`,
-            nextStep: nextMilestone ? `Execute milestone ${nextMilestone.id}: ${nextMilestone.title}` : "Finish verification",
-            openQuestions: []
-          });
-
-          if (chunkResult.exceeded) {
-            task.status = "paused";
-            task.parkedReason = chunkResult.marker;
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "supervisor",
-              action: "chunk-complete",
-              message: `Paused at chunk boundary (${chunkResult.reason}) after ${roundsUsed} rounds. Banked handoff at ${handoffPath}.`
-            });
-            this.saveCheckpoint(task, milestone.commitSha);
-            console.log(`[task:${task.taskId}] phase=chunk-complete reason=${chunkResult.reason} rounds=${roundsUsed}`);
-
-            const activeThreadId = (task as any).threadId;
-            if (activeThreadId) {
-              const port = process.env.PORT || "3000";
-              try {
-                await fetch(`http://127.0.0.1:${port}/api/threads/${activeThreadId}`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "resume" })
-                });
-              } catch (resumeErr: any) {
-                console.warn(`[supervisor] Chunk auto-resume dispatch failed:`, resumeErr?.message || resumeErr);
-              }
-            }
-            return task;
-          }
-        }
-      } else {
-        // Failed after retries: park task and flag ambiguity
-        milestone.status = "failed";
-        if (task.milestones[mIdx]) {
-          task.milestones[mIdx].status = "failed";
-        }
-        task.status = "parked";
-        task.parkedReason = `Milestone ${milestone.id} failed after 3 recovery attempts`;
-        task.ambiguityFlags.push({
-          id: `amb-${Date.now()}`,
-          milestoneId: milestone.id,
-          question: `Milestone ${milestone.title} encountered repeated unrecoverable failures.`,
-          judgmentCall: "Parked task to preserve git integrity and avoid infinite loop.",
-          reasoning: "Autonomy policy: Never spin forever on failing steps without human review.",
-          revertAction: { type: "re_plan", target: milestone.id },
-          reviewed: false
-        });
         this.saveCheckpoint(task);
         return task;
       }
-    }
 
-    if (isPaused()) {
-      task.status = "paused";
-      this.saveCheckpoint(task);
-      return task;
-    }
-
-    if (isAbortedOrCancelled()) {
-      task.status = "cancelled";
-      this.saveCheckpoint(task);
-      return task;
-    }
-
-    if (task.currentMilestoneIndex >= task.milestones.length) {
-      console.log(`[task:${task.taskId}] phase=finish milestones=${task.milestones.length}`);
-      const expectedArtifacts = task.milestones.flatMap((m) => m.modifiedFiles || m.plannedFiles || []);
-      const finishVerification = verifyJobCompletion({
-        workspaceRoot: effectiveRepoRoot,
-        expectedArtifacts,
-        gatePassed: task.milestones.every((m) => m.status === "completed")
-      });
-      if (!finishVerification.ok) {
-        const finishMsg = `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`;
-        task.status = "failed";
-        task.errorSummary = finishMsg;
-        task.parkedReason = finishMsg;
-        task.completedAt = new Date().toISOString();
-        task.journal.push({
-          timestamp: new Date().toISOString(),
-          role: "supervisor",
-          action: "Finish verification gate blocked completion",
-          message: finishMsg
+      if (task.currentMilestoneIndex >= task.milestones.length) {
+        console.log(`[task:${task.taskId}] phase=finish milestones=${task.milestones.length}`);
+        const expectedArtifacts = task.milestones.flatMap(
+          (m) => m.modifiedFiles || m.plannedFiles || []
+        );
+        const finishVerification = verifyJobCompletion({
+          workspaceRoot: effectiveRepoRoot,
+          expectedArtifacts,
+          gatePassed: task.milestones.every((m) => m.status === "completed"),
         });
-        console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${finishMsg}`);
-      } else {
-        let gateExitCode = 0;
-        let gateOut = "";
-
-        if (shouldRunGitOps) {
-          console.log(`[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`);
+        if (!finishVerification.ok) {
+          const finishMsg = `Finish verification gate blocked completion: ${finishVerification.reasons.join("; ")}`;
+          task.status = "failed";
+          task.errorSummary = finishMsg;
+          task.parkedReason = finishMsg;
+          task.completedAt = new Date().toISOString();
           task.journal.push({
             timestamp: new Date().toISOString(),
-            role: "gitops",
-            message: "Running pre-merge test:gate verification (<90s budget)..."
+            role: "supervisor",
+            action: "Finish verification gate blocked completion",
+            message: finishMsg,
           });
+          console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${finishMsg}`);
+        } else {
+          let gateExitCode = 0;
+          let gateOut = "";
 
-          if (options?.gateRunner) {
-            try {
-              const gateRes = await options.gateRunner();
-              gateExitCode = gateRes.exitCode;
-              gateOut = gateRes.stdout || gateRes.stderr;
-            } catch (gErr: any) {
-              gateExitCode = 1;
-              gateOut = gErr?.message || String(gErr);
+          if (shouldRunGitOps) {
+            console.log(
+              `[supervisor] Running test:gate pre-merge verification for task ${task.taskId}`
+            );
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: "Running pre-merge test:gate verification (<90s budget)...",
+            });
+
+            if (options?.gateRunner) {
+              try {
+                const gateRes = await options.gateRunner();
+                gateExitCode = gateRes.exitCode;
+                gateOut = gateRes.stdout || gateRes.stderr;
+              } catch (gErr: any) {
+                gateExitCode = 1;
+                gateOut = gErr?.message || String(gErr);
+              }
+            } else {
+              try {
+                const gateRes = await gitOps.runGateTest();
+                gateExitCode = gateRes.exitCode;
+                gateOut = gateRes.stdout || gateRes.stderr;
+              } catch (gateErr: any) {
+                console.error(`[supervisor] test:gate run failed:`, gateErr);
+                gateExitCode = 1;
+                gateOut = gateErr?.message || String(gateErr);
+              }
             }
-          } else {
-            try {
-              const gateRes = await gitOps.runGateTest();
-              gateExitCode = gateRes.exitCode;
-              gateOut = gateRes.stdout || gateRes.stderr;
-            } catch (gateErr: any) {
-              console.error(`[supervisor] test:gate run failed:`, gateErr);
-              gateExitCode = 1;
-              gateOut = gateErr?.message || String(gateErr);
-            }
+
+            task.gatePassed = gateExitCode === 0;
+            task.gateOutput = gateOut;
           }
 
-          task.gatePassed = gateExitCode === 0;
-          task.gateOutput = gateOut;
+          const adapters: VerificationAdapters =
+            (options as any)?.verificationAdapters || buildVerificationAdapters(effectiveRepoRoot);
+          const milestoneCommits = task.milestones
+            .map((m) => (m as any).commitSha as string | undefined)
+            .filter((sha): sha is string => Boolean(sha));
+          const claims: CompletionClaims = (options as any)?.completionClaims || {
+            commits: milestoneCommits,
+            files: expectedArtifacts,
+            gatePassed: task.gatePassed,
+          };
+          const claimVerification = await verifyCompletionClaims(claims, adapters);
+          const stamped = stampCompletion(task, claimVerification);
+          task.completionStamp = stamped.completionStamp;
+          task.verificationGaps = stamped.verificationGaps;
+
+          if (task.gatePassed === false) {
+            const gateFailMsg = `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`;
+            task.status = "failed";
+            task.completionStamp = "completed-unverified";
+            if (!task.verificationGaps.some((g) => g.kind === "gate")) {
+              task.verificationGaps.push({
+                kind: "gate",
+                claim: "test:gate",
+                checked: "persisted gate result",
+                found: gateFailMsg,
+              });
+            }
+            task.errorSummary = task.errorSummary || gateFailMsg;
+            task.parkedReason = task.parkedReason || gateFailMsg;
+            task.journal.push({
+              timestamp: new Date().toISOString(),
+              role: "gitops",
+              message: gateFailMsg,
+            });
+            console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${gateFailMsg}`);
+          } else {
+            task.status = "completed";
+            console.log(`[task:${task.taskId}] phase=terminal status=completed`);
+            if (claimVerification.status === "completed-unverified") {
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "supervisor",
+                action: "Completion stamped completed-unverified",
+                message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`,
+              });
+            }
+
+            if (shouldRunGitOps && gateExitCode === 0) {
+              task.journal.push({
+                timestamp: new Date().toISOString(),
+                role: "gitops",
+                message: "Pre-merge gate test:gate passed. 1-Click Rollout ready.",
+              });
+
+              const prePr = evaluatePrePrGate({
+                flowChecksPassed: task.milestones.every(
+                  (m) => m.status === "completed" && (m.testsFailed ?? 0) === 0
+                ),
+                reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
+                gatePassed: true,
+              });
+              if (!prePr.ready) {
+                task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "gitops",
+                  message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`,
+                });
+              } else {
+                // BUILD-1 Honesty Rule: wire pushBranch into terminal path
+                const pushCheck = await gitOps.isPushConfigured();
+                if (!pushCheck.configured) {
+                  task.pushStatus = "completed — local only, push not configured";
+                  task.journal.push({
+                    timestamp: new Date().toISOString(),
+                    role: "gitops",
+                    message: "completed — local only, push not configured",
+                  });
+                  console.log(
+                    `[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`
+                  );
+                } else {
+                  try {
+                    const pushRes = await gitOps.pushBranch(task.branchName);
+                    if (pushRes && pushRes.success) {
+                      task.pushStatus = "pushed";
+                      task.journal.push({
+                        timestamp: new Date().toISOString(),
+                        role: "gitops",
+                        message:
+                          pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`,
+                      });
+                    } else {
+                      task.pushStatus = "completed — local only, push failed";
+                      task.journal.push({
+                        timestamp: new Date().toISOString(),
+                        role: "gitops",
+                        message: "completed — local only, push failed",
+                      });
+                    }
+                  } catch (pErr: any) {
+                    const pErrMsg = pErr?.message || String(pErr);
+                    task.pushStatus = `failed: ${pErrMsg}`;
+                    task.journal.push({
+                      timestamp: new Date().toISOString(),
+                      role: "gitops",
+                      message: `failed: ${pErrMsg}`,
+                    });
+                    console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
+                  }
+                }
+              }
+
+              // Check if autoDeployOnGreen is enabled
+              if (task.autoDeployOnGreen) {
+                task.journal.push({
+                  timestamp: new Date().toISOString(),
+                  role: "deploy",
+                  message:
+                    "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout...",
+                });
+
+                try {
+                  const pipeline = new SelfDeployPipeline();
+                  const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
+                  const deployRec = await pipeline.executeDeploy({
+                    branchName: task.branchName,
+                    previousSha: "develop",
+                    newSha: lastSha,
+                    skipPreRollout: true,
+                  });
+                  task.journal.push({
+                    timestamp: new Date().toISOString(),
+                    role: "deploy",
+                    message: `Self-deploy finished with status: ${deployRec.status}`,
+                  });
+                } catch (dErr: any) {
+                  console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
+                  task.journal.push({
+                    timestamp: new Date().toISOString(),
+                    role: "deploy",
+                    message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`,
+                  });
+                }
+              }
+            }
+          }
         }
+        task.completedAt = new Date().toISOString();
 
-        const adapters: VerificationAdapters = (options as any)?.verificationAdapters || buildVerificationAdapters(effectiveRepoRoot);
-        const milestoneCommits = task.milestones
-          .map((m) => (m as any).commitSha as string | undefined)
-          .filter((sha): sha is string => Boolean(sha));
-        const claims: CompletionClaims = (options as any)?.completionClaims || {
-          commits: milestoneCommits,
-          files: expectedArtifacts,
-          gatePassed: task.gatePassed
-        };
-        const claimVerification = await verifyCompletionClaims(claims, adapters);
-        const stamped = stampCompletion(task, claimVerification);
-        task.completionStamp = stamped.completionStamp;
-        task.verificationGaps = stamped.verificationGaps;
-
+        // Defense-in-depth: revert any premature completion stamp if test:gate failed
         if (task.gatePassed === false) {
-          const gateFailMsg = `Pre-merge gate test:gate failed with exit code ${gateExitCode}.`;
-          task.status = "failed";
-          task.completionStamp = "completed-unverified";
+          if (task.status === "completed") {
+            task.status = "failed";
+          }
+          if (task.completionStamp === "completed" || !task.completionStamp) {
+            task.completionStamp = "completed-unverified";
+          }
+          if (!Array.isArray(task.verificationGaps)) {
+            task.verificationGaps = [];
+          }
           if (!task.verificationGaps.some((g) => g.kind === "gate")) {
             task.verificationGaps.push({
               kind: "gate",
               claim: "test:gate",
               checked: "persisted gate result",
-              found: gateFailMsg
+              found: "gate did not pass",
             });
           }
-          task.errorSummary = task.errorSummary || gateFailMsg;
-          task.parkedReason = task.parkedReason || gateFailMsg;
-          task.journal.push({
-            timestamp: new Date().toISOString(),
-            role: "gitops",
-            message: gateFailMsg
-          });
-          console.log(`[task:${task.taskId}] phase=terminal status=failed reason=${gateFailMsg}`);
+        }
+
+        if (task.gatePassed === false) {
+          notify("task.failed", {
+            title: `Task Failed: ${task.taskId}`,
+            body: `Pre-merge gate test failed: ${task.goal?.slice(0, 100)}`,
+          }).catch(() => {});
         } else {
-          task.status = "completed";
-          console.log(`[task:${task.taskId}] phase=terminal status=completed`);
-          if (claimVerification.status === "completed-unverified") {
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "supervisor",
-              action: "Completion stamped completed-unverified",
-              message: `Completion claims unverified: ${claimVerification.gaps.map((g) => `${g.claim} (${g.found})`).join("; ")}`
-            });
-          }
-
-          if (shouldRunGitOps && gateExitCode === 0) {
-            task.journal.push({
-              timestamp: new Date().toISOString(),
-              role: "gitops",
-              message: "Pre-merge gate test:gate passed. 1-Click Rollout ready."
-            });
-
-            const prePr = evaluatePrePrGate({
-              flowChecksPassed: task.milestones.every((m) => m.status === "completed" && (m.testsFailed ?? 0) === 0),
-              reviewerApproved: task.milestones.every((m) => m.criticVerdict !== "FAIL"),
-              gatePassed: true
-            });
-            if (!prePr.ready) {
-              task.pushStatus = `blocked: ${prePr.reasons.join("; ")}`;
-              task.journal.push({
-                timestamp: new Date().toISOString(),
-                role: "gitops",
-                message: `Pre-PR gate blocked push: ${prePr.reasons.join("; ")}`
-              });
-            } else {
-              // BUILD-1 Honesty Rule: wire pushBranch into terminal path
-              const pushCheck = await gitOps.isPushConfigured();
-              if (!pushCheck.configured) {
-                task.pushStatus = "completed — local only, push not configured";
-                task.journal.push({
-                  timestamp: new Date().toISOString(),
-                  role: "gitops",
-                  message: "completed — local only, push not configured"
-                });
-                console.log(`[supervisor] Push not configured: ${pushCheck.reason || "local bundle"}`);
-              } else {
-                try {
-                  const pushRes = await gitOps.pushBranch(task.branchName);
-                  if (pushRes && pushRes.success) {
-                    task.pushStatus = "pushed";
-                    task.journal.push({
-                      timestamp: new Date().toISOString(),
-                      role: "gitops",
-                      message: pushRes.eventMarkdown || `Pushed branch \`${task.branchName}\` to origin`
-                    });
-                  } else {
-                    task.pushStatus = "completed — local only, push failed";
-                    task.journal.push({
-                      timestamp: new Date().toISOString(),
-                      role: "gitops",
-                      message: "completed — local only, push failed"
-                    });
-                  }
-                } catch (pErr: any) {
-                  const pErrMsg = pErr?.message || String(pErr);
-                  task.pushStatus = `failed: ${pErrMsg}`;
-                  task.journal.push({
-                    timestamp: new Date().toISOString(),
-                    role: "gitops",
-                    message: `failed: ${pErrMsg}`
-                  });
-                  console.warn(`[supervisor] pushBranch failed:`, pErrMsg);
-                }
-              }
-            }
-
-            // Check if autoDeployOnGreen is enabled
-            if (task.autoDeployOnGreen) {
-              task.journal.push({
-                timestamp: new Date().toISOString(),
-                role: "deploy",
-                message: "autoDeployOnGreen is active — triggering SelfDeployPipeline.executeDeploy rollout..."
-              });
-
-              try {
-                const pipeline = new SelfDeployPipeline();
-                const lastSha = task.milestones[task.milestones.length - 1]?.commitSha || "HEAD";
-                const deployRec = await pipeline.executeDeploy({
-                  branchName: task.branchName,
-                  previousSha: "develop",
-                  newSha: lastSha,
-                  skipPreRollout: true
-                });
-                task.journal.push({
-                  timestamp: new Date().toISOString(),
-                  role: "deploy",
-                  message: `Self-deploy finished with status: ${deployRec.status}`
-                });
-              } catch (dErr: any) {
-                console.error(`[supervisor] autoDeployOnGreen deploy failed:`, dErr);
-                task.journal.push({
-                  timestamp: new Date().toISOString(),
-                  role: "deploy",
-                  message: `autoDeployOnGreen deploy error: ${dErr.message || dErr}`
-                });
-              }
-            }
-          }
+          notify("task.completed", {
+            title: `Task Completed: ${task.taskId}`,
+            body: `All ${task.milestones.length} milestones completed: ${task.goal?.slice(0, 100)}`,
+          }).catch(() => {});
         }
-      }
-      task.completedAt = new Date().toISOString();
 
-      // Defense-in-depth: revert any premature completion stamp if test:gate failed
-      if (task.gatePassed === false) {
-        if (task.status === "completed") {
-          task.status = "failed";
-        }
-        if (task.completionStamp === "completed" || !task.completionStamp) {
-          task.completionStamp = "completed-unverified";
-        }
-        if (!Array.isArray(task.verificationGaps)) {
-          task.verificationGaps = [];
-        }
-        if (!task.verificationGaps.some((g) => g.kind === "gate")) {
-          task.verificationGaps.push({
-            kind: "gate",
-            claim: "test:gate",
-            checked: "persisted gate result",
-            found: "gate did not pass"
+        if (jobRounds > 0 || jobPromptTokens > 0 || jobOutputTokens > 0) {
+          const rollup = buildJobTokenRollup({
+            rounds: jobRounds,
+            promptTokens: jobPromptTokens,
+            outputTokens: jobOutputTokens,
+            compactions: 0,
           });
-        }
-      }
-
-      if (task.gatePassed === false) {
-        notify("task.failed", {
-          title: `Task Failed: ${task.taskId}`,
-          body: `Pre-merge gate test failed: ${task.goal?.slice(0, 100)}`
-        }).catch(() => {});
-      } else {
-        notify("task.completed", {
-          title: `Task Completed: ${task.taskId}`,
-          body: `All ${task.milestones.length} milestones completed: ${task.goal?.slice(0, 100)}`
-        }).catch(() => {});
-      }
-
-      if (jobRounds > 0 || jobPromptTokens > 0 || jobOutputTokens > 0) {
-        const rollup = buildJobTokenRollup({
-          rounds: jobRounds,
-          promptTokens: jobPromptTokens,
-          outputTokens: jobOutputTokens,
-          compactions: 0
-        });
-        (task as any).tokenEconomics = rollup;
-        const activeThreadId = (task as any).threadId;
-        if (activeThreadId) {
-          try {
-            const store = new ThreadStore();
-            const existingThread = await store.getThread(activeThreadId);
-            if (existingThread) {
-              existingThread.messages = existingThread.messages || [];
-              existingThread.messages.push({
-                id: `msg-${task.taskId}-usage`,
-                role: "assistant",
-                content: "",
-                taskId: task.taskId,
-                timestamp: new Date().toISOString(),
-                outputTokens: rollup.outputTokens,
-                roundPromptTokens: [...jobRoundPromptTokens],
-                tokenEconomics: rollup
-              });
-              store.saveThread(existingThread);
+          (task as any).tokenEconomics = rollup;
+          const activeThreadId = (task as any).threadId;
+          if (activeThreadId) {
+            try {
+              const store = new ThreadStore();
+              const existingThread = await store.getThread(activeThreadId);
+              if (existingThread) {
+                existingThread.messages = existingThread.messages || [];
+                existingThread.messages.push({
+                  id: `msg-${task.taskId}-usage`,
+                  role: "assistant",
+                  content: "",
+                  taskId: task.taskId,
+                  timestamp: new Date().toISOString(),
+                  outputTokens: rollup.outputTokens,
+                  roundPromptTokens: [...jobRoundPromptTokens],
+                  tokenEconomics: rollup,
+                });
+                store.saveThread(existingThread);
+              }
+            } catch (uErr: any) {
+              console.warn(
+                `[supervisor] Could not persist token rollup to thread ${activeThreadId}:`,
+                uErr?.message || uErr
+              );
             }
-          } catch (uErr: any) {
-            console.warn(`[supervisor] Could not persist token rollup to thread ${activeThreadId}:`, uErr?.message || uErr);
           }
         }
-      }
 
-      this.saveCheckpoint(task);
+        this.saveCheckpoint(task);
+      }
+      return task;
+    } finally {
+      this.deleteAbortController(task.taskId);
     }
-    return task;
-  } finally {
-    this.deleteAbortController(task.taskId);
   }
-}
 
   /**
    * Stall detection: checks if no forward progress has been made for stallTimeoutMs.
@@ -2261,7 +2463,7 @@ export class OvernightSupervisor {
         task.journal.push({
           timestamp: new Date().toISOString(),
           role: "supervisor",
-          message: `Stall detected (${Math.round(elapsed / 1000)}s idle). Triggering recovery attempt for ${currentMilestone.id}...`
+          message: `Stall detected (${Math.round(elapsed / 1000)}s idle). Triggering recovery attempt for ${currentMilestone.id}...`,
         });
         task.updatedAt = new Date().toISOString();
         this.saveCheckpoint(task);
@@ -2279,9 +2481,9 @@ export class OvernightSupervisor {
         reasoning: "Autonomy policy: never spin forever; snapshot state and await operator review.",
         revertAction: {
           type: "re_plan",
-          target: currentMilestone ? currentMilestone.id : "all"
+          target: currentMilestone ? currentMilestone.id : "all",
         },
-        reviewed: false
+        reviewed: false,
       });
 
       this.saveCheckpoint(task);
@@ -2301,7 +2503,7 @@ export class OvernightSupervisor {
     task.journal.push({
       timestamp: new Date().toISOString(),
       role: "supervisor",
-      message: `Task stopped: ${reason}. Workers halted, VRAM released.`
+      message: `Task stopped: ${reason}. Workers halted, VRAM released.`,
     });
     this.saveCheckpoint(task);
     return task;
@@ -2321,7 +2523,7 @@ export class OvernightSupervisor {
     task.journal.push({
       timestamp: new Date().toISOString(),
       role: "supervisor",
-      message: `Task paused at milestone ${task.currentMilestoneIndex + 1}: ${reason}. Checkpoint saved.`
+      message: `Task paused at milestone ${task.currentMilestoneIndex + 1}: ${reason}. Checkpoint saved.`,
     });
     this.saveCheckpoint(task);
     return task;
@@ -2353,15 +2555,15 @@ export class OvernightSupervisor {
         diffSummary: undefined,
         completedAt: undefined,
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       })),
       journal: [
         {
           timestamp: nowIso,
           role: "supervisor",
-          message: `Restarted run from parent task ${original.taskId} with fresh milestone state.`
-        }
-      ]
+          message: `Restarted run from parent task ${original.taskId} with fresh milestone state.`,
+        },
+      ],
     };
     this.saveCheckpoint(restarted);
     return restarted;

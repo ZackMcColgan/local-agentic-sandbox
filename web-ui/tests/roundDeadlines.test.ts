@@ -78,15 +78,27 @@ function makeScriptedOllamaServer(script: ScriptStep[]) {
     let clientGone = false;
     req.on("abort", () => {
       clientGone = true;
-      try { res.destroy(); } catch {}
+      try {
+        res.destroy();
+      } catch {}
     });
-    res.on("close", () => { clientGone = true; });
+    res.on("close", () => {
+      clientGone = true;
+    });
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
       if (body.includes("COMPLEXITY")) {
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        res.write(JSON.stringify({ message: { role: "assistant", content: '{"complexity":"SIMPLE_EXECUTION","reasoning":"tool work"}' }, done: true }) + "\n");
+        res.write(
+          JSON.stringify({
+            message: {
+              role: "assistant",
+              content: '{"complexity":"SIMPLE_EXECUTION","reasoning":"tool work"}',
+            },
+            done: true,
+          }) + "\n"
+        );
         res.end();
         return;
       }
@@ -102,14 +114,22 @@ function makeScriptedOllamaServer(script: ScriptStep[]) {
         if (ch.thinking) msg.thinking = ch.thinking;
         if (ch.toolCall) msg.tool_calls = [ch.toolCall];
         if (ch.finishReason) {
-          res.write(JSON.stringify({ message: msg, done: true, finish_reason: ch.finishReason }) + "\n");
+          res.write(
+            JSON.stringify({ message: msg, done: true, finish_reason: ch.finishReason }) + "\n"
+          );
           res.end();
           return;
         }
         res.write(JSON.stringify({ message: msg, done: false }) + "\n");
       }
       if (!clientGone && !res.writableEnded) {
-        res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, finish_reason: "stop" }) + "\n");
+        res.write(
+          JSON.stringify({
+            message: { role: "assistant", content: "" },
+            done: true,
+            finish_reason: "stop",
+          }) + "\n"
+        );
         res.end();
       }
     });
@@ -119,9 +139,11 @@ function makeScriptedOllamaServer(script: ScriptStep[]) {
     getCompletionCount: () => completionCount,
     destroyOpenResponses: () => {
       for (const r of openResponses) {
-        try { r.destroy(); } catch {}
+        try {
+          r.destroy();
+        } catch {}
       }
-    }
+    },
   };
 }
 
@@ -144,7 +166,7 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
     "MCP_SERVER_URL",
     "BROWSER_MCP_URL",
     "LLM_ENGINE",
-    ...Object.keys(deadlineEnv)
+    ...Object.keys(deadlineEnv),
   ];
   for (const k of envKeys) prev[k] = process.env[k];
   process.env.THREADS_DIR = tmpThreadsDir;
@@ -173,7 +195,8 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
   try {
     const { NextRequest } = await import("next/server");
     const chatRouteModule = await import("../app/api/chat/route");
-    const { ThreadStore, activeExecutionSet, getActiveTurn } = await import("../lib/threads/threadStore");
+    const { ThreadStore, activeExecutionSet, getActiveTurn } =
+      await import("../lib/threads/threadStore");
 
     const store = new ThreadStore(tmpThreadsDir);
     const threadId = `thread-round-deadlines-${Date.now()}`;
@@ -186,10 +209,12 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
         threadId,
         userMessageId: "u-1",
         assistantMessageId: "a-1",
-        messages: [{ role: "user", content: "Write a long report on the repo architecture.", id: "u-1" }],
+        messages: [
+          { role: "user", content: "Write a long report on the repo architecture.", id: "u-1" },
+        ],
         model: "swift-15-27b-mtp",
-        enableTools: true
-      })
+        enableTools: true,
+      }),
     });
     const res = await chatRouteModule.POST(req as any);
     const reader = res.body!.getReader();
@@ -208,7 +233,7 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
       raw,
       completionCount: getCompletionCount(),
       slotIdle: !activeExecutionSet.has(threadId) && getActiveTurn(threadId) === null,
-      watchdogFired
+      watchdogFired,
     };
   } finally {
     clearTimeout(watchdog);
@@ -224,7 +249,11 @@ async function runTurn(script: ScriptStep[], deadlineEnv: Record<string, string>
 
 test("(1) exports the pinned round deadline constants", () => {
   const mod = require("../lib/contextBudget.js");
-  assert.equal(mod.ROUND_INACTIVITY_DEADLINE_MS, 180_000, "inactivity deadline must be pinned at 180s");
+  assert.equal(
+    mod.ROUND_INACTIVITY_DEADLINE_MS,
+    180_000,
+    "inactivity deadline must be pinned at 180s"
+  );
   assert.equal(mod.ROUND_TOTAL_DEADLINE_MS, 900_000, "total deadline must be pinned at 15 min");
 });
 
@@ -235,14 +264,21 @@ test("(2) inactivity deadline aborts a silent stream (no chunks at all)", async 
     [{ stallMs: 10_000, chunks: [{ content: "late" }] }],
     { ROUND_INACTIVITY_DEADLINE_MS: "300", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
-  assert.equal(watchdogFired, false, "the turn must end WITHOUT the harness watchdog (product defect otherwise)");
+  assert.equal(
+    watchdogFired,
+    false,
+    "the turn must end WITHOUT the harness watchdog (product defect otherwise)"
+  );
   assert.ok(asst, "assistant message must exist");
   assert.ok(
     asst!.content.includes(TIMEOUT_MARKER),
     `silent stall must end the turn with the timeout marker, got: ${asst!.content}`
   );
   assert.ok(raw.includes(TIMEOUT_MARKER), "timeout marker must reach the SSE stream");
-  assert.ok(completionCount >= 2, `two aborted rounds must run before the turn ends (got ${completionCount})`);
+  assert.ok(
+    completionCount >= 2,
+    `two aborted rounds must run before the turn ends (got ${completionCount})`
+  );
   assert.equal(slotIdle, true, "turn/slot state must be released after the timeout end");
 });
 
@@ -251,17 +287,27 @@ test("(3) total deadline aborts a CONTINUOUSLY chunking stream (the critical run
   // Only the total deadline can end it. This is the load-bearing case.
   const chunks = Array.from({ length: 400 }, (_, i) => ({ content: `word${i} ` }));
   const { asst, raw, completionCount, slotIdle, watchdogFired } = await runTurn(
-    [{ chunks, chunkDelayMs: 12 }, { chunks, chunkDelayMs: 12 }],
+    [
+      { chunks, chunkDelayMs: 12 },
+      { chunks, chunkDelayMs: 12 },
+    ],
     { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "1200" }
   );
-  assert.equal(watchdogFired, false, "the turn must end WITHOUT the harness watchdog (product defect otherwise)");
+  assert.equal(
+    watchdogFired,
+    false,
+    "the turn must end WITHOUT the harness watchdog (product defect otherwise)"
+  );
   assert.ok(asst, "assistant message must exist");
   assert.ok(
     asst!.content.includes(TIMEOUT_MARKER),
     `continuous-streaming runaway must end with the timeout marker, got: ${asst!.content}`
   );
   assert.ok(raw.includes(TIMEOUT_MARKER), "timeout marker must reach the SSE stream");
-  assert.ok(completionCount >= 2, `two consecutive aborted rounds expected (got ${completionCount})`);
+  assert.ok(
+    completionCount >= 2,
+    `two consecutive aborted rounds expected (got ${completionCount})`
+  );
   assert.equal(slotIdle, true, "turn/slot state must be released");
 });
 
@@ -272,7 +318,7 @@ test("(4) first aborted round follows the existing round-abort path (turn contin
   const { asst, raw, completionCount } = await runTurn(
     [
       { stallMs: 10_000, chunks: [{ content: "never delivered" }] },
-      { chunks: [{ content: "FINAL ANSWER after one abort." }] }
+      { chunks: [{ content: "FINAL ANSWER after one abort." }] },
     ],
     { ROUND_INACTIVITY_DEADLINE_MS: "300", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
@@ -297,9 +343,17 @@ test("(5) length-truncated unparseable tool call ends with the size-limit marker
       {
         chunks: [
           { content: "Writing the report. " },
-          { toolCall: { index: 0, id: "call-1", type: "function", function: { name: "workspace_write_file", arguments: truncated } }, finishReason: "length" }
-        ]
-      }
+          {
+            toolCall: {
+              index: 0,
+              id: "call-1",
+              type: "function",
+              function: { name: "workspace_write_file", arguments: truncated },
+            },
+            finishReason: "length",
+          },
+        ],
+      },
     ],
     { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
@@ -319,25 +373,36 @@ test("(6) truncated TEXT round auto-continues once and completes", async () => {
   // continues ONCE with a "continue exactly where you stopped" instruction.
   const { asst, raw, completionCount } = await runTurn(
     [
-      { chunks: [{ content: "PART ONE of the report. " }, { content: "still going", finishReason: "length" }] },
-      { chunks: [{ content: "PART TWO continued to the end." }] }
+      {
+        chunks: [
+          { content: "PART ONE of the report. " },
+          { content: "still going", finishReason: "length" },
+        ],
+      },
+      { chunks: [{ content: "PART TWO continued to the end." }] },
     ],
     { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
   assert.ok(asst, "assistant message must exist");
   assert.ok(asst!.content.includes("PART ONE"), "first truncated half must be kept");
   assert.ok(asst!.content.includes("PART TWO"), "the continuation must land");
-  assert.ok(!asst!.content.includes("Turn incomplete: Generation truncated"), "auto-continue must not end with the truncation marker");
+  assert.ok(
+    !asst!.content.includes("Turn incomplete: Generation truncated"),
+    "auto-continue must not end with the truncation marker"
+  );
   assert.equal(asst!.status, "completed");
   assert.equal(completionCount, 2, `exactly ONE auto-continue round (got ${completionCount})`);
-  assert.ok(raw.includes("continue exactly where you stopped"), "continuation directive must be announced");
+  assert.ok(
+    raw.includes("continue exactly where you stopped"),
+    "continuation directive must be announced"
+  );
 });
 
 test("(7) two consecutive truncated TEXT rounds end with the truncation marker", async () => {
   const { asst, raw, completionCount } = await runTurn(
     [
       { chunks: [{ content: "PART ONE. ", finishReason: "length" }] },
-      { chunks: [{ content: "PART TWO. ", finishReason: "length" }] }
+      { chunks: [{ content: "PART TWO. ", finishReason: "length" }] },
     ],
     { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
@@ -350,7 +415,10 @@ test("(7) two consecutive truncated TEXT rounds end with the truncation marker",
   );
   assert.equal(asst!.status, "incomplete");
   assert.equal(completionCount, 2, `auto-continue fires exactly once (got ${completionCount})`);
-  assert.ok(raw.includes("Turn ended: generation truncated at the per-message size limit."), "marker must reach the SSE stream");
+  assert.ok(
+    raw.includes("Turn ended: generation truncated at the per-message size limit."),
+    "marker must reach the SSE stream"
+  );
 });
 
 test("(8) truncated TOOL CALL is NOT auto-continued", async () => {
@@ -359,24 +427,49 @@ test("(8) truncated TOOL CALL is NOT auto-continued", async () => {
   const badArgs = '{"path":"a.md","content":"aaaa';
   const { asst, completionCount } = await runTurn(
     [
-      { chunks: [{ content: "Writing. " }, { toolCall: { index: 0, id: "c1", type: "function", function: { name: "workspace_write_file", arguments: badArgs } }, finishReason: "length" }] },
-      { chunks: [{ content: "SHOULD NEVER RUN" }] }
+      {
+        chunks: [
+          { content: "Writing. " },
+          {
+            toolCall: {
+              index: 0,
+              id: "c1",
+              type: "function",
+              function: { name: "workspace_write_file", arguments: badArgs },
+            },
+            finishReason: "length",
+          },
+        ],
+      },
+      { chunks: [{ content: "SHOULD NEVER RUN" }] },
     ],
     { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "60000" }
   );
-  assert.ok(asst!.content.includes(SIZE_LIMIT_MARKER), `tool-call truncation must use the size-limit marker, got: ${asst!.content}`);
-  assert.ok(!asst!.content.includes("SHOULD NEVER RUN"), "no continuation round for a truncated tool call");
+  assert.ok(
+    asst!.content.includes(SIZE_LIMIT_MARKER),
+    `tool-call truncation must use the size-limit marker, got: ${asst!.content}`
+  );
+  assert.ok(
+    !asst!.content.includes("SHOULD NEVER RUN"),
+    "no continuation round for a truncated tool call"
+  );
   assert.equal(completionCount, 1, `no continuation round (got ${completionCount})`);
 });
 
 test("(9) per-round finish_reason recorded on the turn record (forensics)", async () => {
-  const { asst } = await runTurn(
-    [{ chunks: [{ content: "done", finishReason: "stop" }] }],
-    { ROUND_INACTIVITY_DEADLINE_MS: "5000", ROUND_TOTAL_DEADLINE_MS: "60000" }
-  );
+  const { asst } = await runTurn([{ chunks: [{ content: "done", finishReason: "stop" }] }], {
+    ROUND_INACTIVITY_DEADLINE_MS: "5000",
+    ROUND_TOTAL_DEADLINE_MS: "60000",
+  });
   assert.ok(asst, "assistant message must exist");
-  assert.ok(Array.isArray((asst as any).roundFinishReasons), "turn record must carry per-round finish_reasons");
-  assert.ok((asst as any).roundFinishReasons.includes("stop"), "round finish reasons must include the round's finish_reason");
+  assert.ok(
+    Array.isArray((asst as any).roundFinishReasons),
+    "turn record must carry per-round finish_reasons"
+  );
+  assert.ok(
+    (asst as any).roundFinishReasons.includes("stop"),
+    "round finish reasons must include the round's finish_reason"
+  );
 });
 
 test("(10) a healthy continuous stream completes UNTOUCHED (calibration guard)", async () => {
@@ -386,12 +479,15 @@ test("(10) a healthy continuous stream completes UNTOUCHED (calibration guard)",
   // ratio (total well above the stream duration) prove the wrapper does not
   // touch healthy rounds.
   const chunks = Array.from({ length: 200 }, (_, i) => ({ content: `tok${i} ` }));
-  const { asst, raw, completionCount, slotIdle } = await runTurn(
-    [{ chunks, chunkDelayMs: 10 }],
-    { ROUND_INACTIVITY_DEADLINE_MS: "2000", ROUND_TOTAL_DEADLINE_MS: "5000" }
-  );
+  const { asst, raw, completionCount, slotIdle } = await runTurn([{ chunks, chunkDelayMs: 10 }], {
+    ROUND_INACTIVITY_DEADLINE_MS: "2000",
+    ROUND_TOTAL_DEADLINE_MS: "5000",
+  });
   assert.ok(asst!.content.includes("tok0"), "healthy stream content must land");
-  assert.ok(!asst!.content.includes(TIMEOUT_MARKER), "healthy round must never trip the timeout marker");
+  assert.ok(
+    !asst!.content.includes(TIMEOUT_MARKER),
+    "healthy round must never trip the timeout marker"
+  );
   assert.ok(!asst!.content.includes("Turn ended"), "healthy round must never carry an end marker");
   assert.equal(asst!.status, "completed");
   assert.equal(completionCount, 1);

@@ -17,8 +17,7 @@ export interface EvidenceSummaryResult {
   gaps: VerificationGap[];
 }
 
-const COMPLETION_TRIGGER_RE =
-  /\b(done|complete|completed|finished|merged|deployed|shipped)\b/i;
+const COMPLETION_TRIGGER_RE = /\b(done|complete|completed|finished|merged|deployed|shipped)\b/i;
 
 const COMMIT_SHA_RE = /\b([0-9a-f]{7,40})\b/gi;
 const PR_NUMBER_RE = /(?:^|[\s(])#(\d+)\b/g;

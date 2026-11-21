@@ -41,7 +41,7 @@ describe("OLED true black — dark mode canvas surfaces", () => {
     assert.match(
       css,
       /html\.dark body,\s*\nhtml\[data-theme="dark"\] body \{\s*\n\s*color-scheme: dark !important;\s*\n\s*background-color: #000000 !important;/,
-      "body paints #000000 in dark mode",
+      "body paints #000000 in dark mode"
     );
     assert.ok(!css.includes("#09090b"), "no zinc-950 left in globals");
   });

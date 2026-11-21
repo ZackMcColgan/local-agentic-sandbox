@@ -16,10 +16,10 @@ describe("eval/run.mjs — job mode", () => {
       calls.push({ url, method, body });
 
       if (url.endsWith("/api/threads") && method === "POST") {
-        return new Response(
-          JSON.stringify({ thread: { id: "thread-123", status: "active" } }),
-          { status: 201, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ thread: { id: "thread-123", status: "active" } }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       if (url.endsWith("/api/threads/thread-123") && method === "GET") {

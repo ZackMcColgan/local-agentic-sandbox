@@ -8,7 +8,7 @@ import {
   estimateTokens,
   TOOL_ROUND_BACKSTOP,
   CHAT_CONTEXT_BUDGET_TOKENS,
-  MAX_WEB_RESEARCH_CALLS
+  MAX_WEB_RESEARCH_CALLS,
 } from "../lib/contextBudget.js";
 
 describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-round backstop)", () => {
@@ -25,7 +25,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: 1000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: [],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(decision.canContinue, true, "round 0 must never be treated as completed");
       assert.equal(decision.stopReason, undefined);
@@ -38,7 +38,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: 2000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_grep"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(decision.canContinue, true);
       assert.equal(decision.forceSynthesis, false);
@@ -50,7 +50,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: 2000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: [],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(decision.canContinue, false);
       assert.equal(decision.stopReason, "completed");
@@ -65,7 +65,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: [],
         webResearchCalls: 0,
-        awaitingToolRound: true
+        awaitingToolRound: true,
       });
       assert.equal(decision.canContinue, true);
       assert.equal(decision.stopReason, undefined);
@@ -76,7 +76,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: [],
         webResearchCalls: 0,
-        awaitingToolRound: true
+        awaitingToolRound: true,
       });
       assert.equal(guardedByBackstop.canContinue, false);
       assert.equal(guardedByBackstop.stopReason, "backstop");
@@ -89,10 +89,14 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
           contextTokens: CHAT_CONTEXT_BUDGET_TOKENS - 1,
           budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
           lastRoundTools: ["workspace_read_file"],
-          webResearchCalls: 0
+          webResearchCalls: 0,
         });
         assert.equal(decision.canContinue, true, `round ${round} with headroom must continue`);
-        assert.equal(decision.forceSynthesis, false, `round ${round} is not the last permitted round`);
+        assert.equal(
+          decision.forceSynthesis,
+          false,
+          `round ${round} is not the last permitted round`
+        );
       }
       // Round 999 is the last round the backstop permits: synthesis is forced there.
       const lastPermitted = canContinueToolLoop({
@@ -100,7 +104,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: CHAT_CONTEXT_BUDGET_TOKENS - 1,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_read_file"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(lastPermitted.canContinue, true);
       assert.equal(lastPermitted.forceSynthesis, true);
@@ -113,7 +117,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: overBudget,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_write_file"],
-        webResearchCalls: 5
+        webResearchCalls: 5,
       });
       assert.equal(single.canContinue, false);
       assert.equal(single.stopReason, "budget");
@@ -123,7 +127,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: overBudget,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["search_web", "workspace_write_file"],
-        webResearchCalls: 5
+        webResearchCalls: 5,
       });
       assert.equal(mixed.canContinue, false);
       assert.equal(mixed.stopReason, "budget");
@@ -136,7 +140,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: overBudget,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["search_web"],
-        webResearchCalls: 8
+        webResearchCalls: 8,
       });
       assert.equal(search.canContinue, true);
       assert.equal(search.forceSynthesis, false, "research rounds must keep tools");
@@ -146,7 +150,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: overBudget,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["fetch_webpage_markdown"],
-        webResearchCalls: 40
+        webResearchCalls: 40,
       });
       assert.equal(fetchOnly.canContinue, true);
     });
@@ -157,7 +161,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: CHAT_CONTEXT_BUDGET_TOKENS + 5000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["search_web"],
-        webResearchCalls: MAX_WEB_RESEARCH_CALLS
+        webResearchCalls: MAX_WEB_RESEARCH_CALLS,
       });
       assert.equal(decision.canContinue, false);
       assert.equal(decision.stopReason, "web-research-cap");
@@ -169,7 +173,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         contextTokens: 100,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_grep"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       });
       assert.equal(decision.canContinue, false);
       assert.equal(decision.stopReason, "backstop");
@@ -182,10 +186,14 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_grep"],
         webResearchCalls: 0,
-        roundBackstop: 4
+        roundBackstop: 4,
       });
       assert.equal(last.canContinue, true);
-      assert.equal(last.forceSynthesis, true, "last permitted round must omit tools and synthesize");
+      assert.equal(
+        last.forceSynthesis,
+        true,
+        "last permitted round must omit tools and synthesize"
+      );
 
       const past = canContinueToolLoop({
         round: 4,
@@ -193,7 +201,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_grep"],
         webResearchCalls: 0,
-        roundBackstop: 4
+        roundBackstop: 4,
       });
       assert.equal(past.canContinue, false);
       assert.equal(past.stopReason, "backstop");
@@ -205,7 +213,7 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
       const capturedPayloads: any[] = [];
       const messages: any[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
-        { role: "user", content: "Inspect every module in the repo and summarize the findings." }
+        { role: "user", content: "Inspect every module in the repo and summarize the findings." },
       ];
       let callCount = 0;
 
@@ -220,11 +228,11 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
                 {
                   function: {
                     name: "workspace_grep",
-                    arguments: JSON.stringify({ query: `module_${callCount}` })
-                  }
-                }
-              ]
-            }
+                    arguments: JSON.stringify({ query: `module_${callCount}` }),
+                  },
+                },
+              ],
+            },
           };
         } else {
           yield { message: { content: "Synthesized findings across all inspected modules." } };
@@ -234,14 +242,14 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
       const mockExecuteTool = async (toolCall: any) => ({
         status: "SUCCESS",
         tool: toolCall.function?.name,
-        data: "X".repeat(800)
+        data: "X".repeat(800),
       });
 
       const result = await runChatToolLoop({
         conversationMessages: messages,
         llmTools: [{ type: "function", function: { name: "workspace_grep" } }],
         streamLlmChat: mockStreamChat,
-        executeTool: mockExecuteTool
+        executeTool: mockExecuteTool,
       });
 
       assert.ok(
@@ -249,7 +257,10 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         `Budget-governed loop must exceed the legacy 8-round ceiling; got ${capturedPayloads.length} rounds`
       );
       assert.equal(result.roundsCompleted, capturedPayloads.length);
-      assert.ok(result.finalContent.includes("Synthesized findings"), "turn concludes with text answer");
+      assert.ok(
+        result.finalContent.includes("Synthesized findings"),
+        "turn concludes with text answer"
+      );
       for (const payload of capturedPayloads) {
         assert.ok(
           estimateTokens(payload.messages) <= CHAT_CONTEXT_BUDGET_TOKENS,
@@ -268,20 +279,41 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         content.includes("canContinueToolLoop({"),
         "route.ts must call canContinueToolLoop"
       );
-      assert.ok(content.includes("contextTokens: estimateTokens(conversationMessages)"), "must pass headroom estimate");
-      assert.ok(content.includes("budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS"), "must pass the budget");
+      assert.ok(
+        content.includes("contextTokens: estimateTokens(conversationMessages)"),
+        "must pass headroom estimate"
+      );
+      assert.ok(
+        content.includes("budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS"),
+        "must pass the budget"
+      );
       assert.ok(content.includes("roundBackstop: TOOL_ROUND_BACKSTOP"), "must pass the backstop");
     });
 
     it("no fixed 8-round ceiling remains", () => {
-      assert.ok(!content.includes("const MAX_TOOL_ROUNDS"), "route.ts must not define a fixed MAX_TOOL_ROUNDS ceiling");
-      assert.ok(!content.includes("maxToolRounds:"), "route.ts must not pass the legacy maxToolRounds option");
+      assert.ok(
+        !content.includes("const MAX_TOOL_ROUNDS"),
+        "route.ts must not define a fixed MAX_TOOL_ROUNDS ceiling"
+      );
+      assert.ok(
+        !content.includes("maxToolRounds:"),
+        "route.ts must not pass the legacy maxToolRounds option"
+      );
     });
 
     it("records the stop reason and emits honest per-reason pause markers", () => {
-      assert.ok(content.includes("toolLoopStopReason = continuation.stopReason"), "route.ts must capture the stop reason");
-      assert.ok(content.includes("toolLoopStopReason === \"budget\""), "budget marker must be keyed on stop reason");
-      assert.ok(content.includes("toolLoopStopReason === \"backstop\""), "backstop marker must be keyed on stop reason");
+      assert.ok(
+        content.includes("toolLoopStopReason = continuation.stopReason"),
+        "route.ts must capture the stop reason"
+      );
+      assert.ok(
+        content.includes('toolLoopStopReason === "budget"'),
+        "budget marker must be keyed on stop reason"
+      );
+      assert.ok(
+        content.includes('toolLoopStopReason === "backstop"'),
+        "backstop marker must be keyed on stop reason"
+      );
       assert.ok(content.includes("Context budget exhausted"), "budget pause text must exist");
       assert.ok(
         content.includes("⚠️ [Turn paused:"),

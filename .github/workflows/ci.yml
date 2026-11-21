@@ -2,9 +2,9 @@ name: CI Pipeline & Security Boundary Verification
 
 on:
   push:
-    branches: [ "main","develop"] 
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ "main","develop" ]
+    branches: ["main", "develop"]
 
 jobs:
   lint-and-format:
@@ -212,7 +212,6 @@ jobs:
           image: local-agentic-sandbox/mcp-server:test
           only-severities: critical,high
         continue-on-error: true
-
 
   ui-e2e-playwright:
     name: Playwright UI (Shard ${{ matrix.shard }}/3)

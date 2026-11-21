@@ -6,11 +6,10 @@ import {
   checkOllama,
   enableOllamaMock,
   disableOllamaMock,
-  logServiceMode
+  logServiceMode,
 } from "./helpers/serviceMocks.js";
 
 describe("Phase C — Test Gate & Tiering Suite", () => {
-
   let useRealOllama = false;
 
   before(async () => {
@@ -24,7 +23,10 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
   });
   it("maps modified source files to their corresponding test suites", () => {
     // 1. SvgViewer and svgUtils map to SVG test suites
-    const svgResult = resolveAffectedTests(["web-ui/lib/svgUtils.ts", "web-ui/components/SvgViewer.tsx"]);
+    const svgResult = resolveAffectedTests([
+      "web-ui/lib/svgUtils.ts",
+      "web-ui/components/SvgViewer.tsx",
+    ]);
     assert.ok(svgResult.tests.includes("tests/svgRendering.test.ts"));
     assert.ok(svgResult.tests.includes("tests/svgComponent.test.ts"));
     assert.ok(svgResult.uncoveredFiles.length === 0, "No uncovered files for svgUtils");
@@ -32,7 +34,7 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     // 2. Supervisor & WorkerPool map to LangGraph and supervisor test suites
     const agentResult = resolveAffectedTests([
       "web-ui/lib/subagents/supervisor.ts",
-      "web-ui/lib/subagents/workerPool.ts"
+      "web-ui/lib/subagents/workerPool.ts",
     ]);
     assert.ok(agentResult.tests.includes("tests/supervisor.test.ts"));
     assert.ok(agentResult.tests.includes("tests/langgraphSupervisorNodes.test.ts"));
@@ -45,14 +47,18 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     assert.ok(selfResult.uncoveredFiles.length === 0);
 
     // 4. Ignored non-code files (documentation, image artifacts) do not require test suites
-    const docResult = resolveAffectedTests(["README.md", "docs/architecture.drawio.png", ".gitignore"]);
+    const docResult = resolveAffectedTests([
+      "README.md",
+      "docs/architecture.drawio.png",
+      ".gitignore",
+    ]);
     assert.ok(docResult.uncoveredFiles.length === 0, "Doc files must not trigger uncovered error");
   });
 
   it("enforces zero-coverage-is-an-error: fails if a changed source file has no test suite", () => {
     const unmappedResult = resolveAffectedTests([
       "web-ui/lib/untestedSubsystemFeature.ts",
-      "web-ui/components/SecretUntestedWidget.tsx"
+      "web-ui/components/SecretUntestedWidget.tsx",
     ]);
 
     assert.ok(unmappedResult.uncoveredFiles.includes("web-ui/lib/untestedSubsystemFeature.ts"));
@@ -61,12 +67,15 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     // Attempting to run testGate with uncovered files must fail
     const gateOutcome = runTestGate({
       changedFiles: ["web-ui/lib/untestedSubsystemFeature.ts"],
-      dryRun: true
+      dryRun: true,
     });
 
     assert.equal(gateOutcome.status, "failed");
     assert.equal(gateOutcome.exitCode, 1);
-    assert.ok(gateOutcome.error?.includes("Zero test coverage detected"), "Must report zero coverage error");
+    assert.ok(
+      gateOutcome.error?.includes("Zero test coverage detected"),
+      "Must report zero coverage error"
+    );
     assert.ok(gateOutcome.error?.includes("web-ui/lib/untestedSubsystemFeature.ts"));
   });
 
@@ -75,7 +84,7 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
 
     const gateOutcome = runTestGate({
       changedFiles: ["web-ui/lib/toolParser.ts"],
-      budgetSeconds: 90
+      budgetSeconds: 90,
     });
 
     const elapsedSeconds = (Date.now() - startTime) / 1000;
@@ -93,7 +102,7 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     // Artificial 0.0001s budget to test budget limit enforcement
     const gateOutcome = runTestGate({
       changedFiles: ["web-ui/lib/toolParser.ts"],
-      budgetSeconds: 0.00001
+      budgetSeconds: 0.00001,
     });
 
     assert.equal(gateOutcome.status, "failed");
@@ -102,9 +111,19 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
   });
 
   it("maps browser-mcp changes to browser-mcp:tests and exports CANONICAL_WORKSPACES", () => {
-    const browserResult = resolveAffectedTests(["browser-mcp/src/index.ts", "browser-mcp/tests/tools.test.ts"]);
-    assert.ok(browserResult.tests.includes("browser-mcp:tests"), "Must map browser-mcp files to browser-mcp:tests");
-    assert.equal(browserResult.uncoveredFiles.length, 0, "No uncovered files for browser-mcp changes");
+    const browserResult = resolveAffectedTests([
+      "browser-mcp/src/index.ts",
+      "browser-mcp/tests/tools.test.ts",
+    ]);
+    assert.ok(
+      browserResult.tests.includes("browser-mcp:tests"),
+      "Must map browser-mcp files to browser-mcp:tests"
+    );
+    assert.equal(
+      browserResult.uncoveredFiles.length,
+      0,
+      "No uncovered files for browser-mcp changes"
+    );
   });
 
   it("maps the 7 orphaned charter modules to their test suites with zero uncovered files", () => {
@@ -115,7 +134,7 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
       ["web-ui/lib/board/boardStore.ts", "tests/boardStore.test.ts"],
       ["web-ui/lib/board/dispatcher.ts", "tests/dispatcher.test.ts"],
       ["web-ui/lib/board/flowMonitor.ts", "tests/flowMonitor.test.ts"],
-      ["web-ui/lib/board/reviewerGate.ts", "tests/reviewerGate.test.ts"]
+      ["web-ui/lib/board/reviewerGate.ts", "tests/reviewerGate.test.ts"],
     ];
 
     const result = resolveAffectedTests(charterModules.map(([mod]) => mod));
@@ -128,7 +147,7 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
   it("includes TypeScript typecheck stage in gate run", () => {
     const gateOutcome = runTestGate({
       changedFiles: ["web-ui/lib/toolParser.ts"],
-      dryRun: true
+      dryRun: true,
     });
     assert.equal(gateOutcome.status, "passed");
     assert.ok(

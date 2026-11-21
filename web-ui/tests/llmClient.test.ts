@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   createOllamaGenerate,
   getContextSizeForScope,
-  GenerateRequest
+  GenerateRequest,
 } from "../lib/subagents/llmClient.js";
 
 describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
@@ -29,7 +29,7 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     await generate({
       model: "swift-27b-mtp",
       prompt: "generate snippet",
-      scope: "SNIPPET"
+      scope: "SNIPPET",
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
@@ -48,7 +48,7 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     await generate({
       model: "swift-27b-mtp",
       prompt: "generate project",
-      scope: "PROJECT"
+      scope: "PROJECT",
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
@@ -66,12 +66,16 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
     const generate = createOllamaGenerate({ fetchImpl: mockFetch as any });
     await generate({
       model: "swift-27b-mtp",
-      prompt: "generate default"
+      prompt: "generate default",
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");
     assert.ok(capturedBody.options, "Request options must exist");
-    assert.equal(capturedBody.options.num_ctx, 4096, "num_ctx must default to 4096 when no scope is provided");
+    assert.equal(
+      capturedBody.options.num_ctx,
+      4096,
+      "num_ctx must default to 4096 when no scope is provided"
+    );
   });
 
   it("Explicit caller num_ctx in options overrides default if specified", async () => {
@@ -86,7 +90,7 @@ describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
       model: "swift-27b-mtp",
       prompt: "custom options",
       scope: "SNIPPET",
-      options: { num_ctx: 16384 }
+      options: { num_ctx: 16384 },
     });
 
     assert.ok(capturedBody, "Outgoing request body must be captured");

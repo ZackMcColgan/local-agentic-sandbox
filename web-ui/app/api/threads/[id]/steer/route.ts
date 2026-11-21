@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ThreadStore, resolveThreadsDir, getActiveTurn, activeExecutionSet, interruptActiveTurnStream } from "@/lib/threads/threadStore";
+import {
+  ThreadStore,
+  resolveThreadsDir,
+  getActiveTurn,
+  activeExecutionSet,
+  interruptActiveTurnStream,
+} from "@/lib/threads/threadStore";
 
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     if (!id) {

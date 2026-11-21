@@ -9,7 +9,7 @@ import {
   completeProjectTask,
   parkProjectTask,
   cancelProjectTask,
-  getProjectTask
+  getProjectTask,
 } from "./projectStore";
 import { runGit } from "./projectGit";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
@@ -48,7 +48,7 @@ export async function isEngineRunning(): Promise<boolean> {
     const res = await fetch(`${supervisorUrl}/control/status`, {
       method: "GET",
       headers,
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
@@ -99,7 +99,9 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   }
 
   if (project.active_task_id) {
-    const err: any = new Error(`Project already has an active task running: ${project.active_task_id}`);
+    const err: any = new Error(
+      `Project already has an active task running: ${project.active_task_id}`
+    );
     err.statusCode = 409;
     throw err;
   }
@@ -143,7 +145,7 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
       projectId: project.project_id,
       prompt: input.prompt,
       baseSha,
-      branch
+      branch,
     });
   } catch (err: any) {
     if (err.message && /active task/i.test(err.message)) {
@@ -159,7 +161,7 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   activeRunners.set(task.task_id, {
     controller,
     project,
-    task
+    task,
   });
 
   // If inline execution is requested (e.g. testing or immediate run)
@@ -174,14 +176,14 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
           goal: input.prompt,
           toolchain: project.toolchain as ToolchainType,
           scope: "PROJECT",
-          model: DEFAULT_PRIMARY_MODEL
+          model: DEFAULT_PRIMARY_MODEL,
         });
 
         const supervisor = new OvernightSupervisor();
         const stepExecutor = createProductionStepExecutor({
           repoRoot: project.root_path,
           model: DEFAULT_PRIMARY_MODEL,
-          signal: controller.signal
+          signal: controller.signal,
         });
 
         for (let i = 0; i < plan.milestones.length; i++) {
@@ -205,22 +207,18 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
             currentMilestoneIndex: i,
             checkpoints: [],
             ambiguityFlags: [],
-            journal: []
+            journal: [],
           };
 
-          await supervisor.executeMilestoneWithTelemetry(
-            taskManifest,
-            i,
-            async (m) => {
-              const res = await stepExecutor(m, 1);
-              return {
-                diff: res.diff || "",
-                gitSha: res.gitSha || baseSha,
-                approved: res.status === "completed",
-                feedback: res.reason ? [res.reason] : []
-              };
-            }
-          );
+          await supervisor.executeMilestoneWithTelemetry(taskManifest, i, async (m) => {
+            const res = await stepExecutor(m, 1);
+            return {
+              diff: res.diff || "",
+              gitSha: res.gitSha || baseSha,
+              approved: res.status === "completed",
+              feedback: res.reason ? [res.reason] : [],
+            };
+          });
         }
       }
 

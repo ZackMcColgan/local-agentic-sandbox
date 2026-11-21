@@ -6,7 +6,12 @@ import os from "os";
 import { WorkerGitOps } from "../lib/git/workerGitOps.js";
 import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
 import { TaskManifest } from "../lib/subagents/types.js";
-import { formatMorningReportMarkdown, generateMorningReport, generateOvernightMorningReport, formatOvernightMorningReportMarkdown } from "../lib/subagents/morningReport.js";
+import {
+  formatMorningReportMarkdown,
+  generateMorningReport,
+  generateOvernightMorningReport,
+  formatOvernightMorningReportMarkdown,
+} from "../lib/subagents/morningReport.js";
 
 describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attribution", () => {
   it("(a) push failure -> honest local-only failure status, not false success or hallucinated PR", async () => {
@@ -20,10 +25,14 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             return { exitCode: 0, stdout: "", stderr: "" };
           }
           if (args[0] === "push") {
-            return { exitCode: 1, stdout: "", stderr: "remote: Permission to zmh-oss/sandbox denied to token" };
+            return {
+              exitCode: 1,
+              stdout: "",
+              stderr: "remote: Permission to zmh-oss/sandbox denied to token",
+            };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       const supervisor = new OvernightSupervisor({});
@@ -43,14 +52,14 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             acceptanceCriteria: [{ id: "AC1", assertion: "passes" }],
             status: "completed",
             builderIterations: 1,
-            criticRounds: 1
-          }
+            criticRounds: 1,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       // Set milestone to completed so loop finishes immediately and triggers terminal gate/push
@@ -58,7 +67,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" }),
       });
 
       assert.equal(completed.status, "completed");
@@ -69,7 +78,9 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
       assert.equal(completed.prUrl, undefined, "prUrl must never be populated on push failure");
 
       // Verify journal entry recorded failure honestly
-      const pushJournal = completed.journal.find(j => j.role === "gitops" && j.message.includes("failed:"));
+      const pushJournal = completed.journal.find(
+        (j) => j.role === "gitops" && j.message.includes("failed:")
+      );
       assert.ok(pushJournal, "Journal must record honest push failure");
 
       // Verify Morning Report renders honest failure without claiming remote push
@@ -84,10 +95,16 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         completedAt: completed.completedAt,
         milestones: [],
         ambiguityFlags: [],
-        parkedItems: []
+        parkedItems: [],
       });
-      assert.ok(report.summaryMarkdown.includes(completed.pushStatus!), "Morning Report must include honest failure status");
-      assert.ok(!report.summaryMarkdown.includes("Opened PR"), "Morning Report must not claim a PR");
+      assert.ok(
+        report.summaryMarkdown.includes(completed.pushStatus!),
+        "Morning Report must include honest failure status"
+      );
+      assert.ok(
+        !report.summaryMarkdown.includes("Opened PR"),
+        "Morning Report must not claim a PR"
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -104,10 +121,15 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             return { exitCode: 0, stdout: "", stderr: "" };
           }
           if (args[0] === "push") {
-            return { exitCode: 0, stdout: "To github.com:zmh/sandbox.git\n * [new branch] feat/push-succ-1 -> feat/push-succ-1", stderr: "" };
+            return {
+              exitCode: 0,
+              stdout:
+                "To github.com:zmh/sandbox.git\n * [new branch] feat/push-succ-1 -> feat/push-succ-1",
+              stderr: "",
+            };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       const supervisor = new OvernightSupervisor({});
@@ -127,25 +149,27 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             acceptanceCriteria: [{ id: "AC1", assertion: "passes" }],
             status: "completed",
             builderIterations: 1,
-            criticRounds: 1
-          }
+            criticRounds: 1,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" }),
       });
 
       assert.equal(completed.status, "completed");
       assert.equal(completed.pushStatus, "pushed");
 
-      const journalEntry = completed.journal.find(j => j.role === "gitops" && j.message.includes("Pushed branch"));
+      const journalEntry = completed.journal.find(
+        (j) => j.role === "gitops" && j.message.includes("Pushed branch")
+      );
       assert.ok(journalEntry, "Journal must record successful branch push");
 
       const overnightReport = generateOvernightMorningReport([completed]);
@@ -165,7 +189,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         commandRunner: async (_file, args) => {
           if (args[0] === "status") return { exitCode: 0, stdout: "", stderr: "" };
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       const supervisor = new OvernightSupervisor({});
@@ -185,26 +209,26 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             acceptanceCriteria: [{ id: "AC1", assertion: "passes" }],
             status: "completed",
             builderIterations: 1,
-            criticRounds: 1
-          }
+            criticRounds: 1,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const completed = await supervisor.executeTaskWithRecovery(task, {
         gitOps,
-        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" })
+        gateRunner: async () => ({ exitCode: 0, stdout: "Pre-merge gate passed", stderr: "" }),
       });
 
       assert.equal(completed.status, "completed");
       assert.equal(completed.pushStatus, "completed — local only, push not configured");
 
       const journalEntry = completed.journal.find(
-        j => j.role === "gitops" && j.message === "completed — local only, push not configured"
+        (j) => j.role === "gitops" && j.message === "completed — local only, push not configured"
       );
       assert.ok(journalEntry, "Journal must record 'completed — local only, push not configured'");
     } finally {
@@ -219,19 +243,20 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         runId: "run-dirty-1",
         commandRunner: async (_file, args) => {
           if (args[0] === "status" && args[1] === "--porcelain") {
-            return { exitCode: 0, stdout: " M uncommitted-change.ts\n?? stray-file.txt\n", stderr: "" };
+            return {
+              exitCode: 0,
+              stdout: " M uncommitted-change.ts\n?? stray-file.txt\n",
+              stderr: "",
+            };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       // Direct gitOps call must throw
-      await assert.rejects(
-        async () => {
-          await gitOps.createAndSwitchBranch("feat/task-dirty");
-        },
-        /Bootstrap failed: dirty working tree in workspace/i
-      );
+      await assert.rejects(async () => {
+        await gitOps.createAndSwitchBranch("feat/task-dirty");
+      }, /Bootstrap failed: dirty working tree in workspace/i);
 
       // Supervisor must catch, mark task failed, and not execute any milestone
       const supervisor = new OvernightSupervisor({});
@@ -252,14 +277,14 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
             acceptanceCriteria: [{ id: "AC1", assertion: "passes" }],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const result = await supervisor.executeTaskWithRecovery(task, {
@@ -267,7 +292,7 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
         stepExecutor: async () => {
           milestoneExecuted = true;
           return { status: "completed", testsPassed: 1, testsFailed: 0 };
-        }
+        },
       });
 
       assert.equal(result.status, "failed");
@@ -300,10 +325,14 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
           return { exitCode: 0, stdout: "06fb0bdc540b9e3fb61b486e3f7b759ef229353a\n", stderr: "" };
         }
         if (cmd.includes("checkout -B feat/clean-boot origin/develop")) {
-          return { exitCode: 0, stdout: "Switched to a new branch 'feat/clean-boot'\n", stderr: "" };
+          return {
+            exitCode: 0,
+            stdout: "Switched to a new branch 'feat/clean-boot'\n",
+            stderr: "",
+          };
         }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
-      }
+      },
     });
 
     const res = await gitOps.createAndSwitchBranch("feat/clean-boot");
@@ -312,8 +341,10 @@ describe("BUILD-1: GitOps Push Honesty, Bootstrap Safety & Morning Report Attrib
     assert.ok(res.eventMarkdown.includes("from `origin/develop` (`06fb0bd`)"));
 
     // Verify correct commands in sequence
-    assert.ok(executedCommands.some(c => c.includes("git status --porcelain")));
-    assert.ok(executedCommands.some(c => c.includes("git fetch origin develop")));
-    assert.ok(executedCommands.some(c => c.includes("git checkout -B feat/clean-boot origin/develop")));
+    assert.ok(executedCommands.some((c) => c.includes("git status --porcelain")));
+    assert.ok(executedCommands.some((c) => c.includes("git fetch origin develop")));
+    assert.ok(
+      executedCommands.some((c) => c.includes("git checkout -B feat/clean-boot origin/develop"))
+    );
   });
 });

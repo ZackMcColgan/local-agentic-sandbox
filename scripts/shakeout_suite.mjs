@@ -15,7 +15,14 @@ async function run() {
       console.log(`[PASS] [${category}] ${name} (${duration}ms)`);
     } catch (err) {
       const duration = Date.now() - start;
-      results.push({ name, category, passed: false, duration, error: err.message, stack: err.stack });
+      results.push({
+        name,
+        category,
+        passed: false,
+        duration,
+        error: err.message,
+        stack: err.stack,
+      });
       console.log(`[FAIL] [${category}] ${name} (${duration}ms): ${err.message}`);
     }
   }
@@ -43,8 +50,8 @@ async function run() {
       body: JSON.stringify({
         messages: [{ role: "user", content: "Reply with exactly 'OK-PONG' and nothing else." }],
         mode: "chat",
-        stream: true
-      })
+        stream: true,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const reader = res.body.getReader();
@@ -65,7 +72,7 @@ async function run() {
     const res = await fetch(`${BASE_URL}/api/threads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Shakeout Test Thread" })
+      body: JSON.stringify({ title: "Shakeout Test Thread" }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
@@ -106,8 +113,8 @@ async function run() {
         name: "shakeout-fixture",
         path: "/workspace/projects/shakeout-fixture",
         description: "Fixture project for shakeout verification",
-        default_branch: "main"
-      })
+        default_branch: "main",
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
@@ -194,8 +201,8 @@ async function run() {
         action: "launchTask",
         goal: "Generate a standalone helper math.js that exports add and sub",
         scope: "SCRIPT",
-        toolchain: "node:22"
-      })
+        toolchain: "node:22",
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
@@ -210,8 +217,8 @@ async function run() {
         action: "launchTask",
         goal: "Implement string utility formatSlug in utils/slug.ts with tests",
         scope: "PROJECT",
-        toolchain: "node:22"
-      })
+        toolchain: "node:22",
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
@@ -220,8 +227,8 @@ async function run() {
 
   console.log("\n=================== SHAKEOUT SUMMARY ===================");
   console.log(`Total Probes: ${results.length}`);
-  console.log(`Passed: ${results.filter(r => r.passed).length}`);
-  console.log(`Failed: ${results.filter(r => !r.passed).length}`);
+  console.log(`Passed: ${results.filter((r) => r.passed).length}`);
+  console.log(`Failed: ${results.filter((r) => !r.passed).length}`);
 }
 
 run().catch(console.error);

@@ -18,7 +18,8 @@
   --border: 20 6% 90%;
 }
 
-.dark, [data-theme="dark"] {
+.dark,
+[data-theme="dark"] {
   color-scheme: dark;
   --background: 0 0% 0%;
   --foreground: 60 9% 98%;
@@ -58,7 +59,9 @@ html[data-theme="dark"] body {
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-feature-settings:
+    "rlig" 1,
+    "calt" 1;
 }
 
 /* Custom subtle scrollbar */
@@ -83,8 +86,12 @@ body {
 /* Live Activity Header (UI-017): indeterminate pulse — travels the track,
    signals work continuing without claiming a completion percentage. */
 @keyframes live-activity-pulse-slide {
-  0% { left: -33%; }
-  100% { left: 100%; }
+  0% {
+    left: -33%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 .live-activity-pulse {
   animation: live-activity-pulse-slide 1.6s ease-in-out infinite;
@@ -134,4 +141,3 @@ html[data-theme="light"] .surface-card {
     animation: none;
   }
 }
-

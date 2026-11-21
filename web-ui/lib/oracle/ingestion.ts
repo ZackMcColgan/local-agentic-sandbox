@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import { toQdrantPointId } from './ingestionRoundTrip';
+import crypto from "node:crypto";
+import { toQdrantPointId } from "./ingestionRoundTrip";
 
 export interface IngestionDocument {
   filePath: string;
@@ -25,9 +25,9 @@ export interface SyntaxBoundary {
  */
 export function detectSyntaxBoundaries(lines: string[], filePath: string): SyntaxBoundary[] {
   const boundaries: SyntaxBoundary[] = [];
-  const ext = (filePath.split('.').pop() || '').toLowerCase();
-  const isMd = ext === 'md' || ext === 'markdown';
-  const isCode = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext);
+  const ext = (filePath.split(".").pop() || "").toLowerCase();
+  const isMd = ext === "md" || ext === "markdown";
+  const isCode = ["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext);
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
@@ -42,7 +42,9 @@ export function detectSyntaxBoundaries(lines: string[], filePath: string): Synta
       }
     } else if (isCode) {
       // Top-level or exported functions
-      const fnMatch = trimmed.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_$]+)/);
+      const fnMatch = trimmed.match(
+        /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_$]+)/
+      );
       if (fnMatch) {
         boundaries.push({ lineIndex: i, type: "function", name: fnMatch[1] });
         continue;
@@ -60,7 +62,9 @@ export function detectSyntaxBoundaries(lines: string[], filePath: string): Synta
         continue;
       }
       // Const arrow functions
-      const constFnMatch = trimmed.match(/^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/);
+      const constFnMatch = trimmed.match(
+        /^(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/
+      );
       if (constFnMatch) {
         boundaries.push({ lineIndex: i, type: "function", name: constFnMatch[1] });
         continue;
@@ -91,7 +95,7 @@ export interface QdrantCollectionConfig {
   name: string;
   vectors: {
     size: number;
-    distance: 'Cosine' | 'Euclid' | 'Dot';
+    distance: "Cosine" | "Euclid" | "Dot";
   };
 }
 
@@ -113,14 +117,11 @@ export interface QdrantPoint {
  * Deterministically chunks a document with line range awareness, citation anchors,
  * and syntax boundary / AST awareness (functions, classes, interfaces, markdown headings).
  */
-export function chunkDocument(
-  doc: IngestionDocument,
-  options: ChunkOptions = {}
-): DocumentChunk[] {
+export function chunkDocument(doc: IngestionDocument, options: ChunkOptions = {}): DocumentChunk[] {
   const maxChunkLines = options.maxChunkLines ?? 50;
   const overlapLines = options.overlapLines ?? 10;
   const strategy = options.strategy ?? "ast";
-  const lines = doc.content.split('\n');
+  const lines = doc.content.split("\n");
   const chunks: DocumentChunk[] = [];
 
   if (lines.length === 0) return chunks;
@@ -154,9 +155,9 @@ export function chunkDocument(
     const chunkSlice = lines.slice(currentLine, chunkEnd);
     const endLine = chunkEnd;
 
-    const content = chunkSlice.join('\n');
-    const checksum = crypto.createHash('sha256').update(content).digest('hex');
-    const id = `${doc.filePath.replace(/[^a-zA-Z0-9]/g, '_')}_chunk_${chunkIdx}`;
+    const content = chunkSlice.join("\n");
+    const checksum = crypto.createHash("sha256").update(content).digest("hex");
+    const id = `${doc.filePath.replace(/[^a-zA-Z0-9]/g, "_")}_chunk_${chunkIdx}`;
     const citation = `${doc.filePath}:${startLine}-${endLine}`;
 
     chunks.push({
@@ -196,7 +197,7 @@ export function createQdrantCollectionPayload(
     name: collectionName,
     vectors: {
       size: vectorSize,
-      distance: 'Cosine',
+      distance: "Cosine",
     },
   };
 }
@@ -243,18 +244,119 @@ export async function generateDocumentVectors(
 }
 
 const STOPWORDS = new Set([
-  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
-  "any", "are", "as", "at", "be", "because", "been", "before", "being",
-  "below", "between", "both", "but", "by", "can", "did", "do", "does",
-  "doing", "down", "during", "each", "few", "for", "from", "further", "had",
-  "has", "have", "having", "he", "her", "here", "hers", "him", "his", "how",
-  "i", "if", "in", "into", "is", "it", "its", "just", "me", "more", "most",
-  "my", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other",
-  "our", "out", "over", "own", "same", "she", "should", "so", "some", "such",
-  "than", "that", "the", "their", "theirs", "them", "then", "there", "these",
-  "they", "this", "those", "through", "to", "too", "under", "until", "up",
-  "very", "was", "we", "were", "what", "when", "where", "which", "while",
-  "who", "whom", "why", "will", "with", "you", "your"
+  "a",
+  "about",
+  "above",
+  "after",
+  "again",
+  "against",
+  "all",
+  "am",
+  "an",
+  "and",
+  "any",
+  "are",
+  "as",
+  "at",
+  "be",
+  "because",
+  "been",
+  "before",
+  "being",
+  "below",
+  "between",
+  "both",
+  "but",
+  "by",
+  "can",
+  "did",
+  "do",
+  "does",
+  "doing",
+  "down",
+  "during",
+  "each",
+  "few",
+  "for",
+  "from",
+  "further",
+  "had",
+  "has",
+  "have",
+  "having",
+  "he",
+  "her",
+  "here",
+  "hers",
+  "him",
+  "his",
+  "how",
+  "i",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "just",
+  "me",
+  "more",
+  "most",
+  "my",
+  "no",
+  "nor",
+  "not",
+  "of",
+  "off",
+  "on",
+  "once",
+  "only",
+  "or",
+  "other",
+  "our",
+  "out",
+  "over",
+  "own",
+  "same",
+  "she",
+  "should",
+  "so",
+  "some",
+  "such",
+  "than",
+  "that",
+  "the",
+  "their",
+  "theirs",
+  "them",
+  "then",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "through",
+  "to",
+  "too",
+  "under",
+  "until",
+  "up",
+  "very",
+  "was",
+  "we",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "while",
+  "who",
+  "whom",
+  "why",
+  "will",
+  "with",
+  "you",
+  "your",
 ]);
 
 /**
@@ -347,7 +449,7 @@ export async function indexWorkspaceCodebase(
     path.join(root, "web-ui", "lib"),
     path.join(root, "web-ui", "components"),
     path.join(root, "mcp-server"),
-    path.join(root, "docs")
+    path.join(root, "docs"),
   ];
 
   const allowedExtensions = [".ts", ".tsx", ".js", ".json", ".md", ".drawio"];
@@ -382,7 +484,7 @@ export async function indexWorkspaceCodebase(
               docs.push({
                 filePath: relPath,
                 corpus: "local-repo",
-                content
+                content,
               });
             } catch {}
           }
@@ -402,14 +504,18 @@ export async function indexWorkspaceCodebase(
   }
 
   inMemoryChunkIndex = allChunks;
-  inMemoryVectors = allChunks.map((c) => deterministicEmbedding(`${c.filePath} ${c.filePath} ${c.content}`));
+  inMemoryVectors = allChunks.map((c) =>
+    deterministicEmbedding(`${c.filePath} ${c.filePath} ${c.content}`)
+  );
   lastIndexedTime = Date.now();
 
   // If Qdrant is configured/available, sync collection & points
   const qUrl =
     qdrantUrl ||
     process.env.QDRANT_URL ||
-    (process.env.NODE_ENV === "production" ? "http://qdrant-service:6333" : "http://127.0.0.1:6333");
+    (process.env.NODE_ENV === "production"
+      ? "http://qdrant-service:6333"
+      : "http://127.0.0.1:6333");
 
   try {
     const collectionName = "codebase-index";
@@ -419,7 +525,7 @@ export async function indexWorkspaceCodebase(
       await fetch(`${qUrl}/collections/${collectionName}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createQdrantCollectionPayload(collectionName, 768))
+        body: JSON.stringify(createQdrantCollectionPayload(collectionName, 768)),
       });
     }
 
@@ -434,8 +540,8 @@ export async function indexWorkspaceCodebase(
         endLine: chunk.endLine,
         corpus: chunk.corpus,
         content: chunk.content,
-        checksum: chunk.checksum
-      }
+        checksum: chunk.checksum,
+      },
     }));
 
     for (let i = 0; i < points.length; i += 100) {
@@ -443,7 +549,7 @@ export async function indexWorkspaceCodebase(
       await fetch(`${qUrl}/collections/${collectionName}/points`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points: slice })
+        body: JSON.stringify({ points: slice }),
       });
     }
   } catch (err: any) {
@@ -452,7 +558,7 @@ export async function indexWorkspaceCodebase(
 
   return {
     indexedFiles: docs.length,
-    totalChunks: allChunks.length
+    totalChunks: allChunks.length,
   };
 }
 
@@ -505,7 +611,9 @@ export async function searchOracleCodebase(
   const qUrl =
     options.qdrantUrl ||
     process.env.QDRANT_URL ||
-    (process.env.NODE_ENV === "production" ? "http://qdrant-service:6333" : "http://127.0.0.1:6333");
+    (process.env.NODE_ENV === "production"
+      ? "http://qdrant-service:6333"
+      : "http://127.0.0.1:6333");
 
   let hits: Array<{
     citation: string;
@@ -524,8 +632,8 @@ export async function searchOracleCodebase(
       body: JSON.stringify({
         vector: queryVec,
         limit: limit * 3,
-        with_payload: true
-      })
+        with_payload: true,
+      }),
     });
 
     if (res.ok) {
@@ -547,7 +655,7 @@ export async function searchOracleCodebase(
               startLine: item.payload?.startLine || 1,
               endLine: item.payload?.endLine || 1,
               content: item.payload?.content || "",
-              score: combinedScore
+              score: combinedScore,
             });
           }
         }
@@ -587,7 +695,7 @@ export async function searchOracleCodebase(
       startLine: s.chunk.startLine,
       endLine: s.chunk.endLine,
       content: s.chunk.content,
-      score: s.score
+      score: s.score,
     }));
   }
 
@@ -599,15 +707,13 @@ export async function searchOracleCodebase(
   }
 
   const citations = Array.from(new Set(hits.map((h) => h.citation)));
-  const snippetParts = hits.map(
-    (h) => `[Source: ${h.citation}]\n${h.content.slice(0, 1500)}`
-  );
+  const snippetParts = hits.map((h) => `[Source: ${h.citation}]\n${h.content.slice(0, 1500)}`);
 
   const contextSnippet = `\n\n--- LOCAL REPOSITORY GROUNDING CONTEXT (ORACLE RETRIEVAL) ---\n${snippetParts.join("\n\n")}\n--- END LOCAL CONTEXT ---`;
 
   return {
     contextSnippet,
     citations,
-    hits
+    hits,
   };
 }

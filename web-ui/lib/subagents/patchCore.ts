@@ -22,7 +22,9 @@ export function resolveSafeWorkspacePath(workspaceRoot: string, userPath: string
   const resolved = path.resolve(workspaceRoot, normalized);
 
   if (!resolved.startsWith(rootResolved)) {
-    throw new Error(`Security Violation: Path traversal outside workspace is forbidden (${userPath})`);
+    throw new Error(
+      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
+    );
   }
   return resolved;
 }
@@ -80,10 +82,13 @@ export async function workspacePatchFile(
   const ext = path.extname(safePath).toLowerCase();
   if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
     const scriptKind =
-      ext === ".tsx" ? ts.ScriptKind.TSX :
-      ext === ".jsx" ? ts.ScriptKind.JSX :
-      ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
-      ts.ScriptKind.TS;
+      ext === ".tsx"
+        ? ts.ScriptKind.TSX
+        : ext === ".jsx"
+          ? ts.ScriptKind.JSX
+          : ext === ".js" || ext === ".mjs" || ext === ".cjs"
+            ? ts.ScriptKind.JS
+            : ts.ScriptKind.TS;
     const sf = ts.createSourceFile(safePath, content, ts.ScriptTarget.Latest, true, scriptKind);
     const diags = (sf as any).parseDiagnostics as ts.Diagnostic[] | undefined;
     if (diags && diags.length > 0) {
@@ -98,6 +103,6 @@ export async function workspacePatchFile(
     status: "SUCCESS",
     path: relativePath,
     patchesApplied: appliedCount,
-    bytesWritten: Buffer.byteLength(content, "utf8")
+    bytesWritten: Buffer.byteLength(content, "utf8"),
   };
 }

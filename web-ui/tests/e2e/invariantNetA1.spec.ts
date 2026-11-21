@@ -41,30 +41,39 @@ for (const width of PHONE_WIDTHS) {
         const children = Array.from(hdr.querySelectorAll("*"));
         for (const el of children) {
           const style = window.getComputedStyle(el);
-          if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+          if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")
+            continue;
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
           if (r.left < hRect.left - 1) {
             issues.push(`${el.tagName}.${el.className} left=${r.left} < header.left=${hRect.left}`);
           }
           if (r.right > hRect.right + 1) {
-            issues.push(`${el.tagName}.${el.className} right=${r.right} > header.right=${hRect.right}`);
+            issues.push(
+              `${el.tagName}.${el.className} right=${r.right} > header.right=${hRect.right}`
+            );
           }
           if (r.top < hRect.top - 1) {
             issues.push(`${el.tagName}.${el.className} top=${r.top} < header.top=${hRect.top}`);
           }
           if (r.bottom > hRect.bottom + 1) {
-            issues.push(`${el.tagName}.${el.className} bottom=${r.bottom} > header.bottom=${hRect.bottom}`);
+            issues.push(
+              `${el.tagName}.${el.className} bottom=${r.bottom} > header.bottom=${hRect.bottom}`
+            );
           }
         }
         return issues;
       });
 
-      expect(violations, `Header child containment violations:\n${violations.join("\n")}`).toEqual([]);
+      expect(violations, `Header child containment violations:\n${violations.join("\n")}`).toEqual(
+        []
+      );
       await assertNoHorizontalOverflow(page, `Header ${width}px`);
     });
 
-    test("Queue deck & steer deck with 6 long unbroken chips: label & Clear all inside viewport, clickable, no overflow", async ({ page }) => {
+    test("Queue deck & steer deck with 6 long unbroken chips: label & Clear all inside viewport, clickable, no overflow", async ({
+      page,
+    }) => {
       // Hold /api/chat open so we can queue and steer while streaming
       await page.route("**/api/chat", async (route) => {
         await new Promise((r) => setTimeout(r, 15000));
@@ -82,7 +91,9 @@ for (const width of PHONE_WIDTHS) {
       // Start a stream
       await composer.fill("Initial streaming prompt");
       await composer.press("Enter");
-      await expect(page.locator('button[aria-label="Stop generating"], button[title*="Stop"]').first()).toBeVisible({ timeout: 5000 });
+      await expect(
+        page.locator('button[aria-label="Stop generating"], button[title*="Stop"]').first()
+      ).toBeVisible({ timeout: 5000 });
 
       // Add 6 queue items with long unbroken text
       for (let i = 0; i < 6; i++) {
@@ -127,7 +138,9 @@ for (const width of PHONE_WIDTHS) {
       }
     });
 
-    test("Navigation drawer open with long session list: no card clipped by footer, no horizontal overflow", async ({ page }) => {
+    test("Navigation drawer open with long session list: no card clipped by footer, no horizontal overflow", async ({
+      page,
+    }) => {
       const longSessions = Array.from({ length: 30 }, (_, i) => ({
         id: `sess-${i}`,
         title: `Session ${i} ${"LongTitle".repeat(6)}`,
@@ -153,7 +166,9 @@ for (const width of PHONE_WIDTHS) {
 
       // Check that session cards inside the scrollable list do not overlap the drawer footer
       const overlap = await page.evaluate(() => {
-        const d = document.querySelector('[data-testid="navigation-drawer"]') || document.querySelector("div.rounded-r-3xl");
+        const d =
+          document.querySelector('[data-testid="navigation-drawer"]') ||
+          document.querySelector("div.rounded-r-3xl");
         if (!d) return "Drawer not found";
         const footer = d.querySelector('[data-testid="drawer-footer"]') || d.lastElementChild;
         if (!footer) return null;
@@ -193,7 +208,12 @@ for (const width of PHONE_WIDTHS) {
 
       await page.goto("/");
       await page.locator('button[aria-label="Open navigation menu"]').first().click();
-      await page.locator('[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")').first().click();
+      await page
+        .locator(
+          '[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")'
+        )
+        .first()
+        .click();
       await page.waitForTimeout(400);
       await expect(page.getByText("Card 0").first()).toBeVisible();
       await assertNoHorizontalOverflow(page, `Board 26 cards ${width}px`);

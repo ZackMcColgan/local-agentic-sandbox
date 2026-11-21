@@ -54,10 +54,7 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export const ROUND_INACTIVITY_DEADLINE_MS = envInt(
-  "ROUND_INACTIVITY_DEADLINE_MS",
-  180_000
-);
+export const ROUND_INACTIVITY_DEADLINE_MS = envInt("ROUND_INACTIVITY_DEADLINE_MS", 180_000);
 export const ROUND_TOTAL_DEADLINE_MS = envInt("ROUND_TOTAL_DEADLINE_MS", 900_000);
 
 /**
@@ -68,7 +65,7 @@ export const ROUND_TOTAL_DEADLINE_MS = envInt("ROUND_TOTAL_DEADLINE_MS", 900_000
 export function resolveRoundDeadlineMs(): { inactivityMs: number; totalMs: number } {
   return {
     inactivityMs: envInt("ROUND_INACTIVITY_DEADLINE_MS", ROUND_INACTIVITY_DEADLINE_MS),
-    totalMs: envInt("ROUND_TOTAL_DEADLINE_MS", ROUND_TOTAL_DEADLINE_MS)
+    totalMs: envInt("ROUND_TOTAL_DEADLINE_MS", ROUND_TOTAL_DEADLINE_MS),
   };
 }
 
@@ -84,22 +81,16 @@ export const TURN_TRUNCATION_MARKER =
   "Turn ended: generation truncated at the per-message size limit.";
 
 /** Directive for the single auto-continue round after a length-truncated text round. */
-export const LENGTH_CONTINUATION_DIRECTIVE =
-  `[LENGTH CONTINUATION]: Your previous answer was cut off at the per-message size limit. Continue exactly where you stopped — output ONLY the remaining continuation, starting from the exact point you stopped, without repeating anything already produced.`;
+export const LENGTH_CONTINUATION_DIRECTIVE = `[LENGTH CONTINUATION]: Your previous answer was cut off at the per-message size limit. Continue exactly where you stopped — output ONLY the remaining continuation, starting from the exact point you stopped, without repeating anything already produced.`;
 
 /** Directive injected after a deadline abort so the next round avoids repeating the runaway. */
-export const ROUND_TIMEOUT_DIRECTIVE =
-  `[ROUND DEADLINE]: The previous round was aborted by the round deadline while still generating (likely an oversized single generation or a stalled stream). Do NOT attempt the same oversized output again. Break the work into smaller steps (e.g. patch_file instead of one giant write_file, or a shorter answer), or synthesize from what already exists.`;
+export const ROUND_TIMEOUT_DIRECTIVE = `[ROUND DEADLINE]: The previous round was aborted by the round deadline while still generating (likely an oversized single generation or a stalled stream). Do NOT attempt the same oversized output again. Break the work into smaller steps (e.g. patch_file instead of one giant write_file, or a shorter answer), or synthesize from what already exists.`;
 
 /** Hard cap on persisted/streamed turn content: a runaway generation is clamped. */
 export const MAX_STREAMED_CONTENT_CHARS = 64_000;
 
 export type ToolLoopStopReason =
-  | "completed"
-  | "budget"
-  | "backstop"
-  | "web-research-cap"
-  | "round-timeout";
+  "completed" | "budget" | "backstop" | "web-research-cap" | "round-timeout";
 
 export interface ToolLoopDecision {
   canContinue: boolean;
@@ -114,8 +105,7 @@ export interface ToolLoopDecision {
 
 export const WEB_RESEARCH_TOOL_NAMES = new Set(["search_web", "fetch_webpage_markdown"]);
 
-export const WEB_BUDGET_EXHAUSTED_DIRECTIVE =
-  `[ACTION DISCIPLINE]: You have reached the maximum of ${MAX_WEB_RESEARCH_CALLS} web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.`;
+export const WEB_BUDGET_EXHAUSTED_DIRECTIVE = `[ACTION DISCIPLINE]: You have reached the maximum of ${MAX_WEB_RESEARCH_CALLS} web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.`;
 
 export function isWebResearchTool(toolName: string, tier?: string): boolean {
   return WEB_RESEARCH_TOOL_NAMES.has(toolName) || tier === "browser";
@@ -135,9 +125,14 @@ export function filterToolsForWebBudget(
   });
 }
 
-export function hasArtifactCreationIntent(userPrompt: string): { isArtifactRequest: boolean; wantsSvg: boolean } {
+export function hasArtifactCreationIntent(userPrompt: string): {
+  isArtifactRequest: boolean;
+  wantsSvg: boolean;
+} {
   const wantsSvg =
-    /\b(svg|vector\s+diagram|vector\s+graphic|drawio|flowchart|architecture\s+diagram)\b/i.test(userPrompt) ||
+    /\b(svg|vector\s+diagram|vector\s+graphic|drawio|flowchart|architecture\s+diagram)\b/i.test(
+      userPrompt
+    ) ||
     (/\b(create|draw|generate|build|make|design|render|sketch)\b/i.test(userPrompt) &&
       /\b(diagram|chart|visual|graphic|card|infographic|illustration)\b/i.test(userPrompt));
 
@@ -149,7 +144,10 @@ export function hasArtifactCreationIntent(userPrompt: string): { isArtifactReque
   return { isArtifactRequest, wantsSvg };
 }
 
-export function buildSynthesisDirective(userPrompt: string, isFinalRoundSystemPrompt: boolean = false): string {
+export function buildSynthesisDirective(
+  userPrompt: string,
+  isFinalRoundSystemPrompt: boolean = false
+): string {
   const { isArtifactRequest, wantsSvg } = hasArtifactCreationIntent(userPrompt);
 
   if (wantsSvg) {
@@ -173,7 +171,10 @@ export function shouldRunPostToolSynthesis(params: {
   lingeringToolCallsCount: number;
   traces: Array<{ tool: string; args?: any; result?: any }>;
 }): boolean {
-  if ((params.traces.length > 0 && params.lingeringToolCallsCount > 0) || !params.assistantContent?.trim()) {
+  if (
+    (params.traces.length > 0 && params.lingeringToolCallsCount > 0) ||
+    !params.assistantContent?.trim()
+  ) {
     return true;
   }
 
@@ -251,17 +252,20 @@ export function mergeSystemDirective<T extends { role?: string; content?: any }>
   const trimmed = directive.trim();
 
   if (messages.length > 0 && messages[0]?.role === "system") {
-    const existing = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    const existing =
+      typeof messages[0].content === "string"
+        ? messages[0].content
+        : JSON.stringify(messages[0].content || "");
     if (!existing.includes(trimmed)) {
       messages[0] = {
         ...messages[0],
-        content: existing ? `${existing}\n\n${trimmed}` : trimmed
+        content: existing ? `${existing}\n\n${trimmed}` : trimmed,
       };
     }
   } else {
     messages.unshift({
       role: "system",
-      content: trimmed
+      content: trimmed,
     } as unknown as T);
   }
 
@@ -319,10 +323,11 @@ export function resolveRoundModelOptions(params: {
   numKeep?: number;
 } {
   const isArtifact =
-    params.isArtifactTurn ?? (params.userPrompt ? hasArtifactCreationIntent(params.userPrompt).isArtifactRequest : false);
+    params.isArtifactTurn ??
+    (params.userPrompt ? hasArtifactCreationIntent(params.userPrompt).isArtifactRequest : false);
   const shouldUseFastSynthesis =
     isArtifact || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
-  const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
+  const effectiveEffort = shouldUseFastSynthesis ? "low" : params.requestedEffort || "medium";
   const baseOpts = computeModelOptions(params.model, effectiveEffort);
   const result: {
     num_ctx: number;
@@ -334,7 +339,7 @@ export function resolveRoundModelOptions(params: {
   } = {
     num_ctx: baseOpts.num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
     temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
-    reasoning_effort: effectiveEffort
+    reasoning_effort: effectiveEffort,
   };
   if (params.numKeep !== undefined) {
     result.num_predict = 2048 + params.numKeep;
@@ -365,16 +370,15 @@ export interface FitContextOptions {
  * - The first message if role === "system"
  * - The last message with role === "user"
  */
-export function fitContextWindow(
-  messages: any[],
-  options?: FitContextOptions
-): any[] {
+export function fitContextWindow(messages: any[], options?: FitContextOptions): any[] {
   if (!Array.isArray(messages) || messages.length === 0) {
     return [];
   }
 
   const source = options?.compactHistory
-    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS }).messages
+    ? compactConversationHistory(messages, {
+        maxContentTokens: options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+      }).messages
     : messages;
 
   // 1. Enforce invariant: role === "system" ONLY exists at index 0.
@@ -382,7 +386,10 @@ export function fitContextWindow(
   let consolidatedSystemContent = "";
   const hasLeadingSystem = source[0]?.role === "system";
   if (hasLeadingSystem) {
-    consolidatedSystemContent = typeof source[0].content === "string" ? source[0].content : JSON.stringify(source[0].content || "");
+    consolidatedSystemContent =
+      typeof source[0].content === "string"
+        ? source[0].content
+        : JSON.stringify(source[0].content || "");
   }
 
   const nonSystemMessages: any[] = [];
@@ -394,7 +401,9 @@ export function fitContextWindow(
     if (m?.role === "system") {
       const extra = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
       if (extra.trim() && !consolidatedSystemContent.includes(extra.trim())) {
-        consolidatedSystemContent = consolidatedSystemContent ? `${consolidatedSystemContent}\n\n${extra.trim()}` : extra.trim();
+        consolidatedSystemContent = consolidatedSystemContent
+          ? `${consolidatedSystemContent}\n\n${extra.trim()}`
+          : extra.trim();
       }
     } else {
       nonSystemMessages.push({ ...m });
@@ -405,7 +414,7 @@ export function fitContextWindow(
   if (hasLeadingSystem || consolidatedSystemContent) {
     working.push({
       role: "system",
-      content: consolidatedSystemContent
+      content: consolidatedSystemContent,
     });
   }
   working.push(...nonSystemMessages);
@@ -435,7 +444,12 @@ export function fitContextWindow(
   }
 
   const hasWebResults = hasWebResearchResults(working);
-  if (isArtifact || options?.reserveOutputTokens !== undefined || options?.outputHeadroomTokens !== undefined || hasWebResults) {
+  if (
+    isArtifact ||
+    options?.reserveOutputTokens !== undefined ||
+    options?.outputHeadroomTokens !== undefined ||
+    hasWebResults
+  ) {
     const headroom =
       options?.outputHeadroomTokens ??
       options?.reserveOutputTokens ??
@@ -501,7 +515,7 @@ export function fitContextWindow(
     if (working[candidateIdx].role === "tool") {
       working[candidateIdx] = {
         ...working[candidateIdx],
-        content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+        content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
       };
       evictedCount++;
     } else {
@@ -556,7 +570,7 @@ export function fitContextWindow(
     const originalContent = working[longestIdx].content;
     working[longestIdx] = {
       ...working[longestIdx],
-      content: originalContent.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
+      content: originalContent.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
     evictedCount++;
   }
@@ -614,14 +628,16 @@ export interface RunChatToolLoopOptions {
  * Runs iterative chat tool rounds with per-round context window fitting,
  * tool-output clamping, and forced final-round synthesis.
  */
-export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+export async function runChatToolLoop(
+  options: RunChatToolLoopOptions
+): Promise<{ finalContent: string; roundsCompleted: number }> {
   const {
     conversationMessages,
     activeModel = "qwen3.8:27b-q3_k_m",
     effectiveReasoningEffort = "medium",
     maxToolRounds = TOOL_ROUND_BACKSTOP,
     maxContentTokens = CHAT_CONTEXT_BUDGET_TOKENS,
-    executeTool
+    executeTool,
   } = options;
   const llmTools = options.llmTools || options.ollamaTools || [];
   const streamChatFn = options.streamLlmChat || options.streamOllamaChat;
@@ -642,7 +658,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   while (true) {
     // Fit conversation to budget first through the compaction/elision ladder
     const fitResult = fitConversationToBudget(conversationMessages, {
-      budgetTokens: maxContentTokens
+      budgetTokens: maxContentTokens,
     });
     if (fitResult.compacted) {
       conversationMessages.length = 0;
@@ -661,7 +677,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       lastRoundTools,
       webResearchCalls,
       roundBackstop: maxToolRounds,
-      awaitingToolRound: groundingRoundPending
+      awaitingToolRound: groundingRoundPending,
     });
     if (!decision.canContinue) break;
     groundingRoundPending = false;
@@ -679,7 +695,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
         tools: isFinalRound ? undefined : llmTools,
-        isArtifactTurn: isArtifactRequest
+        isArtifactTurn: isArtifactRequest,
       }),
       keep_alive: -1,
       options: resolveRoundModelOptions({
@@ -687,8 +703,8 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
         requestedEffort: effectiveReasoningEffort,
         userPrompt,
         isSynthesisOrFinalRound: isFinalRound,
-        hasCompletedToolCalls: round > 0
-      })
+        hasCompletedToolCalls: round > 0,
+      }),
     };
 
     if (llmTools.length > 0 && !isFinalRound) {
@@ -726,7 +742,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       finalContent = fullRoundContent;
       conversationMessages.push({
         role: "assistant",
-        content: fullRoundContent
+        content: fullRoundContent,
       });
       round++;
       break;
@@ -735,7 +751,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     conversationMessages.push({
       role: "assistant",
       content: fullRoundContent,
-      tool_calls: toolCallsFromMessage
+      tool_calls: toolCallsFromMessage,
     });
 
     for (const toolCall of toolCallsFromMessage) {
@@ -746,7 +762,9 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       conversationMessages.push({
         role: "tool",
         name: toolName,
-        content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))
+        content: isFileReadTool
+          ? JSON.stringify(toolResult)
+          : clampToolOutput(JSON.stringify(toolResult)),
       });
     }
 
@@ -756,7 +774,6 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
 
   return { finalContent, roundsCompleted: round };
 }
-
 
 /**
  * CHAT-7: budget-governed tool-round continuation.
@@ -798,13 +815,14 @@ export function canContinueToolLoop(options: {
   }
 
   if (contextTokens > budgetTokens) {
-    const allResearch = lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
+    const allResearch =
+      lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
     if (allResearch && webResearchCalls < MAX_WEB_RESEARCH_CALLS) {
       return { canContinue: true, forceSynthesis: false };
     }
     return {
       canContinue: false,
-      stopReason: webResearchCalls >= MAX_WEB_RESEARCH_CALLS ? "web-research-cap" : "budget"
+      stopReason: webResearchCalls >= MAX_WEB_RESEARCH_CALLS ? "web-research-cap" : "budget",
     };
   }
 
@@ -814,10 +832,7 @@ export function canContinueToolLoop(options: {
 }
 
 export type CompactionAction =
-  | "compaction"
-  | "elide_tool_outputs"
-  | "drop_old_turns"
-  | "truncate_oversize";
+  "compaction" | "elide_tool_outputs" | "drop_old_turns" | "truncate_oversize";
 
 export interface FitConversationResult {
   messages: any[];
@@ -850,7 +865,7 @@ export function fitConversationToBudget(
       actions: [],
       tokensBefore: 0,
       tokensAfter: 0,
-      highWater: false
+      highWater: false,
     };
   }
 
@@ -866,7 +881,7 @@ export function fitConversationToBudget(
     const compactRes = compactConversationHistory(workingMessages, {
       maxContentTokens: budgetTokens,
       compactionThreshold: thresholdRatio,
-      preserveRecentMessages: options?.preserveRecentMessages ?? 4
+      preserveRecentMessages: options?.preserveRecentMessages ?? 4,
     });
     if (compactRes.compacted) {
       workingMessages = compactRes.messages;
@@ -885,7 +900,7 @@ export function fitConversationToBudget(
         if (workingMessages[i].content !== EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER) {
           workingMessages[i] = {
             ...workingMessages[i],
-            content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+            content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
           };
           anyElided = true;
           if (estimateTokens(workingMessages) <= budgetTokens) {
@@ -942,7 +957,8 @@ export function fitConversationToBudget(
     let maxLen = 0;
     for (let i = 0; i < workingMessages.length; i++) {
       if (i === 0 && hasLeadingSystem && workingMessages.length > 1) continue;
-      const len = typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
+      const len =
+        typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
       if (len > maxLen) {
         maxLen = len;
         longestIdx = i;
@@ -960,7 +976,7 @@ export function fitConversationToBudget(
     const orig = workingMessages[longestIdx].content;
     workingMessages[longestIdx] = {
       ...workingMessages[longestIdx],
-      content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
+      content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
     if (!actions.includes("truncate_oversize")) {
       actions.push("truncate_oversize");
@@ -972,7 +988,7 @@ export function fitConversationToBudget(
     actions.includes("elide_tool_outputs") ||
     actions.includes("drop_old_turns") ||
     actions.includes("truncate_oversize") ||
-    finalTokens >= budgetTokens * 0.90;
+    finalTokens >= budgetTokens * 0.9;
 
   return {
     messages: workingMessages,
@@ -980,6 +996,6 @@ export function fitConversationToBudget(
     actions,
     tokensBefore: initialTokens,
     tokensAfter: finalTokens,
-    highWater
+    highWater,
   };
 }

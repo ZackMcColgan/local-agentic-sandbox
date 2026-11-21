@@ -68,7 +68,11 @@ describe("flow-monitor", () => {
     for (const missingName of REAL_CI_CHECK_NAMES) {
       const incomplete = allSevenGreenChecks().filter((c) => c.name !== missingName);
       const incompleteVerdict = evaluatePrChecks("sha-abc123", incomplete);
-      assert.equal(incompleteVerdict.status, "running", `missing ${missingName} must evaluate to running`);
+      assert.equal(
+        incompleteVerdict.status,
+        "running",
+        `missing ${missingName} must evaluate to running`
+      );
     }
   });
 
@@ -87,7 +91,12 @@ describe("flow-monitor", () => {
     for (const failingName of REAL_CI_CHECK_NAMES) {
       const checks = allSevenGreenChecks().map((c) =>
         c.name === failingName
-          ? { name: c.name, status: "COMPLETED", conclusion: "FAILURE", error: `${failingName} failed` }
+          ? {
+              name: c.name,
+              status: "COMPLETED",
+              conclusion: "FAILURE",
+              error: `${failingName} failed`,
+            }
           : c
       );
       const verdict = evaluatePrChecks("sha-red", checks);

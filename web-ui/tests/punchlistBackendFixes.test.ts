@@ -8,7 +8,7 @@ function findRepoRoot(): string {
   const candidates = [
     process.cwd(),
     path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../..")
+    path.resolve(process.cwd(), "../.."),
   ];
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, "package.json")) && fs.existsSync(path.join(dir, "web-ui"))) {
@@ -68,15 +68,15 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
           patches: [
             {
               search: "return a - b;",
-              replace: "return a + b;"
-            }
-          ]
-        })
+              replace: "return a + b;",
+            },
+          ],
+        }),
       });
 
       const builder = new BuilderWorker({
         workspaceRoot: tmpDir,
-        generate: mockGenerate as any
+        generate: mockGenerate as any,
       });
 
       // Spy on patchFile method
@@ -98,18 +98,25 @@ describe("Flash 3.8 Backend Shakeout — Fix 1: B-P0-1 Dockerfile & BuilderWorke
           {
             id: "AC-1",
             assertion: "add returns a + b",
-            fileMatch: targetRel
-          }
-        ]
+            fileMatch: targetRel,
+          },
+        ],
       };
 
       const result = await builder.executeMilestoneWork(milestone, 1, [], tmpDir);
 
-      assert.equal(patchFileCalled, true, "BuilderWorker.patchFile must be invoked when model returns patch payload");
+      assert.equal(
+        patchFileCalled,
+        true,
+        "BuilderWorker.patchFile must be invoked when model returns patch payload"
+      );
       const patchedContent = fs.readFileSync(fullTarget, "utf8");
       assert.match(patchedContent, /return a \+ b;/, "File must contain patched content");
       assert.doesNotMatch(patchedContent, /return a - b;/, "Original flaw must be replaced");
-      assert.ok(result.diff.includes("+  return a + b;"), "Unified diff must reflect the applied patch");
+      assert.ok(
+        result.diff.includes("+  return a + b;"),
+        "Unified diff must reflect the applied patch"
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -140,19 +147,26 @@ describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest T
       acceptanceCriteria: [
         {
           id: "AC-1",
-          assertion: "add returns a + b"
-        }
-      ]
+          assertion: "add returns a + b",
+        },
+      ],
     };
 
     const normalized = normalizeMilestone(rawMilestone);
-    assert.ok(normalized.acceptanceCriteria[0].command, "command should be populated from testFile");
+    assert.ok(
+      normalized.acceptanceCriteria[0].command,
+      "command should be populated from testFile"
+    );
     assert.match(normalized.acceptanceCriteria[0].command!, /tests\/math\.test\.ts/);
   });
 
   it("Supervisor testRunner does NOT report exitCode: 0 with passed > 0 when 0 tests ran", async () => {
     const { runMilestoneTestRunner } = await import("../lib/subagents/supervisor.js");
-    assert.equal(typeof runMilestoneTestRunner, "function", "runMilestoneTestRunner helper must be exported");
+    assert.equal(
+      typeof runMilestoneTestRunner,
+      "function",
+      "runMilestoneTestRunner helper must be exported"
+    );
 
     const milestoneWithZeroCommands = {
       id: "M1",
@@ -164,14 +178,18 @@ describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest T
       acceptanceCriteria: [
         {
           id: "AC-1",
-          assertion: "Code visually verified"
-        }
-      ]
+          assertion: "Code visually verified",
+        },
+      ],
     };
 
     const res = await runMilestoneTestRunner(milestoneWithZeroCommands, process.cwd());
     assert.equal(res.testsRun, 0, "testsRun must be 0");
-    assert.notEqual(res.exitCode, 0, "exitCode must NOT be 0 when 0 tests ran (dishonest success banned)");
+    assert.notEqual(
+      res.exitCode,
+      0,
+      "exitCode must NOT be 0 when 0 tests ran (dishonest success banned)"
+    );
   });
 
   it("Supervisor testRunner automatically executes testFile when acceptance criteria omit command", async () => {
@@ -198,9 +216,9 @@ describe("Flash 3.8 Backend Shakeout — Fix 2: B-P0-2 Planner Schema & Honest T
         acceptanceCriteria: [
           {
             id: "AC-1",
-            assertion: "Passes node test"
-          }
-        ]
+            assertion: "Passes node test",
+          },
+        ],
       };
 
       const res = await runMilestoneTestRunner(milestone, tmpDir);
@@ -261,7 +279,11 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
     const cancelled = cancelTask(taskId);
     assert.equal(cancelled, true, "cancelTask should return true for registered task");
     assert.equal(controller.signal.aborted, true, "Signal must be aborted after cancelTask");
-    assert.equal(supervisor.getAbortController(taskId), undefined, "Controller must be removed after cancellation");
+    assert.equal(
+      supervisor.getAbortController(taskId),
+      undefined,
+      "Controller must be removed after cancellation"
+    );
   });
 
   it("executeTaskWithRecovery halts between milestone steps when signal is aborted", async () => {
@@ -285,15 +307,29 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
       journal: [],
       checkpoints: [],
       milestones: [
-        { id: "M1", title: "M1", status: "pending", builderIterations: 0, criticRounds: 0, acceptanceCriteria: [] },
-        { id: "M2", title: "M2", status: "pending", builderIterations: 0, criticRounds: 0, acceptanceCriteria: [] }
-      ]
+        {
+          id: "M1",
+          title: "M1",
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0,
+          acceptanceCriteria: [],
+        },
+        {
+          id: "M2",
+          title: "M2",
+          status: "pending",
+          builderIterations: 0,
+          criticRounds: 0,
+          acceptanceCriteria: [],
+        },
+      ],
     };
 
     try {
       const res = await supervisor.executeTaskWithRecovery(task, {
         stepExecutor: mockStepExecutor as any,
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       assert.equal(stepsExecuted, 1, "Only first milestone should execute before abort halts loop");
@@ -314,13 +350,13 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
       executeJob: async (job: any) => {
         signalReceived = job.abortSignal;
         return { diff: "diff", gitSha: "a".repeat(40), targetFile: "test.ts" };
-      }
+      },
     };
 
     const controller = new AbortController();
     const executor = createProductionStepExecutor({
       workerPool: mockWorkerPool,
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     const milestone: any = {
@@ -329,11 +365,15 @@ describe("Flash 3.8 Backend Shakeout — Fix 4: B-P1-1 Task Cancellation & Abort
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
-      acceptanceCriteria: []
+      acceptanceCriteria: [],
     };
 
     await executor(milestone, 1);
-    assert.equal(signalReceived, controller.signal, "createProductionStepExecutor must pass abortSignal to workerPool.executeJob");
+    assert.equal(
+      signalReceived,
+      controller.signal,
+      "createProductionStepExecutor must pass abortSignal to workerPool.executeJob"
+    );
   });
 });
 
@@ -343,19 +383,16 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
     const pipeline = new SelfDeployPipeline({
       enabled: true,
       commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
-    await assert.rejects(
-      async () => {
-        await pipeline.executeDeploy({
-          branchName: "main",
-          previousSha: "sha1",
-          newSha: "sha2"
-        });
-      },
-      /strictly blocked by safety rails/i
-    );
+    await assert.rejects(async () => {
+      await pipeline.executeDeploy({
+        branchName: "main",
+        previousSha: "sha1",
+        newSha: "sha2",
+      });
+    }, /strictly blocked by safety rails/i);
   });
 
   it("executeDeploy runs git checkout develop and git merge --no-ff when branchName is feat/task-*", async () => {
@@ -368,7 +405,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
         executedCommands.push({ file, args });
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
     const result = await pipeline.executeDeploy({
@@ -376,7 +413,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
       previousSha: "sha1",
       newSha: "sha2",
       deploymentName: "web-ui",
-      namespace: "local-agentic-sandbox"
+      namespace: "local-agentic-sandbox",
     });
 
     assert.equal(result.status, "deployed");
@@ -393,7 +430,9 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
     assert.ok(mergeCmd.args.includes("--no-ff"), "git merge must use --no-ff flag");
 
     const mergeIndex = executedCommands.indexOf(mergeCmd);
-    const buildIndex = executedCommands.findIndex((c) => c.file === "docker" && c.args[0] === "build");
+    const buildIndex = executedCommands.findIndex(
+      (c) => c.file === "docker" && c.args[0] === "build"
+    );
     assert.ok(buildIndex > mergeIndex, "git merge must happen before docker build");
   });
 
@@ -410,19 +449,16 @@ describe("Flash 3.8 Backend Shakeout — Fix 5: B-P1-2 SelfDeployPipeline Branch
         }
         return { exitCode: 0, stdout: "ok\n", stderr: "" };
       },
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
-    await assert.rejects(
-      async () => {
-        await pipeline.executeDeploy({
-          branchName: "feat/task-conflict-123",
-          previousSha: "sha1",
-          newSha: "sha2"
-        });
-      },
-      /Git merge .* failed/i
-    );
+    await assert.rejects(async () => {
+      await pipeline.executeDeploy({
+        branchName: "feat/task-conflict-123",
+        previousSha: "sha1",
+        newSha: "sha2",
+      });
+    }, /Git merge .* failed/i);
 
     const buildCmd = executedCommands.find((c) => c.file === "docker" && c.args[0] === "build");
     assert.equal(buildCmd, undefined, "Docker build must not execute when git merge fails");
@@ -439,17 +475,29 @@ describe("Flash 3.8 Backend Shakeout — Fix 6: B-P1-3 & B-P2-1 Isolated Branch 
         goal: "Test feature for isolated branch",
         scope: "SNIPPET",
         autoDeployOnGreen: true,
-        autoExecute: false
-      })
+        autoExecute: false,
+      }),
     });
 
     const res = await POST(req);
     assert.equal(res.status, 201);
     const body = await res.json();
     assert.ok(body.taskId, "Must return taskId");
-    assert.notEqual(body.manifest.branchName, "feat/v2.5-overnight", "Must not hardcode feat/v2.5-overnight");
-    assert.match(body.manifest.branchName, /^feat\/task-/, "branchName must default to feat/task-*");
-    assert.equal(body.manifest.autoDeployOnGreen, true, "autoDeployOnGreen must be preserved on manifest");
+    assert.notEqual(
+      body.manifest.branchName,
+      "feat/v2.5-overnight",
+      "Must not hardcode feat/v2.5-overnight"
+    );
+    assert.match(
+      body.manifest.branchName,
+      /^feat\/task-/,
+      "branchName must default to feat/task-*"
+    );
+    assert.equal(
+      body.manifest.autoDeployOnGreen,
+      true,
+      "autoDeployOnGreen must be preserved on manifest"
+    );
   });
 
   it("GET /api/workspace/file route exists and returns 403 on path traversal", async () => {
@@ -457,7 +505,9 @@ describe("Flash 3.8 Backend Shakeout — Fix 6: B-P1-3 & B-P2-1 Isolated Branch 
     const { GET } = await import("../app/api/workspace/file/route.js");
     assert.equal(typeof GET, "function", "GET handler must be exported");
 
-    const reqTraversal = new NextRequest("http://localhost:3000/api/workspace/file?path=../package.json");
+    const reqTraversal = new NextRequest(
+      "http://localhost:3000/api/workspace/file?path=../package.json"
+    );
     const resTraversal = await GET(reqTraversal);
     assert.equal(resTraversal.status, 403, "Must return 403 on path traversal");
 
@@ -481,7 +531,7 @@ describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBa
       recordObservedPattern,
       loadPendingQueue,
       approveSkillCandidate,
-      listActiveSkills
+      listActiveSkills,
     } = await import("../lib/subagents/skillGate.js");
 
     const blockingFile = path.join(os.tmpdir(), `blocking-skills-file-${Date.now()}`);
@@ -496,14 +546,22 @@ describe("Flash 3.8 Backend Shakeout — Fix 7: Writable Fallback in getSkillsBa
 
       // Call getSkillsBasePath without customPath
       const resolvedPath = getSkillsBasePath();
-      assert.equal(resolvedPath, fallbackDir, "Must fall back to os.tmpdir()/local-agentic-sandbox-skills when preferred path is unwritable");
+      assert.equal(
+        resolvedPath,
+        fallbackDir,
+        "Must fall back to os.tmpdir()/local-agentic-sandbox-skills when preferred path is unwritable"
+      );
       assert.ok(fs.existsSync(resolvedPath), "Fallback directory must exist and be created");
 
       // Verify propose -> load -> approve -> list succeeds without throwing EACCES
-      const recordRes = recordObservedPattern("test-fallback-pattern", {
-        title: "Test Fallback Skill",
-        solutionSummary: "Ensure fallback works cleanly"
-      }, { minOccurrences: 1 });
+      const recordRes = recordObservedPattern(
+        "test-fallback-pattern",
+        {
+          title: "Test Fallback Skill",
+          solutionSummary: "Ensure fallback works cleanly",
+        },
+        { minOccurrences: 1 }
+      );
       assert.ok(recordRes.candidate);
 
       const queue = loadPendingQueue();
@@ -540,19 +598,29 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
       body: JSON.stringify({
         goal: "Build a Node.js utility for parsing logs",
         scope: "SNIPPET",
-        autoExecute: false
-      })
+        autoExecute: false,
+      }),
     });
 
     const res = await POST(req);
-    assert.equal(res.status, 201, "POST /api/tasks must return 201 when planner cannot resolve an artifact target");
+    assert.equal(
+      res.status,
+      201,
+      "POST /api/tasks must return 201 when planner cannot resolve an artifact target"
+    );
     const body = await res.json();
     assert.ok(body.taskId, "Must return taskId");
-    assert.deepEqual(body.manifest.milestones, [], "Manifest must have empty milestones when planning fails");
+    assert.deepEqual(
+      body.manifest.milestones,
+      [],
+      "Manifest must have empty milestones when planning fails"
+    );
     const plannerEntries = (body.manifest.journal || []).filter((j: any) => j.role === "planner");
     assert.ok(plannerEntries.length >= 1, "Journal must contain a planner entry");
     assert.ok(
-      plannerEntries.some((j: any) => String(j.message).includes("Planner could not resolve a valid artifact file target")),
+      plannerEntries.some((j: any) =>
+        String(j.message).includes("Planner could not resolve a valid artifact file target")
+      ),
       `Planner journal entry must record the planner error verbatim, got: ${JSON.stringify(plannerEntries)}`
     );
   });
@@ -566,8 +634,8 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
       body: JSON.stringify({
         goal: "Build a Node.js utility for parsing logs",
         scope: "SNIPPET",
-        autoExecute: true
-      })
+        autoExecute: true,
+      }),
     });
 
     const res = await POST(req);
@@ -576,11 +644,17 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
     assert.ok(body.taskId, "Must return taskId");
     assert.deepEqual(body.manifest.milestones, [], "Manifest must have empty milestones");
     assert.notEqual(body.manifest.status, "completed", "Task must not be marked completed");
-    assert.equal(activeExecutionSet.has(body.taskId), false, "Task must not be in activeExecutionSet");
+    assert.equal(
+      activeExecutionSet.has(body.taskId),
+      false,
+      "Task must not be in activeExecutionSet"
+    );
 
     const journalMessages = (body.manifest.journal || []).map((j: any) => String(j.message));
     assert.ok(
-      journalMessages.some((m: string) => m.includes("Planner could not resolve a valid artifact file target")),
+      journalMessages.some((m: string) =>
+        m.includes("Planner could not resolve a valid artifact file target")
+      ),
       "Journal must include verbatim planner error"
     );
     assert.ok(
@@ -590,16 +664,16 @@ describe("AUD-08 Fix 1: POST /api/tasks survives planner artifact-resolution fai
 
     // Yield briefly and verify via GET that no background execution completed the task
     await new Promise((r) => setTimeout(r, 50));
-    const getRes = await GET(new Request(`http://localhost:3000/api/tasks?taskId=${encodeURIComponent(body.taskId)}`));
+    const getRes = await GET(
+      new Request(`http://localhost:3000/api/tasks?taskId=${encodeURIComponent(body.taskId)}`)
+    );
     assert.equal(getRes.status, 200);
     const getBody = await getRes.json();
-    assert.notEqual(getBody.task.status, "completed", "Task must never stamp completed after planning failure");
+    assert.notEqual(
+      getBody.task.status,
+      "completed",
+      "Task must never stamp completed after planning failure"
+    );
     assert.equal(getBody.activeWorkers, 0, "No active workers should be running");
   });
 });
-
-
-
-
-
-

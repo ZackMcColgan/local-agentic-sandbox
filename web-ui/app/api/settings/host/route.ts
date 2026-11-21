@@ -15,7 +15,7 @@ export async function GET() {
       runnerAvailable: runnerStatus.runnerAvailable,
       runnerState: runnerStatus.runnerState,
       runnerReason: runnerStatus.reason,
-      recentActivity
+      recentActivity,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -43,11 +43,17 @@ export async function POST(req: Request) {
         success: true,
         hostAccessEnabled: next.hostAccessEnabled,
         allowUnattendedHostGit: next.allowUnattendedHostGit,
-        jobChunkingEnabled: next.jobChunkingEnabled
+        jobChunkingEnabled: next.jobChunkingEnabled,
       });
     }
 
-    return NextResponse.json({ error: "Invalid payload: hostAccessEnabled, allowUnattendedHostGit, or jobChunkingEnabled boolean required" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "Invalid payload: hostAccessEnabled, allowUnattendedHostGit, or jobChunkingEnabled boolean required",
+      },
+      { status: 400 }
+    );
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -28,11 +28,7 @@
       "passed": true,
       "durationMs": 94854,
       "evidence": {
-        "matchedKeywords": [
-          "close",
-          "enqueue",
-          "controller"
-        ],
+        "matchedKeywords": ["close", "enqueue", "controller"],
         "requiredCount": 3,
         "claimedFixed": false
       }
@@ -54,16 +50,8 @@
       "passed": true,
       "durationMs": 19935,
       "evidence": {
-        "foundCitations": [
-          "tool:read_file#1",
-          "tool:run_command#2",
-          "tool:grep#3"
-        ],
-        "resolvableCitations": [
-          "tool:read_file#1",
-          "tool:run_command#2",
-          "tool:grep#3"
-        ],
+        "foundCitations": ["tool:read_file#1", "tool:run_command#2", "tool:grep#3"],
+        "resolvableCitations": ["tool:read_file#1", "tool:run_command#2", "tool:grep#3"],
         "minRequired": 2
       }
     },

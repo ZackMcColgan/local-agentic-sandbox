@@ -14,10 +14,7 @@ import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CanvasProvider } from "../components/CanvasContext";
-import {
-  ArtifactCanvasPane,
-  CanvasDiffCard,
-} from "../components/ArtifactCanvas";
+import { ArtifactCanvasPane, CanvasDiffCard } from "../components/ArtifactCanvas";
 import { CodeBlock } from "../components/ArtifactRenderers";
 import {
   CANVAS_FLAG_KEY,
@@ -179,8 +176,14 @@ describe("uir-2 canvas: artifact versions and the unseen-update badge", () => {
   });
 
   it("version is stable for identical content and changes when content changes", () => {
-    assert.equal(artifactVersion(fileArtifact("<p>a</p>")), artifactVersion(fileArtifact("<p>a</p>")));
-    assert.notEqual(artifactVersion(fileArtifact("<p>a</p>")), artifactVersion(fileArtifact("<p>b</p>")));
+    assert.equal(
+      artifactVersion(fileArtifact("<p>a</p>")),
+      artifactVersion(fileArtifact("<p>a</p>"))
+    );
+    assert.notEqual(
+      artifactVersion(fileArtifact("<p>a</p>")),
+      artifactVersion(fileArtifact("<p>b</p>"))
+    );
   });
 
   it("badge shows only when a seen artifact changed while the canvas is closed", () => {
@@ -244,14 +247,29 @@ describe("uir-2 canvas: UI wiring (source assertions)", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
     assert.ok(src.includes("CanvasProvider"), "ChatStream must wrap its tree in CanvasProvider");
     assert.ok(src.includes("ArtifactCanvasPane"), "ChatStream must mount the ArtifactCanvasPane");
-    assert.ok(src.includes("CanvasDiffCard"), "ChatStream diff cards must offer the canvas diff door");
-    assert.ok(src.includes("CanvasFileOpenButton"), "ChatStream file cards must offer the canvas open door");
+    assert.ok(
+      src.includes("CanvasDiffCard"),
+      "ChatStream diff cards must offer the canvas diff door"
+    );
+    assert.ok(
+      src.includes("CanvasFileOpenButton"),
+      "ChatStream file cards must offer the canvas open door"
+    );
   });
 
   it("CodeBlock cards carry the Open affordance and the update badge hook", () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "../components/ArtifactRenderers.tsx"), "utf8");
-    assert.ok(src.includes('data-testid="canvas-open"'), "CodeBlock must render the canvas Open button");
-    assert.ok(src.includes('data-testid="canvas-update-badge"'), "CodeBlock must render the unseen-update badge");
+    const src = fs.readFileSync(
+      path.resolve(__dirname, "../components/ArtifactRenderers.tsx"),
+      "utf8"
+    );
+    assert.ok(
+      src.includes('data-testid="canvas-open"'),
+      "CodeBlock must render the canvas Open button"
+    );
+    assert.ok(
+      src.includes('data-testid="canvas-update-badge"'),
+      "CodeBlock must render the unseen-update badge"
+    );
     assert.ok(src.includes("Open"), "the affordance is labelled Open");
   });
 });
@@ -350,9 +368,9 @@ describe("uir-2 canvas: rendered UI", () => {
     const pane = container.querySelector('[data-testid="canvas-pane"]');
     assert.ok(pane, "canvas pane opens");
     assert.ok(pane!.textContent?.includes("page.html"), "pane header shows the filename");
-    const tabLabels = Array.from(
-      container.querySelectorAll('[data-testid="canvas-tab"]')
-    ).map((t) => t.textContent);
+    const tabLabels = Array.from(container.querySelectorAll('[data-testid="canvas-tab"]')).map(
+      (t) => t.textContent
+    );
     assert.deepEqual(
       [...new Set(tabLabels)],
       ["Preview", "Code"],
@@ -366,11 +384,7 @@ describe("uir-2 canvas: rendered UI", () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 60));
     });
-    assert.equal(
-      container.querySelector('[data-testid="canvas-pane"]'),
-      null,
-      "pane closes"
-    );
+    assert.equal(container.querySelector('[data-testid="canvas-pane"]'), null, "pane closes");
     assert.equal(scrollEl.scrollTop, 777, "exact prior scroll position restored");
   });
 

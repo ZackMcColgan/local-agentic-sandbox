@@ -3,10 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import {
-  BoardOrchestrator,
-  type JobExecutionOutcome,
-} from "../lib/board/boardOrchestrator";
+import { BoardOrchestrator, type JobExecutionOutcome } from "../lib/board/boardOrchestrator";
 import type { DispatcherBoardItem } from "../lib/board/dispatcher";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import {
@@ -310,9 +307,7 @@ test("getMechanicalInput assembles diff, allowlist, commit subjects, and branch 
     prNumber: 180,
     headSha: "abc1234",
   });
-  assert.deepEqual(resultWithAllowlist.allowlist, [
-    "web-ui/lib/board/productionStageDeps.ts",
-  ]);
+  assert.deepEqual(resultWithAllowlist.allowlist, ["web-ui/lib/board/productionStageDeps.ts"]);
 });
 
 test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on timeout or unparseable output", async () => {
@@ -376,10 +371,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
         t.messages.push({
           id: "msg-a-2",
           role: "assistant",
-          content: [
-            "VERDICT: FAIL",
-            "- Missing error handling on bridge disconnect.",
-          ].join("\n"),
+          content: ["VERDICT: FAIL", "- Missing error handling on bridge disconnect."].join("\n"),
           timestamp: new Date().toISOString(),
         });
         return t;
@@ -479,10 +471,7 @@ test("issueReviewerThread dispatches the reviewer brief for execution and parses
       record.messages.push({
         id: "msg-dispatched-1",
         role: "assistant",
-        content: [
-          "VERDICT: PASS",
-          "- Dispatched reviewer turn verified the diff.",
-        ].join("\n"),
+        content: ["VERDICT: PASS", "- Dispatched reviewer turn verified the diff."].join("\n"),
         timestamp: new Date().toISOString(),
       });
       return { ok: true, status: 200 };
@@ -576,7 +565,9 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
             {
               status: {
                 phase: "Running",
-                containerStatuses: [{ restartCount: 0, image: "local-agentic-sandbox-web-ui:v-prev" }],
+                containerStatuses: [
+                  { restartCount: 0, image: "local-agentic-sandbox-web-ui:v-prev" },
+                ],
               },
             },
           ],

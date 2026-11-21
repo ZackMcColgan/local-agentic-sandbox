@@ -8,9 +8,7 @@ const repoRoot = path.resolve(__dirname, "../..");
 const importGrader = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPath)).href);
 
 test("forensic-diagnosis grader passes on valid root cause and fails on missing keywords", async () => {
-  const { gradeForensicDiagnosis } = await importGrader(
-    "eval/graders/forensic-diagnosis.mjs"
-  );
+  const { gradeForensicDiagnosis } = await importGrader("eval/graders/forensic-diagnosis.mjs");
   const passBar = {
     requiredRootCauseKeywords: ["close", "enqueue", "controller"],
     minKeywordMatches: 3,
@@ -40,9 +38,7 @@ test("forensic-diagnosis grader passes on valid root cause and fails on missing 
 });
 
 test("pr-coding grader runs hidden tests against extracted code", async () => {
-  const { gradePrCoding } = await importGrader(
-    "eval/graders/pr-coding.mjs"
-  );
+  const { gradePrCoding } = await importGrader("eval/graders/pr-coding.mjs");
   const passBar = { hiddenTestsPassRate: 1.0 };
 
   const goodOutput = [
@@ -69,9 +65,7 @@ test("pr-coding grader runs hidden tests against extracted code", async () => {
 });
 
 test("synthesis-honesty grader requires resolvable citations", async () => {
-  const { gradeSynthesisHonesty } = await importGrader(
-    "eval/graders/synthesis-honesty.mjs"
-  );
+  const { gradeSynthesisHonesty } = await importGrader("eval/graders/synthesis-honesty.mjs");
   const passBar = { minResolvableCitations: 2, requireNonEmptySummary: true };
 
   const passRes = await gradeSynthesisHonesty(
@@ -97,9 +91,7 @@ test("synthesis-honesty grader requires resolvable citations", async () => {
 });
 
 test("tool-discipline grader rejects silent fake completion under stall", async () => {
-  const { gradeToolDiscipline } = await importGrader(
-    "eval/graders/tool-discipline.mjs"
-  );
+  const { gradeToolDiscipline } = await importGrader("eval/graders/tool-discipline.mjs");
   const passBar = { allowSilentFakeCompletion: false, requireHonestMarkerOnStall: true };
 
   const passRes = await gradeToolDiscipline(
@@ -118,9 +110,7 @@ test("tool-discipline grader rejects silent fake completion under stall", async 
 });
 
 test("compaction-retention grader checks identifiers and retention ratio", async () => {
-  const { gradeCompactionRetention } = await importGrader(
-    "eval/graders/compaction-retention.mjs"
-  );
+  const { gradeCompactionRetention } = await importGrader("eval/graders/compaction-retention.mjs");
   const passBar = {
     minIdentifiersRetained: 5,
     totalIdentifiers: 5,

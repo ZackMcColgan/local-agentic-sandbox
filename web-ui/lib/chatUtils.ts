@@ -44,7 +44,7 @@ export function computeModelOptions(
   reasoningEffort?: "low" | "medium" | "xhigh"
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS
+    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS,
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);
@@ -73,7 +73,9 @@ export function computeModelOptions(
  */
 export function shouldConsultLocalOracle(prompt: string): boolean {
   if (!prompt || typeof prompt !== "string") return false;
-  return /\b(repo|codebase|file|function|class|test|supervisor|worker|critic|planner|ledger|mcp|qdrant|k8s|kubernetes|docker|deploy|sandbox|morning report|\.ts|\.tsx|\.js|\.py|\.md|\.yaml)\b/i.test(prompt);
+  return /\b(repo|codebase|file|function|class|test|supervisor|worker|critic|planner|ledger|mcp|qdrant|k8s|kubernetes|docker|deploy|sandbox|morning report|\.ts|\.tsx|\.js|\.py|\.md|\.yaml)\b/i.test(
+    prompt
+  );
 }
 
 /**
@@ -94,7 +96,10 @@ export function parseThinkingAndContent(raw: string): { thought?: string; conten
   // 2. Handle orphan leading reasoning terminated by </think> (swift-15-27b-mtp pattern)
   if (working.includes("</think>")) {
     const idx = working.indexOf("</think>");
-    const before = working.slice(0, idx).replace(/<think>/gi, "").trim();
+    const before = working
+      .slice(0, idx)
+      .replace(/<think>/gi, "")
+      .trim();
     if (before) thoughts.push(before);
     working = working.slice(idx + "</think>".length);
   }
@@ -118,7 +123,7 @@ export function parseThinkingAndContent(raw: string): { thought?: string; conten
   const combinedThought = thoughts.join("\n\n").trim();
   return {
     thought: combinedThought.length > 0 ? combinedThought : undefined,
-    content: working
+    content: working,
   };
 }
 
@@ -170,15 +175,21 @@ export function formatThinkingDisplay(entries: string[]): string[] {
     }
 
     // Clean repetitive prompt instructions or system prompt quotes
-    if (/^(we need answer user's request|need generate only|generate only file content)/i.test(text)) {
+    if (
+      /^(we need answer user's request|need generate only|generate only file content)/i.test(text)
+    ) {
       continue;
     }
 
     // Suppress meta-formatting noise (code fence syntax, counts, structural fences, etc.)
     // Examples: "in a ``` typescript (or appropriate language) code fence", "two fences", "separated by markers", "No intro", "Alternative: output a single..."
     if (
-      /\b(code fence|code fences|two fences|single code fence|fences\b|separated by markers|no intro\b|no introductory|introductory or concluding|closing fence|markdown fence)\b/i.test(text) ||
-      /\b(alternative:\s*output|output a single code fence|enclose(d)? in a (```|markdown)|appropriate language\) code fence)/i.test(text) ||
+      /\b(code fence|code fences|two fences|single code fence|fences\b|separated by markers|no intro\b|no introductory|introductory or concluding|closing fence|markdown fence)\b/i.test(
+        text
+      ) ||
+      /\b(alternative:\s*output|output a single code fence|enclose(d)? in a (```|markdown)|appropriate language\) code fence)/i.test(
+        text
+      ) ||
       /^in a\s+```/i.test(text)
     ) {
       continue;
@@ -214,7 +225,11 @@ export function formatHumanReadableTrace(trace: {
   tier?: "sandbox" | "browser" | "workspace" | "host" | string;
 }): HumanReadableTrace {
   const durationSec = trace.durationMs ? (trace.durationMs / 1000).toFixed(1) + "s" : "";
-  const durationFormatted = trace.durationMs ? (trace.durationMs < 1000 ? `${trace.durationMs}ms` : durationSec) : "";
+  const durationFormatted = trace.durationMs
+    ? trace.durationMs < 1000
+      ? `${trace.durationMs}ms`
+      : durationSec
+    : "";
 
   const tool = trace.tool || "";
   let title = tool;
@@ -282,7 +297,7 @@ export function formatHumanReadableTrace(trace: {
   return {
     title,
     duration: durationFormatted,
-    badge
+    badge,
   };
 }
 
@@ -290,7 +305,10 @@ export function formatHumanReadableTrace(trace: {
  * Buffers streaming token fragments until complete sentences/clauses are formed,
  * preventing mid-word text cuts in the UI.
  */
-export function bufferSentenceStream(accumulatedText: string): { completedText: string; pendingFragment: string } {
+export function bufferSentenceStream(accumulatedText: string): {
+  completedText: string;
+  pendingFragment: string;
+} {
   if (!accumulatedText) return { completedText: "", pendingFragment: "" };
 
   // Find the last sentence-ending punctuation followed by space or newline
@@ -298,7 +316,7 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
   if (match) {
     return {
       completedText: match[1].trim(),
-      pendingFragment: match[2]
+      pendingFragment: match[2],
     };
   }
 
@@ -308,20 +326,23 @@ export function bufferSentenceStream(accumulatedText: string): { completedText: 
     if (lastSpace > 60) {
       return {
         completedText: accumulatedText.slice(0, lastSpace).trim(),
-        pendingFragment: accumulatedText.slice(lastSpace + 1)
+        pendingFragment: accumulatedText.slice(lastSpace + 1),
       };
     }
   }
 
   return {
     completedText: "",
-    pendingFragment: accumulatedText
+    pendingFragment: accumulatedText,
   };
 }
 
 export function canonicalizeModelId(modelId?: string | null): string {
   if (!modelId) return "";
-  const lower = modelId.trim().toLowerCase().replace(/:latest$/, "");
+  const lower = modelId
+    .trim()
+    .toLowerCase()
+    .replace(/:latest$/, "");
   if (lower.includes("swift-1.5") || lower.includes("swift-15") || lower === "swift-1.5") {
     return "swift-1.5-qwen3.8-27b-iq3_xs";
   }
@@ -346,7 +367,10 @@ export function formatModelDisplayLabel(modelId?: string | null): string {
   return (modelId || "").trim().replace(/:latest$/, "");
 }
 
-export function getServedByNote(modelUsed?: string | null, selectedModel?: string | null): string | null {
+export function getServedByNote(
+  modelUsed?: string | null,
+  selectedModel?: string | null
+): string | null {
   if (!modelUsed || !modelUsed.trim()) return null;
   if (!selectedModel || !selectedModel.trim() || selectedModel.trim().toLowerCase() === "auto") {
     return null;
@@ -356,7 +380,13 @@ export function getServedByNote(modelUsed?: string | null, selectedModel?: strin
   if (!servedCanon || !selectedCanon || servedCanon === selectedCanon) {
     return null;
   }
-  return "Served by " + formatModelDisplayLabel(modelUsed) + " (" + formatModelDisplayLabel(selectedModel) + " selected)";
+  return (
+    "Served by " +
+    formatModelDisplayLabel(modelUsed) +
+    " (" +
+    formatModelDisplayLabel(selectedModel) +
+    " selected)"
+  );
 }
 
 export interface FormattedChatError {
@@ -373,7 +403,8 @@ export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
     return { summary: "An unknown error occurred" };
   }
 
-  const rawStr = typeof rawError === "string" ? rawError : (rawError as any).message || String(rawError);
+  const rawStr =
+    typeof rawError === "string" ? rawError : (rawError as any).message || String(rawError);
   const trimmed = rawStr.trim();
 
   // Attempt to find and parse JSON payload within the error string
@@ -398,7 +429,7 @@ export function formatChatErrorMessage(rawError: unknown): FormattedChatError {
         const summary = prefix ? `${prefix}: ${extractedMsg}` : extractedMsg;
         return {
           summary,
-          details: JSON.stringify(parsed, null, 2)
+          details: JSON.stringify(parsed, null, 2),
         };
       }
     } catch {
@@ -481,7 +512,7 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
         addedLines,
         removedLines,
         diffPreview,
-        diffFull
+        diffFull,
       });
     } else if (tool === "workspace_patch_file") {
       const hasOldOrNew =
@@ -513,14 +544,23 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
           addedLines,
           removedLines,
           diffPreview,
-          diffFull: lines.join("\n")
+          diffFull: lines.join("\n"),
         });
       } else {
         const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
-        const newStr = trace?.args?.replace ?? trace?.args?.newText ?? trace?.args?.replacement ?? trace?.args?.content ?? "";
+        const newStr =
+          trace?.args?.replace ??
+          trace?.args?.newText ??
+          trace?.args?.replacement ??
+          trace?.args?.content ??
+          "";
 
-        const oldNormalized = oldStr ? String(oldStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
-        const newNormalized = newStr ? String(newStr).replace(/\r\n/g, "\n").replace(/\n$/, "") : "";
+        const oldNormalized = oldStr
+          ? String(oldStr).replace(/\r\n/g, "\n").replace(/\n$/, "")
+          : "";
+        const newNormalized = newStr
+          ? String(newStr).replace(/\r\n/g, "\n").replace(/\n$/, "")
+          : "";
 
         const oldLines = oldNormalized.length > 0 ? oldNormalized.split("\n") : [];
         const newLines = newNormalized.length > 0 ? newNormalized.split("\n") : [];
@@ -530,12 +570,12 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
 
         const diffPreview = [
           ...oldLines.slice(0, 20).map((l: string) => "- " + l),
-          ...newLines.slice(0, 20).map((l: string) => "+ " + l)
+          ...newLines.slice(0, 20).map((l: string) => "+ " + l),
         ].join("\n");
 
         const diffFull = [
           ...oldLines.map((l: string) => "- " + l),
-          ...newLines.map((l: string) => "+ " + l)
+          ...newLines.map((l: string) => "+ " + l),
         ].join("\n");
 
         items.push({
@@ -545,7 +585,7 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
           addedLines,
           removedLines,
           diffPreview,
-          diffFull
+          diffFull,
         });
       }
     }
@@ -556,13 +596,14 @@ export function extractFileWriteDiffsFromTraces(traces?: any[]): ChatFileDiffIte
 
 export * from "./chatDiffs";
 
-
-
 /**
  * Formats a message timestamp with date context for older-than-today items
  * and relative labels ("Now", "5m ago") for fresh items from today.
  */
-export function formatMessageTimestamp(timestamp: string | number | Date, now: Date = new Date()): string {
+export function formatMessageTimestamp(
+  timestamp: string | number | Date,
+  now: Date = new Date()
+): string {
   const d = timestamp instanceof Date ? timestamp : new Date(timestamp);
   if (isNaN(d.getTime())) return String(timestamp);
 
@@ -576,7 +617,8 @@ export function formatMessageTimestamp(timestamp: string | number | Date, now: D
   if (isToday) {
     const diffMs = now.getTime() - d.getTime();
     if (diffMs >= 0 && diffMs < 60_000) return `${time} · Now`;
-    if (diffMs >= 60_000 && diffMs < 3_600_000) return `${time} · ${Math.floor(diffMs / 60_000)}m ago`;
+    if (diffMs >= 60_000 && diffMs < 3_600_000)
+      return `${time} · ${Math.floor(diffMs / 60_000)}m ago`;
     return `${datePart}, ${time}`;
   }
 
