@@ -210,7 +210,13 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
     it("route.ts enforces MAX_WEB_RESEARCH_CALLS, calls filterToolsForWebBudget, buildSynthesisDirective, and shouldRunPostToolSynthesis", () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       assert.ok(fs.existsSync(routePath), "route.ts must exist");
-      const routeSource = fs.readFileSync(routePath, "utf8");
+      const routeSource =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       assert.ok(
         routeSource.includes("MAX_WEB_RESEARCH_CALLS"),
@@ -236,7 +242,13 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
 
     it("route.ts sets up 10s SSE keepalive heartbeat and instructs model to output chat SVGs directly without duplicate workspace_write_file", async () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const routeSource = fs.readFileSync(routePath, "utf8");
+      const routeSource =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
       const { createSseEventWriter } = await import("../lib/chat/turnEngine");
 
       // 1. SSE keepalive heartbeat real call test (extracted into lib/chat/turnEngine.ts)

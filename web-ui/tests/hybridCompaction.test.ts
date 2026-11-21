@@ -561,7 +561,10 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     // compaction). Fail-before: at HEAD 3fedd43 this slice contained a single
     // unconditional threadStore.compactThreadIncremental(threadData) with no
     // strategy branch and no hybrid rung, so every assertion below was red.
-    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    const routeSrc =
+      fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(process.cwd(), "lib/chat/roundLoop.ts"), "utf8");
     const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
     assert.ok(anchor >= 0, "chat route must contain the in-turn ladder compaction call-site");
     const slice = routeSrc.slice(anchor, anchor + 5000);
@@ -848,7 +851,10 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
     // 1. Verify the chat route mid-turn branch captures the hybrid result,
     //    rebuilds the live conversationMessages via buildModelMessages(threadData),
     //    and reports the hybrid tokens/actions rather than discarding the result.
-    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    const routeSrc =
+      fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(process.cwd(), "lib/chat/roundLoop.ts"), "utf8");
     const anchor = routeSrc.indexOf("const compaction = fitConversationToBudget(");
     assert.ok(anchor >= 0, "chat route must contain mid-turn fitConversationToBudget");
     const slice = routeSrc.slice(anchor, anchor + 5000);
@@ -1018,7 +1024,10 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
 
   it("(c) signal provenance: unrelated external abort does not stop summarization; deadline signal does; chat route closures do not shadow req", async () => {
     // 1. Verify neither summarizer closure in chat/route.ts shadows the HTTP `req` parameter
-    const routeSrc = fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8");
+    const routeSrc =
+      fs.readFileSync(path.resolve(process.cwd(), "app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(process.cwd(), "lib/chat/roundLoop.ts"), "utf8");
     assert.ok(
       !routeSrc.includes("summarize: async (req)"),
       "chat route summarizer closures must not shadow the HTTP `req` parameter"

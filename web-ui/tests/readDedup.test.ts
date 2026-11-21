@@ -268,7 +268,10 @@ describe("Read dedup (d): stub metadata contract", () => {
 });
 
 describe("Read dedup (d): chat route wiring (source assertions)", () => {
-  const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+  const routeSrc =
+    fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+    "\n" +
+    fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
 
   it("route imports lib/readDedup and consults the registry at the file-read result push site", () => {
     assert.match(routeSrc, /from "@\/lib\/readDedup"/, "route must import lib/readDedup");

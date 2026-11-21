@@ -180,7 +180,10 @@ describe("Token Economics (a): rollup shape + thread record persistence", () => 
 });
 
 describe("Token Economics (a): chat route wiring (source assertions)", () => {
-  const routeSrc = fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8");
+  const routeSrc =
+    fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+    "\n" +
+    fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
 
   it("route records per-round prompt tokens and persists the rollup on the final assistant message", () => {
     assert.match(

@@ -202,7 +202,10 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
 
     it("statically verifies chat/route.ts and contextBudget.ts exempt workspace_read_file and host_read_file from clampToolOutput", () => {
       const routePath = path.resolve(testDir, "../app/api/chat/route.ts");
-      const routeCode = fs.readFileSync(routePath, "utf-8");
+      const routeCode =
+        fs.readFileSync(routePath, "utf-8") +
+        "\n" +
+        fs.readFileSync(path.resolve(testDir, "../lib/chat/roundLoop.ts"), "utf-8");
 
       assert.ok(
         routeCode.includes('toolName === "workspace_read_file" || toolName === "host_read_file"'),
