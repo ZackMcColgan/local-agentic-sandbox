@@ -7,6 +7,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { LiveStatusStrip } from "../components/settings/LiveStatusStrip";
 import { AppearanceZone } from "../components/settings/AppearanceZone";
 import { EngineZone } from "../components/settings/EngineZone";
+import { SelfDeployZone } from "../components/settings/SelfDeployZone";
+import { HostZone } from "../components/settings/HostZone";
+import { NotificationsZone } from "../components/settings/NotificationsZone";
+import { MemoryZone } from "../components/settings/MemoryZone";
+import { getHostCardPresentation, formatEngineActionMessage } from "../components/settings/hostCard";
 
 describe("Settings zone components — Step 1 (Top zones)", () => {
   let win: GlobalWindow;
@@ -129,5 +134,91 @@ describe("Settings zone components — Step 1 (Top zones)", () => {
       modelRow!.click();
     });
     assert.equal(openedSheet, true);
+  });
+});
+
+describe("Settings zone components — Step 2 (Middle zones)", () => {
+  it("SelfDeployZone renders status and deploy history cap", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SelfDeployZone, {
+        isSelfDeployActive: true,
+        deployHistory: [
+          {
+            deployId: "d1",
+            timestamp: new Date().toISOString(),
+            branchName: "feature/one",
+            previousSha: "1111111",
+            newSha: "2222222",
+            status: "deployed",
+            rollbackStatus: "none",
+          },
+        ],
+        deployHistoryExpanded: false,
+        onToggleDeployHistoryExpanded: () => {},
+      })
+    );
+    assert.ok(html.includes("Self-deploy is ON"));
+    assert.ok(html.includes("feature/one"));
+  });
+
+  it("HostZone renders host presentation and git activity", () => {
+    const presentation = getHostCardPresentation({
+      hostAccessEnabled: true,
+      runnerAvailable: true,
+      runnerState: "READY",
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(HostZone, {
+        hostSettings: {
+          hostAccessEnabled: true,
+          allowUnattendedHostGit: false,
+          jobChunkingEnabled: true,
+          runnerAvailable: true,
+          recentActivity: [],
+        },
+        hostPresentation: presentation,
+        gitActivityExpanded: false,
+        onToggleHostAccess: () => {},
+        onToggleJobChunking: () => {},
+        onToggleUnattendedGit: () => {},
+        onToggleGitActivityExpanded: () => {},
+      })
+    );
+    assert.ok(html.includes("Host Access"));
+    assert.ok(html.includes("Job chunking"));
+    assert.ok(html.includes("No unattended git operations recorded yet."));
+  });
+
+  it("NotificationsZone renders Telegram status and test button", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(NotificationsZone, {
+        notifStatus: { configured: true, enabled: true },
+        notifTesting: false,
+        notifTestMessage: "Test sent!",
+        onToggleNotifications: () => {},
+        onTestNotification: () => {},
+        onDismissError: () => {},
+      })
+    );
+    assert.ok(html.includes("Telegram Notifications"));
+    assert.ok(html.includes("Connected"));
+    assert.ok(html.includes("Test sent!"));
+  });
+
+  it("MemoryZone renders counter, privacy note, and save button", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(MemoryZone, {
+        memoryText: "hello",
+        memoryMessage: "Saved.",
+        memorySaving: false,
+        memoryTextareaRef: { current: null },
+        onMemoryTextChange: () => {},
+        onSaveMemory: () => {},
+      })
+    );
+    assert.ok(html.includes("5 / 2000"));
+    assert.ok(html.includes("Saved."));
+    assert.ok(html.includes("Stored on this machine only. Never committed to the repository."));
+    assert.equal(formatEngineActionMessage("start", true, 200, {}), "Engine starting up...");
   });
 });
