@@ -97,3 +97,17 @@ describe("Settings host card MISMATCH state", () => {
     );
   });
 });
+
+describe("Settings Danger Zone title polarity", () => {
+  it("labels the self-deploy switch as 'Enable self-deploy' matching ON=enabled / OFF=disabled", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SettingsView as any, {
+        theme: "dark",
+        onThemeChange: () => {},
+        selfDeployEnabled: false,
+      })
+    );
+    assert.equal(html.includes("Disable self-deploy"), false, "Should not invert switch title as 'Disable self-deploy'");
+    assert.ok(html.includes("Enable self-deploy"), "Should label switch as 'Enable self-deploy'");
+  });
+});

@@ -1314,7 +1314,7 @@ export function SettingsView({
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Disable self-deploy</span>
+                  <span>Enable self-deploy</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                   When OFF, self-deploy is completely disabled. Default is OFF.
