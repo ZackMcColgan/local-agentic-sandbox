@@ -202,10 +202,10 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
       activeExecutionSet.delete(thread.id);
       fs.rmSync(dir, { recursive: true, force: true });
     }
-    const streamSrc = fs.readFileSync(
-      path.resolve(__dirname, "../components/ChatStream.tsx"),
-      "utf8"
-    );
+    const streamSrc =
+      fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/chat/messageRender.tsx"), "utf8");
     assert.match(
       streamSrc,
       /status\?: "completed" \| "incomplete" \| "error" \| "streaming"/,

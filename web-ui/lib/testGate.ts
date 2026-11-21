@@ -788,6 +788,26 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Chat route extracted modules
   {
+    match: (p) => p.includes("lib/chat/attachments") || p.includes("chatAttachmentHelpers.test.ts"),
+    tests: ["tests/chatAttachmentHelpers.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/chat/streamMessages") || p.includes("chatStreamMessages.test.ts"),
+    tests: ["tests/chatStreamMessages.test.ts", "tests/chatHistory.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("components/chat/messageRender") || p.includes("chatMessageRender.test.ts"),
+    tests: ["tests/chatMessageRender.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("components/chat/approvals") ||
+      p.includes("components/chat/compactionPill") ||
+      p.includes("chatApprovalsAndCompaction.test.ts"),
+    tests: ["tests/chatApprovalsAndCompaction.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
     tests: ["tests/chatMcpClients.test.ts"],
   },

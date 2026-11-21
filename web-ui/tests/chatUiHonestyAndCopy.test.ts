@@ -204,13 +204,17 @@ describe("FIX B — Assistant Response Copy Button Suite", () => {
     );
 
     // Source verification: Ensure button is NOT hover-only (no opacity-0 group-hover)
-    const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+    const src =
+      fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/chat/messageRender.tsx"), "utf8");
     assert.ok(
       !src.includes('data-testid="copy-response-btn" className="opacity-0 group-hover'),
       "Copy response button must be tappable on phone layout without hover"
     );
     assert.ok(
-      src.includes("copyToClipboard(m.content, m.id)"),
+      src.includes("copyToClipboard(m.content, m.id)") ||
+        src.includes("onCopyToClipboard(m.content, m.id)"),
       "Copy button must pass full raw markdown content"
     );
   });
@@ -277,13 +281,17 @@ describe("Part 3 — User Message Copy Button Suite", () => {
     assert.ok(html.includes("Copy"), "Must render Copy text/label on user message");
 
     // Source verification: ensure copy button wires to copyToClipboard(m.content, m.id)
-    const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+    const src =
+      fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/chat/messageRender.tsx"), "utf8");
     assert.ok(
       src.includes('data-testid="copy-user-message-btn"'),
       "ChatStream must declare copy-user-message-btn"
     );
     assert.ok(
-      src.includes("copyToClipboard(m.content, m.id)"),
+      src.includes("copyToClipboard(m.content, m.id)") ||
+        src.includes("onCopyToClipboard(m.content, m.id)"),
       "User copy button must pass m.content and m.id to copyToClipboard"
     );
   });

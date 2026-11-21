@@ -180,8 +180,10 @@ describe("Artifact Delivery and UI Polish Suite", () => {
   describe("Task 3: ChatStream.tsx Delivery Wiring & Polish", () => {
     it("ChatStream.tsx does not use m.content.includes('<svg') as an SVG blocker and removes workerPool.ts:342", () => {
       const chatStreamPath = path.resolve(__dirname, "../components/ChatStream.tsx");
+      const messageRenderPath = path.resolve(__dirname, "../components/chat/messageRender.tsx");
       assert.ok(fs.existsSync(chatStreamPath), "ChatStream.tsx must exist");
-      const content = fs.readFileSync(chatStreamPath, "utf8");
+      const content =
+        fs.readFileSync(chatStreamPath, "utf8") + "\n" + fs.readFileSync(messageRenderPath, "utf8");
 
       assert.ok(
         !content.includes('m.content.includes("<svg")'),

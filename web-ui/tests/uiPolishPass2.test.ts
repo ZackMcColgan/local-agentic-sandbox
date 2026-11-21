@@ -23,7 +23,10 @@ describe("UI-049 — ThinkingPanel header does not squeeze title on 390px phone"
 });
 
 const diffViewer = fs.readFileSync(path.join(componentsDir, "DiffViewer.tsx"), "utf8");
-const chatStream = fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf8");
+const chatStream =
+  fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(componentsDir, "chat/messageRender.tsx"), "utf8");
 
 describe("UI-052 — DiffViewer and inline code chips prevent mobile horizontal overflow", () => {
   it("DiffViewer header constrains path width with min-w-0/truncate and keeps +/- badges shrink-0", () => {

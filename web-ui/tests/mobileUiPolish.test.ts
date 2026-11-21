@@ -50,7 +50,9 @@ test("formatChatErrorMessage handles plain text, JSON errors, and prefixed engin
 
 test("ChatStream.tsx implements 390px mobile header, trace collapsing, error card, and composer styles", () => {
   const filePath = path.resolve(__dirname, "../components/ChatStream.tsx");
-  const content = fs.readFileSync(filePath, "utf-8");
+  const messageRenderPath = path.resolve(__dirname, "../components/chat/messageRender.tsx");
+  const content =
+    fs.readFileSync(filePath, "utf-8") + "\n" + fs.readFileSync(messageRenderPath, "utf-8");
 
   // Top header: threadTitle is hidden on mobile & narrow viewports (<2xl:) to prevent squishing
   assert.ok(
@@ -211,9 +213,9 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
     "SvgViewer preview container wrapper must include w-full and [&>svg]:w-full"
   );
 
-  // 3. Structural check on ChatStream.tsx
-  const chatStreamPath = path.resolve(__dirname, "../components/ChatStream.tsx");
-  const chatStreamContent = fs.readFileSync(chatStreamPath, "utf-8");
+  // 3. Structural check on ChatStream.tsx / messageRender.tsx
+  const messageRenderPath = path.resolve(__dirname, "../components/chat/messageRender.tsx");
+  const chatStreamContent = fs.readFileSync(messageRenderPath, "utf-8");
 
   const tracesIndex = chatStreamContent.indexOf("formatHumanReadableTrace");
   const markdownIndex = chatStreamContent.includes("wrapRawSvgInMarkdown(m.content)")
