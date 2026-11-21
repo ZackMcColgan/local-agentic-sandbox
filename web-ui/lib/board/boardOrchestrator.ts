@@ -575,7 +575,7 @@ export class BoardOrchestrator {
             itemId: head.id,
             key: head.key,
             title: head.title,
-            outcome: "needs-attention",
+            outcome: "failed",
             threadId: result.threadId,
             reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
             shadowStages,

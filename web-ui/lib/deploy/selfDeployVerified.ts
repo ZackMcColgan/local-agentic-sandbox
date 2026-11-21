@@ -56,7 +56,7 @@ export interface SelfDeployVerifiedDeps {
   readCurrentState: () => Promise<CurrentStateSnapshot>;
   bankRollbackTarget: (tag: string) => Promise<BankRollbackResult>;
   buildAndImport: (targetTag: string, dryRun: boolean) => Promise<BuildImportResult>;
-  setImage: (tag: string) => Promise<{ ok: boolean }>;
+  setImage: (tag: string) => Promise<{ ok: boolean; detail?: string }>;
   verifyDeployment: (expectedTag: string) => Promise<VerifyDeploymentResult>;
 }
 

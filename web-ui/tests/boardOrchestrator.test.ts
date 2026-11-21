@@ -393,7 +393,6 @@ test("rolled-back selfDeploy with needsAttention=true marks item needs-attention
       deployTag: "v-abc1234",
     }),
     selfDeploy: {
-      enabled: true,
       deps: {
         readCurrentState: async () => ({
           image: "local-agentic-sandbox-web-ui:v-prev",
@@ -438,7 +437,7 @@ test("rolled-back selfDeploy with needsAttention=true marks item needs-attention
     const report = await orchestrator.drain();
     assert.equal(item.status, "needs-attention");
     assert.equal(report.completedCount, 0);
-    assert.equal(report.outcomes[0].outcome, "needs-attention");
+    assert.equal(report.outcomes[0].outcome, "failed");
     assert.match(report.outcomes[0].reason ?? "", /S4 verification failed|gateway_200/);
   } finally {
     if (prevSelfDeploy === undefined) delete process.env.SELF_DEPLOY_ENABLED;

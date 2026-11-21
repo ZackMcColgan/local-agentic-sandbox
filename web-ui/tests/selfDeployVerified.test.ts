@@ -256,7 +256,7 @@ test("primary S3 setImage failure aborts before S4 without rollback", async () =
 
   assert.equal(result.status, "failed");
   assert.equal(result.needsAttention, true);
-  assert.match(result.evidence, /kubectl set image exited 1/);
+  assert.match(result.evidence ?? "", /kubectl set image exited 1/);
   assert.equal(calls.filter((c) => c.startsWith("S3:")).length, 1, "no rollback setImage");
   assert.equal(calls.some((c) => c.startsWith("S4:")), false, "S4 must not run after S3 failure");
 });
@@ -286,7 +286,7 @@ test("rollback S3 setImage failure surfaces rollbackVerified=false and failure i
   assert.equal(result.status, "rolled_back_suspended");
   assert.equal(result.rollbackVerified, false);
   assert.equal(result.needsAttention, true);
-  assert.match(result.evidence, /rollback kubectl error/);
+  assert.match(result.evidence ?? "", /rollback kubectl error/);
 });
 
 test("S3 setImage and S4 verifyDeployment use buildAndImport builtTag instead of input targetTag", async () => {
