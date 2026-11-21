@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { ThreadStore } from "../lib/threads/threadStore";
 import {
   READ_DEDUP_TOOLS,
   computeContentHash,
@@ -291,8 +293,35 @@ describe("Read dedup (d): chat route wiring (source assertions)", () => {
     );
   });
 
-  it("threadStore declares the readDedups field so the dedup log lands on the thread record", () => {
-    assert.match(storeSrc, /readDedups\?:/, "ThreadMessage must carry the dedup audit field");
-    assert.match(storeSrc, /ReadDedupMeta/, "threadStore must import the dedup metadata type");
+  it("threadStore declares the readDedups field so the dedup log lands on the thread record", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "read-dedup-store-"));
+    try {
+      const store = new ThreadStore(dir);
+      const thread = store.createThread({ id: "t-dedup-roundtrip", title: "dedup test" });
+      const dedups: ReadDedupMeta[] = [
+        {
+          path: "src/example.ts",
+          contentHash: "deadbeef",
+          savedChars: 1200,
+          earlierRound: 1,
+          earlierTraceId: "trace-1",
+        },
+      ];
+      store.upsertMessage(thread.id, {
+        id: "msg-dedup",
+        role: "assistant",
+        content: "done",
+        createdAt: new Date().toISOString(),
+        readDedups: dedups,
+      });
+      const loaded = await store.getThread(thread.id);
+      assert.deepEqual(
+        loaded?.messages[0]?.readDedups,
+        dedups,
+        "ThreadMessage must round-trip the readDedups audit field"
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
