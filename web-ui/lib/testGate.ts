@@ -644,6 +644,14 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/page"),
     tests: ["tests/chatLiveTraceRows.test.ts"],
   },
+  {
+    match: (p) => p.includes("lib/hooks/useLiveTraces") || p.includes("useLiveTraces.test.ts"),
+    tests: ["tests/useLiveTraces.test.ts"],
+  },
+  {
+    match: (p) => p.includes("components/ViewShell") || p.includes("viewShell.test.ts"),
+    tests: ["tests/viewShell.test.ts"],
+  },
   // qa-7 / UI-013: live header context meter — latest round's actual prompt
   // tokens from the record on every client (helper, snapshot carriage, pill)
   {

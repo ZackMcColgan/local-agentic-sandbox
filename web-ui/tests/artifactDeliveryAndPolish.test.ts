@@ -206,8 +206,11 @@ describe("Artifact Delivery and UI Polish Suite", () => {
 
   describe("Task 4: Workspace Inspector Polish in web-ui/app/page.tsx", () => {
     const pagePath = path.resolve(__dirname, "../app/page.tsx");
+    const viewShellPath = path.resolve(__dirname, "../components/ViewShell.tsx");
     assert.ok(fs.existsSync(pagePath), "page.tsx must exist");
-    const content = fs.readFileSync(pagePath, "utf8");
+    assert.ok(fs.existsSync(viewShellPath), "ViewShell.tsx must exist");
+    const content =
+      fs.readFileSync(pagePath, "utf8") + "\n" + fs.readFileSync(viewShellPath, "utf8");
 
     it("only shows the 'Verified' badge when activeTask.status === 'completed'", () => {
       assert.doesNotMatch(
@@ -243,7 +246,7 @@ describe("Artifact Delivery and UI Polish Suite", () => {
       );
       assert.match(
         content,
-        /<button[^>]*onClick=\{[^}]*handlePreviewWorkspaceFile/,
+        /<button[^>]*onClick=\{[^}]*(?:handlePreviewWorkspaceFile|onPreviewWorkspaceFile)/,
         "Files tab must render interactive buttons that call handlePreviewWorkspaceFile"
       );
       assert.ok(

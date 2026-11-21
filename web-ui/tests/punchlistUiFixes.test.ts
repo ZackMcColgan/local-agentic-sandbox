@@ -107,7 +107,9 @@ describe("Flash 3.8 Frontend Shakeout — Fix 2: UI-P1-4 & UI-P2-1 Ultrawide 840
 describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-Over Drawers & Z-Index Stacking", () => {
   it("app-main remains visible on mobile without selectedThreadId hidden deadlock", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     assert.doesNotMatch(
       content,
@@ -123,7 +125,9 @@ describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-
 
   it("app-sidebar is hidden on mobile and app-inspector opens full-screen on mobile", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     // app-sidebar must be hidden on mobile (< md:)
     assert.match(
@@ -170,7 +174,9 @@ describe("Flash 3.8 Frontend Shakeout — Fix 4: UI-P0-4 & UI-P2-2 Fake Telemetr
 
   it("page.tsx renders honest empty states for diff, output, and files tabs", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     assert.match(
       content,

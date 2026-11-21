@@ -9,7 +9,10 @@ import { renderToString } from "react-dom/server";
 
 describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
   it("page.tsx omits .mobile-bottom-nav and routes all views through NavigationDrawer", () => {
-    const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+    const pageSrc =
+      fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf8");
     assert.ok(
       !pageSrc.includes("mobile-bottom-nav"),
       "page.tsx must not render .mobile-bottom-nav"

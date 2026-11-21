@@ -285,7 +285,7 @@ describe("uir-0 — header diet in ChatStream", () => {
   });
 
   it("page.tsx passes a settings opener so the disconnect chip can open Settings", () => {
-    const page = readSrc("app/page.tsx");
+    const page = readSrc("app/page.tsx") + "\n" + readSrc("components/ViewShell.tsx");
     assert.ok(page.includes("onOpenSettings"), "page wires onOpenSettings into ChatStream");
   });
 

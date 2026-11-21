@@ -43,7 +43,8 @@ describe("Lane C UI Polish", () => {
     const threadsSidebar = readWebUiFile("components/ThreadsSidebar.tsx");
     const chatStream = readWebUiFile("components/ChatStream.tsx");
     const artifactCanvas = readWebUiFile("components/ArtifactCanvas.tsx");
-    const pageTsx = readWebUiFile("app/page.tsx");
+    const pageTsx =
+      readWebUiFile("app/page.tsx") + "\n" + readWebUiFile("components/ViewShell.tsx");
 
     // All 4 pane headers use h-12 and border-b
     assert.match(

@@ -440,7 +440,11 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       ];
       const pagePath = candidates.find((p) => fs.existsSync(p));
       assert.ok(pagePath, "Could not find app/page.tsx in candidate paths");
-      const pageCode = fs.readFileSync(pagePath, "utf8");
+      const viewShellPath = path.resolve(path.dirname(pagePath), "../components/ViewShell.tsx");
+      const pageCode =
+        fs.readFileSync(pagePath, "utf8") +
+        "\n" +
+        (fs.existsSync(viewShellPath) ? fs.readFileSync(viewShellPath, "utf8") : "");
       // Check that ChatStream is not unmounted on view switches or replaced with ternary null
       assert.ok(pageCode.includes("<ChatStream"), "page.tsx must mount <ChatStream />");
       assert.ok(pageCode.includes("<ThreadsSidebar"), "page.tsx must mount <ThreadsSidebar />");
