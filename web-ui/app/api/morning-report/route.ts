@@ -6,7 +6,7 @@ import {
   loadPersistedOvernightMorningReport,
   generateMorningReport,
 } from "@/lib/subagents/morningReport";
-import { ThreadStore, Thread } from "@/lib/threads/threadStore";
+import { ThreadStore } from "@/lib/threads/threadStore";
 import { notify } from "@/lib/notifications";
 
 const supervisor = new OvernightSupervisor();

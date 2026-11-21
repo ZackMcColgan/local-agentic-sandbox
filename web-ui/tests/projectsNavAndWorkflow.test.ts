@@ -33,15 +33,12 @@ describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
 
   it("ChatStream topbar renders a direct Projects navigation button with accessible label", async () => {
     const { ChatStream } = await import("../components/ChatStream.js");
-    let openedProjects = false;
 
     const html = renderToString(
       React.createElement(ChatStream, {
         onTracesUpdate: () => {},
         reasoningEffort: "medium" as const,
-        onOpenProjects: () => {
-          openedProjects = true;
-        },
+        onOpenProjects: () => {},
         threadTitle: "Test Thread",
         activeModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
       })

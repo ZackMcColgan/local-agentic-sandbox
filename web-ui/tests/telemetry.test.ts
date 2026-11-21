@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TelemetryTracer, getTraceSession, getAllTraceSessions } from "../lib/telemetry";
+import { TelemetryTracer, getTraceSession } from "../lib/telemetry";
 
 test("OpenTelemetry Distributed Tracing Suite", async (t) => {
   await t.test("creates root agent.turn span and child spans with correct hierarchy", () => {

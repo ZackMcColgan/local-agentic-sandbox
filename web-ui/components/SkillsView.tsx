@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Menu, Wrench, CheckCircle2, XCircle, Sparkles, BookOpen, FileCode, X } from "lucide-react";
+import { Menu, Wrench, CheckCircle2, XCircle, Sparkles, BookOpen, FileCode } from "lucide-react";
 
 interface SkillCandidateItem {
   id: string;
@@ -31,7 +31,6 @@ interface SkillsViewProps {
 
 export function SkillsView({
   onOpenDrawer,
-  pendingCount = 0,
   initialPending,
   initialActive,
   initialFlywheel,
@@ -40,7 +39,6 @@ export function SkillsView({
   const [pending, setPending] = useState<SkillCandidateItem[]>(initialPending || []);
   const [active, setActive] = useState<string[]>(initialActive || []);
   const [flywheel, setFlywheel] = useState<FlywheelSkillItem[]>(initialFlywheel || []);
-  const [loading, setLoading] = useState<boolean>(!initialPending);
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<SkillCandidateItem | null>(
     initialPreviewCandidate || null
@@ -51,7 +49,6 @@ export function SkillsView({
       return;
     }
     try {
-      setLoading(true);
       const res = await fetch("/api/skills");
       if (res.ok) {
         const data = await res.json();
@@ -61,8 +58,6 @@ export function SkillsView({
       }
     } catch {
       // Non-fatal in test environments
-    } finally {
-      setLoading(false);
     }
   };
 

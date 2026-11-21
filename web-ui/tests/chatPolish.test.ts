@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { ChatStream } from "../components/ChatStream";
-import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 import {
   resolveTurnStatusPhase,
@@ -18,7 +17,6 @@ import os from "os";
 import {
   captureWorkspacePreImage,
   collectTurnModifiedFileDiffs,
-  computeUnifiedFileDiff,
   MAX_DIFF_LINES_CAP,
   TurnFileDiff,
 } from "../lib/chatDiffs";
@@ -203,16 +201,13 @@ Use \`run_command\` for shell actions.
   // -------------------------------------------------------------
   describe("S7 — Navigation: Back to sessions", () => {
     it("renders visible Back button on both mobile and desktop (no sm:hidden)", () => {
-      let backCalled = false;
       const html = renderToString(
         React.createElement(ChatStream, {
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
           threadTitle: "Fix login flow",
-          onBackToList: () => {
-            backCalled = true;
-          },
+          onBackToList: () => {},
           messages: [],
         })
       );

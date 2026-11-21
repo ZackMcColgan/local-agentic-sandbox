@@ -140,8 +140,6 @@ function getDb(dbOverride?: SqliteDb) {
   return db;
 }
 
-let schemaInitialized = false;
-
 export function initProjectStore(dbOverride?: SqliteDb): void {
   const db = dbOverride || getSharedRunLedger().getDatabase();
   try {
@@ -184,7 +182,6 @@ export function initProjectStore(dbOverride?: SqliteDb): void {
       UNIQUE(task_id, file_path)
     );
   `);
-  schemaInitialized = true;
 }
 
 export function registerProject(input: RegisterProjectInput, dbOverride?: SqliteDb): ProjectRecord {

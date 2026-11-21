@@ -386,16 +386,13 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     it("renders ModelBottomSheet with M3 segmented buttons and model rows", async () => {
       let selectedModel = "qwen3.8:27b-q3_k_m";
       let effort: "low" | "medium" | "xhigh" = "medium";
-      let closed = false;
 
       root = createRoot(container);
       await act(async () => {
         root!.render(
           React.createElement(ModelBottomSheet, {
             isOpen: true,
-            onClose: () => {
-              closed = true;
-            },
+            onClose: () => {},
             selectedModel,
             onModelChange: (m) => {
               selectedModel = m;
@@ -420,25 +417,15 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     });
 
     it("renders NavigationDrawer with M3 items, active pill, and 3 pending badge", async () => {
-      let closed = false;
-      let navigatedTo: string | null = null;
-      let newSessionCalled = false;
-
       root = createRoot(container);
       await act(async () => {
         root!.render(
           React.createElement(NavigationDrawer, {
             isOpen: true,
-            onClose: () => {
-              closed = true;
-            },
+            onClose: () => {},
             activeView: "sessions",
-            onNavigate: (view) => {
-              navigatedTo = view;
-            },
-            onNewSession: () => {
-              newSessionCalled = true;
-            },
+            onNavigate: () => {},
+            onNewSession: () => {},
             pendingSkillsCount: 3,
           })
         );
@@ -456,21 +443,14 @@ describe("Work Order — Unified Agent UI (Material 3) Test Suite", () => {
     });
 
     it("renders SettingsView with M3 Theme segmented controls and Default model row", async () => {
-      let backCalled = false;
-      let modelSheetOpened = false;
-
       root = createRoot(container);
       await act(async () => {
         root!.render(
           React.createElement(SettingsView, {
-            onBack: () => {
-              backCalled = true;
-            },
+            onBack: () => {},
             selectedModel: "qwen3.8:27b-q3_k_m",
             reasoningEffort: "medium",
-            onOpenModelSheet: () => {
-              modelSheetOpened = true;
-            },
+            onOpenModelSheet: () => {},
           })
         );
       });

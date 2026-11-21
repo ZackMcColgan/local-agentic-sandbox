@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import http from "http";
-import { ThreadStore, activeExecutionSet } from "../lib/threads/threadStore";
+import { ThreadStore } from "../lib/threads/threadStore";
 import { ThrottledStreamSnapshot, STREAM_SNAPSHOT_INTERVAL_MS } from "../lib/streamSnapshot";
 import { POST as CHAT_POST } from "../app/api/chat/route";
 import { NextRequest } from "next/server";
@@ -75,10 +75,6 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
 
     let serverPort: number;
     let holdThinkingStream = true;
-    let releaseThinking!: () => void;
-    const thinkingReleased = new Promise<void>((r) => {
-      releaseThinking = r;
-    });
 
     const fakeServer = http.createServer((req, res) => {
       res.writeHead(200, { "Content-Type": "application/x-ndjson" });
@@ -171,7 +167,6 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
       );
     } finally {
       holdThinkingStream = false;
-      releaseThinking();
       fakeServer.close();
       process.env.LLM_BASE_URL = prevLlmUrl;
       process.env.THREADS_DIR = originalThreadsDir;

@@ -1,5 +1,5 @@
 import { SIMULATION_SCENARIOS } from "./scenarios";
-import { SimulationScenario, SimulationScenarioKey, SimulationEvent } from "./types";
+import { SimulationScenario, SimulationScenarioKey } from "./types";
 import { TaskManifest } from "../subagents/types";
 
 /**

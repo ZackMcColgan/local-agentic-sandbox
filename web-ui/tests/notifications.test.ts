@@ -6,13 +6,10 @@ import os from "os";
 import React from "react";
 import { renderToString } from "react-dom/server";
 import {
-  resolveHermesTelegramConfig,
   setTelegramConfig,
   resetTelegramConfigOverride,
   getPublicNotificationStatus,
   notify,
-  resolveSettingsDir,
-  getNotificationSettingsFilePath,
 } from "../lib/notifications";
 import { GET, POST } from "../app/api/settings/notifications/route";
 import { SettingsView } from "../components/SettingsView";

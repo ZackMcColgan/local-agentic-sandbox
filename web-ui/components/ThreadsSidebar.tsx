@@ -9,10 +9,6 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
-  Clock,
-  CheckCircle2,
-  StopCircle,
-  AlertCircle,
   X,
   FileText,
   Settings,
@@ -45,7 +41,6 @@ export function ThreadsSidebar({
   onDeleteThread,
   onNavigate,
   onOpenDrawer,
-  onCollapse,
   hideDock = false,
   isLoadingThreads = false,
 }: ThreadsSidebarProps) {

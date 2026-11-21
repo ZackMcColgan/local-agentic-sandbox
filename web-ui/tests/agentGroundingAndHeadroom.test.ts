@@ -126,7 +126,7 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
         { role: "user", content: "What is the weather in Austin today?" },
       ];
 
-      const result = await runChatToolLoop({
+      await runChatToolLoop({
         conversationMessages: messages,
         maxToolRounds: 4,
         streamLlmChat: fakeStream,

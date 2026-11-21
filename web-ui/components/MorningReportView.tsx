@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   XCircle,
   RotateCcw,
-  GitCommit,
   Clock,
   GitBranch,
   ShieldAlert,

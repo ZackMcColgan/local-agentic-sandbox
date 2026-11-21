@@ -11,17 +11,12 @@ import {
   fetchModelSizes,
   fetchLoadedModels,
   enforceResidency,
-  keepAliveFor,
   unloadAllModelsWithResult,
 } from "../lib/subagents/residency";
 import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 
 // 2. BuilderWorker and WorkerPool
-import {
-  BuilderWorker,
-  createBuilderWorker,
-  type BuilderResult,
-} from "../lib/subagents/workerPool";
+import { BuilderWorker, createBuilderWorker } from "../lib/subagents/workerPool";
 import type { Milestone } from "../lib/subagents/types";
 
 // 3. LLM Client thinking budget
@@ -48,7 +43,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
     });
 
     it("fetchModelSizes normalizes model names stripping :latest and indexes by both", async () => {
-      const mockFetch: typeof fetch = async (url) => {
+      const mockFetch: typeof fetch = async () => {
         return new Response(
           JSON.stringify({
             models: [
@@ -67,7 +62,7 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
     });
 
     it("fetchLoadedModels normalizes model names stripping :latest", async () => {
-      const mockFetch: typeof fetch = async (url) => {
+      const mockFetch: typeof fetch = async () => {
         return new Response(
           JSON.stringify({
             models: [{ name: "swift-15-27b-mtp:latest", size_vram: 18_000_000_000 }],
@@ -405,7 +400,6 @@ describe("Sprint A1 — Zero VRAM Eviction & Multi-File Iterative Builder Suite"
     });
 
     it("executeMilestoneWork iterates all plannedFiles and returns modifiedFiles array", async () => {
-      const createdFiles: Record<string, string> = {};
       const mockGenerate = async (req: { model: string; prompt: string }) => {
         // Find which target is being generated from prompt
         const match = req.prompt.match(/content for "([^"]+)"/);

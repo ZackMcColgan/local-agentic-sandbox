@@ -30,8 +30,6 @@ describe("Block 3: Web-UI Four-State Model, Honest Directives, Diff Cards", () =
         "risk"
       );
 
-      const uuidV4Regex =
-        /^approval-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const generalUuidRegex =
         /^approval-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

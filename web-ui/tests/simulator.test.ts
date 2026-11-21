@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   parseSimulateCommand,
   getScenario,
-  SIMULATION_SCENARIOS,
   createSimulatedChatResponse,
   runSimulatedTask,
   SimulationScenarioKey,

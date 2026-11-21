@@ -7,7 +7,7 @@ import {
   shouldAdvertiseUnattendedGitTools,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
 } from "../lib/hostMode";
-import { getHostSettings, setHostSettings, getHostSettingsFilePath } from "../lib/hostSettings";
+import { getHostSettings, setHostSettings } from "../lib/hostSettings";
 
 describe("Unattended Host Git Tool Admission & Settings (Part 1)", () => {
   const originalSettingsDir = process.env.SETTINGS_DIR;

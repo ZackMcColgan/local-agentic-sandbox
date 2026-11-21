@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync, execFileSync } from "child_process";
+import { execFileSync } from "child_process";
 import { StateGraph, START, END, Annotation, MemorySaver } from "@langchain/langgraph";
 import {
   TaskManifest,
@@ -24,7 +24,7 @@ import {
   recordTestBaseline,
   compareAndRevertIfWorse,
 } from "./workerPool";
-import { TelemetryTracer, formatTraceparent } from "../telemetry";
+import { TelemetryTracer } from "../telemetry";
 import {
   generateOvernightMorningReport,
   persistOvernightMorningReport,

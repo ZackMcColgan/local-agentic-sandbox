@@ -9,7 +9,7 @@ import {
   createCriticWorker,
   type WorkspaceRepoMap,
 } from "../lib/subagents/workerPool";
-import { Planner, generatePlanSpec, type PlanSpec } from "../lib/subagents/planner";
+import { Planner } from "../lib/subagents/planner";
 import type { Milestone } from "../lib/subagents/types";
 
 describe("Sprint A3 — Real ExplorerWorker Repo-Map Indexer, Multi-File Planner & Chunked Diff Critic", () => {

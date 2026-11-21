@@ -10,17 +10,14 @@ import {
   ShieldCheck,
   ShieldAlert,
   Menu,
-  ChevronRight,
   RefreshCw,
   GitBranch,
   Terminal,
   CheckCircle2,
-  AlertTriangle,
   X,
   Play,
   Calendar,
   Layers,
-  ChevronDown,
   Eye,
   Check,
   RotateCcw,
@@ -108,7 +105,6 @@ export function ProjectsView({
   const [entryMode, setEntryMode] = useState<"browse" | "greenfield" | "manual">("browse");
   const [browserSubpath, setBrowserSubpath] = useState<string>("");
   const [browserItems, setBrowserItems] = useState<BrowserFolderItem[]>([]);
-  const [browserCurrentPath, setBrowserCurrentPath] = useState<string>("");
   const [browserParentPath, setBrowserParentPath] = useState<string | null>(null);
   const [isBrowserLoading, setIsBrowserLoading] = useState<boolean>(false);
   const [selectedFolder, setSelectedFolder] = useState<BrowserFolderItem | null>(null);
@@ -122,7 +118,6 @@ export function ProjectsView({
       if (res.ok) {
         const data = await res.json();
         setBrowserItems(data.items || []);
-        setBrowserCurrentPath(data.currentPath || "");
         setBrowserParentPath(data.parentPath || null);
         setBrowserSubpath(data.relPath === "." ? "" : data.relPath);
       }
@@ -1076,7 +1071,6 @@ export function ProjectsView({
                   {diffItems
                     .filter((item) => diffFilter === "all" || item.status === diffFilter)
                     .map((item) => {
-                      const isPending = item.status === "pending";
                       const isAccepted = item.status === "accepted";
                       const isReverted = item.status === "reverted";
                       const inProgress = actionInProgress === item.filePath;

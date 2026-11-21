@@ -4,11 +4,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Activity,
-  Clock,
-  Cpu,
   ShieldCheck,
-  Terminal,
-  Layers,
   RefreshCw,
   ChevronDown,
   ChevronRight,

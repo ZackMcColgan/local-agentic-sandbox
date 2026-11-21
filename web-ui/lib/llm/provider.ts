@@ -179,7 +179,7 @@ export class OllamaProvider implements LLMProvider {
           try {
             const json = JSON.parse(trimmed);
             yield json;
-          } catch (err) {
+          } catch {
             console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
           }
         }

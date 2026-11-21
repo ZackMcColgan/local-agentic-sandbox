@@ -4,8 +4,8 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { LiveRunBlock } from "../components/LiveRunBlock";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
-import { ThreadStore, activeExecutionSet } from "../lib/threads/threadStore";
-import { TaskManifest, Milestone } from "../lib/subagents/types";
+import { activeExecutionSet } from "../lib/threads/threadStore";
+import { TaskManifest } from "../lib/subagents/types";
 import { unloadAllModels } from "../lib/subagents/residency";
 
 describe("Epic 1 — Sprint 3: Long-running task controls & progress (S8-S10)", () => {

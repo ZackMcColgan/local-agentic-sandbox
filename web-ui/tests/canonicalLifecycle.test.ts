@@ -76,7 +76,7 @@ describe("Sprint 8 — Canonical Lifecycle Scenario & Real Test Execution", () =
 
       // Track testRunner iterations
       let m2TestIteration = 0;
-      const testRunner = async (milestone: Milestone, targetFile: string, repoRoot: string) => {
+      const testRunner = async (milestone: Milestone) => {
         if (milestone.id === "M2") {
           m2TestIteration++;
           if (m2TestIteration === 1) {

@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
-import { Milestone, EvidenceItem } from "../lib/subagents/types.js";
+import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,

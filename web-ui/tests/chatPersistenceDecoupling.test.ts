@@ -517,7 +517,7 @@ describe("PACKAGE 3: Chat Runtime Shakeout (CHAT-4 + CHAT-6 Server-Side Turn Per
         }),
       });
 
-      const res = await POST(req);
+      await POST(req);
       // Abort the client request SSE stream immediately after initial stream setup
       abortController.abort();
 

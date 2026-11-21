@@ -4,7 +4,6 @@ import {
   compactConversationHistory,
   summarizeTurnHistory,
   extractIdentifiersAndErrors,
-  DEFAULT_COMPACTION_THRESHOLD,
 } from "../lib/conversationCompaction";
 import { estimateTokens } from "../lib/contextBudget";
 

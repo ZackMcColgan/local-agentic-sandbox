@@ -1,10 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  createOllamaGenerate,
-  getContextSizeForScope,
-  GenerateRequest,
-} from "../lib/subagents/llmClient.js";
+import { createOllamaGenerate, getContextSizeForScope } from "../lib/subagents/llmClient.js";
 
 describe("Addendum 2 — Scope-Based num_ctx in llmClient", () => {
   it("getContextSizeForScope: maps scopes correctly", () => {

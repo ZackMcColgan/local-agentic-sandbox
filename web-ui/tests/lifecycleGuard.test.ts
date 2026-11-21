@@ -2,11 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import os from "node:os";
-import {
-  assertSacrificialTarget,
-  PROD_HOST_RUNNER_PORT,
-  PROD_CONFIG_DIR,
-} from "../lib/lifecycleTargetGuard";
+import { assertSacrificialTarget, PROD_HOST_RUNNER_PORT } from "../lib/lifecycleTargetGuard";
 
 describe("PART C — Lifecycle Target Hard Guard Unit Tests", () => {
   it("1. Refuses production port 8765 immediately", () => {

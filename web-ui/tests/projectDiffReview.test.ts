@@ -7,19 +7,12 @@ import { execFileSync } from "node:child_process";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import {
-  registerProject,
-  createProjectTask,
-  getProject,
-  getFileReviews,
-  setFileReviewStatus,
-} from "../lib/projects/projectStore";
+import { registerProject, createProjectTask, getFileReviews } from "../lib/projects/projectStore";
 import {
   runGit,
   getProjectDiffSummary,
   acceptProjectFile,
   revertProjectFile,
-  finalizeProjectReview,
 } from "../lib/projects/projectGit";
 import {
   GET as getProjectDiff,
@@ -202,7 +195,6 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     });
 
     const originalContent1 = fs.readFileSync(path.join(testRepoDir, "src", "existing1.ts"), "utf8");
-    const originalContent2 = fs.readFileSync(path.join(testRepoDir, "src", "existing2.ts"), "utf8");
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
 
     const branch = "feat/task-revert-mod";

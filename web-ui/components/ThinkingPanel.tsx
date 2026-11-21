@@ -5,7 +5,6 @@ import { ChevronDown, ChevronUp, Map, Cog, CheckCircle2, Loader2 } from "lucide-
 
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
-import { formatThoughtLabel } from "../lib/liveActivity";
 
 export type ThinkingPhaseKey = "planning" | "building" | "validating";
 
@@ -261,7 +260,6 @@ export function ThinkingPanel({
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
-            const isValidating = phaseItem.phase === "validating";
 
             const Icon = isPlanning ? Map : isBuilding ? Cog : CheckCircle2;
             const isInProgress = phaseItem.status === "in_progress";

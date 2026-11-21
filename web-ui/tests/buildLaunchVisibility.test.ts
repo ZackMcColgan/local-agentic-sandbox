@@ -40,7 +40,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
   });
 
   it("Test A: POST /api/threads action='launchTask' returns 201 immediately with status 'planning' while planner is blocked", async () => {
-    let plannerStarted = false;
     let finishPlanner: (() => void) | null = null;
 
     const plannerPromise = new Promise<void>((resolve) => {
@@ -48,7 +47,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     });
 
     setPlanSpecGenerator(async (input) => {
-      plannerStarted = true;
       await plannerPromise;
       return {
         taskId: input.taskId,

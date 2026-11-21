@@ -63,6 +63,21 @@ export default [
     ...config,
     files: config.files ?? ["**/*.{ts,tsx}"],
   })),
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
 
   // Node globals for Node services and root TS scripts
   {

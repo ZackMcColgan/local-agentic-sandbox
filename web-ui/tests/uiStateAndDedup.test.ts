@@ -204,11 +204,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
       );
     });
 
-    // Count instances of LiveRunBlock (rendered via milestone checklist or live-run indicators)
-    const liveRunBlocks = container.querySelectorAll(
-      '[data-testid="live-run-block"], .border-slate-200.rounded-3xl'
-    );
-    // More specifically, check how many times "Milestone checklist" is present in the DOM
+    // Check how many times "Milestone checklist" is present in the DOM
     const checklistHeaders = Array.from(container.querySelectorAll("*")).filter(
       (el) => el.textContent?.trim() === "Milestone checklist"
     );

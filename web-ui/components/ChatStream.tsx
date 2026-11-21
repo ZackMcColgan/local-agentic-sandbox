@@ -6,8 +6,6 @@ import type { SupervisorBadgeInput } from "./supervisorBadgeState";
 import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
 import {
   Send,
-  Bot,
-  User,
   Sparkles,
   Loader2,
   Terminal,
@@ -57,13 +55,7 @@ import {
   hostDisconnectChipVisible,
   streamBannerKind,
 } from "../lib/liveActivity";
-import {
-  CodeBlock,
-  CodeBlockWithCopy,
-  SvgRendererBlock,
-  MermaidBlock,
-  highlightTokens,
-} from "./ArtifactRenderers";
+import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
 import {
@@ -75,12 +67,11 @@ import {
   hasCompleteInlineSvg,
   extractCodeDeliverablesFromMessage,
 } from "../lib/svgUtils";
-import { AgentMode, isReasoningEffortSupported } from "../config/models";
+import { AgentMode } from "../config/models";
 import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../lib/toolCallIntegrity";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
 import {
   parseThinkingAndContent,
-  formatThinkingDisplay,
   formatHumanReadableTrace,
   formatChatErrorMessage,
   getServedByNote,
@@ -90,10 +81,9 @@ import {
   displayRepoPath,
   displayBasename,
 } from "../lib/chatUtils";
-import { DiffViewer } from "./DiffViewer";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
-import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
+import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
@@ -387,15 +377,12 @@ export function ChatStream({
   agentMode = "auto",
   reasoningEffort,
   onViewSecurityTelemetry,
-  activeBranch,
   messages: propsMessages,
   setMessages: propsSetMessages,
   threadId,
   threadTitle,
   supervisorState,
-  threadStatus,
   threadHostAccess,
-  onHostAccessChanged,
   activeTask,
   initialScope = "PROJECT",
   threadScope,
@@ -407,7 +394,6 @@ export function ChatStream({
   onLaunchTask,
   onNewThread,
   onDeleteThread,
-  onSendMessage,
   onDeployRun,
   onOpenDrawer,
   onEnsureThread,
@@ -494,10 +480,8 @@ export function ChatStream({
   }, [recoveredAtMs]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
-  const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   useEffect(() => {
@@ -627,62 +611,6 @@ export function ChatStream({
     };
   }, [threadId]);
 
-  const handleToggleHostAccess = async () => {
-    let targetThreadId = activeThreadId || threadId;
-    if (!targetThreadId && onEnsureThread) {
-      targetThreadId = (await onEnsureThread("New session")) || undefined;
-      if (targetThreadId) {
-        activeThreadIdRef.current = targetThreadId;
-        setActiveThreadId(targetThreadId);
-      }
-    }
-    if (!targetThreadId) {
-      return;
-    }
-
-    const nextHostAccess = !hostAccess;
-    try {
-      const res = await fetch(`/api/threads/${targetThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setHostAccess", hostAccess: nextHostAccess }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setHostAccess(nextHostAccess);
-        if (onTaskUpdated && data.thread) {
-          onTaskUpdated(undefined, data.thread);
-        }
-        if (onHostAccessChanged && data.thread) {
-          onHostAccessChanged(nextHostAccess, data.thread);
-        }
-
-        // Fresh check of runner availability
-        try {
-          const statusRes = await fetch(
-            `/api/host/status?threadId=${encodeURIComponent(targetThreadId)}`
-          );
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            if (typeof statusData.runnerAvailable === "boolean") {
-              setRunnerAvailable(statusData.runnerAvailable);
-            }
-            if (statusData.runnerState) {
-              setRunnerState(statusData.runnerState);
-            } else if (typeof statusData.runnerAvailable === "boolean") {
-              setRunnerState(statusData.runnerAvailable ? "READY" : "UNAVAILABLE");
-            }
-            if (statusData.reason) {
-              setRunnerReason(statusData.reason);
-            }
-          }
-        } catch {}
-      }
-    } catch (err) {
-      console.warn("Failed to toggle host access:", err);
-    }
-  };
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -973,10 +901,6 @@ export function ChatStream({
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isLoading, isTaskActive, isUserScrolledUp]);
-
-  const toggleThought = (msgId: string) => {
-    setExpandedThoughts((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
-  };
 
   const toggleProof = (proofKey: string) => {
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
@@ -2623,8 +2547,6 @@ export function ChatStream({
               {deduplicatedMessages.map((m, idx) => {
                 const isUser = m.role === "user";
                 const isCopied = copiedMessageId === m.id;
-                const isThoughtOpen =
-                  expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
                 const isTaskHostMessage = idx === lastLinkedTaskMsgIndex && !!activeTask;
                 const isSupersededTaskMessage = !!m.taskId && !isTaskHostMessage;
 

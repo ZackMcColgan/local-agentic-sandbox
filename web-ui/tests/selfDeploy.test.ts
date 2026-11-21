@@ -166,7 +166,7 @@ describe("Sprint 12 Phase 10 — Self-Deploy Pipeline (selfDeploy.test.ts)", () 
 
     const pipeline = new SelfDeployPipeline({
       enabled: true,
-      commandRunner: async (file: string, args: string[]) => ({
+      commandRunner: async () => ({
         exitCode: 0,
         stdout: "ok\n",
         stderr: "",

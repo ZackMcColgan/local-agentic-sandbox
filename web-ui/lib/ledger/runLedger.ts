@@ -2,10 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createRequire } from "module";
-import {
-  MORNING_REPORT_CHECKPOINT_DIR,
-  getCanonicalCheckpointDir,
-} from "../subagents/morningReport";
+import { getCanonicalCheckpointDir } from "../subagents/morningReport";
 import type { SlotUtilizationMetrics } from "../slotScheduler";
 
 const requireModule = createRequire(import.meta.url);

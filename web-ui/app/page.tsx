@@ -10,21 +10,14 @@ import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
-import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { TaskManifest, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
-  Layers,
-  ShieldCheck,
-  Globe,
-  Cpu,
   ArrowLeft,
   Hammer,
-  Shield,
-  Activity,
-  FolderTree,
   Menu,
   MessageSquare,
   Sun,
@@ -44,14 +37,8 @@ import type { BoardControlAction, BoardControlState } from "@/lib/board/boardCon
 import { SkillsView } from "@/components/SkillsView";
 import { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import {
-  PRESET_MODEL_PROFILES,
-  ModelProfile,
-  AgentMode,
-  DEFAULT_AGENT_MODE,
-  DEFAULT_PRIMARY_MODEL,
-} from "@/config/models";
-import { getInitialWelcomeMessage, loadChatHistory, saveChatHistory } from "@/lib/chatHistory";
+import { AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getInitialWelcomeMessage } from "@/lib/chatHistory";
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -64,13 +51,7 @@ export default function Home() {
 
   // Model & telemetry state
   const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
-  const [status, setStatus] = useState({
-    llm: "INITIALIZING",
-    ollama: "INITIALIZING",
-    mcp: "INITIALIZING",
-    airGapped: true,
-  });
-  const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
+  const agentMode: AgentMode = DEFAULT_AGENT_MODE;
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("preferred_model");
@@ -86,7 +67,6 @@ export default function Home() {
     return "low";
   });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
   const [securityPosture, setSecurityPosture] = useState<
     | {
         execution_uid: string;
@@ -164,12 +144,10 @@ export default function Home() {
     path: string;
     content: string;
   } | null>(null);
-  const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
   const skipThreadLoadRef = useRef<string | null>(null);
 
   const handlePreviewWorkspaceFile = async (filePath: string) => {
     try {
-      setIsLoadingFilePreview(true);
       const res = await fetch(`/api/files?path=${encodeURIComponent(filePath)}&format=json`);
       if (res.ok) {
         const data = await res.json();
@@ -184,8 +162,6 @@ export default function Home() {
         "[WorkspacePreview] Failed to preview file:",
         err instanceof Error ? err.message : String(err)
       );
-    } finally {
-      setIsLoadingFilePreview(false);
     }
   };
 
@@ -258,21 +234,10 @@ export default function Home() {
       const res = await fetch("/api/sandbox-status");
       if (res.ok) {
         const data = await res.json();
-        const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
         const llmModels =
           data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
-        const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
-        setStatus({
-          llm: llmStatus,
-          ollama: llmStatus,
-          mcp: data.services?.mcp_server?.status || "OFFLINE",
-          airGapped: true,
-        });
         if (llmModels) {
           setInstalledModels(llmModels);
-        }
-        if (llmProfiles) {
-          setProfiles(llmProfiles);
         }
         setSecurityPosture(data.security_posture);
       }
@@ -287,12 +252,7 @@ export default function Home() {
         }
       } catch {}
     } catch {
-      setStatus({
-        llm: "UNREACHABLE",
-        ollama: "UNREACHABLE",
-        mcp: "UNREACHABLE",
-        airGapped: true,
-      });
+      // Best-effort status refresh
     }
   };
 
@@ -403,7 +363,6 @@ export default function Home() {
         if (Array.isArray(data.threads)) {
           setThreads(data.threads);
           if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
-            const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
             const urlParams =
               typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");

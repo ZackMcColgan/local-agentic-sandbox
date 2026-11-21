@@ -1,5 +1,3 @@
-import { ChatMessage } from "@/components/ChatStream";
-
 /**
  * Helper for formatting caught SSE writer error with name, message, and first stack line.
  */

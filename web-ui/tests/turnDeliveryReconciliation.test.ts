@@ -2,12 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { POST } from "../app/api/chat/route";
-import { NextRequest } from "next/server";
 import {
   ThreadStore,
   activeExecutionSet,
-  registerTurnAbortController,
   clearTurnAbortController,
 } from "../lib/threads/threadStore";
 import {

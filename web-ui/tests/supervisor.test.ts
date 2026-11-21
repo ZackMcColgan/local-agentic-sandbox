@@ -419,7 +419,7 @@ describe("Phase 1 — Supervisor & LangGraph Checkpointing Suite", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const slowExecutor = async (m: Milestone, attempt: number) => {
+      const slowExecutor = async () => {
         // Simulate a 2s slow model inference
         await new Promise((resolve) => setTimeout(resolve, 2000));
         return {

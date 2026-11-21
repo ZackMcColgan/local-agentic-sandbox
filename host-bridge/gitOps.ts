@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 
 export interface GitCapability {
   repo: string;

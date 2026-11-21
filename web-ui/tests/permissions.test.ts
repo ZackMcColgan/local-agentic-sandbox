@@ -80,7 +80,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
         return origChmodSync(p, m);
       }) as typeof fs.chmodSync;
 
-      const store = new ThreadStore(targetThreadsDir);
+      new ThreadStore(targetThreadsDir);
       assert.ok(fs.existsSync(targetThreadsDir), "threads directory should be created");
 
       // Verify that any mkdirSync calls specify mode 0o770

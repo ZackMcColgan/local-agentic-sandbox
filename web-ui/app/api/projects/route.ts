@@ -4,7 +4,6 @@ import {
   registerProject,
   toggleAllowlist,
   deleteProject,
-  getProject,
 } from "@/lib/projects/projectStore";
 
 export async function GET() {

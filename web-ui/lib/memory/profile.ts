@@ -107,7 +107,7 @@ export function saveUserProfile(profile: UserProfile, customPath?: string): void
     fs.writeFileSync(tempPath, payload, "utf8");
     try {
       fs.renameSync(tempPath, filePath);
-    } catch (renameErr) {
+    } catch {
       // Fallback for Windows cross-device or file locking: copy and delete
       fs.copyFileSync(tempPath, filePath);
       fs.unlinkSync(tempPath);
@@ -199,7 +199,7 @@ export function recordProfileEntry(
  */
 export function extractDurablePreferences(
   text: string,
-  sessionId: string
+  _sessionId: string
 ): Array<{ key: string; value: unknown; origin: "user-stated" | "corrected" }> {
   if (!text || typeof text !== "string") {
     return [];

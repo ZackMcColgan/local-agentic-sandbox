@@ -9,23 +9,10 @@ import { renderToString } from "react-dom/server";
 import { Window } from "happy-dom";
 
 import { TaskManifest } from "../lib/subagents/types";
-import {
-  generateOvernightMorningReport,
-  generateMorningReport,
-} from "../lib/subagents/morningReport";
+import { generateOvernightMorningReport } from "../lib/subagents/morningReport";
 import { MorningReportView } from "../components/MorningReportView";
-import {
-  registerProject,
-  createProjectTask,
-  getProject,
-  getFileReviews,
-} from "../lib/projects/projectStore";
-import {
-  runGit,
-  getProjectDiffSummary,
-  acceptProjectFile,
-  revertProjectFile,
-} from "../lib/projects/projectGit";
+import { registerProject, getFileReviews } from "../lib/projects/projectStore";
+import { runGit } from "../lib/projects/projectGit";
 import {
   runProjectOvernightTask,
   setEngineRunningCheckOverride,
@@ -251,7 +238,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       projectId: project.project_id,
       prompt: "Implement user management module",
       executeInline: true,
-      milestonesExecutor: async (proj, branch) => {
+      milestonesExecutor: async (proj) => {
         // Milestone 1: modify index.ts and create user.ts
         fs.writeFileSync(
           path.join(testRepoDir, "index.ts"),

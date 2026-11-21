@@ -6,8 +6,6 @@ import os from "os";
 import { ThreadStore, ThreadMessage, resolveThreadsDir } from "../lib/threads/threadStore.js";
 import {
   buildFileDeliverablesDirective,
-  getThreadOutputsWorkspaceRelPath,
-  resolveTurnOutputPath,
   recordTurnOutputWrite,
   collectTurnAttachments,
   ThreadTurnWriteTracker,

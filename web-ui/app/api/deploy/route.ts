@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  SelfDeployPipeline,
-  isSelfDeployKillSwitchEnabled,
-  getGlobalSelfDeployHistory,
-} from "@/lib/deploy/selfDeploy";
+import { SelfDeployPipeline, isSelfDeployKillSwitchEnabled } from "@/lib/deploy/selfDeploy";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";

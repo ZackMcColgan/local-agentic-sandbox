@@ -7,11 +7,7 @@ import {
   computeModelOptions,
   resolveEffectiveReasoningEffort,
 } from "../lib/chatUtils.js";
-import {
-  isReasoningEffortSupported,
-  getModelProfile,
-  PRESET_MODEL_PROFILES,
-} from "../config/models.js";
+import { isReasoningEffortSupported, getModelProfile } from "../config/models.js";
 
 describe("Chat Streaming & Real-Time Thinking Parser Suite", () => {
   it("parses completed <think>...</think> blocks into thought and content using real implementation", () => {

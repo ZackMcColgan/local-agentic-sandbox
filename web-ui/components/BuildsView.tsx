@@ -8,7 +8,6 @@ import {
   AlertCircle,
   StopCircle,
   Hammer,
-  Cpu,
   ArrowRight,
   FolderGit2,
   GitBranch,

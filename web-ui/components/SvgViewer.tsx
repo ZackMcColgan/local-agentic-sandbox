@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Eye,
   Code,
@@ -11,7 +11,6 @@ import {
   Minimize2,
   ZoomIn,
   ZoomOut,
-  RotateCcw,
   Loader2,
   AlertCircle,
   FileCode,

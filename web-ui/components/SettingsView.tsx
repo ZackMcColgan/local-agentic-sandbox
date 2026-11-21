@@ -19,9 +19,8 @@ import {
   GitBranch,
   Terminal,
 } from "lucide-react";
-import { useTheme, Theme } from "../lib/hooks/useTheme";
+import { useTheme } from "../lib/hooks/useTheme";
 import { formatModelDisplayLabel, formatMessageTimestamp } from "../lib/chatUtils";
-import { EngineStatusPill } from "./EngineStatusPill";
 import { version as APP_VERSION } from "../package.json";
 const DEFAULT_PRIMARY_MODEL = "qwen3.8-flash-next-gyro-gyro-s";
 
@@ -143,10 +142,7 @@ export function SettingsView({
   onClose,
   selectedModel = DEFAULT_PRIMARY_MODEL,
   defaultModel,
-  models,
-  onDefaultModelChange,
   reasoningEffort = "low",
-  onReasoningEffortChange,
   onOpenModelSheet,
   theme: propsTheme,
   onThemeChange: propsOnThemeChange,

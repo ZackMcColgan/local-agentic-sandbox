@@ -1,4 +1,3 @@
-import { trace, context, SpanStatusCode } from "@opentelemetry/api";
 import crypto from "crypto";
 
 export interface AgentSpan {

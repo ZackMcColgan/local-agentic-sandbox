@@ -4,19 +4,14 @@ import { spawnSync, execSync } from "child_process";
 import {
   createOvernightGraph,
   FileCheckpointSaver,
-  OvernightSupervisor,
   getRealGitSha,
 } from "../lib/subagents/supervisor.js";
 import { WorkerPool } from "../lib/subagents/workerPool.js";
-import { generatePlanSpec } from "../lib/subagents/planner.js";
 import {
   generateArchitectureDiagram,
   discoverRepoState,
 } from "../lib/diagram/architectureGenerator.js";
-import {
-  generateMorningReport,
-  formatMorningReportMarkdown,
-} from "../lib/subagents/morningReport.js";
+import { generateMorningReport } from "../lib/subagents/morningReport.js";
 import { runTestGate, parseTapCounts } from "../lib/testGate.js";
 
 async function runOvernightDogfood() {
@@ -43,7 +38,6 @@ async function runOvernightDogfood() {
   );
   const checkpointer = new FileCheckpointSaver(checkpointDir);
   const workerPool = new WorkerPool();
-  const supervisor = new OvernightSupervisor({ checkpointDirectory: checkpointDir });
 
   // 1. Create and compile wired LangGraph StateGraph
   const graph = createOvernightGraph({ checkpointer, workerPool });

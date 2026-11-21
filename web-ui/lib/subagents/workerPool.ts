@@ -4,19 +4,16 @@ import { execSync, execFileSync } from "child_process";
 import {
   Milestone,
   WorkerRole,
-  AssertionContract,
   EvidenceItem,
   ContractAssertionResult,
   TestSnapshot,
   RevertResult,
-  TestCounts,
 } from "./types";
 import ts from "typescript";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 export type { TestSnapshot, RevertResult } from "./types";
 import {
   createLlmGenerate,
-  createOllamaGenerate,
   isFastGraphTestMode,
   stripCodeFence,
   type GenerateFn,

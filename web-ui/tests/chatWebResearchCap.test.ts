@@ -5,7 +5,6 @@ import path from "path";
 import {
   MAX_WEB_RESEARCH_CALLS,
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
-  WEB_RESEARCH_TOOL_NAMES,
   filterToolsForWebBudget,
   canContinueToolLoop,
   CHAT_CONTEXT_BUDGET_TOKENS,

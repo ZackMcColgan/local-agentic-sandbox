@@ -247,7 +247,6 @@ describe("Thread Compaction Boundary & Restore Suite", () => {
       assert.ok(data2.tokensAfter <= data2.tokensBefore, "tokensAfter must never increase tokens");
 
       // Step 3: Add 2 new messages (1 turn) and compact a third time
-      const updatedThread = (await store.getThread(thread.id))!;
       store.addMessage(thread.id, {
         id: "m9",
         role: "user",

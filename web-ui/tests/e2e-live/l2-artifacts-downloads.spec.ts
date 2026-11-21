@@ -4,7 +4,6 @@ import {
   createFreshSession,
   sendPrompt,
   awaitTurnCompletion,
-  DEADLINES,
 } from "./helpers";
 
 test.describe("L2: Artifact Correctness & Downloads @smoke @full", () => {

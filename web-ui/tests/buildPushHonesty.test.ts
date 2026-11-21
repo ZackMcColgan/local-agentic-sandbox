@@ -7,7 +7,6 @@ import { WorkerGitOps } from "../lib/git/workerGitOps.js";
 import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
 import { TaskManifest } from "../lib/subagents/types.js";
 import {
-  formatMorningReportMarkdown,
   generateMorningReport,
   generateOvernightMorningReport,
   formatOvernightMorningReportMarkdown,

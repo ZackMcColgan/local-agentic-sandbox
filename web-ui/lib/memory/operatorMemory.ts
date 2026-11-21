@@ -105,7 +105,7 @@ export function saveOperatorMemory(text: string, customPath?: string): OperatorM
     fs.writeFileSync(tempPath, payload, "utf8");
     try {
       fs.renameSync(tempPath, filePath);
-    } catch (renameErr) {
+    } catch {
       fs.copyFileSync(tempPath, filePath);
       fs.unlinkSync(tempPath);
     }

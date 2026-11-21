@@ -6,7 +6,6 @@ import {
   generatePlanSpec,
   parsePlanSpec,
   resolveSingleArtifactFile,
-  type PlanSpec,
 } from "../lib/subagents/planner.js";
 
 describe("Phase 1 — Planner Worker Suite", () => {

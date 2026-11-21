@@ -483,7 +483,7 @@ test("(10) a healthy continuous stream completes UNTOUCHED (calibration guard)",
   // ratio (total well above the stream duration) prove the wrapper does not
   // touch healthy rounds.
   const chunks = Array.from({ length: 200 }, (_, i) => ({ content: `tok${i} ` }));
-  const { asst, raw, completionCount, slotIdle } = await runTurn([{ chunks, chunkDelayMs: 10 }], {
+  const { asst, completionCount, slotIdle } = await runTurn([{ chunks, chunkDelayMs: 10 }], {
     ROUND_INACTIVITY_DEADLINE_MS: "2000",
     ROUND_TOTAL_DEADLINE_MS: "5000",
   });

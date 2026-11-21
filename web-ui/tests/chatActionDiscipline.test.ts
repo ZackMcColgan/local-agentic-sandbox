@@ -4,7 +4,6 @@ import fs from "fs";
 import path from "path";
 import {
   MAX_WEB_RESEARCH_CALLS,
-  WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   WEB_RESEARCH_TOOL_NAMES,
   isWebResearchTool,
   filterToolsForWebBudget,

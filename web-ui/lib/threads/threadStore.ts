@@ -1330,7 +1330,7 @@ export class ThreadStore {
       try {
         fs.chmodSync(targetFile, 0o660);
       } catch {}
-    } catch (err) {
+    } catch {
       if (fs.existsSync(tempFile)) {
         try {
           fs.unlinkSync(tempFile);

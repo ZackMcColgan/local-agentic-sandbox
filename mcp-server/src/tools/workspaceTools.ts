@@ -204,7 +204,6 @@ export function validateCodeAst(
   if (ext === ".py") {
     // Try python3 (Unix) then python (Windows) - python3 often missing on Windows
     const pythonCmds = ["python3", "python"];
-    let lastErr: unknown = null;
     for (const cmd of pythonCmds) {
       try {
         execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
@@ -219,7 +218,6 @@ export function validateCodeAst(
         const e = toErrorInfo(err);
         const stderr = e.stderr ? e.stderr.trim() : e.message || "";
         if (e.code === "ENOENT" || e.status === 9009 || stderr.includes("Python was not found")) {
-          lastErr = err;
           continue;
         }
         return {
@@ -385,7 +383,6 @@ export function registerWorkspaceTools(mcp: McpServer) {
             await searchDir(fullPath);
           } else if (entry.isFile()) {
             if (file_glob) {
-              const ext = path.extname(entry.name);
               if (file_glob.startsWith("*") && !entry.name.endsWith(file_glob.slice(1))) {
                 continue;
               }

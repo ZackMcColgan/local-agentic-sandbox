@@ -5,15 +5,11 @@ import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import {
   RotateCcw,
   Check,
-  Circle,
   Square,
   Sparkles,
-  Bot,
   FileCode,
   AlertCircle,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Clock,
   Loader2,
   Pause,
@@ -167,7 +163,6 @@ export function LiveRunBlock({
   isStopping,
   liveTraces,
 }: LiveRunBlockProps) {
-  const [showAllThinking, setShowAllThinking] = useState(false);
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
   const [deliverableCode, setDeliverableCode] = useState<string | null>(null);
   const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
@@ -257,7 +252,6 @@ export function LiveRunBlock({
   const totalMilestones = task.milestones?.length || 1;
   const completedCount = task.milestones?.filter((m) => m.status === "completed").length || 0;
   const activeIndex = Math.min(task.currentMilestoneIndex ?? completedCount, totalMilestones - 1);
-  const activeMilestone = task.milestones?.[activeIndex];
 
   // Derive worker thinking bullets from recent journal entries
   const rawThinkingEntries = (task.journal || [])
@@ -265,7 +259,6 @@ export function LiveRunBlock({
     .map((j) => j.message);
 
   const cleanedThinking = formatThinkingDisplay(rawThinkingEntries);
-  const displayedThinking = showAllThinking ? cleanedThinking : cleanedThinking.slice(-4);
 
   // Dynamic substep activity indicator based on worker journal entries
   const currentActivity = (() => {
@@ -413,7 +406,6 @@ export function LiveRunBlock({
               ((m.status as string) === "in_progress" ||
                 (m.status as string) === "active" ||
                 idx === activeIndex);
-            const isMilestonePending = !isMilestoneCompleted && !isMilestoneActive;
 
             return (
               <div key={m.id || idx} className="space-y-1.5">

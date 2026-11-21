@@ -37,24 +37,19 @@ import {
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SUBAGENT_MODEL,
   AgentMode,
-  AGENT_MODES,
-  isReasoningEffortSupported,
   getModelProfile,
 } from "@/config/models";
 import { parseAttachment } from "@/lib/fileParser";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags, normalizeMcpUrl } from "@/lib/toolParser";
 import {
-  computeModelOptions,
   resolveEffectiveReasoningEffort,
   shouldConsultLocalOracle,
-  parseThinkingAndContent,
   joinNarrationChunks,
 } from "@/lib/chatUtils";
 import {
   fitContextWindow,
   clampToolOutput,
-  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
   MAX_WEB_RESEARCH_CALLS,
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   isWebResearchTool,
@@ -94,10 +89,7 @@ import {
   buildToolRegistry,
   describeTool,
 } from "@/lib/progressiveTools";
-import {
-  compactConversationHistory,
-  resolveCompactionStrategy,
-} from "@/lib/conversationCompaction";
+import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
@@ -105,7 +97,6 @@ import {
   isDestructiveHostAction,
   createPendingApproval,
   consumeContinuationEntry,
-  checkHostRunnerHealth,
   determineHostRunnerState,
   shouldAdvertiseHostTools,
   shouldAdvertiseUnattendedGitTools,
@@ -237,7 +228,7 @@ async function connectMcpClient(url: string, name: string) {
  * Lean hierarchical triage classifier using fast subagent model (~80 tok/s).
  * Classifies incoming prompt into SIMPLE_EXECUTION vs DEEP_SYNTHESIS in < 300ms.
  */
-async function triageComplexity(
+async function _triageComplexity(
   userQuery: string,
   llmBaseUrl: string,
   triageModel: string = DEFAULT_SUBAGENT_MODEL
@@ -292,9 +283,6 @@ async function* streamLlmChat(
   const provider = getLLMProvider();
   yield* provider.streamChat(llmBaseUrl, payload);
 }
-
-// Backward-compat alias
-const streamOllamaChat = streamLlmChat;
 
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
@@ -452,7 +440,6 @@ export async function POST(req: NextRequest) {
     );
 
     const threadOutputsDir = activeThreadId ? path.join(threadsDir, activeThreadId, "files") : null;
-    const threadOutputsRelPath = activeThreadId ? `${activeThreadId}/files` : null;
     if (threadOutputsDir) {
       try {
         fs.mkdirSync(threadOutputsDir, { recursive: true, mode: 0o770 });
@@ -583,7 +570,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // reference. Declared with the other turn state so both persist paths carry it.
     const turnReadDedups: ReadDedupMeta[] = [];
     const accumulatedThoughts: string[] = [];
-    const turnStartMs = Date.now();
     let thinkingEndMs: number | null = null;
     let firstLlmRequestMs: number | null = null;
     let thinkingMsAcc = 0;
@@ -1163,9 +1149,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
             const roundFinishReasons: string[] = [];
             let consecutiveDeadlineAborts = 0;
             let consecutiveLengthTruncations = 0;
-            let turnEndedByTimeout = false;
-            let turnEndedBySizeLimit = false;
-            let turnEndedByTruncation = false;
             let honestEndMarker = "";
             // Text carried across a length-truncated auto-continue: the final answer
             // must contain EVERY produced half, never just the last round.
@@ -1592,7 +1575,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 if (roundSizeCapped) {
                   // Size limit hit: the turn ends honestly. No retry — the content
                   // cap exists precisely to stop runaway generations.
-                  turnEndedBySizeLimit = true;
                   honestEndMarker = TURN_SIZE_LIMIT_MARKER;
                   reasoningSpan.end("ok", { roundSizeCapped: true });
                   break;
@@ -1603,7 +1585,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                   if (consecutiveDeadlineAborts >= 2) {
                     // Second consecutive deadline-aborted round: end the turn with the
                     // honest marker. Never a silent endless retry.
-                    turnEndedByTimeout = true;
                     honestEndMarker = TURN_TIMEOUT_MARKER;
                     accumulatedStreamedTokens += TURN_TIMEOUT_MARKER;
                     streamSnapshot.maybeWrite(accumulatedStreamedTokens, undefined);
@@ -1677,7 +1658,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 });
                 const byteSize =
                   typeof bad?.function?.arguments === "string" ? bad.function.arguments.length : 0;
-                turnEndedBySizeLimit = true;
                 const sizeMarker = `${TURN_SIZE_LIMIT_MARKER} (tool: ${bad?.function?.name}, arguments truncated at ${byteSize} bytes)`;
                 honestEndMarker = sizeMarker;
                 accumulatedStreamedTokens += sizeMarker;
@@ -1763,7 +1743,6 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
                 ) {
                   consecutiveLengthTruncations++;
                   if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
-                    turnEndedByTruncation = true;
                     honestEndMarker = TURN_TRUNCATION_MARKER;
                     // Keep EVERY produced half: the final answer carries the earlier
                     // truncated rounds plus this one, never just the last round.

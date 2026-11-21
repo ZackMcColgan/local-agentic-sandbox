@@ -8,7 +8,6 @@ import {
   createProjectTask,
   completeProjectTask,
   parkProjectTask,
-  cancelProjectTask,
   getProjectTask,
 } from "./projectStore";
 import { runGit } from "./projectGit";

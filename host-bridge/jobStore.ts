@@ -86,7 +86,7 @@ export class JobStore {
   // Graceful shutdown: kill active processes and stamp pending/running jobs
   // interrupted so they never read as running forever.
   interruptActive(): void {
-    for (const [id, kill] of this.killFns.entries()) {
+    for (const kill of this.killFns.values()) {
       try {
         kill();
       } catch {}

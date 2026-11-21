@@ -155,7 +155,7 @@ describe("MCP Server Express Endpoints", () => {
   });
 
   it("files endpoint serves all allowed file extensions with correct MIME types and rejects unallowed types with 415", async () => {
-    const { resolveSafePath, WORKSPACE_DIR } = await import("../src/tools/workspaceTools.js");
+    const { WORKSPACE_DIR } = await import("../src/tools/workspaceTools.js");
     const { handleFilesRequest } = await import("../src/index.js");
     const fs = (await import("fs/promises")).default;
     const path = (await import("path")).default;
