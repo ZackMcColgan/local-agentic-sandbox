@@ -66,6 +66,7 @@ import { deduplicateStreamMessages } from "../lib/chat/streamMessages";
 export { deduplicateStreamMessages };
 import { ChatMessageItem, UserMessageContent } from "./chat/messageRender";
 import { NowLineBar } from "./NowLineBar";
+import { computeFollowState } from "../lib/autoFollow";
 export { UserMessageContent };
 import { HostApprovalsPanel } from "./chat/approvals";
 import {
@@ -658,14 +659,13 @@ export function ChatStream({
     if (isProgrammaticScrollRef.current) return;
     const el = chatContainerRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
-    const unpinned = distanceFromBottom > 90;
-    if (unpinned) {
-      isFollowPinnedRef.current = false;
-    } else {
-      isFollowPinnedRef.current = true;
-    }
-    setIsUserScrolledUp(unpinned);
+    const { isAtBottom, shouldShowLivePill } = computeFollowState({
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    });
+    isFollowPinnedRef.current = isAtBottom;
+    setIsUserScrolledUp(shouldShowLivePill);
   };
 
   const handleContainerWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -2630,18 +2630,19 @@ export function ChatStream({
             </div>
           </div>
 
-          {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
+          {/* Floating "↓ Live" pill when user scrolls up */}
           {isUserScrolledUp && (
             <div className="flex justify-center py-2 z-30 pointer-events-none bg-transparent">
               <button
                 type="button"
+                data-testid="live-follow-pill"
                 onClick={() => scrollToBottom("smooth")}
-                className="pointer-events-auto min-h-[44px] px-4 py-2.5 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 text-xs font-semibold shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all"
-                title="Jump to bottom"
-                aria-label="Jump to bottom"
+                className="pointer-events-auto min-h-[40px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Jump to live"
+                aria-label="Jump to live"
               >
-                <ArrowDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Jump to bottom</span>
+                <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{isLoading ? "Live" : "Latest"}</span>
               </button>
             </div>
           )}
