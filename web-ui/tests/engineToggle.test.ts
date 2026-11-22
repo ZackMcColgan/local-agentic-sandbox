@@ -163,8 +163,8 @@ describe("Engine Status Pill & Settings Toggle UI Components", () => {
 
     it("ModelBottomSheet provides Engine Management card with toggle", () => {
       assert.ok(
-        modelSheetFile.includes("Standalone llama.cpp Engine"),
-        "Must contain engine label"
+        modelSheetFile.includes("Strata Engine (host GPU)"),
+        "Must contain engine label matching the live Strata engine (service=strata)"
       );
       assert.ok(
         modelSheetFile.includes("Start Engine"),
