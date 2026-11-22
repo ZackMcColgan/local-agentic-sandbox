@@ -1,0 +1,6 @@
+// [synthetic FAST_GRAPH_TEST output] M1: Create hello.txt
+// target: hello.txt
+export interface M1TaskResult {
+  id: string;
+  status: string;
+}
