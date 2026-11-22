@@ -421,6 +421,19 @@ const MAPPING_RULES: MappingRule[] = [
     ],
   },
   {
+    // Board #59: single-emerald accent enforcement + dark-mode contrast floor.
+    match: (p) =>
+      p.includes("accentContrastAudit.test.ts") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("ChatStream.tsx") ||
+      p.includes("SettingsView.tsx") ||
+      p.includes("settings/DangerZone.tsx") ||
+      p.includes("settings/EngineZone.tsx") ||
+      p.includes("settings/NotificationsZone.tsx") ||
+      p.includes("settings/MemoryZone.tsx"),
+    tests: ["tests/accentContrastAudit.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("design-tokens.css") ||
       p.includes("globals.css") ||

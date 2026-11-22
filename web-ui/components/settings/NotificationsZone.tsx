@@ -125,7 +125,7 @@ export function NotificationsZone({
               onClick={onTestNotification}
               className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
                 notifTesting || !notifStatus.configured || !notifStatus.enabled
-                  ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
+                  ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
                   : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
               }`}
             >
