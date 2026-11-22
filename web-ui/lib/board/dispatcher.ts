@@ -1,15 +1,9 @@
-import { BoardStore, isItemEligible, type BoardItem } from "./boardStore";
+import { BoardStore, isItemEligible, type BoardHandoff, type BoardItem } from "./boardStore";
 import { loadOperatorMemory } from "../memory/operatorMemory";
 
 export const DISPATCHER_AUTO_ISSUE_DEFAULT = false;
 
-export interface DispatcherHandoff {
-  state: string;
-  branch: string;
-  headSha: string;
-  nextStep: string;
-  openQuestions?: string[];
-}
+export type DispatcherHandoff = BoardHandoff;
 
 export type DispatcherBoardItem = BoardItem & {
   handoff?: DispatcherHandoff;

@@ -569,7 +569,7 @@ test("Fix 3: orchestrator marks item needs-attention and counts failed when job 
   }
 });
 
-test("Fix 1: orphaned working item (stopped thread + no live job) is marked needs-attention and drain issues next queued item", async () => {
+test("Fix 1: orphaned working item (budget exhausted, stopped thread + no live job) is marked needs-attention and drain issues next queued item", async () => {
   const env = makeTempEnv();
   try {
     const store = new BoardStore(env.boardDir);
@@ -578,6 +578,7 @@ test("Fix 1: orphaned working item (stopped thread + no live job) is marked need
       brief: "Died during container OOMKill.",
       status: "working",
       threadLink: "/?thread=thread-orphaned-1",
+      autoResumeCount: 2,
       author: "Owner",
       source: "manual",
     });

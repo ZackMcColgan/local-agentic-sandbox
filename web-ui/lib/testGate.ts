@@ -227,6 +227,16 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/boardDrainExecution.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("lib/board/productionDrain") ||
+      p.includes("lib/board/boardStore") ||
+      p.includes("lib/threads/inAppSupervisor") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("boardDrainRecovery.test.ts"),
+    tests: ["tests/boardDrainRecovery.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/reviewerGate") || p.includes("reviewerGate.test.ts"),
     tests: ["tests/reviewerGate.test.ts"],
   },

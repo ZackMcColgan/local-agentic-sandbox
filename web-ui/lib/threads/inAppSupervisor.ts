@@ -35,6 +35,7 @@ export interface SupervisorJobStore {
 
 export type SuperviseOutcome =
   | { action: "not_stalled" }
+  | { action: "skipped_drain_owned" }
   | { action: "ended_only" }
   | { action: "needs_attention"; reason: string }
   | { action: "resumed"; freshThreadId: string; attempt: number };
@@ -130,8 +131,15 @@ export function superviseStalledThread(
     windowMs?: number;
     threadAdapter: SupervisorThreadAdapter;
     jobStore: SupervisorJobStore;
+    isDrainOwnedThread?: (threadId: string) => boolean;
   }
 ): SuperviseOutcome {
+  // Board-drain-owned threads are recovered exclusively by BoardOrchestrator.
+  // The in-app stall supervisor must never end or resume them.
+  if (thread.boardItemId || deps.isDrainOwnedThread?.(thread.id)) {
+    return { action: "skipped_drain_owned" };
+  }
+
   const now = deps.now ?? Date.now();
   const windowMs = deps.windowMs ?? STALL_WINDOW_MS;
 
