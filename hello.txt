@@ -4,3 +4,5 @@ export interface M1TaskResult {
   id: string;
   status: string;
 }
+
+// [synthetic] refinement iteration 2
