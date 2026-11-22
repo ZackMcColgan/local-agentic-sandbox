@@ -197,4 +197,69 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(rows[0].isGroup, undefined);
     assert.equal(rows[1].status, "running");
   });
+
+  it("folds consecutive completed shell rows of 3 or more into one expandable group row", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "git status" }, durationMs: 100 },
+      { tool: "host_run_powershell", args: { command: "git diff" }, durationMs: 150 },
+      { tool: "workspace_run_command", args: { command: "npm test" }, durationMs: 250 },
+      { tool: "host_run_powershell", args: { command: "git log -1" }, durationMs: 50 },
+      { tool: "host_run_powershell", args: { command: "ls" }, durationMs: 50 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].isGroup, true);
+    assert.equal(rows[0].kind, "shell");
+    assert.equal(rows[0].verb, "Ran");
+    assert.equal(rows[0].label, "Ran 5 commands");
+    assert.equal(rows[0].children?.length, 5);
+    assert.equal(rows[0].durationMs, 600);
+    assert.equal(rows[0].children?.[0].target, "git status");
+    assert.equal(rows[0].children?.[4].target, "ls");
+  });
+
+  it("does not fold a run of 1 or 2 shell rows", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "git status" }, durationMs: 100 },
+      { tool: "host_run_powershell", args: { command: "git diff" }, durationMs: 150 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].isGroup, undefined);
+    assert.equal(rows[1].isGroup, undefined);
+    assert.equal(rows[0].label, "Ran git status");
+    assert.equal(rows[1].label, "Ran git diff");
+  });
+
+  it("breaks shell folding on an error row and keeps the error row unfolded", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "cmd1" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd2" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd3" }, durationMs: 10 },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd4" },
+        durationMs: 20,
+        isError: true,
+        result: "Exit code 1: boom",
+      },
+      { tool: "host_run_powershell", args: { command: "cmd5" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd6" }, durationMs: 10 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 4);
+    assert.equal(rows[0].isGroup, true);
+    assert.equal(rows[0].label, "Ran 3 commands");
+    assert.equal(rows[0].children?.length, 3);
+    assert.equal(rows[1].status, "error");
+    assert.equal(rows[1].isGroup, undefined);
+    assert.ok(rows[1].errorSummary?.includes("Exit code 1"));
+    assert.equal(rows[2].isGroup, undefined);
+    assert.equal(rows[2].label, "Ran cmd5");
+    assert.equal(rows[3].isGroup, undefined);
+    assert.equal(rows[3].label, "Ran cmd6");
+  });
 });

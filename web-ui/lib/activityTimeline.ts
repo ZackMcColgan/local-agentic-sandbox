@@ -332,7 +332,8 @@ export function traceToTimelineRow(
 }
 
 /**
- * Folds consecutive completed `read` or `search` rows into a single expandable group row.
+ * Folds consecutive completed `read`, `search` (2+), or `shell` (3+) rows into
+ * a single expandable group row.
  */
 export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   const result: TimelineRow[] = [];
@@ -341,7 +342,8 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   while (i < rows.length) {
     const current = rows[i];
     const foldable =
-      current.status === "success" && (current.kind === "read" || current.kind === "search");
+      current.status === "success" &&
+      (current.kind === "read" || current.kind === "search" || current.kind === "shell");
 
     if (!foldable) {
       result.push(current);
@@ -355,19 +357,29 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
     }
 
     const count = j - i;
-    if (count === 1) {
-      result.push(current);
+    const minFold = current.kind === "shell" ? 3 : 2;
+    if (count < minFold) {
+      for (let k = i; k < j; k++) {
+        result.push(rows[k]);
+      }
     } else {
       const children = rows.slice(i, j);
       const totalDurationMs = children.reduce((sum, r) => sum + (r.durationMs || 0), 0);
-      const isRead = current.kind === "read";
-      const label = isRead ? `Read ${count} files` : `Searched ${count} queries`;
+      const verb =
+        current.kind === "read" ? "Read" : current.kind === "search" ? "Searched" : "Ran";
+      const target =
+        current.kind === "read"
+          ? `${count} files`
+          : current.kind === "search"
+            ? `${count} queries`
+            : `${count} commands`;
+      const label = `${verb} ${target}`;
       result.push({
         id: `group-${current.kind}-${i}-${j - 1}`,
         kind: current.kind,
         status: "success",
-        verb: isRead ? "Read" : "Searched",
-        target: isRead ? `${count} files` : `${count} queries`,
+        verb,
+        target,
         label,
         durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
         children,
