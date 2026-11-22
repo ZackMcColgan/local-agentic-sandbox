@@ -42,7 +42,7 @@
 - Verification: accentContrastAudit 4/4, darkTextFloor 2/2, settingsView 8/8, parityChatSurfaces 11/11, paritySidebarDrawer 11/11, uirHeaderActivity 20/20, gateManifestCompleteness 1/1 green; `npm run test:gate` PASSED: 687 unit tests + 128 Playwright specs (incl. settingsMobile 5/5 across all 4 projects), 0 failed.
 - Note: `transition-all` on engine buttons animates the disabled-state background; the e2e floor check waits 400ms for the transition to settle before measuring computed contrast.
 
-## Board item #63 — skip unused per-chat worktree creation
+## Board item #63 ï¿½ skip unused per-chat worktree creation
 
 - Worktree: C:\Users\zackm\Desktop\repos\lsb-job63, branch feature/chat-turn-worktree-skip (off develop).
 - Evidence: web-ui/app/api/chat/route.ts passed repoRoot: resolveJobRepoRoot() to serializeTurn, which created+deleted a git worktree per chat turn; the handle was only consumed by chunkWorkspaceRoot (web-ui/lib/chat/roundLoop.ts:663) for the runlog path. MCP workspace tools execute via target.client.callTool against the container shared /workspace (roundLoop.ts:1613) - never _worktree.path. So the worktree was pure git churn, no isolation.
