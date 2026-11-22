@@ -503,16 +503,28 @@ export function buildActivityTimeline(
         r === lastRound &&
         sIdx === segs.length - 1 &&
         roundTraces.length === 0;
-      result.push({
-        id: `thinking-round-${r}-${sIdx}`,
-        kind: "thinking",
-        status: isTailStreaming ? "running" : "success",
-        verb: isTailStreaming ? "Thinking" : "Thought",
-        target: "Reasoning",
-        label: isTailStreaming ? "Thinking…" : "Thought",
-        thinkingText: seg.text,
-        round: r,
-      });
+      const prevRow = result.length > 0 ? result[result.length - 1] : null;
+      if (prevRow && prevRow.kind === "thinking") {
+        prevRow.thinkingText = prevRow.thinkingText
+          ? `${prevRow.thinkingText}\n\n${seg.text}`
+          : seg.text;
+        if (isTailStreaming) {
+          prevRow.status = "running";
+          prevRow.verb = "Thinking";
+          prevRow.label = "Thinking…";
+        }
+      } else {
+        result.push({
+          id: `thinking-round-${r}-${sIdx}`,
+          kind: "thinking",
+          status: isTailStreaming ? "running" : "success",
+          verb: isTailStreaming ? "Thinking" : "Thought",
+          target: "Reasoning",
+          label: isTailStreaming ? "Thinking…" : "Thought",
+          thinkingText: seg.text,
+          round: r,
+        });
+      }
     }
     if (roundTraces.length > 0) {
       const actionRows = roundTraces.map(({ trace, index }) =>

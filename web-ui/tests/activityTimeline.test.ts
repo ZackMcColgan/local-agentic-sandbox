@@ -426,4 +426,17 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(withLiveTail[2].thinkingText, "Streaming round 2 thought...");
     assert.equal(withLiveTail[2].status, "running");
   });
+
+  it("merges consecutive thinking segments when no traces occurred between rounds", () => {
+    const rows = buildActivityTimeline([], undefined, {
+      thinkingSegments: [
+        { round: 1, text: "Assessing user weather request" },
+        { round: 2, text: "Redirecting to SVG diagram" },
+      ],
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].kind, "thinking");
+    assert.ok(rows[0].thinkingText?.includes("Assessing user weather request"));
+    assert.ok(rows[0].thinkingText?.includes("Redirecting to SVG diagram"));
+  });
 });
