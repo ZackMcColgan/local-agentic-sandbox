@@ -106,7 +106,7 @@ export function ThinkingPreviewBlock({
 
   return (
     <div
-      data-testid="thinking-preview-block"
+      data-testid="thinking-panel"
       className="rounded-xl border border-zinc-800 bg-black/90 text-xs"
     >
       <button
@@ -123,6 +123,7 @@ export function ThinkingPreviewBlock({
             <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />
           )}
           <span className="font-medium truncate">{state.summaryLabel}</span>
+          <span className="text-[11px] text-zinc-400 shrink-0">Reasoning</span>
         </span>
         {trimmedThought &&
           (state.isExpanded ? (
