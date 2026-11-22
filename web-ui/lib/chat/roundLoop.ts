@@ -122,6 +122,7 @@ export interface TraceItem {
   timestamp: string;
   model: string;
   tier?: "sandbox" | "browser" | "workspace" | "host";
+  round?: number;
 }
 
 export interface LlmToolCall {
