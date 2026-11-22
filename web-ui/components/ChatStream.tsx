@@ -66,6 +66,8 @@ import { deduplicateStreamMessages } from "../lib/chat/streamMessages";
 export { deduplicateStreamMessages };
 import { ChatMessageItem, UserMessageContent } from "./chat/messageRender";
 import { NowLineBar } from "./NowLineBar";
+import { CanvasDiffSheet } from "./CanvasDiffSheet";
+import type { TimelineWriteDiff } from "../lib/activityTimeline";
 import { computeFollowState } from "../lib/autoFollow";
 export { UserMessageContent };
 import { HostApprovalsPanel } from "./chat/approvals";
@@ -248,6 +250,10 @@ export function ChatStream({
   // mode is fixed at mount from defaultComposerMode; Build is entered via
   // the /build prefix or the Builds view, never a composer toggle.
   const [composerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
+  const [activeCanvasDiff, setActiveCanvasDiff] = useState<{
+    current: TimelineWriteDiff;
+    all: TimelineWriteDiff[];
+  } | null>(null);
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
   const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">(() => {
     if (typeof window !== "undefined" && threadId) {
@@ -2318,6 +2324,16 @@ export function ChatStream({
           })()}
 
           {/* Confirm Dialog for Permanent Session Deletion (mirrors ThreadsSidebar) */}
+          {activeCanvasDiff && (
+            <CanvasDiffSheet
+              currentDiff={activeCanvasDiff.current}
+              allDiffs={activeCanvasDiff.all}
+              onSelectDiff={(diff) =>
+                setActiveCanvasDiff((prev) => (prev ? { ...prev, current: diff } : null))
+              }
+              onClose={() => setActiveCanvasDiff(null)}
+            />
+          )}
           {showDeleteConfirm && onDeleteThread && (
             <div
               data-testid="thread-delete-dialog"
@@ -2438,6 +2454,7 @@ export function ChatStream({
                   onStopTask={onStopTask}
                   onRunControlAction={handleRunControlAction}
                   onDeployRun={onDeployRun}
+                  onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
                 />
               ))}
 

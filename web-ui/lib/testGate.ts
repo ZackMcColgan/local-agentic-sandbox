@@ -85,6 +85,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/autoFollow.test.ts"],
   },
   {
+    match: (p) => p.includes("components/CanvasDiffSheet") || p.includes("canvasDiffSheet.test.ts"),
+    tests: ["tests/canvasDiffSheet.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },
