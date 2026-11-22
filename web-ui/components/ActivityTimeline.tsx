@@ -27,8 +27,8 @@ export interface ThinkingPreviewState {
 
 /**
  * Pure state derivation for the turn's thinking preview block.
- * Streams expanded while active; folds to "Thought for Ns" once complete unless
- * the user explicitly toggled it.
+ * Streams expanded while active; folds to "Thought for Ns" when generation
+ * duration is recorded, or "Thought" when no generation timing exists.
  */
 export function deriveThinkingPreviewState(input: ThinkingPreviewInput): ThinkingPreviewState {
   const hasThought = Boolean(input.thought && input.thought.trim());
@@ -108,35 +108,39 @@ export function ThinkingPreviewBlock({
   return (
     <div
       data-testid="thinking-panel"
-      className="rounded-xl border border-zinc-800 bg-black/90 text-xs"
+      className="rounded-xl border border-zinc-300 dark:border-zinc-800 border-l-2 border-l-emerald-500 bg-zinc-50 dark:bg-black/90 text-xs overflow-hidden"
     >
       <button
         type="button"
         data-testid="thinking-preview-toggle"
         aria-expanded={state.isExpanded}
         onClick={() => setUserExpanded(!state.isExpanded)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-zinc-300 hover:text-zinc-100 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer"
       >
         <span className="inline-flex items-center gap-2 min-w-0">
           {isStreaming && !hasContent ? (
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
           ) : (
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80 shrink-0" />
           )}
-          <span className="font-medium truncate">{state.summaryLabel}</span>
-          <span className="text-[11px] text-zinc-400 shrink-0">Reasoning</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 shrink-0">
+            Reasoning
+          </span>
+          <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+            {state.summaryLabel}
+          </span>
         </span>
         {trimmedThought &&
           (state.isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            <ChevronDown className="h-3.5 w-3.5 text-zinc-600 dark:text-zinc-400 shrink-0" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            <ChevronRight className="h-3.5 w-3.5 text-zinc-600 dark:text-zinc-400 shrink-0" />
           ))}
       </button>
       {state.isExpanded && trimmedThought && (
         <div
           data-testid="thinking-preview-body"
-          className="px-3 pb-2.5 pt-1 border-t border-zinc-900 text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto font-mono text-[11px]"
+          className="px-3 pb-2.5 pt-2 border-t border-zinc-200 dark:border-zinc-900 text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto text-xs"
         >
           {trimmedThought}
         </div>
@@ -148,9 +152,36 @@ export function ThinkingPreviewBlock({
 export interface ActivityTimelineProps {
   traces: TimelineTraceInput[];
   thinkingSegments?: ThinkingSegment[];
+  roundGenerationMs?: number[];
   isStreaming?: boolean;
   hasContent?: boolean;
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
+}
+
+function CollapsibleErrorOutput({ errorSummary }: { errorSummary: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        data-testid="timeline-error-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className="w-fit inline-flex items-center gap-1 text-[11px] font-mono text-rose-700 dark:text-rose-400 hover:underline cursor-pointer"
+      >
+        <span>{expanded ? "▾ hide output" : "› show output"}</span>
+      </button>
+      {expanded && (
+        <div
+          data-testid="timeline-row-error"
+          className="text-[11px] font-mono text-rose-700 bg-rose-50 border border-rose-300 dark:text-rose-400 dark:bg-rose-950/30 dark:border-rose-900/60 rounded-lg px-2.5 py-1.5 break-words"
+        >
+          {errorSummary}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function TimelineRowView({
@@ -174,64 +205,142 @@ function TimelineRowView({
 
   const miniDiff = row.writeDiff?.diffText ? extractMiniDiffLines(row.writeDiff.diffText, 6) : null;
 
+  if (row.isGroup && row.children) {
+    const isErrorGroup = row.status === "error";
+    return (
+      <div data-testid="timeline-row" data-row-status={row.status} className="relative pl-4">
+        <span
+          className={`absolute left-[-4.5px] top-[12px] h-2 w-2 rounded-full ring-2 ring-white dark:ring-black ${dotClass}`}
+        />
+        <div
+          data-testid="timeline-group-card"
+          className={`rounded-xl border overflow-hidden ${
+            isErrorGroup
+              ? "border-rose-300 bg-rose-50 dark:border-rose-900/60 dark:bg-rose-950/30"
+              : "border-zinc-300 bg-zinc-50 dark:border-zinc-800 dark:bg-black/90"
+          }`}
+        >
+          <button
+            type="button"
+            data-testid="timeline-group-toggle"
+            aria-expanded={groupExpanded}
+            onClick={() => setGroupExpanded((v) => !v)}
+            className="w-full px-3 py-2 flex items-center justify-between gap-3 text-left cursor-pointer"
+          >
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <span
+                className={`text-xs font-semibold truncate ${
+                  isErrorGroup
+                    ? "text-rose-700 dark:text-rose-400"
+                    : "text-zinc-800 dark:text-zinc-200"
+                }`}
+              >
+                {row.label}
+              </span>
+              {row.subline && (
+                <span
+                  data-testid="timeline-group-subline"
+                  className={`text-[11px] font-mono truncate ${
+                    isErrorGroup
+                      ? "text-rose-700 dark:text-rose-300"
+                      : "text-zinc-600 dark:text-zinc-400"
+                  }`}
+                >
+                  {row.subline}
+                </span>
+              )}
+            </div>
+            <span
+              className={`text-[11px] font-mono shrink-0 ${
+                isErrorGroup
+                  ? "text-rose-700 dark:text-rose-400"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {groupExpanded ? "▾ collapse" : "› expand"}
+            </span>
+          </button>
+
+          {groupExpanded && (
+            <div
+              className={`px-3 py-2 border-t space-y-1.5 ${
+                isErrorGroup
+                  ? "border-rose-200 dark:border-rose-900/50"
+                  : "border-zinc-200 dark:border-zinc-800"
+              }`}
+            >
+              {row.children.map((child) => (
+                <div key={child.id} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span
+                      className={`truncate ${
+                        child.status === "error"
+                          ? "text-rose-700 dark:text-rose-400 font-medium"
+                          : "text-zinc-700 dark:text-zinc-300"
+                      }`}
+                    >
+                      {child.label}
+                    </span>
+                    {formatRowDuration(child.durationMs) && (
+                      <span className="font-mono text-zinc-600 dark:text-zinc-400 shrink-0">
+                        {formatRowDuration(child.durationMs)}
+                      </span>
+                    )}
+                  </div>
+                  {child.status === "error" && child.errorSummary && (
+                    <CollapsibleErrorOutput errorSummary={child.errorSummary} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="timeline-row" data-row-status={row.status} className="relative pl-4">
       <span
-        className={`absolute left-[-4.5px] top-[7px] h-2 w-2 rounded-full ring-2 ring-black ${dotClass}`}
+        className={`absolute left-[-4.5px] top-[7px] h-2 w-2 rounded-full ring-2 ring-white dark:ring-black ${dotClass}`}
       />
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs">
-          {row.isGroup && row.children ? (
-            <button
-              type="button"
-              data-testid="timeline-group-toggle"
-              aria-expanded={groupExpanded}
-              onClick={() => setGroupExpanded((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-left text-zinc-300 hover:text-zinc-100 cursor-pointer min-w-0"
-            >
-              {groupExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              )}
-              <span className="truncate font-medium">{row.label}</span>
-            </button>
-          ) : (
-            <span
-              className={`truncate ${
-                row.status === "error"
-                  ? "text-rose-400 font-medium"
-                  : row.status === "running"
-                    ? "text-emerald-400 font-medium"
-                    : "text-zinc-200"
-              }`}
-            >
-              {row.label}
-            </span>
-          )}
+          <span
+            className={`truncate ${
+              row.status === "error"
+                ? "text-rose-700 dark:text-rose-400 font-medium"
+                : row.status === "running"
+                  ? "text-emerald-700 dark:text-emerald-400 font-medium"
+                  : "text-zinc-800 dark:text-zinc-200"
+            }`}
+          >
+            {row.label}
+          </span>
 
           <div className="inline-flex items-center gap-2 shrink-0 font-mono text-[11px]">
             {row.writeDiff && (
               <span className="inline-flex items-center gap-1">
-                <span className="text-emerald-400">+{row.writeDiff.addedLines}</span>
-                <span className="text-rose-400">−{row.writeDiff.removedLines}</span>
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  +{row.writeDiff.addedLines}
+                </span>
+                <span className="text-rose-700 dark:text-rose-400">
+                  −{row.writeDiff.removedLines}
+                </span>
               </span>
             )}
-            {durationLabel && <span className="text-zinc-400">{durationLabel}</span>}
+            {durationLabel && (
+              <span className="text-zinc-600 dark:text-zinc-400">{durationLabel}</span>
+            )}
           </div>
         </div>
 
         {row.status === "error" && row.errorSummary && (
-          <div
-            data-testid="timeline-row-error"
-            className="text-[11px] font-mono text-rose-400 bg-rose-950/30 border border-rose-900/60 rounded-lg px-2.5 py-1.5 break-words"
-          >
-            {row.errorSummary}
-          </div>
+          <CollapsibleErrorOutput errorSummary={row.errorSummary} />
         )}
 
         {row.writeDiff && (
-          <div className="rounded-lg border border-zinc-800 bg-black overflow-hidden">
+          <div className="rounded-lg border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black overflow-hidden">
             {miniDiff && miniDiff.lines.length > 0 && (
               <div className="px-2.5 py-1.5 font-mono text-[11px] leading-snug overflow-x-auto">
                 {miniDiff.lines.map((line, i) => (
@@ -239,49 +348,35 @@ function TimelineRowView({
                     key={i}
                     className={
                       line.kind === "add"
-                        ? "text-emerald-400 bg-emerald-950/25 px-1"
+                        ? "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/25 px-1"
                         : line.kind === "del"
-                          ? "text-rose-400 bg-rose-950/25 px-1"
+                          ? "text-rose-700 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/25 px-1"
                           : line.kind === "hunk"
-                            ? "text-zinc-400 px-1"
-                            : "text-zinc-300 px-1"
+                            ? "text-zinc-600 dark:text-zinc-400 px-1"
+                            : "text-zinc-700 dark:text-zinc-300 px-1"
                     }
                   >
                     {line.text}
                   </div>
                 ))}
-                {miniDiff.truncated && <div className="text-zinc-400 px-1 pt-0.5">…</div>}
+                {miniDiff.truncated && (
+                  <div className="text-zinc-600 dark:text-zinc-400 px-1 pt-0.5">…</div>
+                )}
               </div>
             )}
             {onOpenCanvasDiff && (
-              <div className="flex items-center justify-end px-2.5 py-1 border-t border-zinc-900">
+              <div className="flex items-center justify-end px-2.5 py-1 border-t border-zinc-200 dark:border-zinc-900">
                 <button
                   type="button"
                   data-testid="open-in-canvas-btn"
                   onClick={() => onOpenCanvasDiff(row.writeDiff!, allTurnDiffs)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
                 >
                   <FileDiff className="h-3 w-3" />
                   <span>Open</span>
                 </button>
               </div>
             )}
-          </div>
-        )}
-
-        {row.isGroup && groupExpanded && row.children && (
-          <div className="mt-1 ml-2 pl-3 border-l border-zinc-800 space-y-1">
-            {row.children.map((child) => (
-              <div
-                key={child.id}
-                className="flex items-center justify-between gap-2 text-[11px] text-zinc-400"
-              >
-                <span className="truncate">{child.label}</span>
-                {formatRowDuration(child.durationMs) && (
-                  <span className="font-mono shrink-0">{formatRowDuration(child.durationMs)}</span>
-                )}
-              </div>
-            ))}
           </div>
         )}
       </div>
@@ -292,11 +387,16 @@ function TimelineRowView({
 export function ActivityTimeline({
   traces,
   thinkingSegments,
+  roundGenerationMs,
   isStreaming = false,
   hasContent = false,
   onOpenCanvasDiff,
 }: ActivityTimelineProps) {
-  const rows = buildActivityTimeline(traces, undefined, { thinkingSegments, isStreaming });
+  const rows = buildActivityTimeline(traces, undefined, {
+    thinkingSegments,
+    roundGenerationMs,
+    isStreaming,
+  });
   if (rows.length === 0) return null;
 
   const allTurnDiffs: TimelineWriteDiff[] = [];
@@ -307,7 +407,7 @@ export function ActivityTimeline({
   return (
     <div
       data-testid="activity-timeline"
-      className="ml-1.5 border-l border-zinc-800 space-y-2.5 py-1"
+      className="ml-1.5 border-l border-zinc-300 dark:border-zinc-800 space-y-2.5 py-1"
     >
       {rows.map((row) =>
         row.kind === "thinking" ? (

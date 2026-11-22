@@ -104,6 +104,53 @@ function extractPrLink(
 }
 
 /**
+ * Formats stint total duration like the approved mock (e.g. "45s", "4m 03s", "1h 01m 05s").
+ */
+export function formatStintDuration(durationMs: number): string {
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) {
+    return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+  }
+  if (m > 0) {
+    return `${m}m ${String(s).padStart(2, "0")}s`;
+  }
+  return `${s}s`;
+}
+
+function deriveDurationFromTraces(traces: TimelineTraceInput[], genMs: number): number | undefined {
+  let earliest: number | null = null;
+  let latest: number | null = null;
+  let latestTraceDuration = 0;
+  let sumTraceMs = 0;
+
+  for (const t of traces) {
+    if (typeof t.durationMs === "number" && Number.isFinite(t.durationMs) && t.durationMs > 0) {
+      sumTraceMs += t.durationMs;
+    }
+    if (!t.timestamp) continue;
+    const ms = Date.parse(t.timestamp);
+    if (!Number.isFinite(ms)) continue;
+    if (earliest === null || ms < earliest) earliest = ms;
+    if (latest === null || ms >= latest) {
+      latest = ms;
+      latestTraceDuration =
+        typeof t.durationMs === "number" && Number.isFinite(t.durationMs) && t.durationMs > 0
+          ? t.durationMs
+          : 0;
+    }
+  }
+
+  if (earliest !== null && latest !== null && latest > earliest) {
+    return latest - earliest + latestTraceDuration;
+  }
+  const combined = genMs + sumTraceMs;
+  return combined > 0 ? combined : undefined;
+}
+
+/**
  * Derives stint card metrics purely from a completed turn's record and traces.
  * Returns null if no metrics can be derived.
  */
@@ -115,12 +162,14 @@ export function deriveStintMetrics(input: StintRecordInput): StintMetrics | null
       ? input.roundPromptTokens.length
       : undefined;
 
+  const genMs = sumRoundGenerationMs(input.roundGenerationMs);
+
   const durationMs =
     typeof input.durationMs === "number" &&
     Number.isFinite(input.durationMs) &&
     input.durationMs > 0
       ? input.durationMs
-      : undefined;
+      : deriveDurationFromTraces(traces, genMs);
 
   const outputTokens =
     typeof input.outputTokens === "number" &&
@@ -129,9 +178,8 @@ export function deriveStintMetrics(input: StintRecordInput): StintMetrics | null
       ? input.outputTokens
       : undefined;
 
-  const genMs = sumRoundGenerationMs(input.roundGenerationMs);
   const avgTokPerSec =
-    computeAverageTokPerSec(outputTokens, genMs > 0 ? genMs : durationMs) ?? undefined;
+    genMs > 0 ? (computeAverageTokPerSec(outputTokens, genMs) ?? undefined) : undefined;
 
   // Files summary from write traces
   const fileSet = new Set<string>();

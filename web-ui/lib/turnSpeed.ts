@@ -4,6 +4,7 @@
 
 import { formatElapsedDuration } from "./chatUtils";
 import { traceToTimelineRow, type TimelineTraceInput } from "./activityTimeline";
+import { freshnessFor } from "./liveActivity";
 
 /**
  * Sums positive finite per-round generation durations (ms).
@@ -38,7 +39,8 @@ export function computeAverageTokPerSec(
     return null;
   }
   const rate = outputTokens / (generationDurationMs / 1000);
-  return Math.round(rate * 10) / 10;
+  const rounded = Math.round(rate * 10) / 10;
+  return rounded > 0 ? rounded : null;
 }
 
 /**
@@ -69,6 +71,7 @@ export interface NowLineInput {
   streamStatus?: string | null;
   traces?: TimelineTraceInput[];
   startedAtMs?: number | null;
+  lastActivityAtMs?: number | null;
   nowMs: number;
   totalDurationMs?: number;
   outputTokens?: number;
@@ -83,6 +86,7 @@ export interface NowLineState {
   elapsedLabel: string | null;
   tokensLabel: string | null;
   tokPerSecLabel: string | null;
+  stallLabel: string | null;
 }
 
 function deriveObservedStartMs(traces?: TimelineTraceInput[]): number | null {
@@ -111,6 +115,7 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
       elapsedLabel: null,
       tokensLabel: null,
       tokPerSecLabel: null,
+      stallLabel: null,
     };
   }
 
@@ -157,10 +162,23 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
           ? computeAverageTokPerSec(input.outputTokens, genMs)
           : null;
   } else {
-    tokPerSec = computeAverageTokPerSec(input.outputTokens, genMs > 0 ? genMs : elapsedMs);
+    tokPerSec = genMs > 0 ? computeAverageTokPerSec(input.outputTokens, genMs) : null;
   }
 
-  const tokPerSecLabel = tokPerSec !== null ? `${tokPerSec.toFixed(1)} tok/s` : null;
+  const tokPerSecLabel =
+    tokPerSec !== null && tokPerSec > 0 ? `${tokPerSec.toFixed(1)} tok/s` : null;
+
+  let stallLabel: string | null = null;
+  if (
+    input.isStreaming &&
+    typeof input.lastActivityAtMs === "number" &&
+    Number.isFinite(input.lastActivityAtMs)
+  ) {
+    const freshness = freshnessFor(input.lastActivityAtMs, input.nowMs);
+    if (freshness.state === "stalled") {
+      stallLabel = `Stalled · no heartbeat ${freshness.secondsAgo}s`;
+    }
+  }
 
   return {
     visible: true,
@@ -169,5 +187,6 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
     elapsedLabel,
     tokensLabel,
     tokPerSecLabel,
+    stallLabel,
   };
 }

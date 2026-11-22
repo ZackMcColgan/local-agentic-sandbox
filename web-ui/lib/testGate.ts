@@ -421,9 +421,12 @@ const MAPPING_RULES: MappingRule[] = [
     ],
   },
   {
-    // Board #59: single-emerald accent enforcement + dark-mode contrast floor.
+    // Board #59 + Timeline Iteration 2: single-emerald accent enforcement + dark/light contrast floors.
     match: (p) =>
       p.includes("accentContrastAudit.test.ts") ||
+      p.includes("ActivityTimeline.tsx") ||
+      p.includes("NowLineBar.tsx") ||
+      p.includes("StintCard.tsx") ||
       p.includes("BoardView.tsx") ||
       p.includes("ChatStream.tsx") ||
       p.includes("SettingsView.tsx") ||

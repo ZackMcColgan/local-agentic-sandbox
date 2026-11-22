@@ -12,6 +12,7 @@ import {
   formatThoughtLabel,
 } from "../lib/liveActivity";
 import { LiveActivityHeader } from "../components/LiveActivityHeader";
+import { NowLineBar } from "../components/NowLineBar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 
 const webUiRoot = path.resolve(__dirname, "..");
@@ -185,6 +186,60 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
     assert.ok(html.includes("to-cyan-400"), "pulse gradient ends at cyan-400");
   });
+
+  it("Fix 1: LiveActivityHeader retires its duplicate trace list (renders 0 live-trace-row elements)", () => {
+    const html = renderToString(
+      React.createElement(LiveActivityHeader, {
+        startedAtMs: NOW - 15_000,
+        lastActivityAtMs: NOW - 1_000,
+        nowMs: NOW,
+        traceCount: 2,
+        traces: [
+          {
+            tool: "workspace_read_file",
+            args: { path: "a.ts" },
+            result: "ok",
+            durationMs: 20,
+            timestamp: new Date(NOW - 5_000).toISOString(),
+          },
+          {
+            tool: "workspace_run_command",
+            args: { command: "npm test" },
+            result: "",
+            durationMs: 0,
+            timestamp: new Date(NOW - 1_000).toISOString(),
+          },
+        ],
+        phaseLabel: "Running command — workspace_run_command",
+        activityLabel: null,
+        isStreaming: true,
+      })
+    );
+    assert.ok(
+      !html.includes('data-testid="live-trace-row"'),
+      "legacy panel must not duplicate tool call rows"
+    );
+  });
+
+  it("Fix 1: NowLineBar carries the stall signal in place of the retired live-activity panel", () => {
+    const html = renderToString(
+      React.createElement(NowLineBar, {
+        hasRunTurn: true,
+        isStreaming: true,
+        startedAtMs: NOW - 300_000,
+        lastActivityAtMs: NOW - 90_000,
+        nowMs: NOW,
+        traces: [
+          { tool: "workspace_run_command", args: { command: "npm test" }, status: "running" },
+        ],
+      })
+    );
+    assert.ok(html.includes('data-testid="now-line-stalled"'), "now-line carries stalled testid");
+    assert.ok(
+      html.includes("Stalled · no heartbeat 90s"),
+      "now-line carries the silent heartbeat duration"
+    );
+  });
 });
 
 describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {
@@ -263,10 +318,21 @@ describe("uir-0 — header diet in ChatStream", () => {
     );
   });
 
-  it("Live Activity Header is wired into the streaming message and banners exist", () => {
+  it("Fix 1: ActivityTimeline is the single live trace surface (LiveActivityHeader unmounted) and NowLineBar + banners exist", () => {
+    const messageRenderSrc = readSrc("components/chat/messageRender.tsx");
+    const chatStreamSrc = readSrc("components/ChatStream.tsx");
     assert.ok(
-      src.includes("<LiveActivityHeader"),
-      "LiveActivityHeader mounted for the streaming turn"
+      !messageRenderSrc.includes("<LiveActivityHeader"),
+      "LiveActivityHeader no longer mounted on streaming turns (single live surface)"
+    );
+    assert.ok(
+      messageRenderSrc.includes("<ActivityTimeline"),
+      "ActivityTimeline is the single trace renderer"
+    );
+    assert.ok(
+      chatStreamSrc.includes("<NowLineBar") &&
+        chatStreamSrc.includes("lastActivityAtMs={lastActivityAtMs}"),
+      "NowLineBar receives lastActivityAtMs for stall detection"
     );
     assert.ok(
       src.includes('data-testid="turn-transient-disconnected"'),
