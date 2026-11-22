@@ -11,6 +11,7 @@
  */
 
 import type { ExecutionTraceItem } from "@/components/ExecutionTrace";
+import type { ThinkingSegment } from "./activityTimeline";
 
 export const STREAM_SNAPSHOT_INTERVAL_MS = 1000;
 export const STREAM_POLL_INTERVAL_MS = 1500;
@@ -20,6 +21,7 @@ export interface StreamingSnapshotMessage {
   role: "assistant";
   content: string;
   thought?: string;
+  thinkingSegments?: ThinkingSegment[];
   traces?: ExecutionTraceItem[];
   /** qa-7: per-round prompt tokens so far, so watching clients can show the
    * live context meter mid-turn instead of waiting for the turn to settle. */
@@ -41,6 +43,7 @@ export class ThrottledStreamSnapshot {
   private lastRoundPromptTokens: number[] | undefined;
   private lastRoundGenerationMs: number[] | undefined;
   private lastOutputTokens: number | undefined;
+  private lastThinkingSegments: ThinkingSegment[] | undefined;
 
   constructor(
     private sink: StreamingSnapshotSink,
@@ -67,6 +70,7 @@ export class ThrottledStreamSnapshot {
       roundPromptTokens?: number[];
       roundGenerationMs?: number[];
       outputTokens?: number;
+      thinkingSegments?: ThinkingSegment[];
     }
   ): boolean {
     if (!this.threadId) return false;
@@ -81,6 +85,9 @@ export class ThrottledStreamSnapshot {
     if (typeof opts?.outputTokens === "number" && Number.isFinite(opts.outputTokens) && opts.outputTokens > 0) {
       this.lastOutputTokens = opts.outputTokens;
     }
+    if (Array.isArray(opts?.thinkingSegments) && opts.thinkingSegments.length > 0) {
+      this.lastThinkingSegments = [...opts.thinkingSegments];
+    }
     const hasContent = Boolean(content && content.trim());
     const hasThought = Boolean(thought && thought.trim());
     const hasTraces = Array.isArray(traces) && traces.length > 0;
@@ -93,6 +100,7 @@ export class ThrottledStreamSnapshot {
       role: "assistant",
       content: content || "",
       thought: hasThought ? thought : undefined,
+      thinkingSegments: this.lastThinkingSegments,
       traces: hasTraces ? traces : undefined,
       roundPromptTokens: this.lastRoundPromptTokens,
       roundGenerationMs: this.lastRoundGenerationMs,

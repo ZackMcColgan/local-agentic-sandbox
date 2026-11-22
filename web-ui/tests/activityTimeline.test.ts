@@ -367,4 +367,57 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(realRow.writeDiff.diffText, realDiff);
     assert.equal(realRow.writeDiff.synthesized, undefined);
   });
+
+  it("interleaves thinkingSegments inline before each round's action rows (think-act-think-act)", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 20, round: 1 },
+      { tool: "workspace_write_file", args: { path: "b.ts", content: "x=1" }, durationMs: 30, round: 2 },
+    ];
+    const rows = buildActivityTimeline(traces, undefined, {
+      thinkingSegments: [
+        { round: 1, text: "First I will read a.ts" },
+        { round: 2, text: "Now I will write b.ts" },
+      ],
+    });
+
+    assert.equal(rows.length, 4);
+    assert.equal(rows[0].kind, "thinking");
+    assert.equal(rows[0].thinkingText, "First I will read a.ts");
+    assert.equal(rows[1].kind, "read");
+    assert.equal(rows[1].label, "Read a.ts");
+    assert.equal(rows[2].kind, "thinking");
+    assert.equal(rows[2].thinkingText, "Now I will write b.ts");
+    assert.equal(rows[3].kind, "write");
+    assert.equal(rows[3].label, "Wrote b.ts");
+  });
+
+  it("renders a thinking row even when a segment's round has no traces, and marks streaming tail running", () => {
+    const rows = buildActivityTimeline([], undefined, {
+      thinkingSegments: [{ round: 1, text: "Analyzing architecture..." }],
+      isStreaming: true,
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].kind, "thinking");
+    assert.equal(rows[0].thinkingText, "Analyzing architecture...");
+    assert.equal(rows[0].status, "running");
+
+    const withLiveTail = buildActivityTimeline(
+      [{ tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 10, round: 1 }],
+      undefined,
+      {
+        thinkingSegments: [
+          { round: 1, text: "Round 1 thought" },
+          { round: 2, text: "Streaming round 2 thought..." },
+        ],
+        isStreaming: true,
+      }
+    );
+    assert.equal(withLiveTail.length, 3);
+    assert.equal(withLiveTail[0].kind, "thinking");
+    assert.equal(withLiveTail[0].status, "success");
+    assert.equal(withLiveTail[1].kind, "read");
+    assert.equal(withLiveTail[2].kind, "thinking");
+    assert.equal(withLiveTail[2].thinkingText, "Streaming round 2 thought...");
+    assert.equal(withLiveTail[2].status, "running");
+  });
 });

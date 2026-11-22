@@ -6,9 +6,22 @@
  * summaries and write diff metadata without side effects.
  */
 
-export type TimelineToolKind = "read" | "search" | "write" | "shell" | "web" | "subagent" | "other";
+export type TimelineToolKind =
+  | "read"
+  | "search"
+  | "write"
+  | "shell"
+  | "web"
+  | "subagent"
+  | "thinking"
+  | "other";
 
 export type TimelineRowStatus = "running" | "success" | "error";
+
+export interface ThinkingSegment {
+  round: number;
+  text: string;
+}
 
 export interface TimelineWriteDiff {
   filePath: string;
@@ -27,6 +40,7 @@ export interface TimelineTraceInput {
   tier?: string;
   status?: "running" | "complete" | "error" | "success";
   isError?: boolean;
+  round?: number;
 }
 
 export interface TimelineRow {
@@ -42,6 +56,8 @@ export interface TimelineRow {
   children?: TimelineRow[];
   isGroup?: boolean;
   rawTraceIndex?: number;
+  thinkingText?: string;
+  round?: number;
 }
 
 const MAX_TARGET_LEN = 64;
@@ -431,14 +447,85 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   return result;
 }
 
+export interface BuildActivityTimelineOptions {
+  thinkingSegments?: ThinkingSegment[];
+  isStreaming?: boolean;
+}
+
 /**
- * End-to-end pure transform from raw traces to folded timeline rows.
+ * End-to-end pure transform from raw traces (and optional per-round thinking
+ * segments) to folded timeline rows.
  */
 export function buildActivityTimeline(
   traces: TimelineTraceInput[] | undefined,
-  nowMs?: number
+  nowMs?: number,
+  options?: BuildActivityTimelineOptions
 ): TimelineRow[] {
-  if (!Array.isArray(traces) || traces.length === 0) return [];
-  const rows = traces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
-  return foldTimelineRows(rows);
+  const safeTraces = Array.isArray(traces) ? traces : [];
+  const validSegments = Array.isArray(options?.thinkingSegments)
+    ? options.thinkingSegments.filter((s) => s && typeof s.text === "string" && s.text.trim())
+    : [];
+
+  if (validSegments.length === 0) {
+    if (safeTraces.length === 0) return [];
+    const rows = safeTraces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
+    return foldTimelineRows(rows);
+  }
+
+  const segmentsByRound = new Map<number, ThinkingSegment[]>();
+  const roundSet = new Set<number>();
+  for (const seg of validSegments) {
+    const r = typeof seg.round === "number" && Number.isFinite(seg.round) ? seg.round : 1;
+    roundSet.add(r);
+    const list = segmentsByRound.get(r) ?? [];
+    list.push(seg);
+    segmentsByRound.set(r, list);
+  }
+
+  const tracesByRound = new Map<number, Array<{ trace: TimelineTraceInput; index: number }>>();
+  let fallbackRound = 1;
+  for (let idx = 0; idx < safeTraces.length; idx++) {
+    const t = safeTraces[idx];
+    const r = typeof t.round === "number" && Number.isFinite(t.round) ? t.round : fallbackRound;
+    fallbackRound = r;
+    roundSet.add(r);
+    const list = tracesByRound.get(r) ?? [];
+    list.push({ trace: t, index: idx });
+    tracesByRound.set(r, list);
+  }
+
+  const orderedRounds = Array.from(roundSet).sort((a, b) => a - b);
+  const lastRound = orderedRounds[orderedRounds.length - 1];
+  const result: TimelineRow[] = [];
+
+  for (const r of orderedRounds) {
+    const segs = segmentsByRound.get(r) ?? [];
+    const roundTraces = tracesByRound.get(r) ?? [];
+    for (let sIdx = 0; sIdx < segs.length; sIdx++) {
+      const seg = segs[sIdx];
+      const isTailStreaming =
+        Boolean(options?.isStreaming) &&
+        r === lastRound &&
+        sIdx === segs.length - 1 &&
+        roundTraces.length === 0;
+      result.push({
+        id: `thinking-round-${r}-${sIdx}`,
+        kind: "thinking",
+        status: isTailStreaming ? "running" : "success",
+        verb: isTailStreaming ? "Thinking" : "Thought",
+        target: "Reasoning",
+        label: isTailStreaming ? "Thinking…" : "Thought",
+        thinkingText: seg.text,
+        round: r,
+      });
+    }
+    if (roundTraces.length > 0) {
+      const actionRows = roundTraces.map(({ trace, index }) =>
+        traceToTimelineRow(trace, index, nowMs)
+      );
+      result.push(...foldTimelineRows(actionRows));
+    }
+  }
+
+  return result;
 }

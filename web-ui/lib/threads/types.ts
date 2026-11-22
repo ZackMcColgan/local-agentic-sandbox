@@ -11,6 +11,7 @@ import type { JobTokenRollup } from "../tokenEconomics";
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import type { ChunkBudgetConfig } from "../jobChunking";
+import type { ThinkingSegment } from "../activityTimeline";
 
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
@@ -60,6 +61,7 @@ export interface ThreadMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thought?: string;
+  thinkingSegments?: ThinkingSegment[];
   traces?: ExecutionTraceItem[];
   attachments?: ThreadAttachment[];
   diffs?: TurnFileDiff[];

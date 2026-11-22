@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, FileDiff } from "lucide-react";
 import {
   buildActivityTimeline,
+  type ThinkingSegment,
   type TimelineRow,
   type TimelineTraceInput,
   type TimelineWriteDiff,
@@ -146,6 +147,9 @@ export function ThinkingPreviewBlock({
 
 export interface ActivityTimelineProps {
   traces: TimelineTraceInput[];
+  thinkingSegments?: ThinkingSegment[];
+  isStreaming?: boolean;
+  hasContent?: boolean;
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
@@ -285,8 +289,14 @@ function TimelineRowView({
   );
 }
 
-export function ActivityTimeline({ traces, onOpenCanvasDiff }: ActivityTimelineProps) {
-  const rows = buildActivityTimeline(traces);
+export function ActivityTimeline({
+  traces,
+  thinkingSegments,
+  isStreaming = false,
+  hasContent = false,
+  onOpenCanvasDiff,
+}: ActivityTimelineProps) {
+  const rows = buildActivityTimeline(traces, undefined, { thinkingSegments, isStreaming });
   if (rows.length === 0) return null;
 
   const allTurnDiffs: TimelineWriteDiff[] = [];
@@ -299,14 +309,25 @@ export function ActivityTimeline({ traces, onOpenCanvasDiff }: ActivityTimelineP
       data-testid="activity-timeline"
       className="ml-1.5 border-l border-zinc-800 space-y-2.5 py-1"
     >
-      {rows.map((row) => (
-        <TimelineRowView
-          key={row.id}
-          row={row}
-          allTurnDiffs={allTurnDiffs}
-          onOpenCanvasDiff={onOpenCanvasDiff}
-        />
-      ))}
+      {rows.map((row) =>
+        row.kind === "thinking" ? (
+          <div key={row.id} className="pl-3">
+            <ThinkingPreviewBlock
+              thought={row.thinkingText}
+              isStreaming={row.status === "running"}
+              hasContent={row.status === "running" ? hasContent : true}
+              durationMs={row.durationMs}
+            />
+          </div>
+        ) : (
+          <TimelineRowView
+            key={row.id}
+            row={row}
+            allTurnDiffs={allTurnDiffs}
+            onOpenCanvasDiff={onOpenCanvasDiff}
+          />
+        )
+      )}
     </div>
   );
 }
