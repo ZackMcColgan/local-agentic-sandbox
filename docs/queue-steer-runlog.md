@@ -1,5 +1,59 @@
 # Queue Steer Runlog
 
+## job-auto-1 (auto-resume attempt 1/2) — retryAfter parser
+
+- Banked state found on resume: sandbox branch `feat/task-179482628980` held an
+  uncommitted `retryAfter.mjs` rewrite plus untracked `tests/retryAfter.test.mjs`.
+  Prior commits on that branch were unrelated scratch milestones (M1/M2 stubs).
+- Verified scope: `parseRetryAfter(headerValue, nowMs = 0)` per AC-2-1/AC-2-2/AC-2-3.
+- Tests run (host checkout, branch `feature/retry-after-parser`):
+  - `node --test tests/retryAfter.test.mjs` -> 9 pass / 0 fail.
+  - Grader suite `D:\AI\orchestrator-scratch\retryafter-grader\retryAfter.test.mjs`
+    run against the workspace implementation -> 4 pass / 0 fail.
+- Contract notes:
+  - null/undefined/empty/whitespace-only -> null
+  - non-negative integer seconds -> nowMs + seconds*1000; "0" -> 0 always
+  - HTTP-date -> max(0, Date.parse(value) - nowMs)
+  - negative / non-integer / unparseable -> null
+- Status: COMPLETE. Files committed on `feature/retry-after-parser` (PR into develop).
+- Auto-resume attempt 1/2: found an in-progress merge of origin/develop into
+  `feature/retry-after-parser` with two conflicts (`docs/queue-steer-runlog.md`,
+  `web-ui/tests/retryAfter.test.ts`). Resolved both to a union (keep both runlog
+  sections; keep our `../lib/retryAfter.mjs` import under develop's prettier
+  formatting). Merge committed as `71ad704`. Targeted gate
+  `npx tsx scripts/test-gate.ts --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail.
+  Note: the gate initially failed on a missing `typescript` devDependency (not hoisted
+  to the workspace root); installed `typescript@5.7.3 --no-save` at root to fix the
+  eval-pack grader's `tsc` spawn and the mcp-server typecheck. Environment gap, not a
+  regression from this job.
+- Auto-resume attempt 1/2 (continuation): re-ran grader against repo
+  `web-ui/lib/retryAfter.mjs` -> 4 pass / 0 fail; `npx tsx --test
+web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
+  bridge: `npx tsx scripts/test-gate.ts --since=origin/develop` -> PASSED, 409 pass /
+  0 fail / 2 skip in 59.4s (<90s budget). Pitfall logged: `npm run test:gate
+-- --since=...` swallows `--since` as npm's own config flag and silently drops the
+  changed-file scope (selected only 2 suites); invoke `npx tsx scripts/test-gate.ts
+--since=...` directly instead.
+- Status: COMPLETE. PR opened into develop.
+- Auto-resume attempt 1/2 (re-verification): branch `feature/retry-after-parser` clean,
+  PR #217 OPEN + MERGEABLE. Targeted gate
+  `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail.
+  Full change-aware gate scoped to committed diff
+  `node scripts/test-gate.js --since=origin/develop` -> PASSED, 409 pass / 0 fail in 61s
+  (<90s budget), with `tests/retryAfter.test.ts` in the selected suite list.
+  Pitfall reconfirmed: bare `node scripts/test-gate.js` (no `--since`) picks up the 8
+  untracked `eval/results/*` scratch dirs as "changed files", so change detection selects
+  only the eval-pack + skillGate suites (2 suites) and silently drops the retryAfter slice.
+  Scope the gate with `--since=origin/develop` to exclude untracked scratch. No code change
+  needed; job remains COMPLETE.
+- Auto-resume attempt 1/2 (final re-verification, 2026-11-20): branch clean, PR #217
+  OPEN + MERGEABLE into develop. Targeted gate
+  `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail
+  (4.5s). Scoped full gate `node scripts/test-gate.js --since=origin/develop` -> PASSED,
+  636 pass / 0 fail / 2 skip in 67.2s (<90s budget); suite count grew from 409 to 638 as
+  develop advanced (Board #54/#56/#59 slices merged in), `tests/retryAfter.test.ts` still
+  selected. No code change required; job remains COMPLETE.
+
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
 - Worktree: `C:\Users\zackm\Desktop\repos\ls-worktree-54`, branch `feature/eval-run-tool-discipline-and-fault-isolation` (off origin/develop @ 8579193).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseRetryAfter } from "../retryAfter.mjs";
+import { parseRetryAfter } from "../lib/retryAfter.mjs";
 
 test("parseRetryAfter(null, 0) returns null", () => {
   assert.strictEqual(parseRetryAfter(null, 0), null);
