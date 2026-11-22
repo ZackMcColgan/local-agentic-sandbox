@@ -641,6 +641,7 @@ export async function runChatTurn(
     // rolled up onto the assistant message and the thread record.
     const roundPromptTokens: number[] = [];
     const roundGenerationMs: number[] = [];
+    let cumulativeOutputTokens = 0;
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
@@ -933,6 +934,7 @@ export async function runChatTurn(
       let roundSizeCapped = false;
       const toolCallsFromMessage: LlmToolCall[] = [];
       const roundStreamStartMs = Date.now();
+      let roundOutputTokens = 0;
 
       try {
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -942,8 +944,10 @@ export async function runChatTurn(
           }
           if (typeof chunk.outputTokens === "number") {
             turnState.turnOutputTokens = chunk.outputTokens;
+            roundOutputTokens = chunk.outputTokens;
           } else if (typeof chunk.eval_count === "number") {
             turnState.turnOutputTokens = chunk.eval_count;
+            roundOutputTokens = chunk.eval_count;
           }
           // TOKEN ECONOMICS (a): prompt tokens arrive on the finish chunk via
           // the PR #63 usage plumbing (promptTokens) or Ollama's
@@ -1019,6 +1023,9 @@ export async function runChatTurn(
         }
       } finally {
         roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
+        if (roundOutputTokens > 0) {
+          cumulativeOutputTokens += roundOutputTokens;
+        }
         roundDeadline.clear();
         if (activeThreadId) {
           clearRoundAbortController(activeThreadId, roundAbortController);
@@ -1740,6 +1747,8 @@ export async function runChatTurn(
         {
           force: true,
           roundPromptTokens: [...roundPromptTokens],
+          roundGenerationMs: [...roundGenerationMs],
+          outputTokens: cumulativeOutputTokens > 0 ? cumulativeOutputTokens : undefined,
         }
       );
       if (activeThreadId) {

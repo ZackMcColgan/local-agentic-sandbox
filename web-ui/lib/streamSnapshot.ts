@@ -24,6 +24,10 @@ export interface StreamingSnapshotMessage {
   /** qa-7: per-round prompt tokens so far, so watching clients can show the
    * live context meter mid-turn instead of waiting for the turn to settle. */
   roundPromptTokens?: number[];
+  /** Per-round generation durations (ms) so far for live tok/s on observed turns. */
+  roundGenerationMs?: number[];
+  /** Cumulative output tokens across completed rounds so far. */
+  outputTokens?: number;
   status: "streaming";
   timestamp: string;
 }
@@ -35,6 +39,8 @@ export interface StreamingSnapshotSink {
 export class ThrottledStreamSnapshot {
   private lastWriteMs = -Infinity;
   private lastRoundPromptTokens: number[] | undefined;
+  private lastRoundGenerationMs: number[] | undefined;
+  private lastOutputTokens: number | undefined;
 
   constructor(
     private sink: StreamingSnapshotSink,
@@ -56,13 +62,24 @@ export class ThrottledStreamSnapshot {
     content: string,
     thought?: string,
     traces?: ExecutionTraceItem[],
-    opts?: { force?: boolean; roundPromptTokens?: number[] }
+    opts?: {
+      force?: boolean;
+      roundPromptTokens?: number[];
+      roundGenerationMs?: number[];
+      outputTokens?: number;
+    }
   ): boolean {
     if (!this.threadId) return false;
     // qa-7: cache the round token record the moment a caller supplies it, so
     // every later snapshot carries it even when the caller passes content only.
     if (Array.isArray(opts?.roundPromptTokens) && opts.roundPromptTokens.length > 0) {
       this.lastRoundPromptTokens = [...opts.roundPromptTokens];
+    }
+    if (Array.isArray(opts?.roundGenerationMs) && opts.roundGenerationMs.length > 0) {
+      this.lastRoundGenerationMs = [...opts.roundGenerationMs];
+    }
+    if (typeof opts?.outputTokens === "number" && Number.isFinite(opts.outputTokens) && opts.outputTokens > 0) {
+      this.lastOutputTokens = opts.outputTokens;
     }
     const hasContent = Boolean(content && content.trim());
     const hasThought = Boolean(thought && thought.trim());
@@ -78,6 +95,8 @@ export class ThrottledStreamSnapshot {
       thought: hasThought ? thought : undefined,
       traces: hasTraces ? traces : undefined,
       roundPromptTokens: this.lastRoundPromptTokens,
+      roundGenerationMs: this.lastRoundGenerationMs,
+      outputTokens: this.lastOutputTokens,
       status: "streaming",
       timestamp: new Date().toISOString(),
     });

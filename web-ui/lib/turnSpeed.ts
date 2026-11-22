@@ -85,6 +85,19 @@ export interface NowLineState {
   tokPerSecLabel: string | null;
 }
 
+function deriveObservedStartMs(traces?: TimelineTraceInput[]): number | null {
+  if (!Array.isArray(traces) || traces.length === 0) return null;
+  let earliest: number | null = null;
+  for (const t of traces) {
+    if (!t.timestamp) continue;
+    const ms = Date.parse(t.timestamp);
+    if (Number.isFinite(ms) && (earliest === null || ms < earliest)) {
+      earliest = ms;
+    }
+  }
+  return earliest;
+}
+
 /**
  * Pure derivation for the slim status bar under the app header.
  * Hides when no turn has run in the open thread.
@@ -118,9 +131,14 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
     }
   }
 
+  const effectiveStartMs =
+    typeof input.startedAtMs === "number" && Number.isFinite(input.startedAtMs)
+      ? input.startedAtMs
+      : deriveObservedStartMs(input.traces);
+
   const elapsedMs = input.isStreaming
-    ? typeof input.startedAtMs === "number" && input.nowMs >= input.startedAtMs
-      ? input.nowMs - input.startedAtMs
+    ? effectiveStartMs !== null && input.nowMs >= effectiveStartMs
+      ? input.nowMs - effectiveStartMs
       : 0
     : (input.totalDurationMs ?? 0);
 
@@ -130,13 +148,15 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
   const tokensLabel = formatTokenCount(input.outputTokens);
 
   let tokPerSec: number | null = null;
+  const genMs = sumRoundGenerationMs(input.roundGenerationMs);
   if (input.isStreaming) {
     tokPerSec =
       typeof input.liveTokPerSec === "number" && input.liveTokPerSec > 0
         ? input.liveTokPerSec
-        : computeAverageTokPerSec(input.outputTokens, elapsedMs);
+        : genMs > 0
+          ? computeAverageTokPerSec(input.outputTokens, genMs)
+          : null;
   } else {
-    const genMs = sumRoundGenerationMs(input.roundGenerationMs);
     tokPerSec = computeAverageTokPerSec(input.outputTokens, genMs > 0 ? genMs : elapsedMs);
   }
 

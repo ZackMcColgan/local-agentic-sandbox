@@ -87,6 +87,8 @@ export interface ThreadMessage {
   outputTokens?: number;
   /** TOKEN ECONOMICS (a): prompt tokens recorded per model round in this turn. */
   roundPromptTokens?: number[];
+  /** Per-round generation duration (ms) for completed rounds in this turn. */
+  roundGenerationMs?: number[];
   /** TOKEN ECONOMICS (c): micro-elision audit — every stub applied during the
    * turn (tool, target, original size, round). The full results remain in
    * `traces`, so a stubbed result stays recoverable from the thread record. */
