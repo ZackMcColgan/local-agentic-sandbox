@@ -97,7 +97,10 @@ spec:
           port: 4318
         - protocol: TCP
           port: 4317
-    # Allow communication to host inference engine (Strata :8080 / standalone llama-server / ollama-service)
+    # Allow communication to host inference engine (Strata :8080 / standalone llama-server / ollama-service).
+    # NOTE: these port-only rules allow egress to ANY destination on these ports; the
+    # intended destinations are the host (via ExternalName services to host.docker.internal).
+    # This boundary is documented in README.md ("Security boundary").
     - ports:
         - protocol: TCP
           port: 8080
@@ -105,7 +108,8 @@ spec:
           port: 11434
         - protocol: TCP
           port: 11435
-    # Allow communication to host runner daemon bridge (:8765)
+    # Allow communication to host runner daemon bridge (:8765). Port-only rule: any
+    # destination on :8765; intended destination is the host bridge. See README.md.
     - ports:
         - protocol: TCP
           port: 8765

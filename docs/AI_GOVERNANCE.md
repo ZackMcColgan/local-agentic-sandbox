@@ -98,11 +98,12 @@ To verify that the AI Governance controls remain intact across CI and local depl
    ```
 3. **Verify Zero-Trust Container Attestation in Live Kubernetes Pod:**
    ```bash
-   # Probe live MCP runner zero-trust posture
-   kubectl exec -n local-agentic-sandbox deploy/mcp-runner -- node -e "
-     const { verifyContainerProvenance } = require('./dist/tools/attestation.js');
-     verifyContainerProvenance().then(console.log);
-   "
+   # Probe live MCP runner zero-trust posture (mirrors the verify_container_provenance
+   # MCP tool registered by mcp-server/src/tools/attestation.ts)
+   kubectl exec -n local-agentic-sandbox deploy/mcp-runner -- sh -c \
+     "id -u; grep ' / ' /proc/mounts | head -1 | cut -d' ' -f2,3; grep CapEff /proc/self/status"
    # Expected output:
-   # { execution_uid: "10001:10001 (unprivileged)", root_filesystem: "READ_ONLY", capabilities: "CAP_DROP ALL" }
+   # 10001                       (uid 10001:10001, unprivileged)
+   # / overlay                   (root filesystem mounted read-only: ro,...)
+   # CapEff: 0000000000000000    (capabilities CAP_DROP ALL)
    ```

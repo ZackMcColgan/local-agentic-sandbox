@@ -15,7 +15,7 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
 
-1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) with a 27B fallback (`swift-15-27b-mtp`) and 128K context window, keeping inference local with no cloud dependency.
+1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) at 128K context, keeping inference local with no cloud dependency. The optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default) can host a 27B fallback (`swift-15-27b-mtp`) when scaled up.
 2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 13 autonomous developer and attestation tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
 3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
 4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy, test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage.
@@ -85,8 +85,8 @@ _Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `loc
 │  HOST INFERENCE & BRIDGE BOUNDARY (AMD Radeon RX 9070 XT / ROCm/HIP)                              │
 │                                                                                                   │
 │   Strata Inference Engine (Host Process)                                                          │
-│   ├── Qwen3.8-Flash-Next (125B-class MoE) ── Resident Primary Coding Engine (128K context)        │
-│   └── swift-15-27b-mtp (27B Fallback)     ── Secondary / Fallback Local Model                     │
+│   └── Qwen3.8-Flash-Next (125B-class MoE) ── Resident Coding Engine (128K context)                │
+│       (Optional in-cluster Ollama harness, llm-rocm-gpu :11434, scaled to 0, hosts 27B fallback)  │
 │                                                                                                   │
 │   Host Bridge (Host Process — Sole External Boundary)                                             │
 │   └── git / GitHub, internet via host, approval gate for destructive actions, host OS keyring     │
@@ -97,14 +97,14 @@ _Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `loc
 
 ## 3. Network & Security Isolation Matrix
 
-| Component / Pod      | Placement               | Filesystem Mode       | Linux Capabilities  | User ID           | Role & Network Isolation                                                                                                                                                                    |
-| :------------------- | :---------------------- | :-------------------- | :------------------ | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`mcp-runner`**     | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`).                                                                                 |
-| **`browser-mcp`**    | `local-agentic-sandbox` | Read-Only App         | Default (No Privs)  | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only.                                            |
-| **`web-ui`**         | `local-agentic-sandbox` | Read-Write            | Default             | Non-Root          | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge. |
-| **`otel-collector`** | `local-agentic-sandbox` | Ephemeral             | Default (No Privs)  | Non-Root          | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686).                                                                                                                                |
-| **`strata`**         | Host Process / PCIe     | Local Drive           | Host Native         | Host User         | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 27B fallback (`swift-15-27b-mtp`), 128K context.                                       |
-| **`host-bridge`**    | Host Process            | Local Drive           | Host Native         | Host User         | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only).                                                      |
+| Component / Pod      | Placement               | Filesystem Mode       | Linux Capabilities  | User ID           | Role & Network Isolation                                                                                                                                                                                                                           |
+| :------------------- | :---------------------- | :-------------------- | :------------------ | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`mcp-runner`**     | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`).                                                                                                                                        |
+| **`browser-mcp`**    | `local-agentic-sandbox` | Read-Only App         | Default (No Privs)  | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only.                                                                                                   |
+| **`web-ui`**         | `local-agentic-sandbox` | Read-Write            | Default             | Non-Root          | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge.                                                        |
+| **`otel-collector`** | `local-agentic-sandbox` | Ephemeral             | Default (No Privs)  | Non-Root          | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686).                                                                                                                                                                                       |
+| **`strata`**         | Host Process / PCIe     | Local Drive           | Host Native         | Host User         | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 128K context. The 27B fallback (`swift-15-27b-mtp`) lives on the optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default). |
+| **`host-bridge`**    | Host Process            | Local Drive           | Host Native         | Host User         | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only).                                                                                                             |
 
 ### 3.1 Host-Filesystem Write Trust Boundary (`./workspace:/workspace:rw`)
 
@@ -221,7 +221,7 @@ local-agentic-sandbox/
 │   │   ├── DiffViewer.tsx              # Side-by-side git diff viewer
 │   │   └── ThreadsSidebar.tsx          # Material 3 responsive sessions sidebar
 │   ├── lib/
-│   │   ├── agentEngine.ts              # Autonomous test-and-repair agent execution loop
+│   │   ├── board/dispatcher.ts         # Board drain dispatcher with shadow-mode auto-issue gate
 │   │   ├── testGate.ts                 # Change-aware local test gate & Playwright runner
 │   │   ├── threads/threadStore.ts      # Server-side durable thread store
 │   │   ├── fileParser.ts               # File ingestion & multimodal base64 extractor
@@ -232,7 +232,7 @@ local-agentic-sandbox/
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
 │   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
-│   └── tests/                          # 1,681 workspace tests (1,647 in web-ui; 1,677 in Linux CI)
+│   └── tests/                          # 1,930 unit and contract tests across 283 files
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```
 
@@ -267,10 +267,10 @@ kubectl port-forward svc/web-ui -n local-agentic-sandbox 3001:3000 --address 0.0
 # 1. Typecheck web-ui
 npx tsc --noEmit -p web-ui/tsconfig.json
 
-# 2. Run workspace unit/contract suites (1,681 workspace tests locally / 1,677 in Linux CI)
+# 2. Run workspace unit/contract suites (1,930 unit and contract tests across 283 files in web-ui)
 npm test
 
-# 3. Run the change-aware local test gate or full Playwright suite (272 tests across 12 spec files and 4 projects)
+# 3. Run the change-aware local test gate or full Playwright suite (284 tests across 13 spec files and 4 projects)
 npm run test:gate
 npm --prefix web-ui run test:e2e
 
