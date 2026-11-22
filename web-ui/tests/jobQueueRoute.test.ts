@@ -199,16 +199,52 @@ describe("wiring is live, not dead code (audit guard)", () => {
     assert.match(src, /from "@\/lib\/chatTurnGate"/);
     assert.match(src, /serializeTurn\(/);
   });
-  it("chat route wires the singleton queue, per-job repoRoot, and queue_position emission", () => {
+  it("chat route wires the singleton queue and queue_position emission", () => {
     const src = fs.readFileSync(
       path.join(__dirname, "..", "app", "api", "chat", "route.ts"),
       "utf8"
     );
     assert.match(src, /const chatJobQueue = new JobQueue\(\)/);
-    assert.match(src, /repoRoot: resolveJobRepoRoot\(\)/);
     assert.match(src, /queue_position: position/);
     assert.match(src, /onQueued: \(position\)/);
   });
+  // Board item #63: MCP workspace tools execute against the container's shared
+  // /workspace, never the per-turn worktree path, so the chat route must not
+  // create a git worktree per turn (git churn without isolation). Until MCP
+  // tools accept a workspace root, chat turns run with NO repoRoot/worktree.
+  it("chat route does NOT allocate a per-turn worktree (no unused repoRoot)", () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "app", "api", "chat", "route.ts"),
+      "utf8"
+    );
+    assert.doesNotMatch(src, /repoRoot:\s*resolveJobRepoRoot\(\)/);
+    assert.doesNotMatch(src, /createJobWorktree/);
+  });
+
+  it("serializeTurn without repoRoot runs the turn with a null worktree and creates none", async () => {
+    const root = makeRepo();
+    try {
+      const queue = new JobQueue();
+      const observed: Array<{ id: string; worktree: unknown }> = [];
+      const turn = serializeTurn(
+        queue,
+        { id: "no-wt", threadId: "t1", prompt: "x" },
+        {
+          runTurn: async (job, worktree) => {
+            observed.push({ id: job.id, worktree });
+          },
+        }
+      );
+      await turn.settled;
+      assert.deepEqual(observed, [{ id: "no-wt", worktree: null }]);
+      // No worktree metadata churn in the repo: only the base commit exists.
+      const wtDir = path.join(root, ".git", "worktrees");
+      assert.equal(fs.existsSync(wtDir), false, "no worktree must be created");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // Deferred to step 4 (ChatStream queue-position rendering): the route now
   // emits queue_position events; ChatStream must parse them into queuePosition.
   // Skipped so this step's gate stays green without UI work.

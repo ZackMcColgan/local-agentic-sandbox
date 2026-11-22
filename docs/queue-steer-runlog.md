@@ -41,3 +41,12 @@
   - web-ui/lib/testGate.ts: new MAPPING_RULES entry wiring accentContrastAudit.test.ts to BoardView/ChatStream/SettingsView/settings zones (gateManifestCompleteness green).
 - Verification: accentContrastAudit 4/4, darkTextFloor 2/2, settingsView 8/8, parityChatSurfaces 11/11, paritySidebarDrawer 11/11, uirHeaderActivity 20/20, gateManifestCompleteness 1/1 green; `npm run test:gate` PASSED: 687 unit tests + 128 Playwright specs (incl. settingsMobile 5/5 across all 4 projects), 0 failed.
 - Note: `transition-all` on engine buttons animates the disabled-state background; the e2e floor check waits 400ms for the transition to settle before measuring computed contrast.
+
+## Board item #63 — skip unused per-chat worktree creation
+
+- Worktree: C:\Users\zackm\Desktop\repos\lsb-job63, branch feature/chat-turn-worktree-skip (off develop).
+- Evidence: web-ui/app/api/chat/route.ts passed repoRoot: resolveJobRepoRoot() to serializeTurn, which created+deleted a git worktree per chat turn; the handle was only consumed by chunkWorkspaceRoot (web-ui/lib/chat/roundLoop.ts:663) for the runlog path. MCP workspace tools execute via target.client.callTool against the container shared /workspace (roundLoop.ts:1613) - never _worktree.path. So the worktree was pure git churn, no isolation.
+- Decision (assumption logged): REMOVE the unused per-turn worktree rather than thread a workspace root through MCP tools; mcp-server/src/tools/workspaceTools.ts has no workspace-root parameter today, so real isolation is a separate mcp-server change. serializeTurn keeps repoRoot support for job-queue callers (jobQueueIsolation.test.ts untouched).
+- Test-first: web-ui/tests/jobQueueRoute.test.ts - new test asserts chat route source has no repoRoot: resolveJobRepoRoot()/createJobWorktree, and serializeTurn without repoRoot runs runTurn with null worktree and creates no .git/worktrees dir. Red before fix.
+- Patch: web-ui/app/api/chat/route.ts - dropped repoRoot from serializeTurn options, renamed chatTurnWorktreeSeq -> chatTurnSeq, updated comment to record the #63 rationale.
+- Verification: jobQueueRoute.test.ts 11 pass / 0 fail; npm run test:gate PASSED: 370 tests, 0 failed (budget 240s, took ~48s).
