@@ -2,10 +2,13 @@ import { NextRequest } from "next/server";
 import {
   BoardOrchestrator,
   extractJobOutcomeMetadata,
+  extractThreadIdFromLink,
   MAX_DRAIN_DURATION_MS,
   MAX_DRAIN_ITEMS,
+  ORPHANED_WORKING_ITEM_REASON,
   type BoardOrchestratorDeps,
   type JobExecutionOutcome,
+  type WorkingItemLiveness,
 } from "./boardOrchestrator";
 import { readBoardControlState } from "./boardControl";
 import {
@@ -50,6 +53,37 @@ export type HostCheckoutGroundingResult =
   { ok: true; branch: string } | { ok: false; message: string };
 
 export type JobSummaryClassification = "blocked" | "turn-ended" | "completed";
+
+const TERMINAL_THREAD_STATUSES = new Set(["stopped", "failed", "completed"]);
+
+export function createProductionWorkingItemLivenessCheck(options: {
+  threadStore: StageThreadStore | null;
+  isThreadLive?: (threadId: string) => boolean;
+}): NonNullable<BoardOrchestratorDeps["checkWorkingItemLiveness"]> {
+  const isThreadLive = options.isThreadLive ?? ((id: string) => activeExecutionSet.has(id));
+
+  return async (item): Promise<WorkingItemLiveness> => {
+    if (!options.threadStore) {
+      return { status: "unknown", reason: "Thread store unavailable" };
+    }
+
+    const threadId = extractThreadIdFromLink(item.threadLink);
+    if (!threadId) {
+      return { status: "orphaned", reason: ORPHANED_WORKING_ITEM_REASON };
+    }
+
+    if (isThreadLive(threadId)) {
+      return { status: "live", reason: `Active execution in progress for thread ${threadId}` };
+    }
+
+    const thread = await options.threadStore.getThread(threadId);
+    if (!thread || TERMINAL_THREAD_STATUSES.has(thread.status)) {
+      return { status: "orphaned", reason: ORPHANED_WORKING_ITEM_REASON };
+    }
+
+    return { status: "live", reason: `Thread ${threadId} is ${thread.status}` };
+  };
+}
 
 export function classifyJobSummary(summary: string): JobSummaryClassification {
   const trimmed = summary.trim();
@@ -250,6 +284,7 @@ export function createProductionBoardOrchestrator(
       isRunning: activeExecutionSet.size > 0,
       runningJobId: activeExecutionSet.values().next().value,
     }),
+    checkWorkingItemLiveness: createProductionWorkingItemLivenessCheck({ threadStore }),
     getOwnerState: () => {
       const snapshot = getSharedSlotScheduler().getSnapshot();
       const ownerActive =

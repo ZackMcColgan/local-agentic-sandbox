@@ -37,6 +37,31 @@ import {
 export const MAX_DRAIN_ITEMS = 5;
 export const MAX_DRAIN_DURATION_MS = 10 * 60 * 1000;
 export const MAX_TRIAGE_ATTEMPTS = 2;
+export const ORPHANED_WORKING_ITEM_REASON =
+  "Job thread ended without an outcome (possible restart)";
+
+export type WorkingItemLiveness =
+  | { status: "live"; reason?: string }
+  | { status: "orphaned"; reason: string }
+  | { status: "unknown"; reason?: string };
+
+export function extractThreadIdFromLink(threadLink?: string): string | null {
+  if (typeof threadLink !== "string") return null;
+  const trimmed = threadLink.trim();
+  if (!trimmed) return null;
+  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
+  if (queryMatch) {
+    try {
+      return decodeURIComponent(queryMatch[1]);
+    } catch {
+      return queryMatch[1];
+    }
+  }
+  if (!trimmed.includes("/") && !trimmed.includes("?")) {
+    return trimmed;
+  }
+  return null;
+}
 
 export interface OrchestratorIssue {
   code: string;
@@ -137,6 +162,9 @@ export interface BoardOrchestratorDeps {
   getControlState?: () => BoardControlRecord;
   getLiveJobState?: () => LiveJobState;
   getOwnerState?: () => OwnerTurnState;
+  checkWorkingItemLiveness?: (
+    item: DispatcherBoardItem
+  ) => Promise<WorkingItemLiveness> | WorkingItemLiveness;
   getSlotMetrics?: () => SlotUtilizationMetrics;
   operatorMemory?: string;
   hostCheckoutPath?: string;
@@ -474,9 +502,52 @@ export class BoardOrchestrator {
       }
 
       const items = this.getItems();
-      if (items.some((item) => item.status === "working")) {
-        stopReason = "job-already-running";
-        break;
+      const workingItems = items.filter((item) => item.status === "working");
+      if (workingItems.length > 0) {
+        if (!this.deps.checkWorkingItemLiveness) {
+          stopReason = "job-already-running";
+          break;
+        }
+        let hasLiveWorkingItem = false;
+        for (const workingItem of workingItems) {
+          let liveness: WorkingItemLiveness;
+          try {
+            liveness = await this.deps.checkWorkingItemLiveness(workingItem);
+          } catch (err) {
+            this.log(
+              `[orchestrator] liveness check failed for ${workingItem.id}; treating as live: ${
+                err instanceof Error ? err.message : String(err)
+              }`
+            );
+            hasLiveWorkingItem = true;
+            break;
+          }
+          if (liveness.status === "orphaned") {
+            const reason = liveness.reason || ORPHANED_WORKING_ITEM_REASON;
+            this.log(
+              `[orchestrator] recovering orphaned working item ${workingItem.id} (${workingItem.key}): ${reason}`
+            );
+            this.updateItem(workingItem, {
+              status: "needs-attention",
+              needsAttention: true,
+              parkedReason: reason,
+            });
+            surfacedIssues.push({
+              itemId: workingItem.id,
+              key: workingItem.key,
+              code: "orphaned-working-item",
+              message: reason,
+            });
+            failedCount += 1;
+          } else {
+            hasLiveWorkingItem = true;
+            break;
+          }
+        }
+        if (hasLiveWorkingItem) {
+          stopReason = "job-already-running";
+          break;
+        }
       }
 
       const head = selectHeadEligibleItem(items);
