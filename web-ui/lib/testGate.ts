@@ -89,6 +89,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/canvasDiffSheet.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/stintDerivation") ||
+      p.includes("components/StintCard") ||
+      p.includes("stintDerivation.test.ts"),
+    tests: ["tests/stintDerivation.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },

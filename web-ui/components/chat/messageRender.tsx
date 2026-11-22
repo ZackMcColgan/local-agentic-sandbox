@@ -49,6 +49,7 @@ import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
 import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
+import { StintCard } from "../StintCard";
 import type { TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
@@ -922,6 +923,21 @@ export function ChatMessageItem({
                     );
                   })}
               </div>
+            )}
+
+          {/* Stint card on completed turns */}
+          {!isTaskHostMessage &&
+            m.id !== "initial-welcome" &&
+            m.id !== "welcome" &&
+            m.status !== "streaming" &&
+            !(isLoading && m.id === activeAssistantMsgId) && (
+              <StintCard
+                durationMs={m.durationMs}
+                outputTokens={m.outputTokens}
+                roundPromptTokens={m.roundPromptTokens}
+                roundGenerationMs={m.roundGenerationMs}
+                traces={m.traces}
+              />
             )}
 
           {/* Partial output stopped indicator */}
