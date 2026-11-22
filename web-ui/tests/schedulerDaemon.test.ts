@@ -282,4 +282,91 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
       teardown();
     }
   });
+
+  it("Board drain duty: invokes drain once when control is running", async () => {
+    setup();
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: testWorkspace });
+      let drainCalls = 0;
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+        boardDrain: {
+          isRunning: () => true,
+          drain: async () => {
+            drainCalls += 1;
+          },
+        },
+      });
+
+      await daemon.tick();
+      assert.equal(drainCalls, 1);
+    } finally {
+      teardown();
+    }
+  });
+
+  it("Board drain duty: does not invoke drain when control is stopped", async () => {
+    setup();
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: testWorkspace });
+      let drainCalls = 0;
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+        boardDrain: {
+          isRunning: () => false,
+          drain: async () => {
+            drainCalls += 1;
+          },
+        },
+      });
+
+      await daemon.tick();
+      assert.equal(drainCalls, 0);
+    } finally {
+      teardown();
+    }
+  });
+
+  it("Board drain duty: skips second tick while first drain is still in flight", async () => {
+    setup();
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: testWorkspace });
+      let drainCalls = 0;
+      let releaseFirstDrain!: () => void;
+      const firstDrainBlocker = new Promise<void>((resolve) => {
+        releaseFirstDrain = resolve;
+      });
+
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+        boardDrain: {
+          isRunning: () => true,
+          drain: async () => {
+            drainCalls += 1;
+            await firstDrainBlocker;
+          },
+        },
+      });
+
+      const firstTick = daemon.tick();
+      // Yield so firstTick enters drain() and sets the in-flight guard
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const secondTick = daemon.tick();
+
+      await secondTick;
+      assert.equal(drainCalls, 1, "Second tick must not start a second drain while first is in flight");
+
+      releaseFirstDrain();
+      await firstTick;
+      assert.equal(drainCalls, 1);
+    } finally {
+      teardown();
+    }
+  });
 });

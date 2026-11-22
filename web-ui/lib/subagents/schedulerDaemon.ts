@@ -1,6 +1,16 @@
 import fs from "fs";
 import path from "path";
 import { UnattendedScheduler, Schedule } from "./scheduler";
+import { isDrainAllowed, readBoardControlState } from "../board/boardControl";
+import { createProductionBoardOrchestrator } from "../board/productionDrain";
+import { ThreadStore } from "../threads/threadStore";
+
+let boardDrainInFlight = false;
+
+export interface BoardDrainDuty {
+  isRunning: () => boolean;
+  drain: () => Promise<unknown>;
+}
 
 export interface DaemonHeartbeat {
   pid: number;
@@ -13,6 +23,7 @@ export interface DaemonOptions {
   tickIntervalMs?: number;
   workspaceDir?: string;
   scheduler?: UnattendedScheduler;
+  boardDrain?: BoardDrainDuty;
   onTick?: (dueCount: number) => Promise<void> | void;
   singleTick?: boolean;
   registerSignalHandlers?: boolean;
@@ -24,6 +35,7 @@ export class SchedulerDaemon {
   readonly workspaceDir: string;
   readonly tickIntervalMs: number;
   readonly scheduler: UnattendedScheduler;
+  private readonly boardDrain?: BoardDrainDuty;
   public shutdownRequested: boolean = false;
   private isRunning: boolean = false;
   private startedAt: string = "";
@@ -43,6 +55,7 @@ export class SchedulerDaemon {
 
     this.scheduler =
       options?.scheduler || new UnattendedScheduler({ workspaceDir: this.workspaceDir });
+    this.boardDrain = options?.boardDrain;
 
     this.ensureDirectories();
 
@@ -233,6 +246,25 @@ export class SchedulerDaemon {
       }
     }
 
+    if (!this.shutdownRequested && this.boardDrain && this.boardDrain.isRunning()) {
+      if (boardDrainInFlight) {
+        this.log("INFO", "Board drain already in flight; skipping this tick.");
+      } else {
+        boardDrainInFlight = true;
+        try {
+          this.log("INFO", "Board control is running; starting board drain.");
+          await this.boardDrain.drain();
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        } finally {
+          boardDrainInFlight = false;
+        }
+      }
+    }
+
     this.writeHeartbeat(true);
     this.rotateLogs(7);
 
@@ -309,8 +341,23 @@ export class SchedulerDaemon {
   }
 }
 
+export function createDefaultBoardDrainDuty(): BoardDrainDuty {
+  return {
+    isRunning: () => isDrainAllowed(readBoardControlState()),
+    drain: async () => {
+      const orchestrator = createProductionBoardOrchestrator({
+        threadStore: new ThreadStore(),
+      });
+      return orchestrator.drain();
+    },
+  };
+}
+
 export async function startDaemon(options?: DaemonOptions): Promise<void> {
-  const daemon = new SchedulerDaemon(options);
+  const daemon = new SchedulerDaemon({
+    ...options,
+    boardDrain: options?.boardDrain ?? createDefaultBoardDrainDuty(),
+  });
   await daemon.start(options);
 }
 
