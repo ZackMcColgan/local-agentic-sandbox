@@ -45,11 +45,12 @@ const getLlmBaseUrl = () =>
 // time (FIFO); additional turns queue visibly instead of contending for the
 // engine slot. Module-level singleton: one queue per web-ui process.
 const chatJobQueue = new JobQueue();
-let chatTurnWorktreeSeq = 0;
+let chatTurnSeq = 0;
 
-// job-queue-isolation: host checkout root for per-job worktrees. Same
-// convention as the self-deploy pipeline (web-ui may run with cwd at web-ui
-// or repo root); HOST_REPO_ROOT overrides explicitly.
+// job-queue-isolation: host checkout root used as the chunk-handoff/runlog
+// workspace root when no per-turn worktree exists. Same convention as the
+// self-deploy pipeline (web-ui may run with cwd at web-ui or repo root);
+// HOST_REPO_ROOT overrides explicitly.
 const resolveJobRepoRoot = () =>
   process.env.HOST_REPO_ROOT ||
   path.resolve(process.cwd(), fs.existsSync(path.join(process.cwd(), "web-ui")) ? "." : "..");
@@ -439,18 +440,20 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     };
 
     // job-queue-isolation: serialize this job turn through the single in-app
-    // queue (one turn executes at a time, FIFO) and run it against its OWN git
-    // worktree of the host checkout. A turn arriving while one is running
-    // queues visibly (queue_position event) instead of contending for the slot.
+    // queue (one turn executes at a time, FIFO). A turn arriving while one is
+    // running queues visibly (queue_position event) instead of contending for
+    // the slot. Board item #63: NO per-turn git worktree — MCP workspace tools
+    // execute against the container's shared /workspace, so a worktree here
+    // added git churn without providing isolation. Re-enable repoRoot only
+    // when MCP workspace tools accept a workspace-root argument.
     serializeTurn(
       chatJobQueue,
       {
-        id: `${assistantMessageId}-${process.pid}-${++chatTurnWorktreeSeq}`,
+        id: `${assistantMessageId}-${process.pid}-${++chatTurnSeq}`,
         threadId: activeThreadId || clientSessionId,
         prompt: userPrompt,
       },
       {
-        repoRoot: resolveJobRepoRoot(),
         priority: SlotPriority.P0_OWNER,
         scheduler: getSharedSlotScheduler(),
         signal: turnAbortController.signal,
