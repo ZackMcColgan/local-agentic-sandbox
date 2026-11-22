@@ -183,6 +183,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/uiuxAuditFixes.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/board/productionDrain") || p.includes("boardDrainExecution.test.ts"),
+    tests: ["tests/boardDrainExecution.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/reviewerGate") || p.includes("reviewerGate.test.ts"),
     tests: ["tests/reviewerGate.test.ts"],
   },
